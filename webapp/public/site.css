@@ -21,6 +21,14 @@
 .diff-box-green{background-color:#0081384d;border-radius:.25rem;justify-content:center;align-items:center;display:inline-flex;padding-inline:.25rem;font-weight:500;color:#4ade80}
 .diff-box-red{background-color:#bf000f4d;border-radius:.25rem;justify-content:center;align-items:center;display:inline-flex;padding-inline:.25rem;font-weight:500;color:#f87171}
 .diff-box-small{font-size:.75rem;line-height:1rem}
+.boss-stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:.75rem}
+.boss-stat-card{background-color:#1f293766;border-radius:.5rem;padding:.75rem;height:100%;transition:transform .1s ease}
+.boss-stat-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem}
+.boss-stat-title{font-size:.75rem;color:#d1d5dbe6}
+.boss-stat-value{font-size:1.125rem;font-weight:600;color:#fff;margin-bottom:.5rem}
+.boss-progress{position:relative;height:.375rem;overflow:hidden;border-radius:9999px;margin-top:.25rem}
+.boss-progress-bg{position:absolute;height:100%;width:100%;background-color:#3741514d}
+.boss-progress-fill{position:absolute;height:100%;transition:width .5s ease-out}
 .resource-values{display:flex;justify-content:space-around}
 .header-wrapper{background-color:#1f2937f2;border-radius:.375rem .375rem 0 0;overflow:hidden}
 .header-main{background:linear-gradient(to right,#1f2937f2,#111827f2)}

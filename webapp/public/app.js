@@ -1026,6 +1026,10 @@ async function renderBuildList() {
             <h4 class="section-title">Loot</h4>
             <div class="resource-grid mt-3" data-loot></div>
           </div>
+          <div data-boss-section class="hidden">
+            <h4 class="section-title">Boss Statistics</h4>
+            <div class="boss-stats-grid mt-3" data-boss></div>
+          </div>
         </div>
       </div>`;
 
@@ -1098,6 +1102,28 @@ async function renderBuildList() {
           </div></div>
         </div>`).join('');
       card.querySelector('[data-loot]').innerHTML = lootCards;
+
+      // Verbatim port of the live site's "Boss Statistics" section (captured via
+      // outerHTML): only shown when the wasm actually returns boss data for this hunter
+      // (confirmed real on a shared/imported build) -- heart icon + red bar for Boss HP %,
+      // sword icon + emerald bar for Boss Kill %, each with the same delta badge as every
+      // other stat when comparing against the reference build.
+      if (r.bossHpPercent !== undefined && r.bossKillRate !== undefined) {
+        card.querySelector('[data-boss-section]').classList.remove('hidden');
+        const hpPct = r.bossHpPercent, killPct = r.bossKillRate;
+        const baseHpPct = base?.bossHpPercent, baseKillPct = base?.bossKillRate;
+        card.querySelector('[data-boss]').innerHTML = `
+          <div class="boss-stat-card">
+            <div class="boss-stat-header"><div class="flex items-center">${iconSvg('heart-filled', 16, 'text-red-400 mr-1.5')}<span class="boss-stat-title">Boss HP %</span></div>${base ? deltaBadge(hpPct, baseHpPct, true) : ''}</div>
+            <div class="boss-stat-value">${hpPct.toFixed(1)}%</div>
+            <div class="boss-progress"><div class="boss-progress-bg"></div><div class="boss-progress-fill bg-red-500" style="width:${Math.min(100, hpPct)}%"></div></div>
+          </div>
+          <div class="boss-stat-card">
+            <div class="boss-stat-header"><div class="flex items-center">${iconSvg('sword', 16, 'text-emerald-400 mr-1.5')}<span class="boss-stat-title">Boss Kill %</span></div>${base ? deltaBadge(killPct, baseKillPct, false) : ''}</div>
+            <div class="boss-stat-value">${killPct.toFixed(1)}%</div>
+            <div class="boss-progress"><div class="boss-progress-bg"></div><div class="boss-progress-fill bg-emerald-500" style="width:${Math.min(100, killPct)}%"></div></div>
+          </div>`;
+      }
     });
   }
 }
