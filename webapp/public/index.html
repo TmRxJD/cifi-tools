@@ -115,7 +115,11 @@
         <div class="grid grid-cols-3 gap-2 text-center">
           <div>
             <div class="text-sm text-gray-300">Level</div>
-            <input id="levelInput" type="number" min="1" value="1" class="w-16 bg-transparent text-center font-semibold text-white text-base focus:outline-none focus:ring-1 focus:ring-blue-500 rounded" />
+            <div class="flex items-center justify-center gap-1">
+              <button id="levelDecBtn" type="button" class="flex items-center justify-center bg-gray-800 hover:bg-gray-700 rounded p-1" title="Decrease level"></button>
+              <input id="levelInput" type="number" min="1" value="1" class="w-16 bg-transparent text-center font-semibold text-white text-base focus:outline-none focus:ring-1 focus:ring-blue-500 rounded" />
+              <button id="levelIncBtn" type="button" class="flex items-center justify-center bg-gray-800 hover:bg-gray-700 rounded p-1" title="Increase level"></button>
+            </div>
           </div>
           <div>
             <div class="text-sm text-gray-300">Talents</div>
@@ -197,9 +201,11 @@
       <p>Run that in a terminal, leave it running, then click <strong class="text-gray-200">Pull from Device</strong> above.</p>
       <details class="pt-1">
         <summary class="cursor-pointer text-gray-300 hover:text-white">Prefer to find the save file yourself?</summary>
-        <p class="mt-1">On the device (or emulator), it's at:</p>
+        <p class="mt-1"><strong class="text-gray-200">Real phone, plugged in via USB</strong> (browse it from Windows File Explorer):</p>
+        <code class="block bg-gray-800 border border-gray-700 rounded px-2 py-1.5 mt-1 text-gray-200 font-mono break-all">This PC \ [Your Phone's Name] \ Internal storage \ Android \ data \ com.OctocubeGamesCompany.CIFI \ files</code>
+        <p class="mt-1"><strong class="text-gray-200">Emulator</strong> (e.g. via its own file manager, or ADB): the equivalent Android path is:</p>
         <code class="block bg-gray-800 border border-gray-700 rounded px-2 py-1.5 mt-1 text-gray-200 font-mono break-all">/storage/emulated/0/Android/data/com.OctocubeGamesCompany.CIFI/files/DATA.text</code>
-        <p class="mt-1">(or <code class="text-gray-300">CifiBackup.text</code> in the same folder as a rolling backup). Copy either file off the device and drop it below.</p>
+        <p class="mt-1">Either way, look for <code class="text-gray-300">DATA.text</code> (or <code class="text-gray-300">CifiBackup.text</code> in the same folder, a rolling backup). Copy it off the device and drop it below.</p>
       </details>
     </div>
     <div id="importSaveDropZone" class="rounded-lg border-2 border-dashed border-gray-600 hover:border-blue-500 transition-colors p-6 text-center text-gray-400 text-sm cursor-pointer mb-3">

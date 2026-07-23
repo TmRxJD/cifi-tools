@@ -186,6 +186,10 @@
     levels.forEach((value, i) => {
       if (i >= names.length) return;
       const name = names[i];
+      // "lvl" was falling through every branch below (it's not a base stat/talent/attribute/
+      // upgrade key) and getting silently dropped, so every imported build kept the
+      // newDraftBuild() default of level 1 no matter what level was actually encoded.
+      if (name === 'lvl') { build.level = value || 1; return; }
       if (baseStatKeys.has(name)) { build.overrides[name] = value; return; }
       if (talentIds.has(name)) { build.talents[name] = value; return; }
       if (attrIds.has(name)) { build.attributes[name] = value; return; }

@@ -1108,7 +1108,13 @@ async function renderBuildList() {
       // (confirmed real on a shared/imported build) -- heart icon + red bar for Boss HP %,
       // sword icon + emerald bar for Boss Kill %, each with the same delta badge as every
       // other stat when comparing against the reference build.
-      if (r.bossHpPercent !== undefined && r.bossKillRate !== undefined) {
+      // Boss stages are every 100th stage (100, 200, 300...) -- only show Boss Statistics
+      // when the build's simulated stage RANGE actually reaches one (i.e. there's a real
+      // chance of a boss encounter this run), not just whenever the wasm happens to return
+      // boss fields. A build that dies at stage 40 every run never sees a boss at all.
+      const hasBossInRange = r.minStage !== undefined && r.maxStage !== undefined
+        && Math.floor(r.maxStage / 100) >= Math.max(1, Math.ceil(r.minStage / 100));
+      if (hasBossInRange && r.bossHpPercent !== undefined && r.bossKillRate !== undefined) {
         card.querySelector('[data-boss-section]').classList.remove('hidden');
         const hpPct = r.bossHpPercent, killPct = r.bossKillRate;
         const baseHpPct = base?.bossHpPercent, baseKillPct = base?.bossKillRate;
@@ -1996,6 +2002,18 @@ document.getElementById('levelInput').addEventListener('input', (e) => {
   editingBuild.level = Math.max(1, Math.floor(Number(e.target.value) || 1));
   onBuildChanged();
 });
+document.getElementById('levelDecBtn').innerHTML = iconSvg('chevron-left', 14);
+document.getElementById('levelIncBtn').innerHTML = iconSvg('chevron-right', 14);
+document.getElementById('levelDecBtn').onclick = () => {
+  editingBuild.level = Math.max(1, editingBuild.level - 1);
+  document.getElementById('levelInput').value = editingBuild.level;
+  onBuildChanged();
+};
+document.getElementById('levelIncBtn').onclick = () => {
+  editingBuild.level = editingBuild.level + 1;
+  document.getElementById('levelInput').value = editingBuild.level;
+  onBuildChanged();
+};
 
 document.getElementById('updateBuildBtn').onclick = () => {
   editingBuild.name = document.getElementById('buildNameInput').value.trim() || 'Unnamed';
