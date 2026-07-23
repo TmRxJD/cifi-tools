@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HunterSim Optimizer</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>tailwind.config = { darkMode: 'class', theme: { extend: { borderWidth: { 3: '3px' } } } };</script>
+<link rel="stylesheet" href="site.css" />
+<style>
+  body { background:#111827; color:#e5e7eb; }
+  .stepper-btn { @apply w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed text-white; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- Top nav: copies the real site's bar, minus Sign In / Upgrades-landing / Tools / Settings
+     (login and the unrelated non-hunter tool pages), plus a Knox tab the real nav also has. -->
+<header class="bg-gray-800 border-b border-gray-700">
+  <div class="max-w-[1600px] mx-auto px-4 h-16 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center text-white font-bold">C</div>
+      <div>
+        <div class="font-semibold text-white leading-tight">CIFI Tools</div>
+        <div class="text-[11px] text-gray-500 leading-tight">Hunter Simulator &amp; Game Tools</div>
+      </div>
+    </div>
+    <nav class="flex items-center gap-1">
+      <a href="#/gems" class="nav-pill" data-nav="gems">Gems</a>
+      <button id="hunterBorgeBtn" class="nav-pill" data-nav="borge">Borge</button>
+      <button id="hunterOzzyBtn" class="nav-pill" data-nav="ozzy" data-unlock-gem="exodus" data-unlock-lvl="2">Ozzy</button>
+      <button id="hunterKnoxBtn" class="nav-pill" data-nav="knox" data-unlock-gem="exodus" data-unlock-lvl="4">Knox</button>
+      <a href="#/upgrades/relics" class="nav-pill" data-nav="upgrades">Upgrades</a>
+      <a href="#/settings" class="nav-pill" data-nav="settings">Settings</a>
+    </nav>
+    <div class="flex items-center gap-2">
+      <button id="importSaveBtn" class="flex items-center space-x-1 px-3 py-1.5 rounded-full bg-gradient-to-r from-green-600 to-green-800 hover:from-green-700 hover:to-green-900 text-white font-semibold shadow-lg transition-colors duration-200 text-xs sm:text-sm"><span id="importSaveBtnIcon"></span><span>Import Save</span></button>
+    </div>
+  </div>
+</header>
+
+<div class="max-w-[1600px] mx-auto flex">
+
+  <!-- Sidebar: matches the real site's exact category list (Relics, Inscryptions, Loop
+       Mods, Milestone, Diamond Ultima/Specials/Cards, IAP). Gadgets/Researches/CMs/Trinkets
+       DO exist on the real site but are gem-gated (confirmed straight from the live bundle's
+       Ld.upgradeCategories config: unlock_gem/unlock_lvl/unlock_node per link) -- they're
+       rendered here too, just hidden via data-unlock-* + updateNavGating() until earned,
+       exactly like the real site's nav. Base-stat editing still has no sidebar page (that's
+       the "Hunter Stats" banner button + modal instead, confirmed real). -->
+  <aside class="hidden md:flex flex-col w-52 flex-shrink-0 bg-gray-900/90 border-r border-gray-700/40 sticky top-0 h-[calc(100vh-64px)] overflow-y-auto">
+    <div class="py-4 px-3 space-y-5">
+      <div>
+        <h3 class="text-[12px] font-semibold uppercase tracking-wider text-gray-500 px-2.5 mb-1.5">Core Upgrades</h3>
+        <div class="space-y-0.5">
+          <a href="#/upgrades/relics" class="sidebar-link" data-route="upgrades/relics" data-icon="relics"><span>Relics</span></a>
+          <a href="#/upgrades/gadgets" class="sidebar-link hidden" data-route="upgrades/gadgets" data-icon="relics" data-unlock-gem="exodus" data-unlock-lvl="4"><span>Gadgets</span></a>
+          <a href="#/upgrades/inscryptions" class="sidebar-link" data-route="upgrades/inscryptions" data-icon="writing"><span>Inscryptions</span></a>
+        </div>
+      </div>
+      <div>
+        <h3 class="text-[12px] font-semibold uppercase tracking-wider text-gray-500 px-2.5 mb-1.5">Utility Upgrades</h3>
+        <div class="space-y-0.5">
+          <a href="#/upgrades/loopmods" class="sidebar-link" data-route="upgrades/loopmods" data-icon="loopmods"><span>Loop Mods</span></a>
+          <a href="#/upgrades/shardmilestones" class="sidebar-link" data-route="upgrades/shardmilestones" data-icon="milestone"><span id="milestoneSidebarLabel">Milestone #0</span></a>
+          <a href="#/upgrades/researches" class="sidebar-link hidden" data-route="upgrades/researches" data-icon="milestone" data-unlock-gem="innovation" data-unlock-lvl="2"><span>Researches</span></a>
+          <a href="#/upgrades/cms" class="sidebar-link hidden" data-route="upgrades/cms" data-icon="milestone" data-unlock-gem="power" data-unlock-lvl="2"><span>Construction Milest.</span></a>
+          <a href="#/upgrades/trinkets" class="sidebar-link hidden" data-route="upgrades/trinkets" data-icon="loopmods" data-unlock-gem="creation" data-unlock-lvl="4" data-unlock-node="5"><span>Trinkets</span></a>
+        </div>
+      </div>
+      <div>
+        <h3 class="text-[12px] font-semibold uppercase tracking-wider text-gray-500 px-2.5 mb-1.5">Premium</h3>
+        <div class="space-y-0.5">
+          <a href="#/upgrades/ultima" class="sidebar-link" data-route="upgrades/ultima" data-icon="crown"><span>Diamond Ultima</span></a>
+          <a href="#/upgrades/diamondspecials" class="sidebar-link" data-route="upgrades/diamondspecials" data-icon="sparkles"><span>Diamond Specials</span></a>
+          <a href="#/upgrades/diamondcards" class="sidebar-link" data-route="upgrades/diamondcards" data-icon="cards"><span>Diamond Cards</span></a>
+          <a href="#/upgrades/iap" class="sidebar-link" data-route="upgrades/iap" data-icon="credit-card"><span>IAP</span></a>
+        </div>
+      </div>
+    </div>
+    <div id="bridgeStatusSidebar" class="hidden mt-auto mx-3 mb-3 px-2.5 py-2 rounded-lg bg-gray-800/80 border border-gray-700/50 flex items-center gap-2 text-xs">
+      <span id="bridgeStatusDot" class="w-2 h-2 rounded-full bg-gray-500 flex-shrink-0"></span>
+      <span id="bridgeStatusText" class="text-gray-400 truncate">CIFI Bridge</span>
+    </div>
+  </aside>
+
+  <div class="flex-1 min-w-0 px-0.5 py-4" id="pageRoot"></div>
+</div>
+
+<!-- Build Creator Modal -->
+<div id="buildModal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-gray-900/80 flex items-center justify-center p-4 pb-[70px] pt-[50px] sm:py-0">
+  <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto animate-fade-in">
+    <div class="bg-gradient-to-r from-gray-700 to-gray-800 p-4 border-b border-gray-600 flex justify-between items-center sticky top-0 z-10">
+      <h2 class="text-xl font-bold text-white flex items-center"><span id="modalHunterName" class="text-red-500">Borge</span><span class="ml-1">Build Creator</span></h2>
+      <button id="closeModalBtn" class="p-1.5 rounded-full hover:bg-gray-700 transition-colors text-gray-400 hover:text-white text-xl leading-none">&times;</button>
+    </div>
+    <div class="p-4">
+      <div class="mb-5 bg-gray-700 rounded-lg p-4 border border-gray-600">
+        <label for="buildNameInput" class="block text-xs font-medium text-gray-300 mb-2">Build Name</label>
+        <div class="flex flex-col gap-3 md:flex-row md:gap-2">
+          <input id="buildNameInput" type="text" placeholder="Enter build name..." class="flex-1 bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-blue-500" />
+          <div class="flex gap-2">
+            <button id="loadScannedBtn" class="hidden px-3 py-2 bg-green-700 hover:bg-green-600 rounded-md text-white text-sm whitespace-nowrap" title="Prefill level and talents from the last save file you scanned">Load Scanned Values</button>
+            <button id="modalOverridesBtn" class="flex-1 md:flex-none px-3 py-2 bg-purple-700 hover:bg-purple-600 text-white rounded-md flex items-center justify-center" title="Customize game parameters for simulation">Overrides</button>
+            <button id="exportBuildBtn" class="flex-1 md:flex-none px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white rounded-md text-sm" title="Copy a shareable code for this build">Export</button>
+            <button id="updateBuildBtn" class="flex-1 md:flex-none px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md disabled:bg-blue-900 disabled:opacity-50">Save Build</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="mb-5 bg-gray-700 rounded-lg p-4 border border-gray-600 sticky top-[73px] z-10">
+        <div class="grid grid-cols-3 gap-2 text-center">
+          <div>
+            <div class="text-sm text-gray-300">Level</div>
+            <input id="levelInput" type="number" min="1" value="1" class="w-16 bg-transparent text-center font-semibold text-white text-base focus:outline-none focus:ring-1 focus:ring-blue-500 rounded" />
+          </div>
+          <div>
+            <div class="text-sm text-gray-300">Talents</div>
+            <div id="talentBudgetDisplay" class="font-semibold text-base text-white">0/0</div>
+          </div>
+          <div>
+            <div class="text-sm text-gray-300">Attributes</div>
+            <div id="attrBudgetDisplay" class="font-semibold text-white text-base">0/0</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mb-6">
+        <h3 class="text-white font-medium py-2 border-b border-gray-600">Talents</h3>
+        <div id="talentsGrid" class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-3 mt-3"></div>
+      </div>
+
+      <div class="mb-6">
+        <h3 class="text-white font-medium py-2 border-b border-gray-600">Attributes</h3>
+        <div id="attributesGrid" class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-3 mt-3"></div>
+      </div>
+
+      <div class="flex gap-2 pt-3 border-t border-gray-700">
+        <button id="optimizeBtn" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-md text-white">⚡ Optimize within this budget</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Hunter Stats Modal -->
+<div id="statsModal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-gray-900/80 flex items-center justify-center p-4 pb-[70px] pt-[50px] sm:py-0">
+  <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto animate-fade-in">
+    <div class="bg-gradient-to-r from-gray-700 to-gray-800 p-4 border-b border-gray-600 flex justify-between items-center sticky top-0 z-10">
+      <h2 class="text-xl font-bold text-white flex items-center" id="statsModalIconWrap"><span id="statsModalTitle" class="text-red-500">Borge</span><span class="ml-1">Stats</span></h2>
+      <button id="closeStatsModalBtn" class="p-1.5 rounded-full hover:bg-gray-700 transition-colors">&times;</button>
+    </div>
+    <div class="p-4">
+      <div id="statsModalGrid" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-3"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Import Modal -->
+<div id="importModal" class="fixed inset-0 z-50 hidden bg-gray-900/80 flex items-center justify-center p-4">
+  <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-md border border-gray-700 p-5">
+    <h2 class="text-lg font-semibold text-white mb-3">Import Build</h2>
+    <p class="text-xs text-gray-400 mb-2">Paste a build code below to import a build configuration:</p>
+    <textarea id="importCodeInput" rows="4" class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white text-xs font-mono" placeholder="Paste build code here..."></textarea>
+    <div id="importPreview" class="hidden mt-3 space-y-2">
+      <div class="px-3 py-2 rounded-md bg-red-900/30 border border-red-700/50 text-white text-sm font-medium" id="importPreviewName"></div>
+      <button id="importBuildOnlyBtn" class="w-full px-4 py-2 rounded-md bg-red-700 hover:bg-red-600 text-white text-sm font-medium">Import Build Only</button>
+      <p class="text-xs text-gray-500 -mt-1">Only imports talents and attributes</p>
+      <button id="importWithUpgradesBtn" class="w-full px-4 py-2 rounded-md bg-red-700 hover:bg-red-600 text-white text-sm font-medium">Import with Upgrades</button>
+      <p class="text-xs text-gray-500 -mt-1">Imports all parameters including upgrades and stats<br><span class="text-yellow-500">(except pure loot upgrades as they don't affect loot score)</span></p>
+    </div>
+    <div class="flex justify-end gap-2 mt-3">
+      <button id="cancelImportBtn" class="px-4 py-2 rounded-md bg-gray-700 hover:bg-gray-600 text-white">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import Save Modal -->
+<div id="importSaveModal" class="fixed inset-0 z-50 hidden bg-gray-900/80 flex items-center justify-center p-4">
+  <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg border border-gray-700 p-5">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-lg font-semibold text-white">Import Save File</h2>
+      <button id="closeImportSaveBtn" class="text-gray-400 hover:text-white text-xl leading-none">&times;</button>
+    </div>
+    <div id="importSaveBridgeStatus" class="rounded-lg border border-gray-700 bg-gray-900/50 p-3 mb-3 text-sm flex items-center justify-between gap-3">
+      <span id="importSaveBridgeText" class="text-gray-400">Checking for local CIFI Bridge…</span>
+      <button id="importSaveBridgePullBtn" class="hidden px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-sm whitespace-nowrap">Pull from Device</button>
+    </div>
+    <div id="importSaveBridgeSetup" class="rounded-lg border border-gray-700 bg-gray-900/50 p-3 mb-3 text-xs text-gray-400 space-y-2">
+      <p><strong class="text-gray-200">Don't have the CIFI Bridge running?</strong> It's a small local helper that reads your save file over ADB (emulator or USB) so you don't have to find/copy it by hand. Requires <a href="https://nodejs.org/" target="_blank" rel="noopener" class="text-blue-400 hover:underline">Node.js</a> to be installed.</p>
+      <div class="flex items-center gap-2">
+        <code id="bridgeInstallCmd" class="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-gray-200 font-mono">npx cifi-bridge</code>
+        <button id="copyBridgeCmdBtn" class="px-2 py-1.5 rounded-md bg-gray-700 hover:bg-gray-600 text-white flex-shrink-0" title="Copy command"></button>
+      </div>
+      <p>Run that in a terminal, leave it running, then click <strong class="text-gray-200">Pull from Device</strong> above.</p>
+      <details class="pt-1">
+        <summary class="cursor-pointer text-gray-300 hover:text-white">Prefer to find the save file yourself?</summary>
+        <p class="mt-1">On the device (or emulator), it's at:</p>
+        <code class="block bg-gray-800 border border-gray-700 rounded px-2 py-1.5 mt-1 text-gray-200 font-mono break-all">/storage/emulated/0/Android/data/com.OctocubeGamesCompany.CIFI/files/DATA.text</code>
+        <p class="mt-1">(or <code class="text-gray-300">CifiBackup.text</code> in the same folder as a rolling backup). Copy either file off the device and drop it below.</p>
+      </details>
+    </div>
+    <div id="importSaveDropZone" class="rounded-lg border-2 border-dashed border-gray-600 hover:border-blue-500 transition-colors p-6 text-center text-gray-400 text-sm cursor-pointer mb-3">
+      <div>Drop <code class="text-gray-300">DATA.text</code> or <code class="text-gray-300">CifiBackup.text</code> here, or click to choose a file</div>
+      <input id="importSaveFileInput" type="file" class="hidden" accept=".text,.txt,text/plain" />
+    </div>
+    <div id="importSaveResult" class="text-sm space-y-1"></div>
+  </div>
+</div>
+
+<!-- Manage Categories Modal -->
+<div id="categoriesModal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-gray-900/80 flex items-center justify-center p-4">
+  <div class="bg-gray-800 rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto animate-fade-in border border-gray-700">
+    <div class="bg-gradient-to-r from-gray-700 to-gray-800 p-2.5 border-b border-gray-600 flex justify-between items-center">
+      <div><h3 class="text-base font-bold text-white flex items-center" id="categoriesModalTitle"> Category Management </h3></div>
+      <button id="closeCategoriesBtn" class="p-1.5 rounded-full hover:bg-gray-700 transition-colors text-gray-400 hover:text-white text-xl leading-none">&times;</button>
+    </div>
+    <div class="px-3 py-2 border-b border-gray-700">
+      <p class="text-xs text-gray-300 mb-2">Organize your builds into categories for better management.</p>
+      <div class="bg-gray-700/30 rounded-lg p-2 text-xs text-gray-400">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+          <div class="flex items-center"><div class="w-2 h-2 bg-blue-500 rounded mr-1.5"></div><span><strong>System Categories:</strong> Cannot be edited or deleted</span></div>
+          <div class="flex items-center"><div class="w-2 h-2 bg-purple-500 rounded mr-1.5"></div><span><strong>Custom Categories:</strong> Fully customizable</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="p-3 space-y-3">
+      <div>
+        <div class="flex items-center justify-between mb-1.5">
+          <div class="flex items-center"><div class="w-1.5 h-5 bg-blue-500 rounded-r mr-2"></div><h4 class="font-medium text-sm text-blue-200">System Categories</h4><span class="text-xs text-gray-400 ml-2">(2)</span></div>
+        </div>
+        <div id="systemCategoriesList" class="space-y-1"></div>
+      </div>
+      <div class="border-t border-gray-700 pt-3">
+        <div class="flex items-center justify-between mb-1.5">
+          <div class="flex items-center"><div class="w-1.5 h-5 bg-purple-500 rounded-r mr-2"></div><h4 class="font-medium text-sm text-purple-200">Custom Categories</h4><span id="customCategoriesCount" class="text-xs text-gray-400 ml-2">(0)</span></div>
+          <button id="addCategoryBtn" class="bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 rounded-md transition-colors flex items-center gap-1 text-xs"> Add Category </button>
+        </div>
+        <div id="customCategoriesList" class="space-y-1"></div>
+      </div>
+      <div class="p-2 bg-gray-700/30 rounded-md">
+        <p id="categoriesSummary" class="text-xs text-gray-300"></p>
+      </div>
+    </div>
+    <div class="flex justify-end pt-2 border-t border-gray-700 px-3 pb-3">
+      <button id="closeCategoriesDoneBtn" class="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-xs"> Done </button>
+    </div>
+  </div>
+</div>
+
+<!-- Temporary Upgrades popover -- verbatim port of the live site's fixed-position dropdown
+     panel (NOT a full-screen modal there), anchored under the "Temporary Upgrades" button. -->
+<div id="temporaryPopover" class="hidden fixed w-80 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-[9999] max-h-[560px] overflow-y-auto">
+  <div class="p-2 border-b border-gray-600">
+    <h3 class="text-sm font-semibold text-white">Temporary Upgrades</h3>
+    <p class="text-xs text-gray-400 mt-0.5">for quick adjustments after TR</p>
+  </div>
+  <div id="temporaryBody" class="py-1"></div>
+</div>
+
+<!-- Optimize Setup Modal -->
+<div id="optimizeSetupModal" class="fixed inset-0 z-50 hidden bg-gray-900/80 flex items-center justify-center p-4">
+  <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-md border border-gray-700 p-5">
+    <h2 class="text-lg font-semibold text-white mb-4">Optimize Build</h2>
+    <div class="mb-3">
+      <label class="block text-sm text-gray-300 mb-1">Optimize for</label>
+      <select id="optimizeMode" class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white">
+        <option value="loot">Loot Score</option>
+        <option value="push">Ø Stage (push)</option>
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="block text-sm text-gray-300 mb-1">Number of evaluations</label>
+      <input id="targetEvals" type="number" min="100" step="100" value="3000" class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white" />
+    </div>
+    <div class="flex justify-end gap-2 mt-4">
+      <button id="cancelOptimizeSetup" class="px-4 py-2 rounded-md bg-gray-700 hover:bg-gray-600 text-white">Cancel</button>
+      <button id="startOptimizeBtn" class="px-4 py-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white">Start</button>
+    </div>
+  </div>
+</div>
+
+<!-- Optimize Progress Modal -->
+<div id="optimizeProgressModal" class="fixed inset-0 z-50 hidden bg-gray-900/80 flex items-center justify-center p-4">
+  <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-md border border-gray-700 p-5">
+    <h2 class="text-lg font-semibold text-white mb-4">Optimizing...</h2>
+    <div class="w-full bg-gray-700 rounded-full h-3 mb-2 overflow-hidden">
+      <div id="progressBar" class="bg-purple-500 h-3 transition-all" style="width:0%"></div>
+    </div>
+    <div class="flex justify-between text-xs text-gray-400 mb-4">
+      <span id="progressEvals">0 / 0 evaluations</span>
+      <span id="progressElapsed">0.0s</span>
+    </div>
+    <div class="grid grid-cols-2 gap-3 text-sm mb-4">
+      <div class="bg-gray-900/50 rounded p-2"><div class="text-xs text-gray-400">Generation</div><div id="progressGen" class="text-white font-semibold">0</div></div>
+      <div class="bg-gray-900/50 rounded p-2"><div class="text-xs text-gray-400">Best score</div><div id="progressBest" class="text-white font-semibold">-</div></div>
+    </div>
+    <div class="flex justify-end">
+      <button id="cancelOptimizeRunBtn" class="px-4 py-2 rounded-md bg-red-700 hover:bg-red-600 text-white">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="icons.js"></script>
+<script src="hunterDefs.js"></script>
+<script src="upgradeEffects.js"></script>
+<script src="hunterSimBrowser.js"></script>
+<script src="optimizerBrowser.js"></script>
+<script src="beamSearchBrowser.js"></script>
+<script src="saveImport.js"></script>
+<script src="buildCode.js"></script>
+<script src="costFormulas.js"></script>
+<script src="app.js"></script>
+<script>
+  // Custom (non-Tabler) sidebar icons: real game-asset SVG paths copied verbatim from the
+  // live site's rendered DOM (Relics/Loop Mods/Milestones use bespoke icons, not Tabler's).
+  const SIDEBAR_CUSTOM_ICONS = {
+    relics: '<svg width="16" height="16" viewBox="0 0 493.33334 493.33334" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="m 237.78929,474.95598 c -28.8782,-7.9457 -47.9964,-45.70752 -38.87064,-76.77636 4.37265,-14.88679 18.0092,-34.07952 26.02024,-36.62213 2.28725,-0.72594 4.32696,-252.61989 2.04559,-252.61989 -0.42164,0 -9.6541,12.61708 -36.09934,49.33333 -4.48962,6.23334 -10.11048,14.03334 -12.4908,17.33334 -2.38032,3.3 -7.28597,10.2 -10.90144,15.33333 -3.61547,5.13333 -11.10235,15.51317 -16.6375,23.06629 -5.53516,7.55313 -10.06392,14.02078 -10.06392,14.37256 0,0.35178 -2.25,3.55772 -5,7.12432 -2.75,3.5666 -8.3,11.1284 -12.33334,16.80402 -4.03333,5.67561 -8.08333,11.09698 -9,12.04748 -0.91666,0.95051 -1.66666,2.10624 -1.66666,2.56829 0,0.46205 -1.86368,3.15918 -4.1415,5.99362 -6.56886,8.17407 -7.49921,8.02343 49.55352,8.02343 h 51.92131 v 20.67661 20.67661 l -84.33333,-0.34327 -84.333339,-0.34328 -0.40041,-6.18681 c -0.36946,-5.7088 0.24066,-7.09951 7.89686,-18 4.56349,-6.49725 11.39944,-16.31319 15.19099,-21.81319 3.79155,-5.5 10.43797,-15.01857 14.76981,-21.15238 4.33185,-6.13381 10.27608,-14.61968 13.20941,-18.85749 8.323479,-12.02498 17.633439,-25.36074 22.798359,-32.65681 2.59566,-3.66667 9.92788,-14.09314 16.29384,-23.16995 6.36596,-9.07681 13.1826,-18.67681 15.14809,-21.33333 1.96548,-2.65653 5.21354,-7.53005 7.21791,-10.83005 2.00437,-3.3 4.01194,-6.3 4.46127,-6.66667 0.44933,-0.36667 3.94934,-5.16667 7.77779,-10.66667 3.82846,-5.5 13.20746,-18.83408 20.84222,-29.63129 7.63476,-10.797202 14.0867,-20.142184 14.33763,-20.76662 0.25093,-0.624436 3.03794,-4.690356 6.19335,-9.035379 8.37806,-11.536634 20.78428,-29.048524 32.92955,-46.481384 12.3082,-17.6667297 11.05735,-16.8168897 15.32143,-10.40955 1.82679,2.74499 3.7098,5.29089 4.18446,5.65756 0.47466,0.36667 2.58002,3.46659 4.67857,6.88872 2.09855,3.42213 8.01554,12.10584 13.14888,19.29714 11.78567,16.51057 12.05006,16.88616 19.67364,27.947815 3.48718,5.059812 9.18718,13.161459 12.66667,18.00366 10.76719,14.984038 20.85599,29.328128 29.91271,42.529328 12.07606,17.60224 22.02395,31.93074 29.0803,41.88597 3.3,4.6557 12.4148,17.68597 20.25512,28.95614 7.84032,11.27018 17.87444,25.59123 22.29805,31.82457 4.42361,6.23334 10.1293,14.33334 12.67931,18 26.7443,38.45566 32.8592,47.15717 35.28519,50.21088 3.13943,3.95176 3.84008,12.89805 1.21567,15.52246 -1.20993,1.20992 -21.68889,1.6 -84.00001,1.6 h -82.39999 v -20.66667 -20.66667 h 51.33333 c 46.13636,0 51.33333,-0.21567 51.33333,-2.13031 0,-2.25263 -13.11514,-21.58885 -16.61074,-24.48994 -1.13076,-0.93845 -2.05593,-2.21732 -2.05593,-2.84195 0,-0.62462 -5.80298,-9.10116 -12.89551,-18.83675 -16.68633,-22.90454 -41.91911,-57.99386 -49.64274,-69.03439 -3.33462,-4.76667 -14.32768,-19.99277 -24.42901,-33.83578 l -18.36606,-25.1691 v 126.14664 126.14666 l 6.33333,3.24776 c 61.06426,31.31403 24.48258,132.92506 -41.33552,114.81553 z"/></svg>',
+    loopmods: '<svg width="16" height="16" viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg" fill="currentColor" stroke="none"><g transform="translate(0.000000,96.000000) scale(0.100000,-0.100000)"><path d="M413 942 c-86 -45 -324 -185 -328 -192 -3 -5 32 -32 77 -60 84 -51 111 -57 146 -28 12 11 77 48 120 70 21 11 22 17 22 120 0 59 -1 108 -2 108 -2 -1 -17 -9 -35 -18z"/><path d="M502 853 l3 -107 93 -54 94 -55 41 21 c53 28 96 53 125 73 22 16 20 18 -130 104 -205 118 -218 125 -224 125 -2 0 -3 -48 -2 -107z"/><path d="M50 480 l0 -221 43 24 c23 13 63 37 90 53 l47 29 0 115 0 115 -48 27 c-26 15 -66 39 -89 53 l-43 26 0 -221z"/><path d="M855 669 c-16 -10 -37 -22 -45 -26 -8 -3 -32 -17 -52 -30 l-38 -23 0 -110 0 -110 38 -23 c20 -13 44 -27 52 -30 8 -4 29 -16 45 -26 56 -36 55 -39 55 189 0 228 1 225 -55 189z"/><path d="M391 584 c-64 -53 -64 -155 0 -208 25 -21 41 -26 88 -26 53 0 60 3 94 38 34 34 37 43 37 93 0 50 -3 58 -38 92 -35 34 -43 37 -94 37 -46 0 -62 -5 -87 -26z"/><path d="M180 280 c-89 -55 -100 -63 -95 -71 3 -3 67 -41 142 -84 76 -43 145 -83 153 -90 8 -6 27 -16 43 -23 l27 -12 0 109 c0 102 -1 108 -22 119 -43 22 -108 59 -120 70 -32 26 -63 22 -128 -18z"/><path d="M595 266 l-90 -52 -3 -107 c-1 -59 0 -107 2 -107 5 0 31 14 239 134 l137 78 -24 19 c-13 11 -26 19 -29 19 -2 0 -31 16 -63 35 -32 19 -63 35 -68 35 -6 -1 -51 -25 -101 -54z"/></g></svg>',
+    milestone: '<svg width="16" height="16" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="m 16.723514,125.66667 c -0.50611,-1.28334 -1.41363,-5.03334 -2.01672,-8.33334 -0.60309,-3.3 -2.04832,-10.28821 -3.21162,-15.52936 C 10.331874,96.562816 9.011014,91.312816 8.559924,90.1373 8.059464,88.833119 8.434754,88 9.522704,88 c 0.98062,0 7.04482,5.23749 13.47599,11.638868 L 34.691737,111.27774 V 119.63887 128 h -8.524013 -8.52402 z M 38.691737,76 V 24 h 12 12 v 52 52 h -12 -12 z M 69.358404,89.63723 V 51.274459 l 11.02785,-10.970563 c 6.065317,-6.033809 11.465317,-10.970563 12,-10.970563 0.534682,0 0.97215,22.2 0.97215,49.333334 V 128 h -12 -12 z M 98.691737,104 V 80 h 14.142653 14.14265 l -0.91437,2.333333 c -0.50291,1.283334 -2.11369,7.733334 -3.57951,14.333334 -1.46583,6.600003 -3.51855,15.899773 -4.56161,20.666173 -1.04306,4.76639 -1.89648,9.11639 -1.89648,9.66666 0,0.55028 -3.9,1.0005 -8.66666,1.0005 H 98.691737 Z" /></svg>',
+  };
+  document.querySelectorAll('.sidebar-link[data-icon]').forEach((el) => {
+    const custom = SIDEBAR_CUSTOM_ICONS[el.dataset.icon];
+    el.insertAdjacentHTML('afterbegin', custom || iconSvg(el.dataset.icon, 16));
+  });
+</script>
+</body>
+</html>

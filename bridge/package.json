@@ -1,0 +1,46 @@
+{
+  "name": "cifi-bridge",
+  "version": "1.0.0",
+  "description": "CIFI Bridge — local ADB save finder for the HunterSim import feature (emulator or USB)",
+  "license": "MIT",
+  "type": "module",
+  "keywords": [
+    "adb",
+    "android",
+    "emulator",
+    "websocket",
+    "cifi",
+    "save-import",
+    "cifi-bridge"
+  ],
+  "bin": {
+    "cifi-bridge": "bin/cifi-bridge.js"
+  },
+  "files": [
+    "bin",
+    "adb-path.mjs",
+    "adb-status.mjs",
+    "adb-resolve.mjs",
+    "adb-setup.mjs",
+    "boot-persistence.mjs",
+    "bridge-console.mjs",
+    "cli-main.mjs",
+    "device-label.mjs",
+    "usb-settle.mjs",
+    "http-handlers.mjs",
+    "ensure-user-path.mjs",
+    "install-cli.mjs",
+    "platform-tools-install.mjs",
+    "pull-save.mjs",
+    "save-bytes.mjs",
+    "server.mjs",
+    "save-paths.mjs",
+    "update-check.mjs"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
+  }
+}
