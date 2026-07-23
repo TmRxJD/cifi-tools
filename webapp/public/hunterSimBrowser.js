@@ -101,6 +101,12 @@
       if (name === 'upgrades.diamondspecials.reviveboost') return 3 * (state.overrides[name] || 0);
       return state.overrides[name];
     }
+    // Knox-only wasm param -- was falling through to the generic `return 0` default below
+    // (it matches none of the other special-cases, isn't a talent/attribute/hunterStat, and
+    // doesn't start with "upgrades."), meaning every Knox evaluation ran with boss loot
+    // permanently zeroed out regardless of the build's actual boss-killing capability. 1
+    // (full rate) is the correct default absent an override -- 0 was never intentional.
+    if (name === 'bossLootRate') return state.overrides?.[name] ?? state.hunterStats?.bossLootRate ?? 1;
     if (name === 'iterations') return state.iterations ?? 1000;
     if (name === 'lvl') return state.level ?? 0;
     if (name === 'stage' || name === 'maxStage') return state.hunterStats?.stage ?? 0;
