@@ -121,10 +121,18 @@ function cfgFor(hunter, build) {
   const d = window.HUNTER_DEFS[hunter];
   const { talentBudget, attributeBudget } = budgetsForLevel(build.level);
   const mergedUpgrades = window.buildNestedUpgrades(store.globalUpgrades);
+  // The optimizer/beam search must never allocate points into an advanced talent (e.g. The
+  // Legacy of Ultima) that isn't unlocked yet -- it was previously getting the FULL
+  // unfiltered talent list, so "Optimize within budget" could spend points there even while
+  // the talent stayed hidden in the editor, skewing the rest of the distribution. Existing
+  // points already in an advanced talent are kept (it's still a valid current allocation),
+  // just no NEW points get assigned unless the talent is actually visible/unlocked.
+  const showAdvanced = shouldShowAdvancedTalents(hunter);
+  const talents = d.talents.filter((t) => !t.advanced || showAdvanced || (build.talents[t.id] || 0) > 0);
   return {
     hunter, level: build.level, hunterStats: store[hunter].hunterStats,
     globalUpgrades: mergedUpgrades, gemPlannerStore: { gemStates: store.gems }, baseOverrides: build.overrides || {},
-    TALENTS: d.talents, ATTRIBUTES: d.attributes,
+    TALENTS: talents, ATTRIBUTES: d.attributes,
     ATTRIBUTE_DEPENDENCIES: d.attributeDependencies, ATTRIBUTE_MIN_VALUE: d.attributeMinValue,
     TALENT_BUDGET: talentBudget, ATTRIBUTE_BUDGET: attributeBudget,
     currentTalents: build.talents, currentAttrs: build.attributes,
