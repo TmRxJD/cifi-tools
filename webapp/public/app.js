@@ -61,10 +61,58 @@ function loadStore() {
       return parsed;
     }
   } catch { /* fall through to defaults */ }
+  __storeWasFreshOnLoad = true;
   return freshStore();
 }
 
-function saveStore() { localStorage.setItem(STORAGE_KEY, JSON.stringify(store)); updateNavGating(); }
+// Redundant persistence: testers reported losing all builds/settings after a "clear
+// cache"/browser data-clear around an update -- some browsers (especially mobile) bundle
+// localStorage into that clear even though it's technically "site data", not "cache". IndexedDB
+// is stored separately from most browsers' quick "clear cache" action and often survives it, so
+// every save is mirrored there too (fire-and-forget, never blocks the UI), and on startup -- if
+// localStorage came back empty -- we fall back to whatever IndexedDB still has before giving up
+// and seeding fresh defaults.
+const IDB_NAME = 'huntersim_backup';
+const IDB_STORE = 'kv';
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) { reject(new Error('no indexedDB')); return; }
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbSet(key, value) {
+  try {
+    const db = await idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put(value, key);
+      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+    });
+  } catch { /* best effort only */ }
+}
+async function idbGet(key) {
+  try {
+    const db = await idbOpen();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  } catch { return undefined; }
+}
+// True only when loadStore() had to fall back to fresh defaults (no usable localStorage
+// data) -- gates the one-time IndexedDB recovery attempt at startup below.
+let __storeWasFreshOnLoad = false;
+function saveStore() {
+  const json = JSON.stringify(store);
+  localStorage.setItem(STORAGE_KEY, json);
+  idbSet(STORAGE_KEY, json);
+  updateNavGating();
+}
 
 // Confirmed exact from the live bundle's isUnlocked() (AppNavbar.vue): a gem tree level
 // gate, plus an optional specific node (1-based) that must also be toggled on.
@@ -103,6 +151,26 @@ let currentHunter = 'borge';
 let editingBuild = null;
 let showCategoryId = 'active';
 try { window.__lastScan = JSON.parse(localStorage.getItem('huntersim_last_scan') || '{}'); } catch { window.__lastScan = {}; }
+
+// One-time startup recovery: localStorage came back empty (freshStore() defaults), so check
+// the IndexedDB mirror before the user ever sees the seeded defaults -- if it has real data,
+// restore it, re-persist to localStorage, and re-render whatever's already on screen.
+if (__storeWasFreshOnLoad) {
+  idbGet(STORAGE_KEY).then((json) => {
+    if (!json) return;
+    try {
+      const recovered = JSON.parse(json);
+      if (!recovered.gems) recovered.gems = window.defaultGemState();
+      if (!recovered.categories) recovered.categories = JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
+      if (!recovered.viewMode) recovered.viewMode = 'vertical';
+      if (!recovered.knox) recovered.knox = { hunterStats: { ...SEED_HUNTER_STATS.knox }, builds: [] };
+      Object.keys(store).forEach((k) => delete store[k]);
+      Object.assign(store, recovered);
+      localStorage.setItem(STORAGE_KEY, json);
+      if (typeof render === 'function') render();
+    } catch { /* corrupt backup, ignore */ }
+  });
+}
 
 function defs() { return window.HUNTER_DEFS[currentHunter]; }
 function budgetsForLevel(level) { return { talentBudget: window.talentBudgetForLevel(level), attributeBudget: window.attributeBudgetForLevel(level) }; }
