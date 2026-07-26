@@ -4,3 +4,7 @@ node_modules/
 out.json
 .DS_Store
 Thumbs.db
+
+# Real account save data pulled for saveImport.js mapping verification -- kept locally for
+# future regression testing (see bridge/verify-save-mapping.mjs) but never committed.
+bridge/test-fixtures/

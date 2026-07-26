@@ -4,6 +4,7 @@ import {
   probeAdbPathIssue,
   requireAdbExecutable,
 } from './adb-resolve.mjs'
+import { isEmulatorSerial } from './device-label.mjs'
 
 function parseDevicesListing(listing) {
   const devices = []
@@ -25,10 +26,16 @@ export async function getHostAdbStatus(runAdb) {
     const unauthorizedCount = devices.filter(entry => entry.state === 'unauthorized').length
     const offlineCount = devices.filter(entry => entry.state === 'offline').length
     const listedCount = devices.length
+    const emulatorCount = devices.filter(
+      entry => entry.state === 'device' && isEmulatorSerial(entry.serial),
+    ).length
+    const physicalCount = deviceCount - emulatorCount
 
     return {
       serverRunning: true,
       deviceCount,
+      emulatorCount,
+      physicalCount,
       unauthorizedCount,
       offlineCount,
       listedCount,
@@ -42,6 +49,8 @@ export async function getHostAdbStatus(runAdb) {
     return {
       serverRunning: false,
       deviceCount: 0,
+      emulatorCount: 0,
+      physicalCount: 0,
       unauthorizedCount: 0,
       offlineCount: 0,
       listedCount: 0,
@@ -55,6 +64,8 @@ function emptyDeviceFields() {
   return {
     serverRunning: false,
     deviceCount: 0,
+    emulatorCount: 0,
+    physicalCount: 0,
     unauthorizedCount: 0,
     offlineCount: 0,
     listedCount: 0,

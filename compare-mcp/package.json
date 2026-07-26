@@ -1,0 +1,13 @@
+{
+  "name": "cifi-compare-mcp",
+  "version": "1.0.0",
+  "description": "MCP server that compares HunterSim (local clone) simulation output against the live cifi-tools.com site for the same build, to sanity-check calculation accuracy.",
+  "type": "module",
+  "private": true,
+  "main": "server.mjs",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "playwright": "^1.48.0",
+    "zod": "^3.25.76"
+  }
+}

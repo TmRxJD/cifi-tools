@@ -183,18 +183,35 @@
       hunterId: hunter, hunter, name: `${hunter[0].toUpperCase()}${hunter.slice(1)} Import`,
       level: 1, talents: {}, attributes: {}, overrides: {}, upgradeOverrides: {},
     };
+    let sawLvlParam = false;
     levels.forEach((value, i) => {
       if (i >= names.length) return;
       const name = names[i];
       // "lvl" was falling through every branch below (it's not a base stat/talent/attribute/
       // upgrade key) and getting silently dropped, so every imported build kept the
       // newDraftBuild() default of level 1 no matter what level was actually encoded.
-      if (name === 'lvl') { build.level = value || 1; return; }
+      if (name === 'lvl') { sawLvlParam = true; build.level = value || 1; return; }
       if (baseStatKeys.has(name)) { build.overrides[name] = value; return; }
       if (talentIds.has(name)) { build.talents[name] = value; return; }
       if (attrIds.has(name)) { build.attributes[name] = value; return; }
       if (name.startsWith('upgrades.') && value) { build.upgradeOverrides[name] = value; }
     });
+    // No hunter's CODE_PARAMS table actually includes "lvl" -- share codes never encode
+    // level directly -- so build.level silently stayed at the newDraftBuild() default of 1
+    // for every import regardless of the account's real level. Confirmed against the live
+    // site itself (which visibly displays the correct level right after import, e.g. a
+    // Borge build whose talents summed to 41 showed "Level 41"): talentBudgetForLevel is the
+    // identity function (1 talent point per level) for every hunter, so the level is
+    // recoverable by summing the imported talent levels, assuming the account spent every
+    // available talent point (true for any real, actively-played account). This matters more
+    // for some hunters than others -- Borge/Ozzy's loot formula barely reacts to the "lvl"
+    // wasm argument on its own (their computed stats already carry level's effect), but
+    // Knox's does noticeably (confirmed empirically: a real Knox build's Loot Score was ~2-4%
+    // off with level stuck at 1 vs. its real level).
+    if (!sawLvlParam) {
+      const talentPointsSpent = Object.values(build.talents).reduce((sum, v) => sum + (v || 0), 0);
+      if (talentPointsSpent > 0) build.level = talentPointsSpent;
+    }
     return build;
   }
 

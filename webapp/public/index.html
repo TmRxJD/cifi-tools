@@ -7,7 +7,7 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>tailwind.config = { darkMode: 'class', theme: { extend: { borderWidth: { 3: '3px' } } } };</script>
-<link rel="stylesheet" href="site.css" />
+<link rel="stylesheet" href="site.css?v=20260727a" />
 <style>
   body { background:#111827; color:#e5e7eb; }
   .stepper-btn { @apply w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed text-white; }
@@ -193,7 +193,8 @@
       <button id="importSaveBridgePullBtn" class="hidden px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-sm whitespace-nowrap">Pull from Device</button>
     </div>
     <div id="importSaveBridgeSetup" class="rounded-lg border border-gray-700 bg-gray-900/50 p-3 mb-3 text-xs text-gray-400 space-y-2">
-      <p><strong class="text-gray-200">Don't have the CIFI Bridge running?</strong> It's a small local helper that reads your save file over ADB (emulator or USB) so you don't have to find/copy it by hand. Requires <a href="https://nodejs.org/" target="_blank" rel="noopener" class="text-blue-400 hover:underline">Node.js</a> to be installed.</p>
+      <p><strong class="text-gray-200">Don't have the CIFI Bridge running?</strong> It's a small local helper that reads your save file over ADB (emulator or USB) so you don't have to find/copy it by hand. Requires Node.js to be installed.</p>
+      <a href="https://nodejs.org/en/download" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-green-700 hover:bg-green-600 text-white text-xs font-medium w-fit">⬇ Download Node.js</a>
       <div class="flex items-center gap-2">
         <code id="bridgeInstallCmd" class="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-gray-200 font-mono">npx cifi-bridge</code>
         <button id="copyBridgeCmdBtn" class="px-2 py-1.5 rounded-md bg-gray-700 hover:bg-gray-600 text-white flex-shrink-0" title="Copy command"></button>
@@ -309,16 +310,16 @@
   </div>
 </div>
 
-<script src="icons.js"></script>
-<script src="hunterDefs.js"></script>
-<script src="upgradeEffects.js"></script>
-<script src="hunterSimBrowser.js"></script>
-<script src="optimizerBrowser.js"></script>
-<script src="beamSearchBrowser.js"></script>
-<script src="saveImport.js"></script>
-<script src="buildCode.js"></script>
-<script src="costFormulas.js"></script>
-<script src="app.js"></script>
+<script src="icons.js?v=20260727a"></script>
+<script src="hunterDefs.js?v=20260727a"></script>
+<script src="upgradeEffects.js?v=20260727a"></script>
+<script src="hunterSimBrowser.js?v=20260727a"></script>
+<script src="optimizerBrowser.js?v=20260727a"></script>
+<script src="beamSearchBrowser.js?v=20260727a"></script>
+<script src="saveImport.js?v=20260727a"></script>
+<script src="buildCode.js?v=20260727a"></script>
+<script src="costFormulas.js?v=20260727a"></script>
+<script src="app.js?v=20260727a"></script>
 <script>
   // Custom (non-Tabler) sidebar icons: real game-asset SVG paths copied verbatim from the
   // live site's rendered DOM (Relics/Loop Mods/Milestones use bespoke icons, not Tabler's).

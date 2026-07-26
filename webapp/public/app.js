@@ -1244,7 +1244,26 @@ document.getElementById('importSaveBtn').onclick = openImportSaveModal;
 // you don't have to open the Import Save modal just to check. Polls rather than holding one
 // persistent socket open in the background, since the bridge can start/stop independently
 // of this page and reconnecting per-check is simpler than managing socket lifecycle here.
+// Describes what CHECK_ADB's ADB_STATUS response means for the connected-device line, e.g.
+// "connected — emulator detected" vs "connected — no device detected". emulatorCount/
+// physicalCount come from the bridge's adb devices probe (bridge/adb-status.mjs).
+function describeAdbDeviceStatus(status) {
+  if (!status || status.serverRunning === false) return null;
+  const { emulatorCount = 0, physicalCount = 0 } = status;
+  if (emulatorCount > 0 && physicalCount > 0) return 'emulator + device detected';
+  if (emulatorCount > 1) return `${emulatorCount} emulators detected`;
+  if (emulatorCount === 1) return 'emulator detected';
+  if (physicalCount > 1) return `${physicalCount} devices detected`;
+  if (physicalCount === 1) return 'device detected';
+  return 'no device detected';
+}
+
 let bridgeStatusWs = null;
+async function refreshBridgeAdbStatusText(ws, text) {
+  const status = await window.checkCifiBridgeAdbStatus(ws);
+  const desc = describeAdbDeviceStatus(status);
+  text.textContent = desc ? `CIFI Bridge connected — ${desc}` : 'CIFI Bridge connected';
+}
 async function updateBridgeStatusIndicator() {
   const box = document.getElementById('bridgeStatusSidebar');
   const dot = document.getElementById('bridgeStatusDot');
@@ -1256,6 +1275,7 @@ async function updateBridgeStatusIndicator() {
       box.classList.remove('hidden');
       dot.className = 'w-2 h-2 rounded-full bg-green-500 flex-shrink-0';
       text.textContent = 'CIFI Bridge connected';
+      refreshBridgeAdbStatusText(ws, text);
       ws.addEventListener('close', () => { dot.className = 'w-2 h-2 rounded-full bg-gray-500 flex-shrink-0'; text.textContent = 'CIFI Bridge disconnected'; });
     } else {
       box.classList.add('hidden');
@@ -1263,7 +1283,13 @@ async function updateBridgeStatusIndicator() {
   } catch { box.classList.add('hidden'); }
 }
 updateBridgeStatusIndicator();
-setInterval(() => { if (!bridgeStatusWs || bridgeStatusWs.readyState !== WebSocket.OPEN) updateBridgeStatusIndicator(); }, 8000);
+setInterval(() => {
+  if (!bridgeStatusWs || bridgeStatusWs.readyState !== WebSocket.OPEN) {
+    updateBridgeStatusIndicator();
+  } else {
+    refreshBridgeAdbStatusText(bridgeStatusWs, document.getElementById('bridgeStatusText'));
+  }
+}, 8000);
 
 // ==================== MANAGE CATEGORIES ====================
 
@@ -2270,6 +2296,10 @@ function openImportSaveModal() {
   window.tryConnectCifiBridge().then((ws) => {
     if (ws) {
       statusText.textContent = 'CIFI Bridge detected — pull the save directly from your device.';
+      window.checkCifiBridgeAdbStatus(ws).then((status) => {
+        const desc = describeAdbDeviceStatus(status);
+        if (desc) statusText.textContent = `CIFI Bridge detected (${desc}) — pull the save directly from your device.`;
+      });
       pullBtn.classList.remove('hidden');
       pullBtn.onclick = async () => {
         pullBtn.disabled = true;

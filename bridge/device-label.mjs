@@ -4,7 +4,7 @@ import { requireAdbExecutable } from './adb-resolve.mjs'
 
 const execFileAsync = promisify(execFile)
 
-function isEmulatorSerial(serial) {
+export function isEmulatorSerial(serial) {
   const trimmed = String(serial ?? '').trim()
   return /^127\.0\.0\.1:\d+$/.test(trimmed) || /^emulator-\d+$/.test(trimmed)
 }

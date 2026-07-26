@@ -19,7 +19,14 @@ http.createServer((req, res) => {
   fs.readFile(filePath, (err, data) => {
     if (err) { res.writeHead(404); res.end('Not found'); return; }
     const ext = path.extname(filePath);
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+    // index.html is the entry point that references every other file by (versioned) URL --
+    // if a browser caches THIS, it keeps loading old asset URLs forever regardless of any
+    // ?v= cache-bust, which is exactly what required a hard refresh to pick up updates
+    // (including the bridge connection code). Every other file is safe to cache normally
+    // since its URL changes whenever its content does.
+    const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream' };
+    if (ext === '.html') headers['Cache-Control'] = 'no-cache';
+    res.writeHead(200, headers);
     res.end(data);
   });
 }).listen(PORT, () => console.log(`HunterSim webapp running at http://localhost:${PORT}`));

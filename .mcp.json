@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "cifi-compare": {
+      "command": "node",
+      "args": ["compare-mcp/server.mjs"]
+    }
+  }
+}

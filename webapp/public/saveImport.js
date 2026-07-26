@@ -2,7 +2,7 @@
 // CIFI save file import: decode DATA.text/CifiBackup.text entirely client-side (no server,
 // no ADB/Frida needed at runtime) and map it onto this tool's store shape.
 //
-// Format (fully reverse-engineered via Il2CppDumper + radare2 disassembly + live Frida
+// Format (fully reverse-engineered via IL2CPP metadata analysis + disassembly + live
 // instrumentation of com.OctocubeGamesCompany.CIFI -- see project notes):
 //   - File is ASCII text: one giant base64 blob (may contain embedded newlines) plus a few
 //     short unrelated base64 tokens (small encrypted metadata, not needed here).
@@ -124,9 +124,15 @@ const GEM_TREE_SAVE_PREFIX = {
   attraction: 'Attraction', creation: 'Creation', evolution: 'Evolution',
 };
 
+// Borge and Ozzy each have a 9th "advanced" talent (ultima) that HUNTER_DEFS lists between
+// the 7th talent and the final one (tfow/echo) -- it occupies its own Skill{n}Level slot in
+// the save just like every other talent, so it must be included here in position even though
+// it's hidden from the UI by default. Omitting it (as a prior version of this list did) shifts
+// every talent read after it by one slot, which is why the last talent (tfow for Borge, echo
+// for Ozzy) was silently reading the wrong field and importing as 0.
 const HUNTER_TALENT_ORDER = {
-  borge: ['revival', 'loth', 'ua', 'impeccable', 'omen', 'll', 'pog', 'tfow'],
-  ozzy: ['revival', 'boon', 'ua', 'needles', 'omen', 'll', 'crip', 'echo'],
+  borge: ['revival', 'loth', 'ua', 'impeccable', 'omen', 'll', 'pog', 'ultima', 'tfow'],
+  ozzy: ['revival', 'boon', 'ua', 'needles', 'omen', 'll', 'crip', 'ultima', 'echo'],
   knox: ['revival', 'calyp', 'ua', 'ghost', 'omen', 'll', 'pog', 'finish'],
 };
 
@@ -138,12 +144,20 @@ const HUNTER_TALENT_ORDER = {
 // exp=6,atlas=0,weak=6,...) -- note the save's positional order puts "weak" (Weakspot
 // Analysis) at index 9 and "atlas" (Atlas Protocol) at index 10, the REVERSE of the order
 // they're listed in HUNTER_DEFS.borge.attributes. Ozzy/Knox use the same POI/POK field
-// names but their positional order hasn't been verified against a real account with
-// distinguishing nonzero values yet -- best-effort match to HUNTER_DEFS order for now.
+// names and were originally best-effort matched to HUNTER_DEFS order, then live-verified
+// (2026-07) against a real pulled save by checking every value against each attribute's
+// maxLevel cap and its attributeDependencies prerequisite chain in hunterDefs.js. That
+// confirmed TWO reversed pairs for Ozzy, both mirroring Borge's pattern: index 6/7 hold
+// "vect" (Vectid Elixir) then "snek" (Soul Of Snek), and index 8/9 hold "deal" (A Deal With
+// Death, maxLevel 3) then "cycle" (The Cycle Of Death, maxLevel 5) -- the unswapped order
+// put a value of 4 into "deal" (impossible, exceeds its max of 3) and broke the
+// cycle-requires-snek dependency chain; this order satisfies both. Knox's order still isn't
+// verified against a real account (it has no talents/attributes on the account this was
+// checked against).
 const HUNTER_ATTR_SAVE_PREFIX = { borge: 'POM', ozzy: 'POI', knox: 'POK' };
 const HUNTER_ATTR_ORDER = {
   borge: ['ares', 'ylith', 'spartan', 'timeless', 'baal', 'sensors', 'htb', 'lfin', 'exp', 'weak', 'atlas', 'battle', 'mino', 'hermes', 'athena'],
-  ozzy: ['lotl', 'exo', 'scorp', 'timeless', 'ibu', 'exterm', 'snek', 'vect', 'cycle', 'deal', 'medusa', 'dance', 'sisters', 'scarab', 'cat'],
+  ozzy: ['lotl', 'exo', 'scorp', 'timeless', 'ibu', 'exterm', 'vect', 'snek', 'deal', 'cycle', 'medusa', 'dance', 'sisters', 'scarab', 'cat'],
   // Knox only has 11 released attributes vs 15 save slots -- mapping the first 11
   // positionally and leaving the remaining POK11-14 slots unused/unverified.
   knox: ['kraken', 'soul', 'dead', 'spa', 'pl', 'time', 'sear', 'pct', 'kot', 'fe', 'sop'],
@@ -180,14 +194,23 @@ function mapSaveToStore(save) {
 
   unmapped.push('researches', 'cms', 'loopmods', 'diamondspecials', 'iap', 'ultima', 'gadgets', 'trinkets', 'shardmilestones');
 
-  // Gems: tree level + 6 boolean nodes per tree
+  // Gems: tree level + 6 boolean nodes per tree. Every tree except Exodus stores its nodes
+  // as individual `${prefix}GemNode{n}Level` fields; Exodus alone stores them as a single
+  // `ExodusGemNodeLevels` array (confirmed against a live save -- `ExodusGemNode1Level` etc.
+  // don't exist at all for Exodus, so reading them the same way as the other 6 trees always
+  // silently returned "unallocated" regardless of the account's real Exodus node levels).
   const gems = {};
   Object.entries(GEM_TREE_SAVE_PREFIX).forEach(([treeKey, prefix]) => {
     const level = save[`${prefix}QualityLevel`];
     const nodes = [];
-    for (let i = 1; i <= 6; i++) {
-      const n = save[`${prefix}GemNode${i}Level`];
-      nodes.push(!!realNum(n));
+    const arrKey = `${prefix}GemNodeLevels`;
+    if (Array.isArray(save[arrKey])) {
+      for (let i = 0; i < 6; i++) nodes.push(!!realNum(save[arrKey][i]));
+    } else {
+      for (let i = 1; i <= 6; i++) {
+        const n = save[`${prefix}GemNode${i}Level`];
+        nodes.push(!!realNum(n));
+      }
     }
     gems[treeKey] = { level: level !== undefined ? realNum(level) : 0, nodes };
   });
@@ -248,6 +271,35 @@ function tryConnectBridge(timeoutMs = 1200) {
   });
 }
 window.tryConnectCifiBridge = tryConnectBridge;
+
+// Queries the bridge's ADB device list (CHECK_ADB -> ADB_STATUS) so the UI can show whether
+// it's just reachable vs. actually seeing a connected emulator/device. Uses addEventListener
+// (not ws.onmessage=) so it composes with other listeners already attached to this socket
+// (e.g. the sidebar's HELLO listener from tryConnectBridge, or a 'close' listener) instead of
+// clobbering them.
+function checkBridgeAdbStatus(ws, timeoutMs = 5000) {
+  return new Promise((resolve) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) { resolve(null); return; }
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      ws.removeEventListener('message', onMsg);
+      resolve(result);
+    };
+    const onMsg = (ev) => {
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch { return; }
+      if (msg.type === 'ADB_STATUS') finish(msg);
+      else if (msg.type === 'ERROR') finish(null);
+    };
+    const timer = setTimeout(() => finish(null), timeoutMs);
+    ws.addEventListener('message', onMsg);
+    try { ws.send(JSON.stringify({ type: 'CHECK_ADB' })); } catch { finish(null); }
+  });
+}
+window.checkCifiBridgeAdbStatus = checkBridgeAdbStatus;
 
 function pullSaveViaBridge(ws, timeoutMs = 60000) {
   return new Promise((resolve, reject) => {
