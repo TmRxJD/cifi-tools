@@ -1727,7 +1727,31 @@ const STAT_BAR_MAX = { hp: 1000, atk: 1000, regen: 100, critpower: 100, stage: 5
 // Verbatim port of the live "Hunter Stats" modal's card (captured via outerHTML): unlike
 // the Build Creator's card (single chevron each side, no mobile variant here), this one has
 // a min/dec/bar/inc/max quad-chevron row and no responsive md:hidden alternate layout.
-function renderQuadStepperCard({ label, level, maxLevel, accentColor, canDec, onInc, onDec, onMax, onMin, softMax }) {
+// Wires a double-chevron button to step by 10 on a normal click, but jump straight to the
+// true min/max on a press-and-hold (~450ms) instead -- single clicks used to jump straight to
+// the absolute min/max here (unlike every other double-chevron stepper in the app, which
+// steps by 10; see renderUpgradeInput's ctrl-btn row), which made it too easy to overshoot a
+// stat by accident. Hold-to-jump keeps that "snap to max/min" capability available without
+// losing it, just off the accidental single-click path.
+const HOLD_TO_JUMP_MS = 450;
+function wireStepOrHoldButton(button, stepFn, jumpFn) {
+  let firedByHold = false;
+  let timer = null;
+  const clearTimer = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  button.addEventListener('pointerdown', (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    firedByHold = false;
+    clearTimer();
+    timer = setTimeout(() => { firedByHold = true; jumpFn(); }, HOLD_TO_JUMP_MS);
+  });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach((evt) => button.addEventListener(evt, clearTimer));
+  button.addEventListener('click', () => {
+    if (firedByHold) { firedByHold = false; return; }
+    stepFn();
+  });
+}
+
+function renderQuadStepperCard({ label, level, maxLevel, accentColor, canDec, onInc, onDec, onMax, onMin, onJumpMax, onJumpMin, softMax }) {
   const uncapped = maxLevel === Infinity;
   const barMax = uncapped ? (softMax || 1000) : maxLevel;
   const pct = Math.min(100, (level / barMax) * 100);
@@ -1749,8 +1773,11 @@ function renderQuadStepperCard({ label, level, maxLevel, accentColor, canDec, on
       <button data-max class="flex justify-center items-center bg-gray-800 hover:bg-gray-700 rounded transition-colors p-2" style="min-width:2.5rem;">${iconSvg('chevron-right', 18)}${iconSvg('chevron-right', 18, '-ml-2')}</button>
     </div>`;
   div.querySelector('[data-inc]').onclick = onInc;
-  div.querySelector('[data-max]').onclick = onMax;
-  if (canDec) { div.querySelector('[data-dec]').onclick = onDec; div.querySelector('[data-min]').onclick = onMin; }
+  wireStepOrHoldButton(div.querySelector('[data-max]'), onMax, onJumpMax || onMax);
+  if (canDec) {
+    div.querySelector('[data-dec]').onclick = onDec;
+    wireStepOrHoldButton(div.querySelector('[data-min]'), onMin, onJumpMin || onMin);
+  }
   return div;
 }
 
@@ -1776,8 +1803,10 @@ function renderStatsModalBody() {
       accentColor: HUNTER_ACCENTS[currentHunter], canDec: level > 0, softMax: STAT_BAR_MAX[key],
       onInc: () => { store[currentHunter].hunterStats[key] = level + 1; saveStore(); renderStatsModalBody(); },
       onDec: () => { store[currentHunter].hunterStats[key] = level - 1; saveStore(); renderStatsModalBody(); },
-      onMax: () => { store[currentHunter].hunterStats[key] = cap !== Infinity ? cap : level + 10; saveStore(); renderStatsModalBody(); },
-      onMin: () => { store[currentHunter].hunterStats[key] = 0; saveStore(); renderStatsModalBody(); },
+      onMax: () => { store[currentHunter].hunterStats[key] = cap !== Infinity ? Math.min(cap, level + 10) : level + 10; saveStore(); renderStatsModalBody(); },
+      onMin: () => { store[currentHunter].hunterStats[key] = Math.max(0, level - 10); saveStore(); renderStatsModalBody(); },
+      onJumpMax: () => { store[currentHunter].hunterStats[key] = cap !== Infinity ? cap : level + 10; saveStore(); renderStatsModalBody(); },
+      onJumpMin: () => { store[currentHunter].hunterStats[key] = 0; saveStore(); renderStatsModalBody(); },
     });
     grid.appendChild(card);
   });
