@@ -255,15 +255,45 @@
       beam.forEach((b) => allSeen.set(sigOf(b), b));
       onProgress({ evalsDone, targetEvals, generation: 0, bestScore: beam[0].score, elapsedMs: Date.now() - start });
 
+      // Stagnation escape: on a large point budget (dozens of attributes/talents), a single
+      // 1-point mutation per neighbor barely perturbs the allocation, and dedupTopK keeps
+      // collapsing the beam back down to trivial variants of the same greedy seed -- confirmed
+      // empirically (real ~150-point account import): the search plateaued at the exact same
+      // bestScore for 100+ straight generations, moving at most one point off the greedy seed
+      // in 5000+ evaluations. When the best score hasn't improved for a while, replace the
+      // weaker half of the beam with fresh random-restart allocations and mutate the survivors
+      // MORE aggressively (multiple point-moves per neighbor) instead of just repeating the
+      // same tiny local search around a seed it already can't escape.
+      const STAGNATION_LIMIT = 8;
+      let stagnantGens = 0;
+      let lastBestScore = beam[0].score;
+
       let generation = 0;
       while (evalsDone < targetEvals && !shouldCancel()) {
+        const stagnant = stagnantGens >= STAGNATION_LIMIT;
+        const mutationHops = stagnant ? 3 : 1;
         const candidates = [];
         for (const member of beam) {
           for (let k = 0; k < neighborsPerMember; k++) {
-            const mutateTalents = Math.random() < 0.5;
-            const nt = mutateTalents ? Optimizer.neighbor(cfg.TALENTS, cfg.TALENT_BUDGET, member.talentAlloc) : member.talentAlloc;
-            const na = mutateTalents ? member.attrAlloc : Optimizer.constrainedNeighbor(cfg.ATTRIBUTES, cfg.ATTRIBUTE_BUDGET, member.attrAlloc, deps, minVal);
+            let nt = member.talentAlloc;
+            let na = member.attrAlloc;
+            for (let hop = 0; hop < mutationHops; hop++) {
+              const mutateTalents = Math.random() < 0.5;
+              nt = mutateTalents ? Optimizer.neighbor(cfg.TALENTS, cfg.TALENT_BUDGET, nt) : nt;
+              na = mutateTalents ? na : Optimizer.constrainedNeighbor(cfg.ATTRIBUTES, cfg.ATTRIBUTE_BUDGET, na, deps, minVal);
+            }
             candidates.push({ talentAlloc: nt, attrAlloc: na });
+          }
+        }
+        if (stagnant) {
+          // Full random restarts, not just mutated seeds -- gives the search a genuinely
+          // different starting region instead of another variant of the same local optimum.
+          const restartCount = Math.max(2, Math.floor(beamWidth / 2));
+          for (let i = 0; i < restartCount; i++) {
+            candidates.push({
+              talentAlloc: Optimizer.randomAllocation(cfg.TALENTS, cfg.TALENT_BUDGET),
+              attrAlloc: Optimizer.randomConstrainedAllocation(cfg.ATTRIBUTES, cfg.ATTRIBUTE_BUDGET, deps, minVal),
+            });
           }
         }
         const scores = await pool.scoreBatch(candidates, mode, searchIterations);
@@ -273,8 +303,20 @@
           const sig = sigOf(c);
           if (!allSeen.has(sig) || allSeen.get(sig).score < c.score) allSeen.set(sig, c);
         });
-        beam = dedupTopK([...beam, ...scoredCandidates], beamWidth);
+        if (stagnant) {
+          // Keep only the top half of the existing beam (the proven-good members) plus
+          // whatever the mutated/restarted candidates produced, instead of always keeping the
+          // full old beam -- otherwise the untouched top-half immediately out-competes the
+          // fresh restarts every single generation and nothing ever actually changes.
+          const survivors = dedupTopK(beam, Math.ceil(beamWidth / 2));
+          beam = dedupTopK([...survivors, ...scoredCandidates], beamWidth);
+          stagnantGens = 0;
+        } else {
+          beam = dedupTopK([...beam, ...scoredCandidates], beamWidth);
+        }
         generation++;
+        if (beam[0].score > lastBestScore) { lastBestScore = beam[0].score; stagnantGens = 0; }
+        else stagnantGens++;
         onProgress({ evalsDone, targetEvals, generation, bestScore: beam[0].score, elapsedMs: Date.now() - start });
       }
 
