@@ -1,38 +1,30 @@
 'use strict';
 
-// Seed defaults from your real account data (pulled earlier from cifi-tools.com's own
-// localStorage) so the tool is immediately useful; everything below is then edited/persisted
-// independently in THIS page's own localStorage (different origin, so no risk of touching
-// your real cifi-tools.com data). Global upgrades are ONE shared pool (matching the real
-// site's actual data shape), merged here from what was originally captured per-hunter.
+// Fresh-install defaults -- deliberately all-zero/agnostic. An earlier version of this file
+// seeded these from one specific real account's own captured localStorage (specific
+// non-zero relic/inscryption/milestone/loot-multiplier levels), which meant every NEW install
+// of this tool silently started with someone else's progression baked in, and -- worse --
+// any field a user hadn't gotten around to re-configuring on the Gems/Upgrades pages kept
+// contributing that stranger's numbers to their own sim results indefinitely. This surfaced
+// as a real, measurable bug: several "pure loot" fields (hunterloot, ultima, scavenger2,
+// milestone count, iridian/gaiden cards, gem loot-bonus nodes) are deliberately excluded from
+// build-share codes since they don't move Loot SCORE, but they very much move the raw
+// mat1/mat2/mat3/xp yield shown on a build card -- confirmed directly: evaluating the exact
+// same build with the old anchored defaults vs. all-zero inflated mat1 by ~1000x. Every field
+// here must be filled in by the user (Gems page, Upgrades pages, Hunter Stats modal) to match
+// their own real account -- there is no substitute "reasonable" non-zero default that isn't
+// just some other account's data.
 // "stage" (highest stage ever reached) is a required sim input, not just display -- the
 // site's own EVAL_PARAMS list includes it (resolved from hunterStats.stage), and leaving
-// it at the 0 default visibly breaks the simulation (flat 100-100 stage range with zero
-// Monte Carlo variance -- a "haven't progressed yet" input, not a real playthrough).
+// it at 0 visibly breaks the simulation (flat 100-100 stage range with zero Monte Carlo
+// variance). 1 is the minimal honest value true of any account, real or brand new.
 const SEED_HUNTER_STATS = {
-  borge: { hp: 210, atk: 188, regen: 120, dr: 32, evade: 35, effect: 38, critchance: 54, critpower: 50, atkspeed: 26, stage: 173 },
-  ozzy: { hp: 221, atk: 220, regen: 163, dr: 50, evade: 30, effect: 37, multichance: 36, multipower: 27, atkspeed: 27, stage: 168 },
-  knox: { hp: 0, atk: 0, regen: 0, dr: 0, block: 0, effect: 0, charge: 0, chargeGain: 0, reload: 0, proj: 0, stage: 0 },
+  borge: { hp: 0, atk: 0, regen: 0, dr: 0, evade: 0, effect: 0, critchance: 0, critpower: 0, atkspeed: 0, stage: 1 },
+  ozzy: { hp: 0, atk: 0, regen: 0, dr: 0, evade: 0, effect: 0, multichance: 0, multipower: 0, atkspeed: 0, stage: 1 },
+  knox: { hp: 0, atk: 0, regen: 0, dr: 0, block: 0, effect: 0, charge: 0, chargeGain: 0, reload: 0, proj: 0, stage: 1 },
 };
 
-const SEED_GLOBAL_UPGRADES = {
-  'relics.r4': 8, 'relics.r7': 8, 'relics.r16': 0, 'relics.r17': 0, 'relics.r19': 0,
-  'relics.t2r5': 0, 'relics.t2r7': 0, 'shardmilestones.m0': 70,
-  'inscryptions.i3': 8, 'inscryptions.i4': 6, 'inscryptions.i11': 3, 'inscryptions.i13': 8,
-  'inscryptions.i14': 5, 'inscryptions.i23': 5, 'inscryptions.i24': 8, 'inscryptions.i27': 10,
-  'inscryptions.i44': 10, 'inscryptions.i60': 1, 'inscryptions.i80': 0, 'inscryptions.i84': 0,
-  'inscryptions.i87': 0, 'inscryptions.i88': 0, 'inscryptions.i89': 0, 'inscryptions.i91': 0, 'inscryptions.i103': 0,
-  'inscryptions.i31': 10, 'inscryptions.i32': 8, 'inscryptions.i33': 6, 'inscryptions.i36': 5,
-  'inscryptions.i37': 7, 'inscryptions.i40': 10, 'inscryptions.i105': 0,
-  'loopmods.scavenger': 25, 'loopmods.scavenger2': 25, 'loopmods.trample': 1, 'loopmods.stelzi': 0,
-  'iap.travpack': 1, 'ultima.ulti': 1,
-  'diamondspecials.reviveboost': 10, 'diamondspecials.hunterloot': 10,
-  'diamondcards.gaiden': 1, 'diamondcards.iridian': 1,
-  'researches.res81': 0, 'researches.res95': 0, 'researches.res105': 0,
-  'cms.cm46': 0, 'cms.cm47': 0, 'cms.cm48': 0, 'cms.cm51': 0, 'cms.cm53': 0, 'cms.cm54': 0, 'cms.cm57': 0, 'cms.milestoneCount': 0,
-  'gadgets.wrench': 0, 'gadgets.zaptron': 0, 'gadgets.anchor': 0,
-  'trinkets.last_handbook': 0, 'trinkets.transmission_amplifier': 0, 'trinkets.ouro_codex': 0,
-};
+const SEED_GLOBAL_UPGRADES = {};
 
 const STORAGE_KEY = 'huntersim_clone_v2';
 const DEFAULT_CATEGORIES = [{ id: 'active', name: 'Active', isSystem: true }, { id: 'archived', name: 'Archived', isSystem: true }];

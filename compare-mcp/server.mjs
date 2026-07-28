@@ -34,12 +34,24 @@ const TEST_BUILD_SHAPE = {
 
 function summarize(hunter, live, clone) {
   const cloneLootScore = clone.lootPerMin;
+  // Clone-side "per day" isn't a direct wasm field -- it's derived the same way app.js
+  // derives it for display: perDay = perRun * (1440 / avgTime).
+  const cloneRunsPerDay = clone.avgTime ? 1440 / clone.avgTime : null;
+  const perDay = (perRun) => (perRun != null && cloneRunsPerDay != null ? perRun * cloneRunsPerDay : null);
   const fields = [
     { key: 'lootScore', live: live.lootScore, clone: cloneLootScore },
     { key: 'avgStage', live: live.avgStage, clone: clone.avgStage },
     { key: 'avgTimeMinutes', live: live.avgTimeMinutes, clone: clone.avgTime },
     { key: 'minStage', live: live.minStage, clone: clone.minStage },
     { key: 'maxStage', live: live.maxStage, clone: clone.maxStage },
+    { key: 'mat1PerRun', live: live.mat1PerRun, clone: clone.mat1 },
+    { key: 'mat1PerDay', live: live.mat1PerDay, clone: perDay(clone.mat1) },
+    { key: 'mat2PerRun', live: live.mat2PerRun, clone: clone.mat2 },
+    { key: 'mat2PerDay', live: live.mat2PerDay, clone: perDay(clone.mat2) },
+    { key: 'mat3PerRun', live: live.mat3PerRun, clone: clone.mat3 },
+    { key: 'mat3PerDay', live: live.mat3PerDay, clone: perDay(clone.mat3) },
+    { key: 'xpPerRun', live: live.xpPerRun, clone: clone.xp },
+    { key: 'xpPerDay', live: live.xpPerDay, clone: perDay(clone.xp) },
   ];
   // 1000-iteration Monte Carlo runs on either side never come out bit-identical -- flag only
   // deltas outside normal sampling noise (~2%) as a real mismatch worth investigating.

@@ -44,6 +44,24 @@ function parseDurationToMinutes(str) {
   return h || m || s ? minutes : null;
 }
 
+// The "Loot" section right after the 4 headline stats is 4 material cards in a fixed order
+// (mat1, mat2, mat3, xp -- confirmed against app.js's own `[r.mat1, r.mat2, r.mat3, r.xp]`
+// ordering), each rendering as "<perRun>\nper run\n<perDay>\nper day".
+function parseLootMaterials(block) {
+  // NOT a plain split on "Loot" -- "Loot Score" earlier in the same block also contains the
+  // word "Loot" and would be matched first, silently grabbing the wrong (middle) segment.
+  const idx = block.search(/\nLoot\n/);
+  const lootBlock = idx === -1 ? null : block.slice(idx);
+  if (!lootBlock) return null;
+  const re = /([\d.]+\s*[kmb]?)\s*\n?\s*per run\s*\n?\s*([\d.]+\s*[kmb]?)\s*\n?\s*per day/gi;
+  const materials = [];
+  let m;
+  while ((m = re.exec(lootBlock)) && materials.length < 4) {
+    materials.push({ perRun: parseSuffixedNumber(m[1]), perDay: parseSuffixedNumber(m[2]) });
+  }
+  return materials.length === 4 ? materials : null;
+}
+
 function parseMainStatistics(text) {
   const block = text.split('Main Statistics')[1];
   if (!block) return null;
@@ -52,6 +70,7 @@ function parseMainStatistics(text) {
     return m ? m[1].trim() : null;
   };
   const rangeMatch = block.match(/Ø Stage\s*\n?\s*([\d.]+)\s*\n?\s*(\d+)-(\d+)/);
+  const materials = parseLootMaterials(block);
   return {
     lootScore: parseSuffixedNumber(grab(/Loot Score\s*\n?\s*([\d.]+\s*[kmb]?)\b/i)),
     avgTimeMinutes: parseDurationToMinutes(grab(/Ø Time\s*\n?\s*((?:[\d.]+\s*[hms]\s*)+)/i)),
@@ -59,6 +78,11 @@ function parseMainStatistics(text) {
     minStage: rangeMatch ? Number.parseInt(rangeMatch[2], 10) : null,
     maxStage: rangeMatch ? Number.parseInt(rangeMatch[3], 10) : null,
     runsPerDay: Number.parseFloat(grab(/Runs per Day\s*\n?\s*([\d.]+)/)),
+    // [mat1, mat2, mat3, xp] per-run/per-day, matching HunterSim.evaluate()'s own field order.
+    mat1PerRun: materials?.[0]?.perRun ?? null, mat1PerDay: materials?.[0]?.perDay ?? null,
+    mat2PerRun: materials?.[1]?.perRun ?? null, mat2PerDay: materials?.[1]?.perDay ?? null,
+    mat3PerRun: materials?.[2]?.perRun ?? null, mat3PerDay: materials?.[2]?.perDay ?? null,
+    xpPerRun: materials?.[3]?.perRun ?? null, xpPerDay: materials?.[3]?.perDay ?? null,
   };
 }
 
