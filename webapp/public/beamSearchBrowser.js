@@ -245,6 +245,30 @@
           swaps.push({ talentAlloc, attrAlloc: trial, kind: 'attribute', from: from.id, to: to.id });
         }
       }
+
+      // A swap only ever moves a point FROM somewhere TO somewhere else -- it can never spend
+      // budget that's simply sitting unallocated (e.g. a leftover point after an odd-cost
+      // substitution, or a random-mutation candidate that never spent its full budget in the
+      // first place). Confirmed as a real bug on a real Knox build: the "optimized" result only
+      // spent 35 of 36 attribute points, permanently wasting one, because this pass had no move
+      // type that could ever touch idle budget. If there's leftover room, also offer plain
+      // "spend one more point here" candidates with nothing removed.
+      const talentLeftover = cfg.TALENT_BUDGET - Optimizer.costOf(cfg.TALENTS, talentAlloc);
+      if (talentLeftover > 0) {
+        for (const to of talentTo) {
+          const nt = { ...talentAlloc, [to.id]: (talentAlloc[to.id] || 0) + 1 };
+          swaps.push({ talentAlloc: nt, attrAlloc, kind: 'talent-topup', to: to.id });
+        }
+      }
+      const attrLeftover = cfg.ATTRIBUTE_BUDGET - Optimizer.costOf(cfg.ATTRIBUTES, attrAlloc);
+      if (attrLeftover > 0) {
+        for (const to of cfg.ATTRIBUTES) {
+          if ((to.cost || 1) > attrLeftover) continue;
+          if (!Optimizer.isEligible(to, cfg.ATTRIBUTES, deps, minVal, attrAlloc)) continue;
+          const trial = { ...attrAlloc, [to.id]: (attrAlloc[to.id] || 0) + 1 };
+          swaps.push({ talentAlloc, attrAlloc: trial, kind: 'attribute-topup', to: to.id });
+        }
+      }
       if (!swaps.length) break;
 
       // Cheap single-sample screen across every candidate swap (parallelized across workers).
