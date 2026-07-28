@@ -26,6 +26,21 @@ const SEED_HUNTER_STATS = {
 
 const SEED_GLOBAL_UPGRADES = {};
 
+// Every build id used to be `String(Date.now())` (optionally +hunterKey), which collides
+// whenever two builds get created/saved within the same millisecond -- e.g. running the
+// optimizer, saving, then immediately importing another build. A collision means two builds
+// share one id, so any id-keyed lookup (delete's `filter(b => b.id !== id)`, save's
+// `findIndex(b => b.id === id)`) silently affects BOTH of them at once: deleting one build
+// deleted another that happened to share its id (and, since duplicate/re-saved builds often
+// share a name too, looked like "deleting by name"), and importing a new build could stomp an
+// existing one it collided with. crypto.randomUUID() (or a random-suffix fallback on very old
+// browsers) makes a collision astronomically unlikely instead of merely "unlikely within the
+// same millisecond of normal clicking."
+function genBuildId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 const STORAGE_KEY = 'huntersim_clone_v2';
 const DEFAULT_CATEGORIES = [{ id: 'active', name: 'Active', isSystem: true }, { id: 'archived', name: 'Archived', isSystem: true }];
 
@@ -767,10 +782,30 @@ async function openOverrideCostsModal(build) {
     perDayRate = { mat1: r.mat1 * runsPerDay, mat2: r.mat2 * runsPerDay, mat3: r.mat3 * runsPerDay };
   } catch { /* Collection Time just won't be shown if evaluation fails */ }
 
+  // Verbatim behavior port of the live "Override Costs" modal's own computation (its `C()`
+  // function, extracted directly from the bundle): it iterates ONLY the keys actually present
+  // in build.overrides, computes `difference = overrideValue - globalValue`, and INCLUDES A
+  // ROW ONLY WHEN `difference > 0` -- i.e. only upgrades you don't already have (an override
+  // set below or equal to your current global value is never shown here at all, not even
+  // with a zero/negative cost). Our clone previously showed every overridden field regardless
+  // of sign, which is the bug being fixed.
+  const positiveOverrideKeys = (prefix) => Object.keys(overrides).filter((k) => {
+    if (!k.startsWith(prefix)) return false;
+    const field = overrideGroups.flatMap((g) => g.fields).find((f) => f.key === k);
+    const globalVal = field ? (field.global() ?? 0) : 0;
+    return overrides[k] > globalVal;
+  });
+  const positiveOverrideBaseStats = d.baseStatKeys.filter((k) => {
+    if (overrides[k] === undefined) return false;
+    const field = overrideGroups.find((g) => g.title === 'Base Stats').fields.find((f) => f.key === k);
+    const globalVal = field ? (field.global() ?? 0) : 0;
+    return overrides[k] > globalVal;
+  });
+
   const groups = [
     {
       title: 'Base Stats', icon: 'writing',
-      rows: d.baseStatKeys.filter((k) => overrides[k] !== undefined).map((k) => {
+      rows: positiveOverrideBaseStats.map((k) => {
         const field = overrideGroups.find((g) => g.title === 'Base Stats').fields.find((f) => f.key === k);
         const globalVal = field ? (field.global() ?? 0) : 0;
         const overrideVal = overrides[k];
@@ -780,8 +815,33 @@ async function openOverrideCostsModal(build) {
       }),
     },
     {
+      title: 'Relics', icon: 'scale',
+      rows: positiveOverrideKeys('upgrades.relics.').map((k) => {
+        const id = k.split('.')[2];
+        const field = overrideGroups.find((g) => g.title === 'Relics')?.fields.find((f) => f.key === k);
+        const globalVal = field ? (field.global() ?? 0) : 0;
+        const overrideVal = overrides[k];
+        const resource = CF.relicResource(currentHunter);
+        const cost = resource ? CF.relicCostRange(id, globalVal, overrideVal) : undefined;
+        return { label: field ? field.label : id, globalVal, overrideVal, resource, cost };
+      }),
+    },
+    {
+      title: 'Gadgets', icon: 'settings',
+      rows: positiveOverrideKeys('upgrades.gadgets.').map((k) => {
+        const id = k.split('.')[2];
+        const field = overrideGroups.find((g) => g.title === 'Gadgets')?.fields.find((f) => f.key === k);
+        const globalVal = field ? (field.global() ?? 0) : 0;
+        const overrideVal = overrides[k];
+        // No resource/material table extracted for gadgets yet -- shown without a material
+        // icon (still a real, correctly-formatted cost number, just no currency badge).
+        const cost = CF.gadgetCostRange(id, globalVal, overrideVal);
+        return { label: field ? field.label : id, globalVal, overrideVal, resource: null, cost };
+      }),
+    },
+    {
       title: 'Inscryptions', icon: 'chart-bar',
-      rows: Object.keys(overrides).filter((k) => k.startsWith('upgrades.inscryptions.')).map((k) => {
+      rows: positiveOverrideKeys('upgrades.inscryptions.').map((k) => {
         const id = k.split('.')[2];
         const field = overrideGroups.find((g) => g.title === 'Inscryptions')?.fields.find((f) => f.key === k);
         const globalVal = field ? (field.global() ?? 0) : 0;
@@ -792,24 +852,34 @@ async function openOverrideCostsModal(build) {
       }),
     },
     {
-      title: 'Relics', icon: 'scale',
-      rows: Object.keys(overrides).filter((k) => k.startsWith('upgrades.relics.')).map((k) => {
-        const id = k.split('.')[2];
-        const field = overrideGroups.find((g) => g.title === 'Relics')?.fields.find((f) => f.key === k);
+      title: 'Gem Nodes', icon: 'diamond',
+      rows: positiveOverrideKeys('upgrades.gems_nodes.').map((k) => {
+        const suffix = k.split('.')[2];
+        const field = overrideGroups.find((g) => g.title === 'Gem Nodes & Upgrades')?.fields.find((f) => f.key === k);
         const globalVal = field ? (field.global() ?? 0) : 0;
         const overrideVal = overrides[k];
-        const resource = CF.relicResource(currentHunter);
-        const cost = resource ? CF.relicCostRange(id, globalVal, overrideVal) : undefined;
-        return { label: field ? field.label : id, globalVal, overrideVal, resource, cost };
+        const alias = GEM_ALIAS_BY_SUFFIX[suffix];
+        const cost = alias ? CF.gemAliasCostRange(alias, globalVal, overrideVal) : CF.baseStatCostRange(k, globalVal, overrideVal, currentHunter);
+        return { label: field ? field.label : suffix, globalVal, overrideVal, resource: null, cost };
       }),
     },
   ].filter((g) => g.rows.length);
 
+  const modeledPrefixes = ['upgrades.inscryptions.', 'upgrades.relics.', 'upgrades.gadgets.', 'upgrades.gems_nodes.'];
   const knownKeys = new Set([
-    ...d.baseStatKeys,
-    ...Object.keys(overrides).filter((k) => k.startsWith('upgrades.inscryptions.') || k.startsWith('upgrades.relics.')),
+    ...positiveOverrideBaseStats,
+    ...modeledPrefixes.flatMap((p) => positiveOverrideKeys(p)),
   ]);
-  const unmodeledKeys = Object.keys(overrides).filter((k) => !knownKeys.has(k));
+  // Anything else with a positive override we don't have a cost formula for yet -- still
+  // flagged for transparency (an intentional divergence from the live site, which -- since it
+  // has cost data for every category it supports -- would never hit this "unknown" case at
+  // all; ours honestly says so instead of fabricating a number).
+  const unmodeledKeys = Object.keys(overrides).filter((k) => {
+    if (knownKeys.has(k)) return false;
+    const field = overrideGroups.flatMap((g) => g.fields).find((f) => f.key === k);
+    const globalVal = field ? (field.global() ?? 0) : 0;
+    return overrides[k] > globalVal;
+  });
 
   const resourceTotals = {};
   groups.forEach((g) => g.rows.forEach((r) => {
@@ -1403,7 +1473,7 @@ function renderCategoriesList() {
 function addCustomCategory() {
   const name = prompt('New category name:');
   if (!name || !name.trim()) return;
-  store.categories.push({ id: String(Date.now()), name: name.trim(), isSystem: false });
+  store.categories.push({ id: genBuildId(), name: name.trim(), isSystem: false });
   saveStore(); renderCategoriesList(); renderCategoryTabs();
 }
 document.getElementById('closeCategoriesBtn').onclick = () => document.getElementById('categoriesModal').classList.add('hidden');
@@ -2185,7 +2255,7 @@ document.getElementById('levelIncBtn').onclick = () => {
 
 document.getElementById('updateBuildBtn').onclick = () => {
   editingBuild.name = document.getElementById('buildNameInput').value.trim() || 'Unnamed';
-  if (!editingBuild.id) editingBuild.id = String(Date.now());
+  if (!editingBuild.id) editingBuild.id = genBuildId();
   const builds = store[currentHunter].builds;
   const idx = builds.findIndex((b) => b.id === editingBuild.id);
   if (idx >= 0) builds[idx] = editingBuild; else builds.push(editingBuild);
@@ -2331,7 +2401,7 @@ function applyImportedBuild(payload, includeUpgrades) {
   // gets a DIFFERENT id assigned the first time it's edited and saved, so the update
   // handler's id-match lookup fails to find the original and pushes a second copy instead
   // of overwriting it -- this was the "editing creates a duplicate" bug.
-  build.id = String(Date.now());
+  build.id = genBuildId();
   build.name = payload.name || 'Imported';
   build.level = payload.level || 1;
   Object.assign(build.talents, payload.talents || {});
@@ -2441,7 +2511,7 @@ async function processImportedSaveText(rawText) {
       Object.entries(info.attributes || {}).forEach(([attrId, level]) => { existing.attributes[attrId] = level; });
     } else {
       const build = newDraftBuild();
-      build.id = String(Date.now()) + hunterKey;
+      build.id = genBuildId();
       build.name = scanName;
       if (info.level !== undefined) build.level = info.level;
       Object.entries(info.talents || {}).forEach(([talentId, level]) => { build.talents[talentId] = level; });
@@ -2544,6 +2614,8 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
 
   editingBuild.talents = best.talentAlloc;
   editingBuild.attributes = best.attrAlloc;
+  editingBuild.name = 'Optimized';
+  document.getElementById('buildNameInput').value = editingBuild.name;
   onBuildChanged();
   document.getElementById('optimizeProgressModal').classList.add('hidden');
 };
