@@ -2450,7 +2450,21 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
   const result = await beamSearchBrowser(cfg, {
     mode, targetEvals, beamWidth: 8, neighborsPerMember: 3, searchIterations: 100, seedCandidates,
     shouldCancel: () => cancelRequested,
-    onProgress: ({ evalsDone, targetEvals: target, generation, bestScore, elapsedMs }) => {
+    onProgress: ({ evalsDone, targetEvals: target, generation, bestScore, elapsedMs, phase, greedyStep, greedyStepsEstimate }) => {
+      // The greedy-seeding phase (see beamSearchBrowser.js) runs before any beam generations
+      // and used to report nothing at all here -- on a large real-account budget it could look
+      // completely frozen (0/target evaluations, "Generation 0") for a long stretch even
+      // though it was actively working and Cancel was fully functional. Show its own step
+      // count instead of leaving the bar/eval-count static during that phase.
+      if (phase === 'greedy-seeding') {
+        const pct = greedyStepsEstimate ? Math.min(100, (greedyStep / greedyStepsEstimate) * 100) : 0;
+        document.getElementById('progressBar').style.width = `${pct}%`;
+        document.getElementById('progressEvals').textContent = `Finding a strong starting point (${greedyStep} / ~${greedyStepsEstimate} steps)…`;
+        document.getElementById('progressElapsed').textContent = `${(elapsedMs / 1000).toFixed(1)}s`;
+        document.getElementById('progressGen').textContent = '-';
+        document.getElementById('progressBest').textContent = '-';
+        return;
+      }
       document.getElementById('progressBar').style.width = `${Math.min(100, (evalsDone / target) * 100)}%`;
       document.getElementById('progressEvals').textContent = `${evalsDone} / ${target} evaluations`;
       document.getElementById('progressElapsed').textContent = `${(elapsedMs / 1000).toFixed(1)}s`;

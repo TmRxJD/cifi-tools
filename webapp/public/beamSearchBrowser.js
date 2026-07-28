@@ -121,7 +121,7 @@
   // different paths when candidates are close in value, instead of both deterministically
   // picking the exact same allocation -- passed in as multiple seeds so beam search refines
   // from more than one promising starting point ("several path options").
-  async function greedyMarginalSeed(cfg, pool, mode, iterations, epsilon = 0) {
+  async function greedyMarginalSeed(cfg, pool, mode, iterations, epsilon = 0, { onStep = () => {}, shouldCancel = () => false } = {}) {
     const deps = cfg.ATTRIBUTE_DEPENDENCIES || {};
     const minVal = cfg.ATTRIBUTE_MIN_VALUE || {};
     const talentAlloc = {};
@@ -138,6 +138,13 @@
     // slack for the rare case a talent/attribute pair of moves both cost >1.
     const maxSteps = cfg.TALENT_BUDGET + cfg.ATTRIBUTE_BUDGET + 50;
     for (let step = 0; step < maxSteps; step++) {
+      // This loop was previously silent and uncancellable for its entire duration -- on a
+      // small budget that's a fraction of a second and unnoticeable, but on a large real
+      // account's budget (hundreds of talent+attribute points) it could run for a long stretch
+      // with the progress bar frozen and Cancel doing nothing, which is indistinguishable from
+      // the whole optimizer being hung. Report progress and honor cancellation every step.
+      onStep({ evalsUsed, step, maxSteps });
+      if (shouldCancel()) break;
       const candidates = [];
       if (talentSpent < cfg.TALENT_BUDGET) {
         cfg.TALENTS.forEach((t) => {
@@ -198,13 +205,25 @@
       // mutation to stumble onto a good allocation -- this is what actually closes the gap
       // against hand-tuned/community builds (see the big comment on greedyMarginalSeed above).
       let greedyEvalsUsed = 0;
-      onProgress({ evalsDone: 0, targetEvals, generation: 0, bestScore: null, elapsedMs: 0, phase: 'greedy-seeding' });
+      const greedyStart = Date.now();
+      // Rough total step estimate for the progress bar: 2 greedy passes, each ~(budget) steps.
+      const greedyStepsEstimate = 2 * (cfg.TALENT_BUDGET + cfg.ATTRIBUTE_BUDGET);
+      const reportGreedyProgress = (passOffset, step) => onProgress({
+        evalsDone: 0, targetEvals, generation: 0, bestScore: null,
+        elapsedMs: Date.now() - greedyStart, phase: 'greedy-seeding',
+        greedyStep: passOffset + step, greedyStepsEstimate,
+      });
+      onProgress({ evalsDone: 0, targetEvals, generation: 0, bestScore: null, elapsedMs: 0, phase: 'greedy-seeding', greedyStep: 0, greedyStepsEstimate });
       const greedyIterations = Math.min(searchIterations, 100);
-      const greedy1 = await greedyMarginalSeed(cfg, pool, mode, greedyIterations, 0);
-      const greedy2 = await greedyMarginalSeed(cfg, pool, mode, greedyIterations, 0.2);
-      greedyEvalsUsed += greedy1.evalsUsed + greedy2.evalsUsed;
+      const greedy1 = await greedyMarginalSeed(cfg, pool, mode, greedyIterations, 0, {
+        shouldCancel, onStep: ({ step }) => reportGreedyProgress(0, step),
+      });
+      const greedy2 = shouldCancel() ? null : await greedyMarginalSeed(cfg, pool, mode, greedyIterations, 0.2, {
+        shouldCancel, onStep: ({ step }) => reportGreedyProgress(cfg.TALENT_BUDGET + cfg.ATTRIBUTE_BUDGET, step),
+      });
+      greedyEvalsUsed += greedy1.evalsUsed + (greedy2?.evalsUsed || 0);
       seeds.push({ talentAlloc: greedy1.talentAlloc, attrAlloc: greedy1.attrAlloc });
-      seeds.push({ talentAlloc: greedy2.talentAlloc, attrAlloc: greedy2.attrAlloc });
+      if (greedy2) seeds.push({ talentAlloc: greedy2.talentAlloc, attrAlloc: greedy2.attrAlloc });
 
       while (seeds.length < beamWidth) {
         seeds.push({
