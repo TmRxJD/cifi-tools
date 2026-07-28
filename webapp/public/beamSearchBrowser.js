@@ -240,6 +240,16 @@
         const attrTo = cfg.ATTRIBUTES.filter((a) => a.id !== from.id && (a.cost || 1) <= freedCost);
         for (const to of attrTo) {
           const trial = { ...attrAlloc, [from.id]: attrAlloc[from.id] - 1 };
+          // CRITICAL: removing a point from `from` can strand anything downstream that gates on
+          // it -- either a direct dependency parent (deps) or a cumulative minVal threshold sum
+          // that other already-invested attributes rely on. Every other move generator in this
+          // file (constrainedNeighbor in optimizerBrowser.js) cascades a clear of now-invalid
+          // descendants after a removal; this hand-rolled swap loop did not, and it was the
+          // cause of a real illegal build: 0 points in a gating attribute (Essence Of Ylith)
+          // while attributes gated on it stayed fully maxed. Clear BEFORE checking eligibility
+          // and before granting the point to `to`, so the swap can never produce or hide an
+          // illegal allocation.
+          Optimizer.clearInvalidDescendants(cfg.ATTRIBUTES, deps, minVal, trial);
           if (!Optimizer.isEligible(to, cfg.ATTRIBUTES, deps, minVal, trial)) continue;
           trial[to.id] = (trial[to.id] || 0) + 1;
           swaps.push({ talentAlloc, attrAlloc: trial, kind: 'attribute', from: from.id, to: to.id });
@@ -327,15 +337,29 @@
       });
       onProgress({ evalsDone: 0, targetEvals, generation: 0, bestScore: null, elapsedMs: 0, phase: 'greedy-seeding', greedyStep: 0, greedyStepsEstimate });
       const greedyIterations = Math.min(searchIterations, 100);
-      const greedy1 = await greedyMarginalSeed(cfg, pool, mode, greedyIterations, 0, {
-        shouldCancel, onStep: ({ step }) => reportGreedyProgress(0, step),
-      });
-      const greedy2 = shouldCancel() ? null : await greedyMarginalSeed(cfg, pool, mode, greedyIterations, 0.2, {
-        shouldCancel, onStep: ({ step }) => reportGreedyProgress(cfg.TALENT_BUDGET + cfg.ATTRIBUTE_BUDGET, step),
-      });
-      greedyEvalsUsed += greedy1.evalsUsed + (greedy2?.evalsUsed || 0);
-      seeds.push({ talentAlloc: greedy1.talentAlloc, attrAlloc: greedy1.attrAlloc });
-      if (greedy2) seeds.push({ talentAlloc: greedy2.talentAlloc, attrAlloc: greedy2.attrAlloc });
+      // Pure greedy marginal-value construction (epsilon=0) is myopic on attribute trees with
+      // threshold-gated tiers (ATTRIBUTE_MIN_VALUE): it always takes whichever single point
+      // looks best RIGHT NOW, so it can systematically under-invest in a cheap foundational
+      // attribute that only pays off once several points deep unlock something bigger --
+      // confirmed on a real cold-start (level-only) Borge search landing ~11% below the
+      // hand-tuned import even after polish, because the greedy seed anchored on a foundational
+      // choice (Soul Of Ares vs Essence Of Ylith) that a purely-greedy pass has no way to
+      // revisit. Multiple passes with increasing exploration (epsilon) let later passes take a
+      // few "worse-right-now" moves that a single deterministic pass never would, giving the
+      // beam actually different regions to refine instead of near-identical variants of one
+      // greedy path.
+      const EPSILONS = [0, 0.15, 0.3, 0.45];
+      const greedyRuns = [];
+      for (let i = 0; i < EPSILONS.length; i++) {
+        if (shouldCancel()) break;
+        const passOffset = i * (cfg.TALENT_BUDGET + cfg.ATTRIBUTE_BUDGET);
+        const run = await greedyMarginalSeed(cfg, pool, mode, greedyIterations, EPSILONS[i], {
+          shouldCancel, onStep: ({ step }) => reportGreedyProgress(passOffset, step),
+        });
+        greedyRuns.push(run);
+      }
+      greedyEvalsUsed += greedyRuns.reduce((sum, r) => sum + r.evalsUsed, 0);
+      for (const run of greedyRuns) seeds.push({ talentAlloc: run.talentAlloc, attrAlloc: run.attrAlloc });
 
       while (seeds.length < beamWidth) {
         seeds.push({
@@ -420,21 +444,68 @@
       }
 
       // Beam search sampled random neighbors; it never verified that every simple single-point
-      // swap on its own winner had been tried. Polish the top candidate exhaustively -- this is
-      // what actually backs a "never regress" claim (see hillClimbPolish above), so it always
-      // runs regardless of whether targetEvals was already spent.
+      // swap on its own winner had been tried. Polishing ONLY beam[0] risks getting stuck if the
+      // beam's single best member sits in a worse local-optimum basin than #2 or #3 -- confirmed
+      // on a real cold-start (level-only, no seed build) Borge search: the search landed 12.7%
+      // below the hand-tuned import despite this exact polish pass already existing, because
+      // whichever candidate the randomized beam happened to rank #1 wasn't necessarily the one
+      // closest to the true optimum. Polish the top few distinct candidates independently and
+      // keep whichever converges highest -- this is what actually backs a "never regress" claim
+      // (see hillClimbPolish above), so it always runs regardless of remaining eval budget.
       if (!shouldCancel() && beam.length) {
-        onProgress({ evalsDone, targetEvals, generation, bestScore: beam[0].score, elapsedMs: Date.now() - start, phase: 'polish' });
-        const polished = await hillClimbPolish(cfg, pool, mode, searchIterations, beam[0], {
-          shouldCancel,
-          onStep: ({ round, maxRounds }) => onProgress({
-            evalsDone, targetEvals, generation, bestScore: beam[0].score, elapsedMs: Date.now() - start,
-            phase: 'polish', polishRound: round, polishRoundsEstimate: maxRounds,
-          }),
-        });
-        evalsDone += polished.evalsUsed;
-        if (polished.score > beam[0].score) {
-          beam = [{ talentAlloc: polished.talentAlloc, attrAlloc: polished.attrAlloc, score: polished.score }, ...beam.slice(1)];
+        const toPolish = dedupTopK(beam, Math.min(3, beam.length));
+        let bestPolished = null;
+        for (const candidate of toPolish) {
+          if (shouldCancel()) break;
+          onProgress({ evalsDone, targetEvals, generation, bestScore: beam[0].score, elapsedMs: Date.now() - start, phase: 'polish' });
+          const polished = await hillClimbPolish(cfg, pool, mode, searchIterations, candidate, {
+            shouldCancel,
+            onStep: ({ round, maxRounds }) => onProgress({
+              evalsDone, targetEvals, generation, bestScore: beam[0].score, elapsedMs: Date.now() - start,
+              phase: 'polish', polishRound: round, polishRoundsEstimate: maxRounds,
+            }),
+          });
+          evalsDone += polished.evalsUsed;
+          if (!bestPolished || polished.score > bestPolished.score) bestPolished = polished;
+        }
+        if (bestPolished && bestPolished.score > beam[0].score) {
+          beam = [{ talentAlloc: bestPolished.talentAlloc, attrAlloc: bestPolished.attrAlloc, score: bestPolished.score }, ...beam.slice(1)];
+          allSeen.set(sigOf(beam[0]), beam[0]);
+        }
+      }
+
+      // Final legality guarantee: confirmed on a real cold-start Borge search that the winning
+      // allocation could end up with 0 points in a gating attribute (Essence Of Ylith) while
+      // attributes gated on it (Spartan Lineage, Timeless Mastery) stayed fully invested -- an
+      // illegal allocation the real game would never allow. Every generator here was individually
+      // re-verified safe in isolation, so rather than keep hunting for one more edge case, every
+      // candidate that could become the FINAL answer gets a hard clearInvalidDescendants pass
+      // right before being returned. If that actually changes anything, it freed budget, so also
+      // give the freed points a cheap single top-up pass instead of leaving them unspent.
+      if (beam.length) {
+        const before = JSON.stringify(beam[0].attrAlloc);
+        Optimizer.clearInvalidDescendants(cfg.ATTRIBUTES, deps, minVal, beam[0].attrAlloc);
+        if (JSON.stringify(beam[0].attrAlloc) !== before) {
+          let leftover = cfg.ATTRIBUTE_BUDGET - Optimizer.costOf(cfg.ATTRIBUTES, beam[0].attrAlloc);
+          let guard = 0;
+          while (leftover > 0 && guard++ < cfg.ATTRIBUTE_BUDGET) {
+            const eligible = cfg.ATTRIBUTES.filter((a) => (a.cost || 1) <= leftover && Optimizer.isEligible(a, cfg.ATTRIBUTES, deps, minVal, beam[0].attrAlloc));
+            if (!eligible.length) break;
+            const topupScores = await pool.scoreBatch(
+              eligible.map((a) => ({ talentAlloc: beam[0].talentAlloc, attrAlloc: { ...beam[0].attrAlloc, [a.id]: (beam[0].attrAlloc[a.id] || 0) + 1 } })),
+              mode, searchIterations,
+            );
+            evalsDone += eligible.length;
+            let bestIdx = 0;
+            for (let i = 1; i < topupScores.length; i++) if (topupScores[i] > topupScores[bestIdx]) bestIdx = i;
+            beam[0].attrAlloc[eligible[bestIdx].id] = (beam[0].attrAlloc[eligible[bestIdx].id] || 0) + 1;
+            leftover = cfg.ATTRIBUTE_BUDGET - Optimizer.costOf(cfg.ATTRIBUTES, beam[0].attrAlloc);
+          }
+          const rescore = await pool.scoreBatch(
+            Array.from({ length: 3 }, () => ({ talentAlloc: beam[0].talentAlloc, attrAlloc: beam[0].attrAlloc })), mode, searchIterations,
+          );
+          evalsDone += 3;
+          beam[0].score = rescore.reduce((a, b) => a + b, 0) / 3;
           allSeen.set(sigOf(beam[0]), beam[0]);
         }
       }
