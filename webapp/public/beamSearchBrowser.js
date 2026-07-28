@@ -256,6 +256,55 @@
         }
       }
 
+      // Chain-unlock: a real Knox import deliberately spends 1 point in a weak "gate" attribute
+      // (A Pirates Life For Knox) purely to unlock a much stronger downstream one (Timeless
+      // Mastery, 5 levels at cost 3 each) that is worthless on its own until unlocked. A single
+      // one-for-one swap can NEVER discover this: investing that first gate point alone looks
+      // like a pure loss (no visible payoff yet), so it never gets accepted by itself, and the
+      // real payoff only exists once the whole chain plus its target are funded together.
+      // Confirmed directly: cold-start Knox searches kept landing 60%+ below the import because
+      // nothing in this file could ever evaluate "unlock this chain" as one atomic move. Try
+      // funding the minimal unlock (1 point in every zero ancestor, plus 1 in the target) from a
+      // single already-invested donor that can afford the whole cost, and let it compete
+      // alongside every other candidate on actual score.
+      for (const to of cfg.ATTRIBUTES) {
+        if ((attrAlloc[to.id] || 0) > 0) continue;
+        const chain = [];
+        const seen = new Set();
+        let cursor = to;
+        while (true) {
+          const parents = deps[cursor.id];
+          if (!parents || !parents.length) break;
+          const blocked = parents.find((p) => (attrAlloc[p] || 0) <= 0 && !seen.has(p));
+          if (!blocked) break;
+          seen.add(blocked);
+          const pdef = cfg.ATTRIBUTES.find((a) => a.id === blocked);
+          if (!pdef) break;
+          chain.push(pdef);
+          cursor = pdef;
+        }
+        if (!chain.length) continue;
+        const unlockCost = chain.reduce((sum, d) => sum + (d.cost || 1), 0) + (to.cost || 1);
+        for (const donor of attrFrom) {
+          if (donor.id === to.id || chain.some((d) => d.id === donor.id)) continue;
+          const donorCost = donor.cost || 1;
+          if (attrAlloc[donor.id] * donorCost < unlockCost) continue;
+          const trial = { ...attrAlloc };
+          let freed = 0;
+          while (freed < unlockCost && trial[donor.id] > 0) { trial[donor.id]--; freed += donorCost; }
+          Optimizer.clearInvalidDescendants(cfg.ATTRIBUTES, deps, minVal, trial);
+          let ok = true;
+          for (const d of [...chain].reverse()) {
+            if (!Optimizer.isEligible(d, cfg.ATTRIBUTES, deps, minVal, trial)) { ok = false; break; }
+            trial[d.id] = (trial[d.id] || 0) + 1;
+          }
+          if (ok && Optimizer.isEligible(to, cfg.ATTRIBUTES, deps, minVal, trial)) {
+            trial[to.id] = (trial[to.id] || 0) + 1;
+            swaps.push({ talentAlloc, attrAlloc: trial, kind: 'chain-unlock', to: to.id, donor: donor.id });
+          }
+        }
+      }
+
       // A swap only ever moves a point FROM somewhere TO somewhere else -- it can never spend
       // budget that's simply sitting unallocated (e.g. a leftover point after an odd-cost
       // substitution, or a random-mutation candidate that never spent its full budget in the
@@ -302,25 +351,34 @@
     return { talentAlloc, attrAlloc, score: baseline, evalsUsed };
   }
 
-  // Runs beam search until `targetEvals` cumulative WASM evaluations have been spent (the
-  // user-selectable "number of evaluations" knob), calling onProgress after every
-  // generation with {evalsDone, targetEvals, generation, bestScore, elapsedMs}.
-  async function beamSearchBrowser(cfg, {
-    mode = 'loot', targetEvals = 3000, beamWidth = 8, neighborsPerMember = 3,
-    searchIterations = 100, poolSize = navigator.hardwareConcurrency || 4,
-    seedCandidates = [], onProgress = () => {}, shouldCancel = () => false,
-  } = {}) {
+  // Runs ONE full greedy-seed -> beam-search -> polish pipeline against a shared, already-ready
+  // worker pool. Split out of beamSearchBrowser so the outer function can run several
+  // INDEPENDENT passes (multi-restart) and keep whichever converges highest -- see the big
+  // comment on beamSearchBrowser below for why that's necessary, not just nice-to-have.
+  async function runOnePass(cfg, pool, {
+    mode, targetEvals, beamWidth, neighborsPerMember, searchIterations, seedCandidates, onProgress, shouldCancel,
+  }) {
     const deps = cfg.ATTRIBUTE_DEPENDENCIES || {};
     const minVal = cfg.ATTRIBUTE_MIN_VALUE || {};
-    const pool = new WorkerPool(cfg, poolSize);
-    const initError = await pool.ready();
-    if (initError) { pool.terminate(); throw new Error(`Optimizer worker failed to initialize: ${initError}`); }
-    if (shouldCancel()) { pool.terminate(); return { beam: [], allSeen: [] }; }
-
-    try {
+    {
+      // Root cause of a recurring illegal-allocation bug finally traced here: seedCandidates
+      // come from localStorage history (saveHistory/loadHistory in app.js) written by EARLIER
+      // runs, including runs from before every legality fix in this file existed. Seeds are
+      // taken as ground truth and pushed straight into the beam with NO eligibility check at
+      // all -- confirmed directly: every single one of 20 saved Knox history entries carried
+      // the same illegal allocation (Timeless Mastery maxed with its gating prerequisite at 0),
+      // and each new search kept reintroducing that exact illegal state no matter how many
+      // generator-level fixes landed, because the seed intake itself was the unguarded path.
+      // Sanitize every incoming seed the same way a legal allocation would look -- cheap,
+      // synchronous, no wasm calls needed.
       const seeds = [];
-      if (cfg.currentTalents && cfg.currentAttrs) seeds.push({ talentAlloc: cfg.currentTalents, attrAlloc: cfg.currentAttrs });
-      for (const h of seedCandidates) seeds.push({ talentAlloc: h.talentAlloc, attrAlloc: h.attrAlloc });
+      const sanitizeSeed = (talentAlloc, attrAlloc) => {
+        const cleanAttrs = { ...attrAlloc };
+        Optimizer.clearInvalidDescendants(cfg.ATTRIBUTES, deps, minVal, cleanAttrs);
+        return { talentAlloc, attrAlloc: cleanAttrs };
+      };
+      if (cfg.currentTalents && cfg.currentAttrs) seeds.push(sanitizeSeed(cfg.currentTalents, cfg.currentAttrs));
+      for (const h of seedCandidates) seeds.push(sanitizeSeed(h.talentAlloc, h.attrAlloc));
 
       // Two greedy marginal-value passes (one strict, one with a little exploration on near-
       // ties) give the beam a strong starting point instead of relying purely on random
@@ -474,43 +532,129 @@
         }
       }
 
-      // Final legality guarantee: confirmed on a real cold-start Borge search that the winning
-      // allocation could end up with 0 points in a gating attribute (Essence Of Ylith) while
-      // attributes gated on it (Spartan Lineage, Timeless Mastery) stayed fully invested -- an
-      // illegal allocation the real game would never allow. Every generator here was individually
-      // re-verified safe in isolation, so rather than keep hunting for one more edge case, every
-      // candidate that could become the FINAL answer gets a hard clearInvalidDescendants pass
-      // right before being returned. If that actually changes anything, it freed budget, so also
-      // give the freed points a cheap single top-up pass instead of leaving them unspent.
       if (beam.length) {
-        const before = JSON.stringify(beam[0].attrAlloc);
-        Optimizer.clearInvalidDescendants(cfg.ATTRIBUTES, deps, minVal, beam[0].attrAlloc);
-        if (JSON.stringify(beam[0].attrAlloc) !== before) {
-          let leftover = cfg.ATTRIBUTE_BUDGET - Optimizer.costOf(cfg.ATTRIBUTES, beam[0].attrAlloc);
-          let guard = 0;
-          while (leftover > 0 && guard++ < cfg.ATTRIBUTE_BUDGET) {
-            const eligible = cfg.ATTRIBUTES.filter((a) => (a.cost || 1) <= leftover && Optimizer.isEligible(a, cfg.ATTRIBUTES, deps, minVal, beam[0].attrAlloc));
-            if (!eligible.length) break;
-            const topupScores = await pool.scoreBatch(
-              eligible.map((a) => ({ talentAlloc: beam[0].talentAlloc, attrAlloc: { ...beam[0].attrAlloc, [a.id]: (beam[0].attrAlloc[a.id] || 0) + 1 } })),
-              mode, searchIterations,
-            );
-            evalsDone += eligible.length;
-            let bestIdx = 0;
-            for (let i = 1; i < topupScores.length; i++) if (topupScores[i] > topupScores[bestIdx]) bestIdx = i;
-            beam[0].attrAlloc[eligible[bestIdx].id] = (beam[0].attrAlloc[eligible[bestIdx].id] || 0) + 1;
-            leftover = cfg.ATTRIBUTE_BUDGET - Optimizer.costOf(cfg.ATTRIBUTES, beam[0].attrAlloc);
-          }
-          const rescore = await pool.scoreBatch(
-            Array.from({ length: 3 }, () => ({ talentAlloc: beam[0].talentAlloc, attrAlloc: beam[0].attrAlloc })), mode, searchIterations,
-          );
-          evalsDone += 3;
-          beam[0].score = rescore.reduce((a, b) => a + b, 0) / 3;
-          allSeen.set(sigOf(beam[0]), beam[0]);
-        }
+        const repaired = await repairLegality(cfg, pool, mode, searchIterations, beam[0]);
+        if (repaired) { beam[0] = repaired; evalsDone += repaired.evalsUsed; allSeen.set(sigOf(beam[0]), beam[0]); }
       }
 
       return { beam, allSeen: [...allSeen.values()], generations: generation, evalsDone };
+    }
+  }
+
+  // Confirmed on real cold-start searches (Borge: Essence Of Ylith at 0 while Spartan Lineage/
+  // Timeless Mastery -- both gated on it -- stayed maxed; Knox: same pattern with A Pirates Life
+  // For Knox / Timeless Mastery) that a winning allocation can carry an illegal dependency-gate
+  // violation the real game would never allow. Rather than keep hunting for the exact generator
+  // responsible, this hard-repairs whatever allocation is about to become a FINAL answer: clear
+  // any stranded descendant, top up any budget that repair frees, and rescore. Called on each
+  // pass's own winner AND (critically) on the winner AFTER merging multiple restart passes --
+  // the merge can promote a candidate that was never that pass's own beam[0] and therefore never
+  // got checked, which is exactly how the Knox violation slipped through the first version of
+  // this guarantee.
+  async function repairLegality(cfg, pool, mode, searchIterations, entry) {
+    const deps = cfg.ATTRIBUTE_DEPENDENCIES || {};
+    const minVal = cfg.ATTRIBUTE_MIN_VALUE || {};
+    let evalsUsed = 0;
+    const attrAlloc = { ...entry.attrAlloc };
+    const before = JSON.stringify(attrAlloc);
+    Optimizer.clearInvalidDescendants(cfg.ATTRIBUTES, deps, minVal, attrAlloc);
+    if (JSON.stringify(attrAlloc) === before) return null;
+
+    let leftover = cfg.ATTRIBUTE_BUDGET - Optimizer.costOf(cfg.ATTRIBUTES, attrAlloc);
+    let guard = 0;
+    while (leftover > 0 && guard++ < cfg.ATTRIBUTE_BUDGET) {
+      const eligible = cfg.ATTRIBUTES.filter((a) => (a.cost || 1) <= leftover && Optimizer.isEligible(a, cfg.ATTRIBUTES, deps, minVal, attrAlloc));
+      if (!eligible.length) break;
+      const topupScores = await pool.scoreBatch(
+        eligible.map((a) => ({ talentAlloc: entry.talentAlloc, attrAlloc: { ...attrAlloc, [a.id]: (attrAlloc[a.id] || 0) + 1 } })),
+        mode, searchIterations,
+      );
+      evalsUsed += eligible.length;
+      let bestIdx = 0;
+      for (let i = 1; i < topupScores.length; i++) if (topupScores[i] > topupScores[bestIdx]) bestIdx = i;
+      attrAlloc[eligible[bestIdx].id] = (attrAlloc[eligible[bestIdx].id] || 0) + 1;
+      leftover = cfg.ATTRIBUTE_BUDGET - Optimizer.costOf(cfg.ATTRIBUTES, attrAlloc);
+    }
+    // The topup loop above only asks "which single eligible def gives the best score right
+    // now", which is exactly the same greedy myopia documented on greedyMarginalSeed -- and
+    // confirmed to fail badly here: repairing a real Knox cold-start build this way spent the
+    // freed budget on the wrong things and landed 62.5% BELOW the import, legal but far worse
+    // than the illegal build it replaced. Route the topped-up allocation through the exhaustive
+    // swap-based polish (which tries every reallocation, not just a greedy fill) so the freed
+    // budget actually gets optimized instead of dumped wherever looked best in isolation.
+    const polished = await hillClimbPolish(cfg, pool, mode, searchIterations, { talentAlloc: entry.talentAlloc, attrAlloc }, {});
+    evalsUsed += polished.evalsUsed;
+    return { talentAlloc: polished.talentAlloc, attrAlloc: polished.attrAlloc, score: polished.score, evalsUsed };
+  }
+
+  // Runs beam search until `targetEvals` cumulative WASM evaluations have been spent (the
+  // user-selectable "number of evaluations" knob), calling onProgress after every
+  // generation with {evalsDone, targetEvals, generation, bestScore, elapsedMs}.
+  //
+  // Multi-restart: a single greedy-seed pass can get permanently anchored on one region of the
+  // allocation space (confirmed on a real cold-start, level-only Borge search: even with 4
+  // greedy epsilons and polishing the top 3 beam candidates, it still landed ~12.7% below the
+  // hand-tuned import). Running the ENTIRE pipeline several independent times -- fresh random
+  // mutations, fresh random restarts, a fresh trajectory through the whole search each time --
+  // and keeping whichever run converges highest is what actually closes that gap, because each
+  // restart has a real chance of landing in a different, better basin instead of just refining
+  // the same one. Cold starts (no existing build to warm-start from) get the most restarts since
+  // they have the least information to work with; a build that's already being edited only needs
+  // one, since its own current allocation already anchors the search near a good region.
+  async function beamSearchBrowser(cfg, {
+    mode = 'loot', targetEvals = 3000, beamWidth = 8, neighborsPerMember = 3,
+    searchIterations = 100, poolSize = navigator.hardwareConcurrency || 4,
+    seedCandidates = [], onProgress = () => {}, shouldCancel = () => false,
+  } = {}) {
+    const pool = new WorkerPool(cfg, poolSize);
+    const initError = await pool.ready();
+    if (initError) { pool.terminate(); throw new Error(`Optimizer worker failed to initialize: ${initError}`); }
+    if (shouldCancel()) { pool.terminate(); return { beam: [], allSeen: [] }; }
+
+    try {
+      const hasSeedBuild = !!(cfg.currentTalents && cfg.currentAttrs);
+      const RESTARTS = hasSeedBuild ? 2 : 4;
+      const perPassEvals = Math.max(500, Math.floor(targetEvals / RESTARTS));
+
+      let globalBeam = [];
+      const globalAllSeen = new Map();
+      let totalEvalsDone = 0;
+      let totalGenerations = 0;
+
+      for (let r = 0; r < RESTARTS; r++) {
+        if (shouldCancel()) break;
+        const result = await runOnePass(cfg, pool, {
+          mode, targetEvals: perPassEvals, beamWidth, neighborsPerMember, searchIterations, seedCandidates,
+          shouldCancel,
+          onProgress: (p) => onProgress({ ...p, restart: r, restartsTotal: RESTARTS, evalsDone: totalEvalsDone + p.evalsDone, targetEvals }),
+        });
+        totalEvalsDone += result.evalsUsed;
+        totalGenerations += result.generations;
+        result.allSeen.forEach((c) => {
+          const sig = sigOf(c);
+          if (!globalAllSeen.has(sig) || globalAllSeen.get(sig).score < c.score) globalAllSeen.set(sig, c);
+        });
+        globalBeam = dedupTopK([...globalBeam, ...result.beam], beamWidth);
+      }
+
+      // app.js's shortlist takes the top 5 beam entries (not just #1) and re-scores all of them
+      // to pick the final answer -- repairing only globalBeam[0] left ranks #2-#5 completely
+      // unchecked, and confirmed on a real Knox cold-start run: the illegal allocation (A
+      // Pirates Life For Knox at 0 while the gated Timeless Mastery stayed maxed) reached the
+      // saved build because app.js's own re-scoring picked one of those never-repaired lower
+      // ranks, not beam[0]. Repair every entry that could realistically end up in that
+      // shortlist, not just the presumptive #1.
+      for (let i = 0; i < globalBeam.length; i++) {
+        const repaired = await repairLegality(cfg, pool, mode, searchIterations, globalBeam[i]);
+        if (repaired) {
+          globalBeam[i] = repaired;
+          totalEvalsDone += repaired.evalsUsed;
+          globalAllSeen.set(sigOf(globalBeam[i]), globalBeam[i]);
+        }
+      }
+      globalBeam = dedupTopK(globalBeam, beamWidth);
+
+      return { beam: globalBeam, allSeen: [...globalAllSeen.values()], generations: totalGenerations, evalsDone: totalEvalsDone };
     } finally {
       pool.terminate();
     }
