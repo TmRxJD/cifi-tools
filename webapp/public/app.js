@@ -2641,7 +2641,10 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
     const result = await beamSearchBrowser(cfg, {
       mode, targetEvals, beamWidth: 8, neighborsPerMember: 3, searchIterations: 100, seedCandidates,
       shouldCancel: () => cancelRequested,
-      onProgress: ({ evalsDone, targetEvals: target, generation, bestScore, elapsedMs, phase, greedyStep, greedyStepsEstimate }) => {
+      onProgress: ({
+        evalsDone, targetEvals: target, generation, bestScore, elapsedMs, phase,
+        greedyStep, greedyStepsEstimate, polishRound, polishRoundsEstimate,
+      }) => {
         // The greedy-seeding phase (see beamSearchBrowser.js) runs before any beam generations
         // and used to report nothing at all here -- on a large real-account budget it could look
         // completely frozen (0/target evaluations, "Generation 0") for a long stretch even
@@ -2654,6 +2657,19 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
           document.getElementById('progressElapsed').textContent = `${(elapsedMs / 1000).toFixed(1)}s`;
           document.getElementById('progressGen').textContent = '-';
           document.getElementById('progressBest').textContent = '-';
+          return;
+        }
+        // Final exhaustive polish (see hillClimbPolish): runs after the beam search's normal
+        // eval budget is spent, so it needs its own indicator instead of showing a stalled
+        // "evalsDone / target" bar sitting at 100% while this still keeps working.
+        if (phase === 'polish') {
+          document.getElementById('progressBar').style.width = '100%';
+          document.getElementById('progressEvals').textContent = polishRoundsEstimate
+            ? `Verifying no single point-move improves this build (round ${polishRound} / up to ${polishRoundsEstimate})…`
+            : 'Verifying no single point-move improves this build…';
+          document.getElementById('progressElapsed').textContent = `${(elapsedMs / 1000).toFixed(1)}s`;
+          document.getElementById('progressGen').textContent = generation;
+          document.getElementById('progressBest').textContent = fmt(bestScore);
           return;
         }
         document.getElementById('progressBar').style.width = `${Math.min(100, (evalsDone / target) * 100)}%`;

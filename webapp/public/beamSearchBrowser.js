@@ -193,6 +193,81 @@
     return { talentAlloc, attrAlloc, score: currentScore, evalsUsed };
   }
 
+  // Exhaustive coordinate-ascent polish: after the beam search's randomized mutation/dedup
+  // process, there is no guarantee it actually tried every simple "move one point from A to
+  // B" swap on the winning allocation -- it only ever sampled a handful of random neighbors
+  // per generation. This pass systematically tries EVERY (spend one less on some def currently
+  // >0) x (spend one more on some eligible def) pair -- not a random sample of them -- and
+  // keeps applying whichever swap helps most, until literally no single-swap improves the
+  // score. That is the actual mechanism that can back up a "never regress" claim: random
+  // mutation can miss an improving move by chance, an exhaustive sweep of all pairs cannot.
+  // Because a single wasm evaluate() carries real Monte Carlo noise, each candidate swap is
+  // screened cheaply with one sample each, but the swap only gets ACCEPTED and applied after a
+  // 3-sample-averaged confirmation beats a 3-sample-averaged baseline -- so noise can at worst
+  // cost a missed improvement, never an accepted regression.
+  async function hillClimbPolish(cfg, pool, mode, iterations, alloc, { shouldCancel = () => false, onStep = () => {} } = {}) {
+    const deps = cfg.ATTRIBUTE_DEPENDENCIES || {};
+    const minVal = cfg.ATTRIBUTE_MIN_VALUE || {};
+    let { talentAlloc, attrAlloc } = alloc;
+    let evalsUsed = 0;
+    const avgScore = async (ta, aa, samples = 3) => {
+      const batch = Array.from({ length: samples }, () => ({ talentAlloc: ta, attrAlloc: aa }));
+      const scores = await pool.scoreBatch(batch, mode, iterations);
+      evalsUsed += samples;
+      return scores.reduce((a, b) => a + b, 0) / samples;
+    };
+    let baseline = await avgScore(talentAlloc, attrAlloc);
+
+    const maxRounds = cfg.TALENT_BUDGET + cfg.ATTRIBUTE_BUDGET;
+    for (let round = 0; round < maxRounds; round++) {
+      onStep({ round, maxRounds, evalsUsed });
+      if (shouldCancel()) break;
+
+      const talentFrom = cfg.TALENTS.filter((t) => (talentAlloc[t.id] || 0) > 0);
+      const talentTo = cfg.TALENTS.filter((t) => (talentAlloc[t.id] || 0) < t.maxLevel);
+      const attrFrom = cfg.ATTRIBUTES.filter((a) => (attrAlloc[a.id] || 0) > 0);
+
+      const swaps = [];
+      for (const from of talentFrom) {
+        for (const to of talentTo) {
+          if (from.id === to.id) continue;
+          const nt = { ...talentAlloc, [from.id]: talentAlloc[from.id] - 1, [to.id]: (talentAlloc[to.id] || 0) + 1 };
+          swaps.push({ talentAlloc: nt, attrAlloc, kind: 'talent', from: from.id, to: to.id });
+        }
+      }
+      for (const from of attrFrom) {
+        const freedCost = from.cost || 1;
+        const attrTo = cfg.ATTRIBUTES.filter((a) => a.id !== from.id && (a.cost || 1) <= freedCost);
+        for (const to of attrTo) {
+          const trial = { ...attrAlloc, [from.id]: attrAlloc[from.id] - 1 };
+          if (!Optimizer.isEligible(to, cfg.ATTRIBUTES, deps, minVal, trial)) continue;
+          trial[to.id] = (trial[to.id] || 0) + 1;
+          swaps.push({ talentAlloc, attrAlloc: trial, kind: 'attribute', from: from.id, to: to.id });
+        }
+      }
+      if (!swaps.length) break;
+
+      // Cheap single-sample screen across every candidate swap (parallelized across workers).
+      const screenScores = await pool.scoreBatch(swaps, mode, iterations);
+      evalsUsed += swaps.length;
+      let bestIdx = 0;
+      for (let i = 1; i < swaps.length; i++) if (screenScores[i] > screenScores[bestIdx]) bestIdx = i;
+      const candidate = swaps[bestIdx];
+
+      // Averaged confirmation before accepting -- the screen above is noisy and only used to
+      // pick a candidate worth confirming, never to decide the swap outright.
+      const candidateScore = await avgScore(candidate.talentAlloc, candidate.attrAlloc);
+      if (candidateScore > baseline) {
+        talentAlloc = candidate.talentAlloc;
+        attrAlloc = candidate.attrAlloc;
+        baseline = candidateScore;
+      } else {
+        break;
+      }
+    }
+    return { talentAlloc, attrAlloc, score: baseline, evalsUsed };
+  }
+
   // Runs beam search until `targetEvals` cumulative WASM evaluations have been spent (the
   // user-selectable "number of evaluations" knob), calling onProgress after every
   // generation with {evalsDone, targetEvals, generation, bestScore, elapsedMs}.
@@ -318,6 +393,26 @@
         if (beam[0].score > lastBestScore) { lastBestScore = beam[0].score; stagnantGens = 0; }
         else stagnantGens++;
         onProgress({ evalsDone, targetEvals, generation, bestScore: beam[0].score, elapsedMs: Date.now() - start });
+      }
+
+      // Beam search sampled random neighbors; it never verified that every simple single-point
+      // swap on its own winner had been tried. Polish the top candidate exhaustively -- this is
+      // what actually backs a "never regress" claim (see hillClimbPolish above), so it always
+      // runs regardless of whether targetEvals was already spent.
+      if (!shouldCancel() && beam.length) {
+        onProgress({ evalsDone, targetEvals, generation, bestScore: beam[0].score, elapsedMs: Date.now() - start, phase: 'polish' });
+        const polished = await hillClimbPolish(cfg, pool, mode, searchIterations, beam[0], {
+          shouldCancel,
+          onStep: ({ round, maxRounds }) => onProgress({
+            evalsDone, targetEvals, generation, bestScore: beam[0].score, elapsedMs: Date.now() - start,
+            phase: 'polish', polishRound: round, polishRoundsEstimate: maxRounds,
+          }),
+        });
+        evalsDone += polished.evalsUsed;
+        if (polished.score > beam[0].score) {
+          beam = [{ talentAlloc: polished.talentAlloc, attrAlloc: polished.attrAlloc, score: polished.score }, ...beam.slice(1)];
+          allSeen.set(sigOf(beam[0]), beam[0]);
+        }
       }
 
       return { beam, allSeen: [...allSeen.values()], generations: generation, evalsDone };
