@@ -289,6 +289,62 @@
     return sum;
   }
 
+  // Verbatim port of the live bundle's `pV` (gadget per-level cost). Only wrench/zaptron/
+  // anchor are ever reachable from this app's 3 hunters, but every case is transcribed
+  // as-is (g1-g14/oogadget/campfragdet included) rather than trimmed to "what we use" --
+  // this is a direct copy, not a reimplementation.
+  function gadgetCostAtLevel(id, level) {
+    if (level <= 0) return 0;
+    const t = Math.floor((level - 1) / 10);
+    const e = level - 1;
+    switch (id) {
+      case 'g1': case 'g2': case 'g3': return Math.ceil(1 * Math.pow(1.025, e) * Math.pow(1.15, t));
+      case 'oogadget': case 'g4': return Math.ceil(2 * Math.pow(1.14, e) * Math.pow(1.6, t));
+      case 'wrench': case 'g5': return Math.ceil(3 * Math.pow(1.1, e) * Math.pow(1.35, t));
+      case 'zaptron': case 'g6': return Math.ceil(4 * Math.pow(1.1, e) * Math.pow(1.35, t));
+      case 'g7': return Math.ceil(5 * Math.pow(1.04, e) * Math.pow(1.15, t));
+      case 'g8': return Math.ceil(6 * Math.pow(1.1, e) * Math.pow(1.35, t));
+      case 'g9': return Math.ceil(7 * Math.pow(1.08, e) * Math.pow(1.25, t));
+      case 'g10': return Math.ceil(400 * Math.pow(1.1, e) * Math.pow(1.25, t));
+      case 'g11': return Math.ceil(1000 * Math.pow(1.07, e) * Math.pow(1.23, t));
+      case 'g12': return Math.ceil(6e4 * Math.pow(1.28, e) * Math.pow(1.4, t));
+      case 'g13': return Math.ceil(6e4 * Math.pow(1.1, e) * Math.pow(1.28, t));
+      case 'campfragdet': case 'g14': return Math.ceil(6e4 * Math.pow(1.12, e) * Math.pow(1.38, t));
+      case 'anchor': case 'g15': return Math.ceil(6e4 * Math.pow(1.1, e) * Math.pow(1.35, t));
+      default: return 0;
+    }
+  }
+  function gadgetCostRange(id, fromLevel, toLevel) {
+    if (toLevel <= fromLevel) return 0;
+    let sum = 0;
+    for (let lvl = fromLevel + 1; lvl <= toLevel; lvl++) sum += gadgetCostAtLevel(id, lvl);
+    return sum;
+  }
+
+  // Verbatim port of the live bundle's `_V` (gem-tree named-upgrade per-level cost: the
+  // per-hunter loot-bonus and stat-bonus nodes, plus Attraction's catch-up-power nodes).
+  function gemAliasCostAtLevel(alias, level) {
+    if (level <= 0) return 0;
+    const e = level - 1;
+    switch (alias) {
+      case 'lootBorge': return Math.floor(5 * Math.pow(2.5, e) * Math.pow(1.2, Math.max(0, e - 9)) * Math.pow(1.3, Math.max(0, e - 19)) * Math.pow(1.4, Math.max(0, e - 29)) * Math.pow(2, Math.max(0, e - 39)));
+      case 'lootOzzy': return Math.floor(20 * Math.pow(2.5, e) * Math.pow(1.3, Math.max(0, e - 9)) * Math.pow(1.4, Math.max(0, e - 19)) * Math.pow(1.5, Math.max(0, e - 29)) * Math.pow(1.5, Math.max(0, e - 39)));
+      case 'lootKnox': return Math.floor(12e10 * Math.pow(3, e) * Math.pow(1.2, Math.max(0, e - 9)) * Math.pow(1.3, Math.max(0, e - 19)) * Math.pow(1.4, Math.max(0, e - 29)) * Math.pow(2, Math.max(0, e - 39)));
+      case 'catchUp': return Math.floor(1 * Math.pow(100, e));
+      case 'catchUp2': return Math.floor(4e10 * Math.pow(100, e));
+      case 'borgeGU': return Math.floor(1e11 * Math.pow(10, e));
+      case 'ozzyGU': return Math.floor(1e6 * Math.pow(10, e));
+      case 'knoxGU': return Math.floor(1e11 * Math.pow(10, e));
+      default: return 0;
+    }
+  }
+  function gemAliasCostRange(alias, fromLevel, toLevel) {
+    if (toLevel <= fromLevel) return 0;
+    let sum = 0;
+    for (let lvl = fromLevel + 1; lvl <= toLevel; lvl++) sum += gemAliasCostAtLevel(alias, lvl);
+    return sum;
+  }
+
   // Verbatim port of the live bundle's `oV` number formatter -- costs here can run past
   // 1e21 (inscryption tiers), well beyond fmt()'s billion cap in app.js.
   const SUFFIXES = ['', 'k', 'm', 'b', 't', 'qa', 'qu', 'sx', 'sp', 'oc', 'n', 'd'];
@@ -332,6 +388,7 @@
 
   global.CostFormulas = {
     HUNTER_RESOURCES, resourceLabel, resourceAbbr, baseStatResource, relicResource, inscryptionResource,
-    baseStatCostRange, relicCostRange, inscryptionCostRange, projCostRange, collectionTimeMinutes, fmtBig,
+    baseStatCostRange, relicCostRange, inscryptionCostRange, gadgetCostRange, gemAliasCostRange,
+    projCostRange, collectionTimeMinutes, fmtBig,
   };
 })(window);

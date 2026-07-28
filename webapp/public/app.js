@@ -430,6 +430,17 @@ function getOverrideGroups() {
       })),
     });
   }
+  // Gadgets (Wrench/Zaptron/Anchor) were missing from this panel entirely -- the live site's
+  // Overrides editor has its own priced Gadgets section (confirmed via its `O()`/cost-badge
+  // function, which has a whole branch for "upgrades.gadgets." keys).
+  const GADGET_BY_HUNTER = { borge: { id: 'wrench', label: 'The Wrench of Gore' }, ozzy: { id: 'zaptron', label: 'Zaptron-533 Bio-Repair Tool' }, knox: { id: 'anchor', label: 'The Anchor of Ages' } };
+  const gadget = GADGET_BY_HUNTER[currentHunter];
+  if (gadget) {
+    groups.push({
+      title: 'Gadgets',
+      fields: [{ key: `upgrades.gadgets.${gadget.id}`, label: gadget.label, global: () => store.globalUpgrades[`gadgets.${gadget.id}`] }],
+    });
+  }
   if (currentHunter === 'borge') {
     groups.push(
       {
@@ -483,11 +494,52 @@ function overrideFieldResource(key) {
   return CF.baseStatResource(currentHunter, key);
 }
 
+// Verbatim port of the live Overrides panel's `A(e)` (is this row eligible to show a "Cost:"
+// badge at all) and `O(e)` (the cost itself) -- extracted directly from
+// cifi-tools.com/assets/index-CBtvNH_D.js. The live panel does NOT show every row's diff as
+// a cost: only baseStats/relics/gadgets/inscryptions/gems_nodes rows, only while an override
+// is actually set, and only when it's a POSITIVE difference (current > global) -- a lowered
+// override still shows red/green value coloring but never a Cost badge, since you can't
+// "buy" your way down. "stage"/"proj" are excluded entirely (matches `A(e)`'s first check).
+// Our clone previously showed no Cost badge at all for any row, which is the actual bug being
+// fixed here -- not a sign-based row *filter* (the live site never hides rows by sign).
+function overrideCostEligible(key, current, globalVal) {
+  if (key === 'stage' || key === 'proj') return false;
+  if (current === '' || current <= globalVal) return false;
+  return !key.startsWith('upgrades.') || key.startsWith('upgrades.relics.') || key.startsWith('upgrades.gadgets.')
+    || key.startsWith('upgrades.inscryptions.') || key.startsWith('upgrades.gems_nodes.');
+}
+
+// Mirrors `O(e)`'s per-category dispatch to the real cost-range formulas (relics -> dV,
+// gadgets -> fV, inscryptions -> yV, the 8 aliased gem named-upgrades -> wV, everything else
+// -- base stats, and any gems_nodes key that isn't one of those 8 aliases, exactly matching
+// the live site's own fallthrough -- -> aV/baseStatCostRange).
+const GEM_ALIAS_BY_SUFFIX = {
+  attraction_lootBorge: 'lootBorge', attraction_lootOzzy: 'lootOzzy', attraction_lootKnox: 'lootKnox',
+  attraction_catchUp: 'catchUp', attraction_catchUp2: 'catchUp2',
+  creation_borgeGU: 'borgeGU', creation_ozzyGU: 'ozzyGU', creation_knoxGU: 'knoxGU',
+};
+function overrideCost(key, fromLevel, toLevel) {
+  const CF = window.CostFormulas;
+  if (key.startsWith('upgrades.relics.')) return CF.relicCostRange(key.split('.')[2], fromLevel, toLevel);
+  if (key.startsWith('upgrades.gadgets.')) return CF.gadgetCostRange(key.split('.')[2], fromLevel, toLevel);
+  if (key.startsWith('upgrades.inscryptions.')) return CF.inscryptionCostRange(key.split('.')[2], fromLevel, toLevel);
+  if (key.startsWith('upgrades.gems_nodes.')) {
+    const alias = GEM_ALIAS_BY_SUFFIX[key.split('.')[2]];
+    if (alias) return CF.gemAliasCostRange(alias, fromLevel, toLevel);
+    return CF.baseStatCostRange(key, fromLevel, toLevel, currentHunter);
+  }
+  return CF.baseStatCostRange(key, fromLevel, toLevel, currentHunter);
+}
+
 function overrideNumericRow(f, current, globalVal, onChange) {
   const overridden = current !== '';
   const displayVal = overridden ? current : globalVal;
   const valueClass = overridden ? (current > globalVal ? 'text-green-400' : current < globalVal ? 'text-red-400' : 'text-gray-500') : 'text-gray-500';
   const resource = overrideFieldResource(f.key);
+  const costEligible = overrideCostEligible(f.key, current, globalVal);
+  const costLine = costEligible
+    ? `<div class="text-[10px] text-amber-400 mt-0.5">Cost: ${window.CostFormulas.fmtBig(overrideCost(f.key, Math.floor(globalVal), Math.floor(current)))}</div>` : '';
   const div = document.createElement('div');
   div.className = 'bg-gray-750/60 rounded-md p-1.5 bg-gray-700/60 transition-colors border border-transparent hover:border-gray-600';
   div.innerHTML = `
@@ -508,7 +560,8 @@ function overrideNumericRow(f, current, globalVal, onChange) {
           <button data-max class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded-r-md ml-px"><div class="flex">${iconSvg('chevron-right', 14)}${iconSvg('chevron-right', 14, '-ml-2')}</div></button>
         </div>
       </div>
-    </div>`;
+    </div>
+    ${costLine}`;
   div.querySelector('[data-inc]').onclick = () => onChange((overridden ? current : globalVal) + 1);
   div.querySelector('[data-dec]').onclick = () => onChange((overridden ? current : globalVal) - 1);
   div.querySelector('[data-max]').onclick = () => onChange((overridden ? current : globalVal) + 10);
