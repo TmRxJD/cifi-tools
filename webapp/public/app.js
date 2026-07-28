@@ -2633,54 +2633,66 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
   const historyKey = `${currentHunter}_${mode}_${editingBuild.level}`;
   const seedCandidates = loadHistory(historyKey);
 
-  const result = await beamSearchBrowser(cfg, {
-    mode, targetEvals, beamWidth: 8, neighborsPerMember: 3, searchIterations: 100, seedCandidates,
-    shouldCancel: () => cancelRequested,
-    onProgress: ({ evalsDone, targetEvals: target, generation, bestScore, elapsedMs, phase, greedyStep, greedyStepsEstimate }) => {
-      // The greedy-seeding phase (see beamSearchBrowser.js) runs before any beam generations
-      // and used to report nothing at all here -- on a large real-account budget it could look
-      // completely frozen (0/target evaluations, "Generation 0") for a long stretch even
-      // though it was actively working and Cancel was fully functional. Show its own step
-      // count instead of leaving the bar/eval-count static during that phase.
-      if (phase === 'greedy-seeding') {
-        const pct = greedyStepsEstimate ? Math.min(100, (greedyStep / greedyStepsEstimate) * 100) : 0;
-        document.getElementById('progressBar').style.width = `${pct}%`;
-        document.getElementById('progressEvals').textContent = `Finding a strong starting point (${greedyStep} / ~${greedyStepsEstimate} steps)…`;
+  // Everything below used to run outside any try/catch: if beamSearchBrowser threw (e.g. a
+  // worker failing to initialize) the progress modal was left open forever with no way to
+  // close it and no feedback -- indistinguishable from "stuck at optimizing, cancel does
+  // nothing", because Cancel only ever set a flag this code never got back around to reading.
+  try {
+    const result = await beamSearchBrowser(cfg, {
+      mode, targetEvals, beamWidth: 8, neighborsPerMember: 3, searchIterations: 100, seedCandidates,
+      shouldCancel: () => cancelRequested,
+      onProgress: ({ evalsDone, targetEvals: target, generation, bestScore, elapsedMs, phase, greedyStep, greedyStepsEstimate }) => {
+        // The greedy-seeding phase (see beamSearchBrowser.js) runs before any beam generations
+        // and used to report nothing at all here -- on a large real-account budget it could look
+        // completely frozen (0/target evaluations, "Generation 0") for a long stretch even
+        // though it was actively working and Cancel was fully functional. Show its own step
+        // count instead of leaving the bar/eval-count static during that phase.
+        if (phase === 'greedy-seeding') {
+          const pct = greedyStepsEstimate ? Math.min(100, (greedyStep / greedyStepsEstimate) * 100) : 0;
+          document.getElementById('progressBar').style.width = `${pct}%`;
+          document.getElementById('progressEvals').textContent = `Finding a strong starting point (${greedyStep} / ~${greedyStepsEstimate} steps)…`;
+          document.getElementById('progressElapsed').textContent = `${(elapsedMs / 1000).toFixed(1)}s`;
+          document.getElementById('progressGen').textContent = '-';
+          document.getElementById('progressBest').textContent = '-';
+          return;
+        }
+        document.getElementById('progressBar').style.width = `${Math.min(100, (evalsDone / target) * 100)}%`;
+        document.getElementById('progressEvals').textContent = `${evalsDone} / ${target} evaluations`;
         document.getElementById('progressElapsed').textContent = `${(elapsedMs / 1000).toFixed(1)}s`;
-        document.getElementById('progressGen').textContent = '-';
-        document.getElementById('progressBest').textContent = '-';
-        return;
-      }
-      document.getElementById('progressBar').style.width = `${Math.min(100, (evalsDone / target) * 100)}%`;
-      document.getElementById('progressEvals').textContent = `${evalsDone} / ${target} evaluations`;
-      document.getElementById('progressElapsed').textContent = `${(elapsedMs / 1000).toFixed(1)}s`;
-      document.getElementById('progressGen').textContent = generation;
-      document.getElementById('progressBest').textContent = fmt(bestScore);
-    },
-  });
-
-  saveHistory(historyKey, result.allSeen);
-
-  const shortlist = result.beam.slice(0, 5);
-  shortlist.push({ talentAlloc: editingBuild.talents, attrAlloc: editingBuild.attributes });
-  let best = null;
-  for (const c of shortlist) {
-    const r = await HunterSim.evaluate(currentHunter, {
-      level: editingBuild.level, iterations: 1000, hunterStats: store[currentHunter].hunterStats,
-      talents: c.talentAlloc, attributes: c.attrAlloc, overrides: editingBuild.overrides || {},
-      upgrades: window.buildNestedUpgrades(store.globalUpgrades),
-      gemPlannerStore: { gemStates: store.gems },
+        document.getElementById('progressGen').textContent = generation;
+        document.getElementById('progressBest').textContent = fmt(bestScore);
+      },
     });
-    const score = mode === 'push' ? r.avgStage : r.lootPerMin;
-    if (!best || score > best.score) best = { talentAlloc: c.talentAlloc, attrAlloc: c.attrAlloc, score };
-  }
 
-  editingBuild.talents = best.talentAlloc;
-  editingBuild.attributes = best.attrAlloc;
-  editingBuild.name = 'Optimized';
-  document.getElementById('buildNameInput').value = editingBuild.name;
-  onBuildChanged();
-  document.getElementById('optimizeProgressModal').classList.add('hidden');
+    saveHistory(historyKey, result.allSeen);
+
+    if (result.beam.length) {
+      const shortlist = result.beam.slice(0, 5);
+      shortlist.push({ talentAlloc: editingBuild.talents, attrAlloc: editingBuild.attributes });
+      let best = null;
+      for (const c of shortlist) {
+        const r = await HunterSim.evaluate(currentHunter, {
+          level: editingBuild.level, iterations: 1000, hunterStats: store[currentHunter].hunterStats,
+          talents: c.talentAlloc, attributes: c.attrAlloc, overrides: editingBuild.overrides || {},
+          upgrades: window.buildNestedUpgrades(store.globalUpgrades),
+          gemPlannerStore: { gemStates: store.gems },
+        });
+        const score = mode === 'push' ? r.avgStage : r.lootPerMin;
+        if (!best || score > best.score) best = { talentAlloc: c.talentAlloc, attrAlloc: c.attrAlloc, score };
+      }
+
+      editingBuild.talents = best.talentAlloc;
+      editingBuild.attributes = best.attrAlloc;
+      editingBuild.name = 'Optimized';
+      document.getElementById('buildNameInput').value = editingBuild.name;
+      onBuildChanged();
+    }
+  } catch (err) {
+    console.error('Optimizer failed', err);
+    alert(`Optimizer failed to run: ${err.message || err}`);
+  } finally {
+    document.getElementById('optimizeProgressModal').classList.add('hidden');
+  }
 };
 document.getElementById('cancelOptimizeRunBtn').onclick = () => { cancelRequested = true; };
 

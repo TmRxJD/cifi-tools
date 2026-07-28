@@ -1,14 +1,34 @@
 // Persistent pool worker (browser Web Worker version of poolWorker.js): compiles the
 // WASM evaluator once when initialized, then stays alive scoring batches as they arrive.
-importScripts('hunterSimBrowser.js');
+// hunterDefs.js unconditionally assigns to `window.*` (it's normally loaded on the main
+// thread) -- a dedicated Worker's global scope has no `window`, only `self`, so importing it
+// as-is would throw ReferenceError: window is not defined. Alias it before importing so those
+// assignments land on this worker's own global instead.
+self.window = self;
+// hunterDefs.js must load first -- it defines window.GEM_UPGRADE_ALIASES, the single
+// canonical alias table that hunterSimBrowser.js's resolveParam reads from (global.
+// GEM_UPGRADE_ALIASES). Without it, compileEvaluator throws "Cannot read properties of
+// undefined (reading 'catchUp')" on the first gem-aliased param it resolves -- and since that
+// throw used to be uncaught in this worker's init handler, 'ready' never posted and the main
+// thread's pool.ready() awaited forever: this was the actual "optimizer stuck at optimizing,
+// Cancel does nothing" bug.
+importScripts('hunterDefs.js', 'hunterSimBrowser.js');
 
 let evalFast = null;
 
 self.onmessage = async (e) => {
   const msg = e.data;
   if (msg.type === 'init') {
-    evalFast = await HunterSim.compileEvaluator(msg.cfg.hunter, msg.cfg);
-    self.postMessage({ type: 'ready' });
+    // If compileEvaluator throws (bad cfg, wasm/params fetch failure, etc.) and this isn't
+    // caught, 'ready' never posts and the main thread's pool.ready() promise waits forever --
+    // this was the "optimizer stuck at 'optimizing', Cancel does nothing" bug: cancel is only
+    // checked *after* pool.ready() resolves, so a wedged init couldn't be escaped at all.
+    try {
+      evalFast = await HunterSim.compileEvaluator(msg.cfg.hunter, msg.cfg);
+      self.postMessage({ type: 'ready' });
+    } catch (err) {
+      self.postMessage({ type: 'ready', error: String(err && err.message || err) });
+    }
     return;
   }
   if (msg.type === 'scoreBatch') {

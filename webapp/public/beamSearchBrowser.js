@@ -11,8 +11,13 @@
         const worker = new Worker('beamWorker.js');
         const ready = new Promise((resolve) => {
           worker.onmessage = (e) => {
-            if (e.data.type === 'ready') { worker.onmessage = this._handleMessage.bind(this); resolve(); return; }
+            if (e.data.type === 'ready') {
+              worker.onmessage = this._handleMessage.bind(this);
+              resolve(e.data.error || null);
+              return;
+            }
           };
+          worker.onerror = (e) => resolve(String((e && e.message) || 'worker failed to load'));
         });
         worker.postMessage({ type: 'init', cfg: serializeCfg(cfg) });
         this.readyPromises.push(ready);
@@ -33,7 +38,13 @@
       }
     }
 
-    async ready() { await Promise.all(this.readyPromises); }
+    // Returns the first init error string, or null if every worker came up clean. Never
+    // hangs: each readyPromise above always resolves (via 'ready' or worker.onerror), so this
+    // can't stall the search the way an uncaught compileEvaluator throw used to.
+    async ready() {
+      const errors = await Promise.all(this.readyPromises);
+      return errors.find((e) => e) || null;
+    }
 
     async scoreBatch(items, mode, iterations) {
       if (!items.length) return [];
@@ -193,7 +204,9 @@
     const deps = cfg.ATTRIBUTE_DEPENDENCIES || {};
     const minVal = cfg.ATTRIBUTE_MIN_VALUE || {};
     const pool = new WorkerPool(cfg, poolSize);
-    await pool.ready();
+    const initError = await pool.ready();
+    if (initError) { pool.terminate(); throw new Error(`Optimizer worker failed to initialize: ${initError}`); }
+    if (shouldCancel()) { pool.terminate(); return { beam: [], allSeen: [] }; }
 
     try {
       const seeds = [];
