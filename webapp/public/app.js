@@ -2668,24 +2668,45 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
 
     if (result.beam.length) {
       const shortlist = result.beam.slice(0, 5);
+      const currentIdx = shortlist.length;
       shortlist.push({ talentAlloc: editingBuild.talents, attrAlloc: editingBuild.attributes });
-      let best = null;
+      // A single 1000-iteration evaluate() carries real Monte Carlo noise (fresh wasm RNG
+      // state every call, see hunterSimBrowser.js) -- with only one sample per candidate, it
+      // was possible for that noise alone to make a candidate that's actually no better than
+      // (or even worse than) the build you started with LOOK like the winner, replacing your
+      // build with a "downgrade" that only exists because of evaluation variance. Averaging 3
+      // independent evaluate() calls per candidate shrinks that noise by ~sqrt(3) so the
+      // comparison reflects the real difference between allocations, not RNG luck.
+      const SAMPLES = 3;
+      const scores = [];
       for (const c of shortlist) {
-        const r = await HunterSim.evaluate(currentHunter, {
-          level: editingBuild.level, iterations: 1000, hunterStats: store[currentHunter].hunterStats,
-          talents: c.talentAlloc, attributes: c.attrAlloc, overrides: editingBuild.overrides || {},
-          upgrades: window.buildNestedUpgrades(store.globalUpgrades),
-          gemPlannerStore: { gemStates: store.gems },
-        });
-        const score = mode === 'push' ? r.avgStage : r.lootPerMin;
-        if (!best || score > best.score) best = { talentAlloc: c.talentAlloc, attrAlloc: c.attrAlloc, score };
+        let sum = 0;
+        for (let i = 0; i < SAMPLES; i++) {
+          const r = await HunterSim.evaluate(currentHunter, {
+            level: editingBuild.level, iterations: 1000, hunterStats: store[currentHunter].hunterStats,
+            talents: c.talentAlloc, attributes: c.attrAlloc, overrides: editingBuild.overrides || {},
+            upgrades: window.buildNestedUpgrades(store.globalUpgrades),
+            gemPlannerStore: { gemStates: store.gems },
+          });
+          sum += mode === 'push' ? r.avgStage : r.lootPerMin;
+        }
+        scores.push(sum / SAMPLES);
       }
+      let bestIdx = 0;
+      for (let i = 1; i < shortlist.length; i++) if (scores[i] > scores[bestIdx]) bestIdx = i;
 
-      editingBuild.talents = best.talentAlloc;
-      editingBuild.attributes = best.attrAlloc;
-      editingBuild.name = 'Optimized';
-      document.getElementById('buildNameInput').value = editingBuild.name;
-      onBuildChanged();
+      // The build you started with is always in the shortlist -- if nothing the search found
+      // actually beats it (within noise), keep it as-is instead of silently swapping in a
+      // same-or-worse allocation just because it happened to be a different candidate.
+      if (bestIdx === currentIdx) {
+        alert(`No improvement found (best candidate: ${fmt(scores[bestIdx])}, current: ${fmt(scores[currentIdx])}). Keeping your existing build unchanged.`);
+      } else {
+        editingBuild.talents = shortlist[bestIdx].talentAlloc;
+        editingBuild.attributes = shortlist[bestIdx].attrAlloc;
+        editingBuild.name = 'Optimized';
+        document.getElementById('buildNameInput').value = editingBuild.name;
+        onBuildChanged();
+      }
     }
   } catch (err) {
     console.error('Optimizer failed', err);
