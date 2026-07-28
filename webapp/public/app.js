@@ -56,6 +56,32 @@ function freshStore() {
   };
 }
 
+// One-time repair for data saved before genBuildId() existed: every build/category id used
+// to be String(Date.now()) (optionally +hunterKey), which collides whenever two were
+// created/saved within the same millisecond -- so an account that hit that bug before the
+// fix can have ACTUAL duplicate ids already sitting in its saved data. Fixing the generator
+// only prevents NEW collisions; it does nothing for ones already persisted, which is exactly
+// why "delete one build with the same name deleted both" could still happen even after that
+// fix landed -- the two builds already shared one id from before. Keeps the first occurrence
+// of each id as-is and reassigns a fresh unique id to every later collision.
+function dedupeIds(list) {
+  const seen = new Set();
+  let changed = false;
+  for (const item of list) {
+    if (!item || !item.id || seen.has(item.id)) {
+      if (item) { item.id = genBuildId(); changed = true; }
+    } else {
+      seen.add(item.id);
+    }
+  }
+  return changed;
+}
+function dedupeStoreIds(parsed) {
+  let changed = dedupeIds(parsed.categories || []);
+  ['borge', 'ozzy', 'knox'].forEach((h) => { if (dedupeIds(parsed[h]?.builds || [])) changed = true; });
+  return changed;
+}
+
 function loadStore() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -65,6 +91,14 @@ function loadStore() {
       if (!parsed.categories) parsed.categories = JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
       if (!parsed.viewMode) parsed.viewMode = 'vertical';
       if (!parsed.knox) parsed.knox = { hunterStats: { ...SEED_HUNTER_STATS.knox }, builds: [] };
+      if (dedupeStoreIds(parsed)) {
+        // Persist the repair immediately rather than waiting for the next unrelated save --
+        // otherwise a read-only session (just browsing, no edits) would silently re-detect
+        // and "fix" the same already-in-memory duplicates every reload without ever writing
+        // the correction back.
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+        idbSet(STORAGE_KEY, JSON.stringify(parsed));
+      }
       return parsed;
     }
   } catch { /* fall through to defaults */ }
@@ -171,9 +205,12 @@ if (__storeWasFreshOnLoad) {
       if (!recovered.categories) recovered.categories = JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
       if (!recovered.viewMode) recovered.viewMode = 'vertical';
       if (!recovered.knox) recovered.knox = { hunterStats: { ...SEED_HUNTER_STATS.knox }, builds: [] };
+      dedupeStoreIds(recovered);
       Object.keys(store).forEach((k) => delete store[k]);
       Object.assign(store, recovered);
-      localStorage.setItem(STORAGE_KEY, json);
+      const repairedJson = JSON.stringify(recovered);
+      localStorage.setItem(STORAGE_KEY, repairedJson);
+      idbSet(STORAGE_KEY, repairedJson);
       if (typeof render === 'function') render();
     } catch { /* corrupt backup, ignore */ }
   });
