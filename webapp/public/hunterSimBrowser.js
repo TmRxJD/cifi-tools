@@ -45,11 +45,9 @@
   // Score/Stage, distinct from the step-simulation visualizer in the main bundle which has
   // a different, simpler resolver). Gem data is read from a SEPARATE `gemPlannerStore`
   // object (matching the real site's data model), not nested under `upgrades`.
-  const GEM_UPGRADE_ALIASES = {
-    lootBorge: 'borge-loot-bonus', lootOzzy: 'ozzy-loot-bonus', lootKnox: 'knox-loot-bonus',
-    catchUp: 'catch-up-power-borge-ozzy', catchUp2: 'catch-up-power-knox',
-    borgeGU: 'borge-stat-bonus', ozzyGU: 'ozzy-stat-bonus', knoxGU: 'knox-stat-bonus',
-  };
+  // GEM_UPGRADE_ALIASES itself lives in hunterDefs.js (window.GEM_UPGRADE_ALIASES, loaded
+  // before this file) -- it's the one canonical copy shared with app.js's Overrides Cost
+  // badge, instead of each keeping its own separately-maintained copy.
 
   function gemTree(state, tree) { return state.gemPlannerStore?.gemStates?.[tree]; }
   function sumGemUpgrades(state, tree) {
@@ -128,7 +126,7 @@
           const idx = parseInt(suffix.replace('gem', ''), 10) - 1;
           return (g.nodes || [])[idx] ? 1 : 0;
         }
-        const realKey = GEM_UPGRADE_ALIASES[suffix] || suffix;
+        const realKey = global.GEM_UPGRADE_ALIASES[suffix] || suffix;
         return (g.upgrades || {})[realKey] || 0;
       }
       if (parts.length === 3) {

@@ -525,22 +525,30 @@ function overrideCostEligible(key, current, globalVal) {
     || key.startsWith('upgrades.inscryptions.') || key.startsWith('upgrades.gems_nodes.');
 }
 
+// Extracts a gems_nodes field's named-upgrade alias the same way resolveParam
+// (hunterSimBrowser.js) does: split at the FIRST underscore (gemName_alias, e.g.
+// "attraction_lootBorge" -> "lootBorge"), then look up the one shared canonical table
+// (window.GEM_UPGRADE_ALIASES, defined in hunterDefs.js) instead of hand-listing every
+// gemName+alias combination in a separate table here -- that hardcoded list previously had
+// to be kept in sync by hand and would silently miss any new tree/alias pairing.
+function gemFieldAlias(field) {
+  const us = field.indexOf('_');
+  if (us <= 0) return null;
+  const suffix = field.substring(us + 1);
+  return window.GEM_UPGRADE_ALIASES[suffix] ? suffix : null;
+}
+
 // Mirrors `O(e)`'s per-category dispatch to the real cost-range formulas (relics -> dV,
-// gadgets -> fV, inscryptions -> yV, the 8 aliased gem named-upgrades -> wV, everything else
-// -- base stats, and any gems_nodes key that isn't one of those 8 aliases, exactly matching
+// gadgets -> fV, inscryptions -> yV, the aliased gem named-upgrades -> wV, everything else
+// -- base stats, and any gems_nodes key that isn't an aliased named-upgrade, exactly matching
 // the live site's own fallthrough -- -> aV/baseStatCostRange).
-const GEM_ALIAS_BY_SUFFIX = {
-  attraction_lootBorge: 'lootBorge', attraction_lootOzzy: 'lootOzzy', attraction_lootKnox: 'lootKnox',
-  attraction_catchUp: 'catchUp', attraction_catchUp2: 'catchUp2',
-  creation_borgeGU: 'borgeGU', creation_ozzyGU: 'ozzyGU', creation_knoxGU: 'knoxGU',
-};
 function overrideCost(key, fromLevel, toLevel) {
   const CF = window.CostFormulas;
   if (key.startsWith('upgrades.relics.')) return CF.relicCostRange(key.split('.')[2], fromLevel, toLevel);
   if (key.startsWith('upgrades.gadgets.')) return CF.gadgetCostRange(key.split('.')[2], fromLevel, toLevel);
   if (key.startsWith('upgrades.inscryptions.')) return CF.inscryptionCostRange(key.split('.')[2], fromLevel, toLevel);
   if (key.startsWith('upgrades.gems_nodes.')) {
-    const alias = GEM_ALIAS_BY_SUFFIX[key.split('.')[2]];
+    const alias = gemFieldAlias(key.split('.')[2]);
     if (alias) return CF.gemAliasCostRange(alias, fromLevel, toLevel);
     return CF.baseStatCostRange(key, fromLevel, toLevel, currentHunter);
   }
@@ -858,7 +866,7 @@ async function openOverrideCostsModal(build) {
         const field = overrideGroups.find((g) => g.title === 'Gem Nodes & Upgrades')?.fields.find((f) => f.key === k);
         const globalVal = field ? (field.global() ?? 0) : 0;
         const overrideVal = overrides[k];
-        const alias = GEM_ALIAS_BY_SUFFIX[suffix];
+        const alias = gemFieldAlias(suffix);
         const cost = alias ? CF.gemAliasCostRange(alias, globalVal, overrideVal) : CF.baseStatCostRange(k, globalVal, overrideVal, currentHunter);
         return { label: field ? field.label : suffix, globalVal, overrideVal, resource: null, cost };
       }),
@@ -1991,12 +1999,20 @@ function renderGemsPage(root) {
         tree.upgradeKeys.forEach((upKey) => {
           if (newLevel < ((tree.unlocks && tree.unlocks[upKey]) || 1)) state.upgrades[upKey] = 0;
         });
+        (tree.nonSimKeys || []).forEach((upKey) => {
+          if (newLevel < ((tree.nonSimUnlocks && tree.nonSimUnlocks[upKey]) || 0)) state.upgrades[upKey] = 0;
+        });
       }
       state.level = newLevel;
       // Confirmed real: dropping Exodus below 5 auto-untoggles any tier-2 (exodus-5-gated)
-      // nodes across every tree, since they're about to become invisible/inaccessible again.
+      // nodes across every OTHER tree, since they're about to become invisible/inaccessible
+      // again. Exodus's OWN nodes are handled separately below since Exodus gates all 6 of
+      // its own nodes on its own level (0 visible until maxed), not just nodes 4-6.
       if (key === 'exodus' && state.level < window.GEM_TREES.exodus.maxLevel) {
-        Object.values(store.gems).forEach((s) => { for (let i = 3; i < s.nodes.length; i++) s.nodes[i] = false; });
+        Object.entries(store.gems).forEach(([gemKey, s]) => {
+          if (gemKey === 'exodus') { s.nodes.fill(false); return; }
+          for (let i = 3; i < s.nodes.length; i++) s.nodes[i] = false;
+        });
       }
       saveStore();
       renderGemsPage(root);
@@ -2005,12 +2021,18 @@ function renderGemsPage(root) {
     card.querySelector('[data-lvl-inc]').onclick = () => setLevel(state.level + 1);
 
     const nodesWrap = card.querySelector('[data-nodes]');
-    // Confirmed real (live bundle's Gems.vue): nodes 4-6 of every tree -- including Exodus's
-    // own -- carry unlockRequirement:"exodus-5" and stay hidden until Exodus itself hits 5.
-    // Every node (1-6) additionally needs its OWN tree at level >= 1 before it can be
-    // toggled (node.unlock defaults to 1 when unset) -- shown but disabled below that.
+    // Corrected against a real account (2026-07): the previous comment here ("nodes 4-6 of
+    // every tree, including Exodus's own, unlock at Exodus level 5") was an unverified
+    // assumption and wrong for Exodus specifically. Confirmed directly by maxing a real
+    // account's Exodus tree: Exodus shows ZERO node buttons at any level below its own max,
+    // then all 6 at once the instant it hits 5/5 -- it is NOT "3 always visible, 3 more once
+    // Exodus is maxed" like every OTHER tree. Every other tree (Temporal/Innovation/Power/
+    // Attraction/Creation/Evolution) does follow that shared "3, then 6 once Exodus is maxed"
+    // rule -- only Exodus itself is self-gated on its own level instead.
     const exodusMaxed = store.gems.exodus.level >= window.GEM_TREES.exodus.maxLevel;
-    const visibleNodeCount = exodusMaxed ? tree.nodeCount : Math.min(3, tree.nodeCount);
+    const visibleNodeCount = key === 'exodus'
+      ? (exodusMaxed ? tree.nodeCount : 0)
+      : (exodusMaxed ? tree.nodeCount : Math.min(3, tree.nodeCount));
     const nodesClickable = state.level >= 1;
     for (let i = 0; i < visibleNodeCount; i++) {
       const btn = document.createElement('button');
@@ -2046,13 +2068,17 @@ function renderGemsPage(root) {
     });
 
     if (!hideNonSimRelevant) {
-      (tree.nonSimKeys || []).forEach((upKey) => {
+      // nonSimUnlocks mirrors upgradeKeys' own unlock-threshold gating (e.g. Exodus's 5 extra
+      // bonus fields only appear once Exodus's own level is maxed) -- previously ungated,
+      // showing every nonSimKey unconditionally regardless of whether the account could
+      // actually see it yet.
+      (tree.nonSimKeys || []).filter((upKey) => state.level >= ((tree.nonSimUnlocks && tree.nonSimUnlocks[upKey]) || 0)).forEach((upKey) => {
         const label = (tree.nonSimLabels && tree.nonSimLabels[upKey]) || upKey;
         const cap = (tree.nonSimCaps && tree.nonSimCaps[upKey]) ?? null;
         const val = state.upgrades[upKey] || 0;
         const wrap = document.createElement('div');
         wrap.className = 'bg-gray-800/60 rounded-sm p-2 pt-1.5 hover:bg-gray-700/60 transition-colors border-l-3';
-        wrap.style.borderLeftColor = '#6b7280';
+        wrap.style.borderLeftColor = (tree.nonSimFieldColors && tree.nonSimFieldColors[upKey]) || '#6b7280';
         wrap.innerHTML = `<div class="flex items-center justify-between mb-1"><span class="text-xs font-medium text-white truncate">${label}</span>${cap !== null ? `<span class="text-[10px] text-gray-500">${cap}</span>` : ''}</div>
           <div class="flex items-center gap-1">
             <button data-dec class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded-l-md">${iconSvg('chevron-left', 14)}</button>

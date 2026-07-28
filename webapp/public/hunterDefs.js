@@ -131,8 +131,8 @@ window.HUNTER_DEFS = {
         ],
       },
       // Gem bonuses are NOT edited here -- gems are one shared account-wide tree (see
-      // window.GEM_TREES / the Gems page), not per-hunter. gemsToParamMap() below computes
-      // these dotted keys from that shared state at evaluation time.
+      // window.GEM_TREES / the Gems page), not per-hunter. resolveParam (hunterSimBrowser.js)
+      // reads them straight from state.gemPlannerStore at evaluation time.
     },
   },
 
@@ -309,9 +309,27 @@ window.GEM_TREES = {
   // shown when the user asks to see everything, matching the live page exactly.
   exodus: {
     label: 'Exodus', maxLevel: 5, nodeCount: 6, upgradeKeys: [], gradient: 'linear-gradient(135deg, #5a95f5 0%, #6326f1 40%, #ec4899 100%)',
-    nonSimKeys: ['cells-bonus', 'shards-bonus'],
-    nonSimLabels: { 'cells-bonus': 'Cells Bonus', 'shards-bonus': 'Shards Bonus' },
-    nonSimCaps: { 'cells-bonus': 999, 'shards-bonus': 999 },
+    // Confirmed directly on a real account (2026-07): Exodus actually has 7 non-sim bonus
+    // fields, not the 2 (Cells/Shards Bonus) this file previously listed -- 5 more (RP/MP/AP/
+    // Materials/Orbs Bonus) only appear once Exodus's own level is maxed (5/5), matching the
+    // same self-gating this file's node-visibility logic in app.js was just fixed for
+    // (Exodus is the one tree that gates on its OWN max level, not "3 always + 3 more once
+    // Exodus is maxed" like every other tree). Border colors copied verbatim from the live
+    // DOM's computed styles. nonSimUnlocks mirrors upgradeKeys' own `unlocks` convention.
+    nonSimKeys: ['cells-bonus', 'shards-bonus', 'rp-bonus', 'mp-bonus', 'ap-bonus', 'materials-bonus', 'orbs-bonus'],
+    nonSimLabels: {
+      'cells-bonus': 'Cells Bonus', 'shards-bonus': 'Shards Bonus', 'rp-bonus': 'RP Bonus',
+      'mp-bonus': 'MP Bonus', 'ap-bonus': 'AP Bonus', 'materials-bonus': 'Materials Bonus', 'orbs-bonus': 'Orbs Bonus',
+    },
+    nonSimCaps: {
+      'cells-bonus': 999, 'shards-bonus': 999, 'rp-bonus': 999, 'mp-bonus': 999, 'ap-bonus': 999,
+      'materials-bonus': 999, 'orbs-bonus': 999,
+    },
+    nonSimUnlocks: { 'rp-bonus': 5, 'mp-bonus': 5, 'ap-bonus': 5, 'materials-bonus': 5, 'orbs-bonus': 5 },
+    nonSimFieldColors: {
+      'cells-bonus': '#39ff94', 'shards-bonus': '#39d3ff', 'rp-bonus': '#ec8e34', 'mp-bonus': '#ff3842',
+      'ap-bonus': '#2a47cc', 'materials-bonus': '#8b5a3c', 'orbs-bonus': '#ba88fc',
+    },
   },
   temporal: {
     label: 'Temporal', maxLevel: 3, nodeCount: 6, upgradeKeys: [], gradient: 'linear-gradient(135deg, #dc2626 0%, #e67b7b 100%)',
@@ -374,46 +392,21 @@ function defaultGemState() {
 }
 window.defaultGemState = defaultGemState;
 
-// Maps the shared gem tree state into the "gems_nodes.*" dotted param keys the sim expects
-// -- mirrors main.js's real resolver logic (the `v` internal-name lookup table + the
-// gemName_suffix splitting convention) confirmed from the evaluationWorker bundle.
-const GEM_UPGRADE_ALIASES = {
+// Canonical alias -> internal-upgrades-key table for gem-tree named upgrades (loot/stat
+// bonuses, Attraction's catch-up-power nodes) -- the ONE source of truth for this mapping.
+// Previously duplicated three times with real risk of drifting out of sync: this same table
+// verbatim in hunterSimBrowser.js's resolveParam (the actual sim-facing consumer, reading
+// "upgrades.gems_nodes.<gemName>_<alias>" params), an inverted "suffix -> alias" copy
+// hand-built in app.js for the Overrides-panel Cost badge, and this file's own now-deleted
+// gemsToParamMap() (which had become entirely dead code -- resolveParam reads gem state
+// straight from state.gemPlannerStore, gemsToParamMap's flattened-map approach was never
+// actually wired into any evaluate() call path). Both real consumers now reference this one
+// table instead of keeping their own copies.
+window.GEM_UPGRADE_ALIASES = {
   lootBorge: 'borge-loot-bonus', lootOzzy: 'ozzy-loot-bonus', lootKnox: 'knox-loot-bonus',
   catchUp: 'catch-up-power-borge-ozzy', catchUp2: 'catch-up-power-knox',
   borgeGU: 'borge-stat-bonus', ozzyGU: 'ozzy-stat-bonus', knoxGU: 'knox-stat-bonus',
 };
-// IMPORTANT: every key here MUST be prefixed with "gems_nodes." -- the sim's own param
-// resolver (hunterSimBrowser.js resolveParam) looks up gem-derived values as
-// "upgrades.gems_nodes.<key>", stripping only the "upgrades." prefix before indexing into
-// globalUpgrades. A previous version of this function emitted unprefixed keys (e.g.
-// "attraction_lootBorge" instead of "gems_nodes.attraction_lootBorge"), which silently
-// resolved to 0 for every gem-derived param in every hunter's param list -- gem levels,
-// nodes, and named upgrades (loot bonuses, stat bonuses, etc.) were being completely
-// ignored by the simulation regardless of what was set on the Gems page. Confirmed via a
-// live side-by-side Loot Score comparison: stage (driven by hp/atk/talents, unaffected by
-// this bug) was within ~1%, but Loot Score was ~20% low -- consistent with gem loot-bonus
-// contributions (e.g. Attraction's Borge Loot Bonus) being dropped entirely.
-function gemsToParamMap(gems) {
-  const map = {};
-  Object.entries(gems || {}).forEach(([gemName, state]) => {
-    map[`gems_nodes.${gemName}_level`] = state.level || 0;
-    (state.nodes || []).forEach((on, i) => { map[`gems_nodes.${gemName}_gem${i + 1}`] = on ? 1 : 0; });
-    Object.entries(GEM_UPGRADE_ALIASES).forEach(([alias, realKey]) => {
-      if (realKey in (state.upgrades || {})) map[`gems_nodes.${gemName}_${alias}`] = state.upgrades[realKey] || 0;
-    });
-  });
-  // Exodus's 3 paired-tree "Upgrades Count" fields (temporalEvolutionCount,
-  // powerInnovationCount, attractionCreationCount) aren't user-editable nodes/upgrades --
-  // they're derived from the combined level of their two paired trees. Best-effort formula
-  // (sum of the two trees' levels); still being verified against a live account with
-  // nonzero values in these specific slots.
-  const g = gems || {};
-  map['gems_nodes.exodus_temporalEvolutionCount'] = (g.temporal?.level || 0) + (g.evolution?.level || 0);
-  map['gems_nodes.exodus_powerInnovationCount'] = (g.power?.level || 0) + (g.innovation?.level || 0);
-  map['gems_nodes.exodus_attractionCreationCount'] = (g.attraction?.level || 0) + (g.creation?.level || 0);
-  return map;
-}
-window.gemsToParamMap = gemsToParamMap;
 
 // Real site's resolveParam (extracted verbatim from the live bundle's worker,
 // evaluationWorker-BKbzsoAA.js -- the ACTUAL function used to compute Loot Score/Stage for
