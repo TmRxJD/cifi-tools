@@ -1140,7 +1140,20 @@ async function screenshotCard(card, build) {
   }
 }
 
+// renderBuildList is async and `await`s the first card's evaluation mid-loop (see below) --
+// if it gets called again (any of the many action handlers that call it: delete, archive,
+// reorder, category switch, re-evaluate...) while a previous call is still paused on that
+// await, the second call clears and rebuilds the whole list, and then the FIRST call's stale
+// continuation resumes and appends its own leftover cards on top of the second call's fresh
+// ones. Confirmed directly: this produced a visually-duplicated card for a SINGLE underlying
+// build (store had 3 builds, the DOM showed 4 cards, one name appearing twice) -- not an id
+// collision at all. Deleting one visual copy removed the one real build both copies pointed
+// to, which looked exactly like "deleting one card deletes both". A monotonically increasing
+// token lets a stale call detect it's been superseded and bail out before touching the DOM
+// again instead of racing the newer call.
+let renderBuildListToken = 0;
 async function renderBuildList() {
+  const myToken = ++renderBuildListToken;
   const list = document.getElementById('buildList');
   if (!list) return;
   const builds = store[currentHunter].builds.filter((b) => (b.categoryId || 'active') === showCategoryId);
@@ -1304,8 +1317,15 @@ async function renderBuildList() {
       upgrades: window.buildNestedUpgrades(store.globalUpgrades),
       gemPlannerStore: { gemStates: store.gems },
     });
-    if (buildIdx === 0) comparisonBaseline = await evalPromise;
+    if (buildIdx === 0) {
+      comparisonBaseline = await evalPromise;
+      // A newer renderBuildList() call started while we were paused here -- it already
+      // cleared and repopulated `list` with its own fresh cards, so continuing this loop
+      // would append stale duplicates on top of them. Stop immediately.
+      if (myToken !== renderBuildListToken) return;
+    }
     evalPromise.then((r) => {
+      if (myToken !== renderBuildListToken) return;
       const runsPerDay = r.avgTime ? 1440 / r.avgTime : 0;
       const base = buildIdx > 0 ? comparisonBaseline : null;
       const baseRunsPerDay = base?.avgTime ? 1440 / base.avgTime : 0;
@@ -2474,6 +2494,29 @@ function applyImportedBuild(payload, includeUpgrades) {
     Object.entries(payload.upgradeOverrides || {}).forEach(([key, val]) => {
       if (!window.isPureLootOverrideKey(key)) build.overrides[key] = val;
     });
+    // Base-stat overrides (hp/atk/regen/etc.) and global-upgrade overrides (relics,
+    // inscryptions, gadgets, diamond specials/cards, gem nodes) both encode real account-wide
+    // values captured at import time, but were only ever written onto THIS one build's
+    // overrides object -- any OTHER build for the same hunter (most of all a brand new blank
+    // one) never saw them and fell back to the all-zero fresh-install baseline, so hitting
+    // Optimize on a from-scratch build scored as if the account had no relics/stats at all.
+    // Propagate them into the actual global stores (store[hunter].hunterStats /
+    // store.globalUpgrades / store.gems) so every build -- including ones that don't exist
+    // yet -- inherits the real current account state through the normal fallback path,
+    // instead of needing its own copy of every override.
+    const baseKeys = new Set(window.HUNTER_DEFS[currentHunter]?.baseStatKeys || []);
+    const applyGlobal = (key, val) => {
+      if (baseKeys.has(key)) { store[currentHunter].hunterStats[key] = val; return; }
+      const m = /^upgrades\.gems_nodes\.(.+)$/.exec(key);
+      if (m) { /* gem node state has its own dedicated store shape; skip rather than guess */ return; }
+      const u = /^upgrades\.(.+)$/.exec(key);
+      if (u) { store.globalUpgrades[u[1]] = val; return; }
+      if (key in store[currentHunter].hunterStats) store[currentHunter].hunterStats[key] = val;
+    };
+    Object.entries(payload.overrides || {}).forEach(([key, val]) => applyGlobal(key, val));
+    Object.entries(payload.upgradeOverrides || {}).forEach(([key, val]) => {
+      if (!window.isPureLootOverrideKey(key)) applyGlobal(key, val);
+    });
   }
   store[currentHunter].builds.push(build);
   saveStore();
@@ -2641,10 +2684,39 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
     const result = await beamSearchBrowser(cfg, {
       mode, targetEvals, beamWidth: 8, neighborsPerMember: 3, searchIterations: 100, seedCandidates,
       shouldCancel: () => cancelRequested,
-      onProgress: ({
-        evalsDone, targetEvals: target, generation, bestScore, elapsedMs, phase,
-        greedyStep, greedyStepsEstimate, polishRound, polishRoundsEstimate,
-      }) => {
+      onProgress: (raw) => {
+        // Defensive: with multi-restart, evalsDone is threaded through several layers
+        // (totalEvalsDone + this-pass's own count) across restart boundaries -- if any one of
+        // those ever comes through as undefined/non-finite (a stale/partial progress event,
+        // a future refactor that misses a field), arithmetic on it silently produces NaN,
+        // which then prints literally as the text "NaN" in the dialog instead of a number.
+        // Coerce every numeric field to a safe finite fallback before it's ever used in a
+        // template string, so a bad upstream value degrades to "0" instead of "NaN".
+        const safe = (v, fallback = 0) => (Number.isFinite(v) ? v : fallback);
+        const {
+          evalsDone, targetEvals: target, generation, bestScore, elapsedMs, phase,
+          greedyStep, greedyStepsEstimate, polishRound, polishRoundsEstimate, restart, restartsTotal,
+        } = {
+          ...raw,
+          evalsDone: safe(raw.evalsDone),
+          targetEvals: safe(raw.targetEvals, targetEvals),
+          generation: safe(raw.generation),
+          elapsedMs: safe(raw.elapsedMs),
+          greedyStep: safe(raw.greedyStep),
+          greedyStepsEstimate: safe(raw.greedyStepsEstimate, 0),
+          polishRound: safe(raw.polishRound),
+          polishRoundsEstimate: safe(raw.polishRoundsEstimate, 0),
+        };
+        // beamSearchBrowser runs the whole greedy-seed -> beam-search -> polish pipeline
+        // several independent times (multi-restart, see the big comment on beamSearchBrowser
+        // in beamSearchBrowser.js) and keeps whichever attempt converges highest -- confirmed
+        // necessary to reliably match hand-tuned builds from a cold start. Without labeling
+        // it, the dialog looked like it was randomly restarting/glitching (seeding far past
+        // its own estimate, jumping straight to polish, then starting over) with no
+        // explanation. Prefix every phase with which attempt this is so the same underlying
+        // behavior reads as a deliberate, structured process instead of a bug.
+        const attemptPrefix = Number.isFinite(restart) && restartsTotal > 1
+          ? `Attempt ${restart + 1} of ${restartsTotal} — ` : '';
         // The greedy-seeding phase (see beamSearchBrowser.js) runs before any beam generations
         // and used to report nothing at all here -- on a large real-account budget it could look
         // completely frozen (0/target evaluations, "Generation 0") for a long stretch even
@@ -2653,7 +2725,8 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
         if (phase === 'greedy-seeding') {
           const pct = greedyStepsEstimate ? Math.min(100, (greedyStep / greedyStepsEstimate) * 100) : 0;
           document.getElementById('progressBar').style.width = `${pct}%`;
-          document.getElementById('progressEvals').textContent = `Finding a strong starting point (${greedyStep} / ~${greedyStepsEstimate} steps)…`;
+          document.getElementById('progressEvals').textContent =
+            `${attemptPrefix}Finding a strong starting point (${greedyStep} / ~${greedyStepsEstimate} steps)…`;
           document.getElementById('progressElapsed').textContent = `${(elapsedMs / 1000).toFixed(1)}s`;
           document.getElementById('progressGen').textContent = '-';
           document.getElementById('progressBest').textContent = '-';
@@ -2665,15 +2738,15 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
         if (phase === 'polish') {
           document.getElementById('progressBar').style.width = '100%';
           document.getElementById('progressEvals').textContent = polishRoundsEstimate
-            ? `Verifying no single point-move improves this build (round ${polishRound} / up to ${polishRoundsEstimate})…`
-            : 'Verifying no single point-move improves this build…';
+            ? `${attemptPrefix}Verifying no single point-move improves this build (round ${polishRound} / up to ${polishRoundsEstimate})…`
+            : `${attemptPrefix}Verifying no single point-move improves this build…`;
           document.getElementById('progressElapsed').textContent = `${(elapsedMs / 1000).toFixed(1)}s`;
           document.getElementById('progressGen').textContent = generation;
           document.getElementById('progressBest').textContent = fmt(bestScore);
           return;
         }
         document.getElementById('progressBar').style.width = `${Math.min(100, (evalsDone / target) * 100)}%`;
-        document.getElementById('progressEvals').textContent = `${evalsDone} / ${target} evaluations`;
+        document.getElementById('progressEvals').textContent = `${attemptPrefix}${evalsDone} / ${target} evaluations`;
         document.getElementById('progressElapsed').textContent = `${(elapsedMs / 1000).toFixed(1)}s`;
         document.getElementById('progressGen').textContent = generation;
         document.getElementById('progressBest').textContent = fmt(bestScore);
