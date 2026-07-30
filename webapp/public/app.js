@@ -52,6 +52,26 @@ function freshStore() {
     gems: window.defaultGemState(),
     categories: JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)),
     viewMode: 'vertical',
+    ships: {},
+    researchUnits: {},
+    shipBuilds: {},
+    shipInputs: {},
+    shipGear: {},
+    gearSets: {},
+    fleetBoosts: {},
+    fleetResearch: {},
+    fleetBadges: {},
+    unlockedGens: { 1: true, 2: false, 3: false, 4: false, 5: false, 6: false, 7: false, 8: false },
+    optimizerSettings: { shipEnabled: { 1: true, 2: true, 3: true, 4: true, 5: true, 6: true, 7: true }, zaglag: false },
+    loadoutTabs: {
+      tabs: [
+        { id: 1, name: 'Loadout 1', perShip: {}, zaglagChecklist: null },
+        { id: 2, name: 'Loadout 2', perShip: {}, zaglagChecklist: null },
+        { id: 3, name: 'Loadout 3', perShip: {}, zaglagChecklist: null },
+      ],
+      activeId: 1,
+      nextId: 4,
+    },
     ...perHunter,
   };
 }
@@ -91,6 +111,31 @@ function loadStore() {
       if (!parsed.categories) parsed.categories = JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
       if (!parsed.viewMode) parsed.viewMode = 'vertical';
       if (!parsed.knox) parsed.knox = { hunterStats: { ...SEED_HUNTER_STATS.knox }, builds: [] };
+      if (!parsed.ships) parsed.ships = {};
+      if (!parsed.researchUnits) parsed.researchUnits = {};
+      if (!parsed.shipBuilds) parsed.shipBuilds = {};
+      if (!parsed.shipInputs) parsed.shipInputs = {};
+      if (!parsed.shipGear) parsed.shipGear = {};
+      if (!parsed.gearSets) parsed.gearSets = {};
+      if (!parsed.fleetBoosts) parsed.fleetBoosts = {};
+      if (!parsed.fleetResearch) parsed.fleetResearch = {};
+      if (!parsed.fleetBadges) parsed.fleetBadges = {};
+      if (!parsed.unlockedGens) parsed.unlockedGens = { 1: true, 2: false, 3: false, 4: false, 5: false, 6: false, 7: false, 8: false };
+      if (!parsed.optimizerSettings) parsed.optimizerSettings = { shipEnabled: { 1: true, 2: true, 3: true, 4: true, 5: true, 6: true, 7: true }, zaglag: false };
+      if (!parsed.loadoutTabs) {
+        // Migrate a pre-tabs single currentLoadout (if any) into tab 1 instead of discarding it.
+        const legacy = parsed.currentLoadout;
+        parsed.loadoutTabs = {
+          tabs: [
+            { id: 1, name: legacy?.name || 'Loadout 1', perShip: legacy?.perShip || {}, zaglagChecklist: null },
+            { id: 2, name: 'Loadout 2', perShip: {}, zaglagChecklist: null },
+            { id: 3, name: 'Loadout 3', perShip: {}, zaglagChecklist: null },
+          ],
+          activeId: 1,
+          nextId: 4,
+        };
+      }
+      delete parsed.currentLoadout;
       if (dedupeStoreIds(parsed)) {
         // Persist the repair immediately rather than waiting for the next unrelated save --
         // otherwise a read-only session (just browsing, no edits) would silently re-detect
@@ -188,6 +233,7 @@ function updateNavGating() {
 window.updateNavGating = updateNavGating;
 
 let store = loadStore();
+window.store = store;
 let currentHunter = 'borge';
 let editingBuild = null;
 let showCategoryId = 'active';
@@ -296,6 +342,10 @@ function render() {
   });
   const root = document.getElementById('pageRoot');
   if (route === 'gems') { renderGemsPage(root); return; }
+  if (route === 'fleet') { renderFleetPage(root); return; }
+  if (route === 'shipsetup') { renderShipSetupPage(root); return; }
+  if (route === 'gearsets') { renderGearSetsPage(root); return; }
+  if (route === 'research') { renderResearchPage(root); return; }
   if (route === 'settings') { renderSettingsPage(root); return; }
   if (route.startsWith('upgrades/')) { renderUpgradesPage(root, route.slice('upgrades/'.length)); return; }
   renderSimPage(root);
@@ -1444,6 +1494,23 @@ async function refreshBridgeAdbStatusText(ws, text) {
   const desc = describeAdbDeviceStatus(status);
   text.textContent = desc ? `CIFI Bridge connected — ${desc}` : 'CIFI Bridge connected';
 }
+// Chromium throttles repeated WebSocket connection attempts to a host:port that keeps refusing
+// the connection -- after several failures in a row it silently delays the ACTUAL socket-level
+// connect attempt further and further (independent of our own JS-level timeout), a well-known
+// gotcha for exactly this "poll a maybe-not-running local server" pattern. Hammering it on a
+// fixed short interval while the bridge is down just keeps racking up that penalty, so once the
+// bridge actually starts, the next attempt can still silently sit throttled past our own 1s
+// timeout -- which is why this used to need a hard refresh (that resets the per-page counter)
+// to redetect. Fix: back off further while failing (so we never trip Chromium's own throttle),
+// and snap back to fast polling immediately once connected.
+const BRIDGE_POLL_MIN_MS = 4000;
+const BRIDGE_POLL_MAX_MS = 30000;
+let bridgePollDelay = BRIDGE_POLL_MIN_MS;
+let bridgePollTimer = null;
+function scheduleBridgePoll(delay) {
+  clearTimeout(bridgePollTimer);
+  bridgePollTimer = setTimeout(pollBridgeStatus, delay);
+}
 async function updateBridgeStatusIndicator() {
   const box = document.getElementById('bridgeStatusSidebar');
   const dot = document.getElementById('bridgeStatusDot');
@@ -1452,24 +1519,39 @@ async function updateBridgeStatusIndicator() {
     const ws = await window.tryConnectCifiBridge(1000);
     if (ws) {
       bridgeStatusWs = ws;
+      bridgePollDelay = BRIDGE_POLL_MIN_MS; // connected -- reset backoff so a future drop recovers fast again
       box.classList.remove('hidden');
       dot.className = 'w-2 h-2 rounded-full bg-green-500 flex-shrink-0';
       text.textContent = 'CIFI Bridge connected';
       refreshBridgeAdbStatusText(ws, text);
-      ws.addEventListener('close', () => { dot.className = 'w-2 h-2 rounded-full bg-gray-500 flex-shrink-0'; text.textContent = 'CIFI Bridge disconnected'; });
-    } else {
-      box.classList.add('hidden');
+      ws.addEventListener('close', () => {
+        bridgeStatusWs = null;
+        dot.className = 'w-2 h-2 rounded-full bg-gray-500 flex-shrink-0';
+        text.textContent = 'CIFI Bridge disconnected';
+      });
+      return true;
     }
-  } catch { box.classList.add('hidden'); }
+    box.classList.add('hidden');
+    return false;
+  } catch { box.classList.add('hidden'); return false; }
+}
+async function pollBridgeStatus() {
+  let connected;
+  if (!bridgeStatusWs || bridgeStatusWs.readyState !== WebSocket.OPEN) {
+    connected = await updateBridgeStatusIndicator();
+  } else {
+    await refreshBridgeAdbStatusText(bridgeStatusWs, document.getElementById('bridgeStatusText'));
+    connected = true;
+  }
+  bridgePollDelay = connected ? BRIDGE_POLL_MIN_MS : Math.min(bridgePollDelay * 2, BRIDGE_POLL_MAX_MS);
+  scheduleBridgePoll(bridgePollDelay);
 }
 updateBridgeStatusIndicator();
-setInterval(() => {
-  if (!bridgeStatusWs || bridgeStatusWs.readyState !== WebSocket.OPEN) {
-    updateBridgeStatusIndicator();
-  } else {
-    refreshBridgeAdbStatusText(bridgeStatusWs, document.getElementById('bridgeStatusText'));
-  }
-}, 8000);
+scheduleBridgePoll(bridgePollDelay);
+// Redetect immediately when the tab regains focus/visibility -- covers "I started the bridge
+// while this tab was in the background" without waiting out the current backoff delay.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleBridgePoll(0); });
+window.addEventListener('focus', () => scheduleBridgePoll(0));
 
 // ==================== MANAGE CATEGORIES ====================
 
@@ -1733,6 +1815,7 @@ function renderUpgradeInput(catKey, item) {
 // inline per-hunter effect lines instead.
 let inscriptionsTabHunter = 'Borge';
 let hideMaxedInscriptions = false;
+let showFleetLoopMods = false;
 
 function renderUpgradesPage(root, catKey) {
   const cat = window.ALL_UPGRADE_CATEGORIES[catKey];
@@ -1740,10 +1823,10 @@ function renderUpgradesPage(root, catKey) {
 
   if (catKey === 'inscryptions') {
     root.innerHTML = `
-      <div class="flex items-center justify-center gap-2 mb-4" id="inscTabs"></div>
+      <div class="flex items-center justify-center gap-2 mb-4 flex-wrap" id="inscTabs"></div>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="upgradeItemsGrid"></div>`;
     const tabs = document.getElementById('inscTabs');
-    ['Borge', 'Ozzy', 'Knox'].forEach((h) => {
+    ['Borge', 'Ozzy', 'Knox', 'Fleet'].forEach((h) => {
       const btn = document.createElement('button');
       btn.textContent = h;
       btn.className = `px-4 py-1.5 rounded-full text-sm font-semibold ${inscriptionsTabHunter === h ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`;
@@ -1757,6 +1840,10 @@ function renderUpgradesPage(root, catKey) {
     tabs.appendChild(hideBtn);
 
     const grid = document.getElementById('upgradeItemsGrid');
+    if (inscriptionsTabHunter === 'Fleet') {
+      window.renderFleetBoostItemsInto(grid, 'Inscryption');
+      return;
+    }
     cat.items
       .filter((item) => {
         const f = window.UPGRADE_FORMULAS[`inscryptions.${item.id}`];
@@ -1770,8 +1857,15 @@ function renderUpgradesPage(root, catKey) {
   root.innerHTML = `
     <h1 class="text-2xl font-bold text-white text-center mb-4">${cat.label}</h1>
     <div class="text-center text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Tier 1</div>
+    ${catKey === 'loopmods' ? '<div class="flex justify-center mb-4"><button id="fleetModsToggle" class="flex items-center gap-2 text-xs text-gray-400"><span>Show Fleet Mods</span></button></div>' : ''}
     <div id="upgradeItemsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>`;
   const grid = document.getElementById('upgradeItemsGrid');
+  if (catKey === 'loopmods') {
+    const toggleBtn = document.getElementById('fleetModsToggle');
+    toggleBtn.innerHTML = `<span>Show Fleet Mods</span><div class="w-9 h-5 rounded-full transition-colors ${showFleetLoopMods ? 'bg-blue-600' : 'bg-gray-700'}"><div class="w-4 h-4 bg-white rounded-full m-0.5 transition-transform ${showFleetLoopMods ? 'translate-x-4' : ''}"></div></div>`;
+    toggleBtn.onclick = () => { showFleetLoopMods = !showFleetLoopMods; renderUpgradesPage(root, catKey); };
+    if (showFleetLoopMods) { window.renderFleetBoostItemsInto(grid, 'Loop Mod'); return; }
+  }
   cat.items.forEach((item) => { grid.appendChild(renderUpgradeInput(catKey, item)); });
 }
 
@@ -2586,6 +2680,7 @@ async function processImportedSaveText(rawText) {
     return;
   }
   const mapped = window.mapCifiSaveToStore(save);
+  window.applyImportedShipData(save);
 
   Object.assign(store.globalUpgrades, mapped.globalUpgrades);
   Object.entries(mapped.gems).forEach(([treeKey, treeState]) => {

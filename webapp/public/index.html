@@ -33,6 +33,7 @@
       <button id="hunterBorgeBtn" class="nav-pill" data-nav="borge">Borge</button>
       <button id="hunterOzzyBtn" class="nav-pill" data-nav="ozzy" data-unlock-gem="exodus" data-unlock-lvl="2">Ozzy</button>
       <button id="hunterKnoxBtn" class="nav-pill" data-nav="knox" data-unlock-gem="exodus" data-unlock-lvl="4">Knox</button>
+      <a href="#/fleet" class="nav-pill" data-nav="fleet">Fleet</a>
       <a href="#/upgrades/relics" class="nav-pill" data-nav="upgrades">Upgrades</a>
       <a href="#/settings" class="nav-pill" data-nav="settings">Settings</a>
     </nav>
@@ -65,10 +66,18 @@
         <h3 class="text-[12px] font-semibold uppercase tracking-wider text-gray-500 px-2.5 mb-1.5">Utility Upgrades</h3>
         <div class="space-y-0.5">
           <a href="#/upgrades/loopmods" class="sidebar-link" data-route="upgrades/loopmods" data-icon="loopmods"><span>Loop Mods</span></a>
+          <a href="#/research" class="sidebar-link" data-route="research" data-icon="milestone"><span>Research</span></a>
           <a href="#/upgrades/shardmilestones" class="sidebar-link" data-route="upgrades/shardmilestones" data-icon="milestone"><span id="milestoneSidebarLabel">Milestone #0</span></a>
           <a href="#/upgrades/researches" class="sidebar-link hidden" data-route="upgrades/researches" data-icon="milestone" data-unlock-gem="innovation" data-unlock-lvl="2"><span>Researches</span></a>
           <a href="#/upgrades/cms" class="sidebar-link hidden" data-route="upgrades/cms" data-icon="milestone" data-unlock-gem="power" data-unlock-lvl="2"><span>Construction Milest.</span></a>
           <a href="#/upgrades/trinkets" class="sidebar-link hidden" data-route="upgrades/trinkets" data-icon="loopmods" data-unlock-gem="creation" data-unlock-lvl="4" data-unlock-node="5"><span>Trinkets</span></a>
+        </div>
+      </div>
+      <div>
+        <h3 class="text-[12px] font-semibold uppercase tracking-wider text-gray-500 px-2.5 mb-1.5">Fleet</h3>
+        <div class="space-y-0.5">
+          <a href="#/shipsetup" class="sidebar-link" data-route="shipsetup" data-icon="relics"><span>Ship Setup</span></a>
+          <a href="#/gearsets" class="sidebar-link" data-route="gearsets" data-icon="crown"><span>Gear Sets</span></a>
         </div>
       </div>
       <div>
@@ -146,6 +155,117 @@
         <button id="optimizeBtn" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-md text-white">⚡ Optimize within this budget</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Ship Setup Editor Modal: edits one ship's baseline state (rank/crew/evo/generators bought)
+     and its current install levels (staggered hex grid), used by the Ship Setup sidebar page.
+     This is the account's real current state, NOT a planned build -- the Fleet page's
+     "New Loadout" flow reads these as its starting point. -->
+<div id="shipBuildModal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-gray-900/80 flex items-center justify-center p-4 pb-[70px] pt-[50px] sm:py-0">
+  <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto animate-fade-in">
+    <div class="bg-gradient-to-r from-gray-700 to-gray-800 p-4 border-b border-gray-600 flex justify-between items-center sticky top-0 z-10">
+      <h2 class="text-xl font-bold text-white flex items-center"><span id="shipBuildModalShipName" class="text-blue-400">Ship</span><span class="ml-1">Setup</span></h2>
+      <button id="closeShipBuildModalBtn" class="p-1.5 rounded-full hover:bg-gray-700 transition-colors text-gray-400 hover:text-white text-xl leading-none">&times;</button>
+    </div>
+    <div class="p-4">
+      <div class="mb-5 bg-gray-700 rounded-lg p-4 border border-gray-600 grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div><label class="block text-xs text-gray-400 mb-1">Rank</label><input id="shipSetupRank" type="number" min="0" class="w-full bg-gray-800 border border-gray-600 rounded-md px-2 py-1.5 text-white text-sm" /></div>
+        <div><label class="block text-xs text-gray-400 mb-1">Crew</label><input id="shipSetupCrew" type="number" min="0" class="w-full bg-gray-800 border border-gray-600 rounded-md px-2 py-1.5 text-white text-sm" /></div>
+        <div><label class="block text-xs text-gray-400 mb-1">Evolution</label><input id="shipSetupEvo" type="number" min="0" class="w-full bg-gray-800 border border-gray-600 rounded-md px-2 py-1.5 text-white text-sm" /></div>
+        <div><label class="block text-xs text-gray-400 mb-1">Rank Points</label><input id="shipSetupRankPoints" type="number" min="0" class="w-full bg-gray-800 border border-gray-600 rounded-md px-2 py-1.5 text-white text-sm" /></div>
+      </div>
+
+      <div class="mb-5 bg-gray-700 rounded-lg p-4 border border-gray-600" id="shipSetupGearWrap">
+        <h3 class="text-white font-medium mb-2">Progression Counters</h3>
+        <p class="text-xs text-gray-400 mb-3">These "per X" values directly scale this ship's install bonuses -- see each node's tooltip below.</p>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3" id="shipSetupGearFields"></div>
+      </div>
+
+      <div class="mb-6">
+        <div class="flex justify-between items-center">
+          <h3 class="text-white font-medium py-2 border-b border-gray-600 flex-1">Installs</h3>
+          <div class="text-xs text-gray-400 ml-2">Total spent: <span id="shipSetupTotalSpent" class="text-white font-semibold">0</span></div>
+        </div>
+        <div id="shipInstallsGrid" class="mt-3"></div>
+      </div>
+
+      <button id="updateShipBuildBtn" class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md">Save Ship Setup</button>
+    </div>
+  </div>
+</div>
+
+<!-- New Loadout Modal: set available install points per ship (prefilled from Ship Setup's
+     Rank Points), then generate a fleet-wide loadout. Ships affect each other's resource
+     totals, so this is one combined "solve," not 8 independent per-ship builds. -->
+<div id="newLoadoutModal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-gray-900/80 flex items-center justify-center p-4 pb-[70px] pt-[50px] sm:py-0">
+  <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-fade-in">
+    <div class="bg-gradient-to-r from-gray-700 to-gray-800 p-4 border-b border-gray-600 flex justify-between items-center sticky top-0 z-10">
+      <h2 class="text-xl font-bold text-white">Optimize Loadout</h2>
+      <button id="closeNewLoadoutModalBtn" class="p-1.5 rounded-full hover:bg-gray-700 transition-colors text-gray-400 hover:text-white text-xl leading-none">&times;</button>
+    </div>
+    <div class="p-4">
+      <h3 class="text-white font-medium py-2 border-b border-gray-600 mb-2">Available Install Points per Ship</h3>
+      <div id="newLoadoutShipPoints" class="grid grid-cols-2 gap-3"></div>
+      <div class="flex items-center justify-between py-2 border-b border-gray-600 mb-2 mt-4">
+        <h3 class="text-white font-medium">Focus Weights <span class="text-xs text-gray-500 font-normal">(prioritizes resources for this loadout)</span></h3>
+        <button id="newLoadoutWeightPresetBtn" class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300" title="Sets sliders to the community-reported priority ordering (Materials &gt; MP/Shards &gt; Academy &gt; Research &gt; Cells) -- unverified against live data, provided by you as a starting point.">Load Community Preset</button>
+      </div>
+      <div class="space-y-3" id="newLoadoutFocusWeights"></div>
+      <h3 class="text-white font-medium py-2 border-b border-gray-600 mb-2 mt-4">Tactics</h3>
+      <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer" title="Delays Zagreus's own install investment to maximize Hephaestus/Demeter loop scaling -- Zagreus is skipped entirely by this batch optimize (as if not yet unlocked) while Hephaestus/Demeter are optimized normally. A readiness checklist appears on Zagreus's Fleet card after you generate.">
+        <input type="checkbox" id="newLoadoutZaglag" class="accent-purple-500" /> Zaglag Tactic (delay Zagreus for Hephaestus/Demeter)
+      </label>
+      <div class="mt-4">
+        <label for="newLoadoutMeltdown" class="block text-xs font-medium text-gray-300 mb-1">Meltdown</label>
+        <input id="newLoadoutMeltdown" type="number" step="0.001" class="w-32 bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white text-sm" />
+      </div>
+      <button id="generateLoadoutBtn" class="w-full mt-5 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-md">⚡ Generate Loadout</button>
+    </div>
+  </div>
+</div>
+
+<!-- Optimize This Ship Modal: same idea as Optimize Loadout but scoped to one ship, with its
+     own weight sliders -- opened from a ship's Fleet card. -->
+<div id="optimizeShipModal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-gray-900/80 flex items-center justify-center p-4 pb-[70px] pt-[50px] sm:py-0">
+  <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-fade-in">
+    <div class="bg-gradient-to-r from-gray-700 to-gray-800 p-4 border-b border-gray-600 flex justify-between items-center sticky top-0 z-10">
+      <h2 id="optimizeShipTitle" class="text-xl font-bold text-white">Optimize Ship</h2>
+      <button id="closeOptimizeShipModalBtn" class="p-1.5 rounded-full hover:bg-gray-700 transition-colors text-gray-400 hover:text-white text-xl leading-none">&times;</button>
+    </div>
+    <div class="p-4">
+      <label for="optimizeShipPoints" class="block text-xs font-medium text-gray-300 mb-1">Available Install Points</label>
+      <input id="optimizeShipPoints" type="number" min="0" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white mb-4" />
+      <div class="flex items-center justify-between py-2 border-b border-gray-600 mb-2">
+        <h3 class="text-white font-medium">Focus Weights</h3>
+        <button id="optimizeShipWeightPresetBtn" class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300">Load Community Preset</button>
+      </div>
+      <div class="space-y-3" id="optimizeShipFocusWeights"></div>
+      <button id="optimizeShipGenerateBtn" class="w-full mt-5 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-md">⚡ Optimize</button>
+    </div>
+  </div>
+</div>
+
+<!-- Zaglag Checklist Modal: read-only, opened from the badge on Zagreus's Fleet card. -->
+<div id="zaglagChecklistModal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-gray-900/80 flex items-center justify-center p-4 pb-[70px] pt-[50px] sm:py-0">
+  <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto animate-fade-in">
+    <div class="bg-gradient-to-r from-gray-700 to-gray-800 p-4 border-b border-gray-600 flex justify-between items-center sticky top-0 z-10">
+      <h2 class="text-xl font-bold text-white">Zaglag Readiness</h2>
+      <button id="closeZaglagChecklistModalBtn" class="p-1.5 rounded-full hover:bg-gray-700 transition-colors text-gray-400 hover:text-white text-xl leading-none">&times;</button>
+    </div>
+    <div id="zaglagChecklistBody" class="p-4"></div>
+  </div>
+</div>
+
+<!-- Loadout Detail Modal: reused for both "View Install Order" and "View Effective Path" on
+     a ship card -- title/body set dynamically. -->
+<div id="loadoutDetailModal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-gray-900/80 flex items-center justify-center p-4 pb-[70px] pt-[50px] sm:py-0">
+  <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-fade-in">
+    <div class="bg-gradient-to-r from-gray-700 to-gray-800 p-4 border-b border-gray-600 flex justify-between items-center sticky top-0 z-10">
+      <h2 id="loadoutDetailTitle" class="text-xl font-bold text-white">Install Order</h2>
+      <button id="closeLoadoutDetailModalBtn" class="p-1.5 rounded-full hover:bg-gray-700 transition-colors text-gray-400 hover:text-white text-xl leading-none">&times;</button>
+    </div>
+    <div id="loadoutDetailBody" class="p-4"></div>
   </div>
 </div>
 
@@ -312,6 +432,8 @@
 
 <script src="icons.js?v=20260729t"></script>
 <script src="hunterDefs.js?v=20260729t"></script>
+<script src="shipSchema.js?v=20260729t"></script>
+<script src="shipsPage.js?v=20260729t"></script>
 <script src="upgradeEffects.js?v=20260729t"></script>
 <script src="hunterSimBrowser.js?v=20260729t"></script>
 <script src="optimizerBrowser.js?v=20260729t"></script>

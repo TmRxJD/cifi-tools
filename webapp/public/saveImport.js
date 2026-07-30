@@ -118,6 +118,10 @@ const RELIC_TIER1_IDS = { r4: 4, r7: 7, r16: 16, r17: 17, r19: 19 };
 const RELIC_TIER2_INDEX = { t2r5: 4, t2r7: 6 }; // 0-based index into AORTier2Levels[]
 
 const INSCRYPTION_IDS = [3, 4, 11, 13, 14, 23, 24, 27, 31, 32, 33, 36, 37, 40, 44, 60, 80, 81, 84, 86, 87, 88, 89, 91, 92, 103, 104, 105];
+// Ship/Fleet-related inscriptions (Free Rank-Up / Free Crew per ship) -- same `IS${n}Level`
+// save field convention as the hunter-relevant ids above, just never added to that list since
+// they're consumed by shipsPage.js's Fleet Boost items instead of a hunter's upgrade page.
+const FLEET_INSCRYPTION_IDS = [48, 49, 50, 51, 53, 54, 55, 56, 64, 65, 67, 68];
 
 const GEM_TREE_SAVE_PREFIX = {
   exodus: 'Exodus', temporal: 'Temporal', innovation: 'Innovation', power: 'Power',
@@ -183,7 +187,7 @@ function mapSaveToStore(save) {
   }
 
   // Inscryptions
-  INSCRYPTION_IDS.forEach((n) => {
+  [...INSCRYPTION_IDS, ...FLEET_INSCRYPTION_IDS].forEach((n) => {
     const v = save[`IS${n}Level`];
     if (v !== undefined) globalUpgrades[`inscryptions.i${n}`] = realNum(v);
   });
