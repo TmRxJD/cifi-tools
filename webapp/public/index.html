@@ -65,6 +65,7 @@
       <div>
         <h3 class="text-[12px] font-semibold uppercase tracking-wider text-gray-500 px-2.5 mb-1.5">Utility Upgrades</h3>
         <div class="space-y-0.5">
+          <a href="#/badges" class="sidebar-link" data-route="badges" data-icon="crown"><span>Academy Badges</span></a>
           <a href="#/upgrades/loopmods" class="sidebar-link" data-route="upgrades/loopmods" data-icon="loopmods"><span>Loop Mods</span></a>
           <a href="#/research" class="sidebar-link" data-route="research" data-icon="milestone"><span>Research</span></a>
           <a href="#/upgrades/shardmilestones" class="sidebar-link" data-route="upgrades/shardmilestones" data-icon="milestone"><span id="milestoneSidebarLabel">Milestone #0</span></a>
@@ -209,12 +210,15 @@
       <div id="newLoadoutShipPoints" class="grid grid-cols-2 gap-3"></div>
       <div class="flex items-center justify-between py-2 border-b border-gray-600 mb-2 mt-4">
         <h3 class="text-white font-medium">Focus Weights <span class="text-xs text-gray-500 font-normal">(prioritizes resources for this loadout)</span></h3>
-        <button id="newLoadoutWeightPresetBtn" class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300" title="Sets sliders to the community-reported priority ordering (Materials &gt; MP/Shards &gt; Academy &gt; Research &gt; Cells) -- unverified against live data, provided by you as a starting point.">Load Community Preset</button>
+        <button id="newLoadoutWeightPresetBtn" class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300">Reset</button>
       </div>
       <div class="space-y-3" id="newLoadoutFocusWeights"></div>
       <h3 class="text-white font-medium py-2 border-b border-gray-600 mb-2 mt-4">Tactics</h3>
       <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer" title="Delays Zagreus's own install investment to maximize Hephaestus/Demeter loop scaling -- Zagreus is skipped entirely by this batch optimize (as if not yet unlocked) while Hephaestus/Demeter are optimized normally. A readiness checklist appears on Zagreus's Fleet card after you generate.">
         <input type="checkbox" id="newLoadoutZaglag" class="accent-purple-500" /> Zaglag Tactic (delay Zagreus for Hephaestus/Demeter)
+      </label>
+      <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer mt-2" title="Maxes Demeter's Ahead of the Curve (its payoff only applies at the start of your NEXT loop reset, so the normal marginal-value engine can't score it) -- otherwise it's skipped so scarce points go to Demeter's direct multipliers instead.">
+        <input type="checkbox" id="newLoadoutPrepForLongRun" class="accent-purple-500" /> Preparing for Long Run (max Demeter's Ahead of the Curve)
       </label>
       <div class="mt-4">
         <label for="newLoadoutMeltdown" class="block text-xs font-medium text-gray-300 mb-1">Meltdown</label>
@@ -238,9 +242,14 @@
       <input id="optimizeShipPoints" type="number" min="0" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white mb-4" />
       <div class="flex items-center justify-between py-2 border-b border-gray-600 mb-2">
         <h3 class="text-white font-medium">Focus Weights</h3>
-        <button id="optimizeShipWeightPresetBtn" class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300">Load Community Preset</button>
+        <button id="optimizeShipWeightPresetBtn" class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300">Reset</button>
       </div>
       <div class="space-y-3" id="optimizeShipFocusWeights"></div>
+      <div id="optimizeShipPrepForLongRunWrap">
+        <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer mt-4" title="Maxes Demeter's Ahead of the Curve (its payoff only applies at the start of your NEXT loop reset) -- otherwise it's skipped so scarce points go to Demeter's direct multipliers instead.">
+          <input type="checkbox" id="optimizeShipPrepForLongRun" class="accent-purple-500" /> Preparing for Long Run (max Ahead of the Curve)
+        </label>
+      </div>
       <button id="optimizeShipGenerateBtn" class="w-full mt-5 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-md">⚡ Optimize</button>
     </div>
   </div>

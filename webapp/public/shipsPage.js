@@ -12,11 +12,19 @@
 // live diffs (Ship1 and Ship5, done before this correction) matched the wiki's name+gate
 // pairs exactly, which is what let us derive GRID_TO_CODE below with real confidence.
 //
-// `source`: 'confirmed' = name/effect/gate cross-checked against a live save diff, with the
-// live-measured `max` (wiki max levels are stale/pre-rebalance, e.g. wiki said Mitosis
-// Enhancements max 250, live confirmed max is 1250). 'wiki' = transcribed as-is from
-// cifi.fandom.com, including a couple of internally-inconsistent MK-tier mentions in the
-// source text itself (flagged inline) that weren't "corrected" by guessing.
+// `source`: 'confirmed' = name/effect/gate cross-checked against a live save diff. 'wiki' =
+// transcribed as-is from cifi.fandom.com, including a couple of internally-inconsistent MK-tier
+// mentions in the source text itself (flagged inline) that weren't "corrected" by guessing.
+//
+// `max`: the wiki's BASE level cap (re-confirmed against every ship's cifi.fandom.com page
+// 2026-07-30) -- NOT the researched value. An earlier version of this catalog baked
+// live-captured max values in directly instead (e.g. "wiki said Mitosis Enhancements max 250,
+// live confirmed max is 1250"), which silently mixed base and x5'd numbers depending on whether
+// the specific account/ship being diffed had Research #68 "Fleet Analysis 1" tier 1 ("All Rank
+// Installs Max LV x5") at the time -- some nodes ended up correctly 5x, others 10x/50x by
+// accident, others still at 1x, entirely inconsistent. Use nodeMaxLevel(shipId, slot) (defined
+// near GEN_TIERS) everywhere an EFFECTIVE cap is needed -- it applies the x5 research multiplier
+// on top of this base value, in one place, so it can never drift out of sync again.
 //
 // `ruId`: which RU{id}{Category}Level field in the global RU registry (see shipSchema.js)
 // holds this node's real current install level. For Cradle (ruId 1-11) and 5 of Demeter's
@@ -30,17 +38,17 @@
 // off in-game, since it's inferred rather than individually verified for these 60 nodes.
 const SHIP_NODE_CATALOG = {
   1: { // Cradle -- ranks up by manually purchasing generators. RU category "Gen".
-    1: { source: 'confirmed', name: 'Mitosis Enhancements', max: 1250, ruId: 1, effect: '+10% Cells gained, per crew member' },
-    2: { source: 'confirmed', name: 'Improved Timing Belts', max: 125, ruId: 2, gateAtTotalInstalls: 5, effect: '+5% MK1 output, per crew member' },
-    3: { source: 'confirmed', name: 'Improved Printing Engines', max: 125, ruId: 3, gateAtTotalInstalls: 5, effect: '+5% MK2 output, per crew member' },
-    4: { source: 'confirmed', name: 'Printer Tweaks', max: 100, ruId: 4, gateAtTotalInstalls: 25, gearKey: 'manualMK2Gens', effect: '+0.5% MK1 Generator output, per manually purchased MK2 Generator, per crew member' },
-    5: { source: 'confirmed', name: 'Improved Capacitors', max: 100, ruId: 5, gateAtTotalInstalls: 25, effect: '+3% MK3 output, per crew member' },
-    6: { source: 'confirmed', name: 'Improved Cooling Systems', max: 50, ruId: 6, gateAtTotalInstalls: 40, effect: '+3% MK4 output, per crew member' },
-    7: { source: 'confirmed', name: 'Printer Modulization', max: 75, ruId: 7, gateAtTotalInstalls: 40, gearKey: 'manualMK3Gens', effect: '+0.4% MK2 Generator output, per manually purchased MK3 Generator, per crew member' },
-    8: { source: 'confirmed', name: 'Molecule Infusing Tech', max: 500, ruId: 8, gateAtTotalInstalls: 100, gearKey: 'totalManualGens', effect: '+0.005% output of all Generators, per manual generator purchased, per crew member' },
-    9: { source: 'confirmed', name: 'Improved Generator Equipment', max: 250, ruId: 9, gateAtTotalInstalls: 100, gearKey: 'totalManualGens', effect: '+0.027% Cells gained, per manual generator purchased, per crew member' },
-    10: { source: 'confirmed', name: 'On-Site Mining Printers', max: 150, ruId: 10, gateAtTotalInstalls: 100, gearKey: 'totalManualGens', effect: '+0.006% Shards gained, per manual generator purchased, per crew member' },
-    11: { source: 'confirmed', name: 'Brain Capacity Genetics', max: 200, ruId: 11, gateAtTotalInstalls: 100, gearKey: 'totalManualGens', effect: '+0.007% Research Points gained, per manual generator purchased, per crew member' },
+    1: { source: 'confirmed', name: 'Mitosis Enhancements', max: 250, ruId: 1, effect: '+10% Cells gained, per crew member' },
+    2: { source: 'confirmed', name: 'Improved Timing Belts', max: 25, ruId: 2, gateAtTotalInstalls: 5, effect: '+5% MK1 output, per crew member' },
+    3: { source: 'confirmed', name: 'Improved Printing Engines', max: 25, ruId: 3, gateAtTotalInstalls: 5, effect: '+5% MK2 output, per crew member' },
+    4: { source: 'confirmed', name: 'Printer Tweaks', max: 20, ruId: 4, gateAtTotalInstalls: 25, gearKey: 'manualMK2Gens', effect: '+0.5% MK1 Generator output, per manually purchased MK2 Generator, per crew member' },
+    5: { source: 'confirmed', name: 'Improved Capacitors', max: 20, ruId: 5, gateAtTotalInstalls: 25, effect: '+3% MK3 output, per crew member' },
+    6: { source: 'confirmed', name: 'Improved Cooling Systems', max: 10, ruId: 6, gateAtTotalInstalls: 40, effect: '+3% MK4 output, per crew member' },
+    7: { source: 'confirmed', name: 'Printer Modulization', max: 15, ruId: 7, gateAtTotalInstalls: 40, gearKey: 'manualMK3Gens', effect: '+0.4% MK2 Generator output, per manually purchased MK3 Generator, per crew member' },
+    8: { source: 'confirmed', name: 'Molecule Infusing Tech', max: 10, ruId: 8, gateAtTotalInstalls: 100, gearKey: 'totalManualGens', effect: '+0.005% output of all Generators, per manual generator purchased, per crew member' },
+    9: { source: 'confirmed', name: 'Improved Generator Equipment', max: 25, ruId: 9, gateAtTotalInstalls: 100, gearKey: 'totalManualGens', effect: '+0.027% Cells gained, per manual generator purchased, per crew member' },
+    10: { source: 'confirmed', name: 'On-Site Mining Printers', max: 15, ruId: 10, gateAtTotalInstalls: 100, gearKey: 'totalManualGens', effect: '+0.006% Shards gained, per manual generator purchased, per crew member' },
+    11: { source: 'confirmed', name: 'Brain Capacity Genetics', max: 20, ruId: 11, gateAtTotalInstalls: 100, gearKey: 'totalManualGens', effect: '+0.007% Research Points gained, per manual generator purchased, per crew member' },
   },
   2: { // Auxesia -- unlocks Tech Upgrades.
     1: { source: 'wiki', ruId: 1, name: 'Improved Tech Software', max: 250, effect: '+1% final output of Tech Software upgrades, per crew member' },
@@ -82,48 +90,47 @@ const SHIP_NODE_CATALOG = {
     11: { source: 'wiki', ruId: 11, name: 'Improved Blueprints', max: 30, gateAtTotalInstalls: 100, gearKey: 'ticksThisLoop', effect: '+0.0002% Research Points Gained, per Tick Completed, per crew member' },
   },
   5: { // Demeter -- ranks up by completing Operations. Unlocks Shard Mining.
-    1: { source: 'confirmed', name: 'Ahead of the Curve', max: 25, ruId: 1, effect: '+1 completed operation per crew member on new-run start (no immediate shards)' },
-    2: { source: 'confirmed', name: 'Better Mineral Extraction', max: 1250, ruId: 2, effect: '+1% Shards Gained, per crew member' },
-    3: { source: 'confirmed', name: 'Rare Organism Detection', max: 125, ruId: 3, gearKey: 'operationsCompleted', effect: '+0.2% Cells Gained, per Operation Completed, per crew member' },
-    4: { source: 'confirmed', name: 'Canned Mineral Water', max: 125, ruId: 4, gateAtTotalInstalls: 10, gearKey: 'operationsCompleted', effect: '+0.02% MK1 & MK4 outputs, per Operation Completed, per crew member' },
-    5: { source: 'confirmed', name: 'Bi-Product Goo', max: 125, ruId: 5, gateAtTotalInstalls: 10, gearKey: 'operationsCompleted', effect: '+0.02% MK2 & MK5 outputs, per Operation Completed, per crew member' },
-    6: { source: 'confirmed', name: 'The Hexagonal Advantage', max: 25, ruId: 6, gateAtTotalInstalls: 25, gearKey: 'operationsCompleted', effect: '+0.001% Mod Points gained, per Operation Completed, per crew member' },
-    7: { source: 'confirmed', name: 'Shardlytics', max: 50, ruId: 7, gateAtTotalInstalls: 25, gearKey: 'operationsCompleted', effect: '+0.1% MK3 & MK6 outputs, per Operation Completed, per crew member' },
-    8: { source: 'confirmed', name: 'Liquid Extraction Tech', max: 25, ruId: 8, gateAtTotalInstalls: 100, effect: '+2.5% output of all Generators, per crew member' },
-    9: { source: 'confirmed', name: 'On-Site Printing Vehicles', max: 125, ruId: 9, gateAtTotalInstalls: 100, gearKey: 'operationsCompleted', effect: '+3% Cells Gained, per Operation Completed, per crew member' },
-    10: { source: 'confirmed', name: 'On-Site GPR Hotspot Scanners', max: 625, ruId: 10, gateAtTotalInstalls: 100, gearKey: 'operationsCompleted', effect: '+0.08% Shards Gained, per Operation Completed, per crew member' },
-    11: { source: 'confirmed', name: 'Phylogenetic Analysis', max: 275, ruId: 11, gateAtTotalInstalls: 100, gearKey: 'operationsCompleted', effect: '+0.04% Research Points gained, per Operation Completed, per crew member' },
+    1: { source: 'confirmed', name: 'Ahead of the Curve', max: 5, ruId: 1, effect: '+1 completed operation per crew member on new-run start (no immediate shards)' },
+    2: { source: 'confirmed', name: 'Better Mineral Extraction', max: 250, ruId: 2, effect: '+1% Shards Gained, per crew member' },
+    3: { source: 'confirmed', name: 'Rare Organism Detection', max: 25, ruId: 3, gearKey: 'operationsCompleted', effect: '+0.2% Cells Gained, per Operation Completed, per crew member' },
+    4: { source: 'confirmed', name: 'Canned Mineral Water', max: 25, ruId: 4, gateAtTotalInstalls: 10, gearKey: 'operationsCompleted', effect: '+0.02% MK1 & MK4 outputs, per Operation Completed, per crew member' },
+    5: { source: 'confirmed', name: 'Bi-Product Goo', max: 25, ruId: 5, gateAtTotalInstalls: 10, gearKey: 'operationsCompleted', effect: '+0.02% MK2 & MK5 outputs, per Operation Completed, per crew member' },
+    6: { source: 'confirmed', name: 'The Hexagonal Advantage', max: 5, ruId: 6, gateAtTotalInstalls: 25, gearKey: 'operationsCompleted', effect: '+0.001% Mod Points gained, per Operation Completed, per crew member' },
+    7: { source: 'confirmed', name: 'Shardlytics', max: 10, ruId: 7, gateAtTotalInstalls: 25, gearKey: 'operationsCompleted', effect: '+0.1% MK3 & MK6 outputs, per Operation Completed, per crew member' },
+    8: { source: 'confirmed', name: 'Liquid Extraction Tech', max: 5, ruId: 8, gateAtTotalInstalls: 100, effect: '+2.5% output of all Generators, per crew member' },
+    9: { source: 'confirmed', name: 'On-Site Printing Vehicles', max: 25, ruId: 9, gateAtTotalInstalls: 100, gearKey: 'operationsCompleted', effect: '+3% Cells Gained, per Operation Completed, per crew member' },
+    10: { source: 'confirmed', name: 'On-Site GPR Hotspot Scanners', max: 15, ruId: 10, gateAtTotalInstalls: 100, gearKey: 'operationsCompleted', effect: '+0.08% Shards Gained, per Operation Completed, per crew member' },
+    11: { source: 'confirmed', name: 'Phylogenetic Analysis', max: 55, ruId: 11, gateAtTotalInstalls: 100, gearKey: 'operationsCompleted', effect: '+0.04% Research Points gained, per Operation Completed, per crew member' },
   },
   6: { // Koios -- ranks up by completing Studies. Unlocks Research Points. Wiki page had no
     // explicit unlock-requirement numbers (different page format from the others) -- gates
-    // unconfirmed for this ship. `max` values ARE live-confirmed (read directly off the real
-    // grid on a live account, since the wiki's maxes are stale like every other ship).
-    1: { source: 'wiki', ruId: 1, name: 'The Venn Hypothesis', max: 1250, gearKey: ['studiesThisLR', 'operationsCompleted'], effect: '+0.25% Cells gained, per completed Study & Operation, per crew member' },
-    2: { source: 'wiki', ruId: 2, name: 'Unobtanium Drills', max: 25, gearKey: 'studiesThisLR', effect: '+0.003% Shards gained, per Study completed, per crew member' },
-    3: { source: 'wiki', ruId: 3, name: 'Modification Thesis', max: 25, gearKey: 'totalCompletedResearch', effect: '+2.5% Mod Points gained, per fully completed Research, per crew member' },
-    4: { source: 'wiki', ruId: 4, name: 'The Study of Threesium', max: 25, gearKey: 'researchLevels', effect: '+0.5% MK3 & MK6 outputs, per level in Researches (a maxed Research counts as 3), per crew member' },
-    5: { source: 'wiki', ruId: 5, name: 'The Big Brainium Thesis', max: 25, gearKey: 'studiesThisLR', effect: '+0.001% Research Points gained, per Study completed, per crew member' },
-    6: { source: 'wiki', ruId: 6, name: 'The Connectivity Thesis', max: 50, effect: '+1% Mod Points & Shards gained, per crew member' },
-    7: { source: 'wiki', ruId: 7, name: 'The Overclocking Thesis', max: 50, gearKey: 'studiesThisLR', effect: '+0.1% MK1, MK2, MK3, MK4, MK5, MK6 outputs, per Study completed, per crew member' },
-    8: { source: 'wiki', ruId: 8, name: 'Modified Portable Arcade', max: 300, effect: '+3% output of all Generators, per crew member' },
-    9: { source: 'wiki', ruId: 9, name: 'Improved Mk1 Printing Fuel', max: 150, gearKey: 'studiesThisLR', effect: '+1% Cells gained, per Study completed, per crew member' },
-    10: { source: 'wiki', ruId: 10, name: 'Shard Scanning Breakthrough', max: 200, gearKey: 'studiesThisLR', effect: '+0.01% Shards gained, per Study completed, per crew member' },
-    11: { source: 'wiki', ruId: 11, name: 'Robo-Research Assistants', max: 750, gearKey: 'studiesThisLR', effect: '+0.02% Research Points gained, per Study completed, per crew member' },
+    // unconfirmed for this ship. `max` values are the wiki's BASE cap (see nodeMaxLevel).
+    1: { source: 'wiki', ruId: 1, name: 'The Venn Hypothesis', max: 250, gearKey: ['studiesThisLR', 'operationsCompleted'], effect: '+0.25% Cells gained, per completed Study & Operation, per crew member' },
+    2: { source: 'wiki', ruId: 2, name: 'Unobtanium Drills', max: 5, gearKey: 'studiesThisLR', effect: '+0.003% Shards gained, per Study completed, per crew member' },
+    3: { source: 'wiki', ruId: 3, name: 'Modification Thesis', max: 5, gearKey: 'totalCompletedResearch', effect: '+2.5% Mod Points gained, per fully completed Research, per crew member' },
+    4: { source: 'wiki', ruId: 4, name: 'The Study of Threesium', max: 5, gearKey: 'researchLevels', effect: '+0.5% MK3 & MK6 outputs, per level in Researches (a maxed Research counts as 3), per crew member' },
+    5: { source: 'wiki', ruId: 5, name: 'The Big Brainium Thesis', max: 5, gearKey: 'studiesThisLR', effect: '+0.001% Research Points gained, per Study completed, per crew member' },
+    6: { source: 'wiki', ruId: 6, name: 'The Connectivity Thesis', max: 10, effect: '+1% Mod Points & Shards gained, per crew member' },
+    7: { source: 'wiki', ruId: 7, name: 'The Overclocking Thesis', max: 10, gearKey: 'studiesThisLR', effect: '+0.1% MK1, MK2, MK3, MK4, MK5, MK6 outputs, per Study completed, per crew member' },
+    8: { source: 'wiki', ruId: 8, name: 'Modified Portable Arcade', max: 40, effect: '+3% output of all Generators, per crew member' },
+    9: { source: 'wiki', ruId: 9, name: 'Improved Mk1 Printing Fuel', max: 20, gearKey: 'studiesThisLR', effect: '+1% Cells gained, per Study completed, per crew member' },
+    10: { source: 'wiki', ruId: 10, name: 'Shard Scanning Breakthrough', max: 30, gearKey: 'studiesThisLR', effect: '+0.01% Shards gained, per Study completed, per crew member' },
+    11: { source: 'wiki', ruId: 11, name: 'Robo-Research Assistants', max: 50, gearKey: 'studiesThisLR', effect: '+0.02% Research Points gained, per Study completed, per crew member' },
   },
   7: { // Zeus -- ranks up by completing Missions. Unlocks Academy Points / Gear Sets. Wiki
     // page had no explicit unlock-requirement numbers -- gates unconfirmed for this ship.
-    // `max` values ARE live-confirmed (real grid on a live account).
+    // `max` values are the wiki's BASE cap (see nodeMaxLevel).
     1: { source: 'wiki', ruId: 1, name: 'Academy Janitor Bots', max: 250, gearKey: 'missionsCompleted', effect: '+50% Cells gained, per Mission Completed, per crew member' },
-    2: { source: 'wiki', ruId: 2, name: 'Perfect Student Blueprint', max: 5, effect: '+10% Academy Points gained, per crew member' },
-    3: { source: 'wiki', ruId: 3, name: 'Material Scavenger Vehicles', max: 5, effect: '+25% Mission Materials gained, per crew member' },
-    4: { source: 'wiki', ruId: 4, name: 'Academy Mining Bots', max: 75, gearKey: 'missionsCompleted', effect: '+0.5% Cells & Shards gained, per Mission Completed, per crew member' },
-    5: { source: 'wiki', ruId: 5, name: 'Database Brain-Link Integration', max: 100, gearKey: 'missionsCompleted', effect: '+0.5% Cells & Research Points gained, per Mission Completed, per crew member' },
-    6: { source: 'wiki', ruId: 6, name: 'Academy Auto-Scrappers', max: 75, effect: '+10% Mission Materials & Mod Points gained, per crew member' },
-    7: { source: 'wiki', ruId: 7, name: 'On-Site Auto Construction', max: 250, effect: '+1% Academy Points gained & All Gens output, per crew member' },
-    8: { source: 'wiki', ruId: 8, name: 'Remote Printing Facilities', max: 250, gearKey: 'missionsCompleted', effect: '+1% All Gens output, per Mission Completed, per crew member' },
-    9: { source: 'wiki', ruId: 9, name: 'Academy Flight-Kicks', max: 250, gearKey: 'missionsCompleted', effect: '+5% Cells gained, per Mission Completed, per crew member' },
-    10: { source: 'wiki', ruId: 10, name: 'Orbital Hotspot Scanner', max: 250, gearKey: 'missionsCompleted', effect: '+1% Shards gained, per Mission Completed, per crew member' },
-    11: { source: 'wiki', ruId: 11, name: 'Cluster Scans', max: 250, gearKey: 'missionsCompleted', effect: '+1% Research Points gained, per Mission Completed, per crew member' },
+    2: { source: 'wiki', ruId: 2, name: 'Perfect Student Blueprint', max: 1, effect: '+10% Academy Points gained, per crew member' },
+    3: { source: 'wiki', ruId: 3, name: 'Material Scavenger Vehicles', max: 1, effect: '+25% Mission Materials gained, per crew member' },
+    4: { source: 'wiki', ruId: 4, name: 'Academy Mining Bots', max: 10, gearKey: 'missionsCompleted', effect: '+0.5% Cells & Shards gained, per Mission Completed, per crew member' },
+    5: { source: 'wiki', ruId: 5, name: 'Database Brain-Link Integration', max: 20, gearKey: 'missionsCompleted', effect: '+0.5% Cells & Research Points gained, per Mission Completed, per crew member' },
+    6: { source: 'wiki', ruId: 6, name: 'Academy Auto-Scrappers', max: 15, effect: '+10% Mission Materials & Mod Points gained, per crew member' },
+    7: { source: 'wiki', ruId: 7, name: 'On-Site Auto Construction', max: 15, effect: '+1% Academy Points gained & All Gens output, per crew member' },
+    8: { source: 'wiki', ruId: 8, name: 'Remote Printing Facilities', max: 10, gearKey: 'missionsCompleted', effect: '+1% All Gens output, per Mission Completed, per crew member' },
+    9: { source: 'wiki', ruId: 9, name: 'Academy Flight-Kicks', max: 10, gearKey: 'missionsCompleted', effect: '+5% Cells gained, per Mission Completed, per crew member' },
+    10: { source: 'wiki', ruId: 10, name: 'Orbital Hotspot Scanner', max: 10, gearKey: 'missionsCompleted', effect: '+1% Shards gained, per Mission Completed, per crew member' },
+    11: { source: 'wiki', ruId: 11, name: 'Cluster Scans', max: 10, gearKey: 'missionsCompleted', effect: '+1% Research Points gained, per Mission Completed, per crew member' },
   },
 };
 
@@ -162,14 +169,14 @@ const FLEET_BOOST_ITEMS = [
   { key: 'lm_koi_sp', name: 'Koios Rank Point Transmission', source: 'Loop Mod', max: 25, ship: 6, grants: [{ ships: [6], sp: 1 }] },
   { key: 'lm_zeus_sp', name: 'Zeus Rank Point Transmission', source: 'Loop Mod', max: 25, ship: 7, grants: [{ ships: [7], sp: 1 }] },
   { key: 'lm_fleet_sp', name: 'Fleet Rank Point Transmissions', source: 'Loop Mod', max: 25, grants: [{ ships: [1, 2, 3, 4, 5, 6, 7], sp: 1 }] },
-  { key: 'lm_rule_cradle', name: 'Ultima Loop Mod: Rule of the Cradle', source: 'Loop Mod', max: 7, ship: 1, grants: [{ ships: [1], sp: 8 }], pctEffect: { ships: [1], resource: 'allGens', perLevel: 8, per: 'rank' }, note: "Doesn't count toward rank-up requirement. Also grants +8% All Gens output per Cradle rank-up -- applied." },
+  { key: 'lm_rule_cradle', name: 'Ultima Loop Mod: Rule of the Cradle', source: 'Loop Mod', max: 7, ship: 1, grants: [{ ships: [1], sp: 8 }], pctEffect: { ships: [1], resource: 'allGens', perLevel: 8, per: 'rank' }, note: "Doesn't count toward rank-up requirement. Also grants +8% All Gens output per Cradle rank-up." },
   { key: 'lm_rule_loyalty', name: 'Ultima Loop Mod: Rule of Loyalty', source: 'Loop Mod', max: 999, grants: [{ ships: [1, 2, 3, 4, 5, 6, 7], sp: 1, crew: 1 }], note: 'Ouroboros excluded. No level cap in-game; neither grant counts toward rank-up requirement.' },
-  { key: 'lm_rule_destruction', name: 'Ultima Loop Mod: Rule of Destruction', source: 'Loop Mod', max: 10, grants: [{ ships: [1, 2, 3, 4, 5, 6, 7], sp: 3 }], note: 'Also 2% MP per Player Level, crew costs -1e20, x50 Shards, x3 AP -- not applied here (no Player Level / cost model).' },
-  { key: 'lm_algd_delta', name: 'Accumulative Level Growth Module Delta', source: 'Loop Mod', max: 10, grants: [{ ships: [1, 2, 5], sp: 3 }], note: 'Also +12%/Player-Level to Cells and +6 flat LP, not applied here (no Player Level model).' },
+  { key: 'lm_rule_destruction', name: 'Ultima Loop Mod: Rule of Destruction', source: 'Loop Mod', max: 10, grants: [{ ships: [1, 2, 3, 4, 5, 6, 7], sp: 3 }], note: 'Also 2% MP per Player Level, crew costs -1e20, x50 Shards, x3 AP.' },
+  { key: 'lm_algd_delta', name: 'Accumulative Level Growth Module Delta', source: 'Loop Mod', max: 10, grants: [{ ships: [1, 2, 5], sp: 3 }], note: 'Also +12%/Player-Level to Cells and +6 flat LP.' },
   { key: 'lm_algd_fenix', name: 'Accumulative Level Growth Module Fenix', source: 'Loop Mod', max: 5, grants: [{ ships: [1, 2, 5], sp: 6 }, { ships: [3, 4, 6], sp: 4 }] },
   // Rank Benefits Modules -- % increase to a specific resource per rank-up, multiplicative.
   { key: 'lm_rb_cra', name: 'Cradle Rank Benefits Module', source: 'Loop Mod', max: 10, ship: 1, grants: [], pctEffect: { ships: [1], resource: 'cells', perLevel: 2.5, per: 'rank' } },
-  { key: 'lm_rb_aux', name: 'Auxesia Rank Benefits Module', source: 'Loop Mod', max: 10, ship: 2, grants: [], pctEffect: { ships: [2], resource: 'mk1', perLevel: 0.7, per: 'rank' }, note: 'Per wiki text this applies to MK1, MK2, MK3 & MK4 outputs collectively -- only MK1 is modeled here.' },
+  { key: 'lm_rb_aux', name: 'Auxesia Rank Benefits Module', source: 'Loop Mod', max: 10, ship: 2, grants: [], pctEffect: { ships: [2], resource: 'mk1', perLevel: 0.7, per: 'rank' }, note: 'Applies to MK1, MK2, MK3 & MK4 outputs collectively.' },
   { key: 'lm_rb_zag', name: 'Zagreus Rank Benefits Module', source: 'Loop Mod', max: 10, ship: 3, grants: [], pctEffect: { ships: [3], resource: 'modPoints', perLevel: 2, per: 'rank' } },
   { key: 'lm_rb_hep', name: 'Hephaestus Rank Benefits Module', source: 'Loop Mod', max: 10, ship: 4, grants: [], pctEffect: { ships: [4], resource: 'mk5', perLevel: 3, per: 'rank' } },
   { key: 'lm_rb_dem', name: 'Demeter Rank Benefits Module', source: 'Loop Mod', max: 10, ship: 5, grants: [], pctEffect: { ships: [5], resource: 'shards', perLevel: 2, per: 'rank' } },
@@ -186,14 +193,14 @@ const FLEET_BOOST_ITEMS = [
   // Cost Modification Modules -- divide crew/evolution/generator costs. No cost model exists
   // in this tool (it works off install budgets, not currency), so these are listed for
   // tracking only, not wired into any calculation.
-  { key: 'lm_cost_cra', name: 'Cradle Cost Modification Module', source: 'Loop Mod', max: 200, ship: 1, grants: [], note: 'Divides cost of Cradle crew, evolution, and MK1 generators by 10. Not applied (no cost model).' },
-  { key: 'lm_cost_aux', name: 'Auxesia Cost Modification Module', source: 'Loop Mod', max: 200, ship: 2, grants: [], note: 'Divides cost of Auxesia crew, evolution, and MK2 generators by 10. Not applied (no cost model).' },
-  { key: 'lm_cost_zag', name: 'Zagreus Cost Modification Module', source: 'Loop Mod', max: 200, ship: 3, grants: [], note: 'Divides cost of Zagreus crew, evolution, and MK3 generators by 10. Not applied (no cost model).' },
-  { key: 'lm_cost_hep', name: 'Hephaestus Cost Modification Module', source: 'Loop Mod', max: 200, ship: 4, grants: [], note: 'Divides cost of Hephaestus crew, evolution, and MK4 generators by 10. Not applied (no cost model).' },
-  { key: 'lm_cost_dem', name: 'Demeter Cost Modification Module', source: 'Loop Mod', max: 200, ship: 5, grants: [], note: 'Divides cost of Demeter crew, evolution, and MK5 generators by 10. Not applied (no cost model).' },
-  { key: 'lm_cost_koi', name: 'Koios Cost Modification Module', source: 'Loop Mod', max: 200, ship: 6, grants: [], note: 'Divides cost of Koios crew, evolution, and MK6 generators by 10. Not applied (no cost model).' },
-  { key: 'lm_cost_zeus', name: 'Zeus Cost Modification Module', source: 'Loop Mod', max: 200, ship: 7, grants: [], note: 'Divides cost of Zeus crew, evolution, and MK7 generators by 10. Not applied (no cost model).' },
-  { key: 'lm_cost_fleet', name: 'Fleet Cost Modification Module', source: 'Loop Mod', max: 200, grants: [], note: 'Divides cost of all ships crew, evolutions, and MK1-7 generators by 100000. Not applied (no cost model).' },
+  { key: 'lm_cost_cra', name: 'Cradle Cost Modification Module', source: 'Loop Mod', max: 200, ship: 1, grants: [], note: 'Divides cost of Cradle crew, evolution, and MK1 generators by 10.' },
+  { key: 'lm_cost_aux', name: 'Auxesia Cost Modification Module', source: 'Loop Mod', max: 200, ship: 2, grants: [], note: 'Divides cost of Auxesia crew, evolution, and MK2 generators by 10.' },
+  { key: 'lm_cost_zag', name: 'Zagreus Cost Modification Module', source: 'Loop Mod', max: 200, ship: 3, grants: [], note: 'Divides cost of Zagreus crew, evolution, and MK3 generators by 10.' },
+  { key: 'lm_cost_hep', name: 'Hephaestus Cost Modification Module', source: 'Loop Mod', max: 200, ship: 4, grants: [], note: 'Divides cost of Hephaestus crew, evolution, and MK4 generators by 10.' },
+  { key: 'lm_cost_dem', name: 'Demeter Cost Modification Module', source: 'Loop Mod', max: 200, ship: 5, grants: [], note: 'Divides cost of Demeter crew, evolution, and MK5 generators by 10.' },
+  { key: 'lm_cost_koi', name: 'Koios Cost Modification Module', source: 'Loop Mod', max: 200, ship: 6, grants: [], note: 'Divides cost of Koios crew, evolution, and MK6 generators by 10.' },
+  { key: 'lm_cost_zeus', name: 'Zeus Cost Modification Module', source: 'Loop Mod', max: 200, ship: 7, grants: [], note: 'Divides cost of Zeus crew, evolution, and MK7 generators by 10.' },
+  { key: 'lm_cost_fleet', name: 'Fleet Cost Modification Module', source: 'Loop Mod', max: 200, grants: [], note: 'Divides cost of all ships crew, evolutions, and MK1-7 generators by 100000.' },
 ];
 // Academy Badges / Dark Academy Badges (traded for Innovation/Dark Cores) -- binary
 // purchased-or-not toggles that multiply ship rank-install power directly, folded into
@@ -325,6 +332,22 @@ const CODE_TO_GRID = Object.fromEntries(GRID_TO_CODE.map((code, i) => [code, i +
 
 const GEN_TIERS = [1, 2, 3, 4, 5, 6, 7, 8];
 
+// SHIP_NODE_CATALOG's `max` fields store the WIKI BASE level cap (confirmed against
+// cifi.fandom.com's per-ship pages 2026-07-30) -- NOT the researched value. Research #68 "Fleet
+// Analysis 1" tier 1 ("All Rank Installs Max LV x5") multiplies EVERY ship's install caps by 5
+// account-wide once researched. An earlier version of this catalog baked live-captured max
+// values in directly instead, which silently mixed base and x5'd numbers depending on whether
+// the specific account/ship being diffed had that research at the time -- inconsistent by
+// construction (some nodes correctly 5x, others accidentally 10x/50x, others still at 1x).
+// getFleetResearch/computeFleetResearchShipMultipliers are defined further down (hoisted).
+function installCapMultiplier() {
+  return (getFleetResearch().levels.fleetAnalysis1 || 0) >= 1 ? 5 : 1;
+}
+function nodeMaxLevel(shipId, slot) {
+  const base = SHIP_NODE_CATALOG[shipId]?.[slot]?.max || 0;
+  return base * installCapMultiplier();
+}
+
 // ---- Resource-bonus aggregation (rough, visuals-first -- see effectResources/gearMultiplierFor
 // notes) ----
 const RESOURCE_KEYWORDS = [
@@ -343,18 +366,32 @@ function effectResources(effect) {
     const end = mkRange[2] ? parseInt(mkRange[2], 10) : start;
     for (let i = start; i <= end && i <= 12; i++) tags.push(`mk${i}`);
   }
+  // Tech Software/Hardware Upgrade OUTPUT nodes (Auxesia 1/2, Hephaestus 2's "Software & Hardware
+  // Tech Upgrades" combined wording) aren't a final resource at all -- boosting their "output"
+  // means your Tech Upgrade COUNT itself compounds faster over time, which several OTHER
+  // Auxesia nodes then convert into Cells/Shards/RP ("+X%, per Tech Upgrade currently
+  // purchased"). That's structurally the same role a generator tier plays for Cells -- an
+  // intermediate pool that compounds before feeding a final resource -- so these get tracked
+  // and Meltdown-melted the same way generator tiers are, instead of falling through to the
+  // untracked/uninvested 'other' bucket.
+  if (/tech (software|hardware) upgrades|software\s*&\s*hardware tech upgrades|hardware\s*&\s*software tech upgrades/i.test(effect)) {
+    if (/hardware/i.test(effect)) tags.push('techHardware');
+    if (/software/i.test(effect)) tags.push('techSoftware');
+  }
   if (!tags.length) tags.push('other');
   return tags;
 }
+const TECH_UPGRADE_TAGS = ['techSoftware', 'techHardware'];
 const RESOURCE_LABELS = {
   cells: 'Cells', allGens: 'All Gens', shards: 'Shards', researchPoints: 'Research Points', modPoints: 'Mod Points',
-  academyPoints: 'Academy Points', missionMaterials: 'Mission Materials', other: 'Other',
+  academyPoints: 'Academy Points', missionMaterials: 'Mission Materials', other: 'Tech Bonuses',
+  techSoftware: 'Tech Software Output', techHardware: 'Tech Hardware Output',
   ...Object.fromEntries(GEN_TIERS.map((n) => [`mk${n}`, `MK${n}`])),
 };
 // Fixed display order for the fleet totals readout -- Cells, All Gens, then generator tiers
 // in numeric order, then the rest -- instead of sorting by magnitude (which scattered MK
 // tiers out of order and made the readout hard to scan).
-const RESOURCE_ORDER = ['cells', 'allGens', ...GEN_TIERS.map((n) => `mk${n}`), 'shards', 'researchPoints', 'modPoints', 'academyPoints', 'missionMaterials', 'other'];
+const RESOURCE_ORDER = ['cells', 'allGens', ...GEN_TIERS.map((n) => `mk${n}`), 'techSoftware', 'techHardware', 'shards', 'researchPoints', 'modPoints', 'academyPoints', 'missionMaterials', 'other'];
 function sortResourceEntries(totals) {
   return Object.entries(totals).sort((a, b) => RESOURCE_ORDER.indexOf(a[0]) - RESOURCE_ORDER.indexOf(b[0]));
 }
@@ -492,7 +529,7 @@ function defaultShipGear() {
     manualMK2Gens: 0, manualMK3Gens: 0, totalManualGens: 0, techUpgrades: 0, softwareUpgrades: 0,
     loopModsOwned: 0, loopFillsThisRun: 0, loopResetsDone: 0, automationsUnlocked: 0, ticksThisLoop: 0,
     operationsCompleted: 0, studiesThisLR: 0, researchLevels: 0, totalCompletedResearch: 0, missionsCompleted: 0,
-    meltdown: 0, focusWeights: { cells: 50, shards: 50, researchPoints: 50, modPoints: 50, missionMaterials: 50, academyPoints: 50 },
+    meltdown: 0, focusWeights: { cells: 5, shards: 5, researchPoints: 5, modPoints: 5, missionMaterials: 5, academyPoints: 5 },
   };
 }
 function getShipGear() {
@@ -770,9 +807,10 @@ function renderHexGrid(container, catalog, levels, options = {}) {
       const level = levels[slot] || 0;
       const gateCheck = options.gateCheck || ((m, s) => !m.gateAtTotalInstalls || s >= m.gateAtTotalInstalls);
       const gateMet = gateCheck(meta, spent - level);
-      const canInc = !options.readOnly && level < meta.max && gateMet && (budget == null || spent < budget);
+      const maxLevel = options.shipId ? nodeMaxLevel(options.shipId, slot) : meta.max;
+      const canInc = !options.readOnly && level < maxLevel && gateMet && (budget == null || spent < budget);
       const canDec = !options.readOnly && level > 0;
-      const maxed = level >= meta.max;
+      const maxed = level >= maxLevel;
       const locked = !gateMet;
       // Wrapper holds the hex (icon fills the frame edge-to-edge) plus the level/max readout
       // BELOW the frame -- not overlaid on top of the icon.
@@ -806,7 +844,7 @@ function renderHexGrid(container, catalog, levels, options = {}) {
       }
       const label = document.createElement('div');
       label.className = `text-center mt-1 ${locked ? 'text-gray-600' : 'text-gray-200'}`;
-      label.innerHTML = `<span class="${options.small ? 'text-[10px]' : 'text-xs'} font-semibold">${level}</span><span class="${options.small ? 'text-[8px]' : 'text-[10px]'} text-gray-400">/${meta.max}</span>`;
+      label.innerHTML = `<span class="${options.small ? 'text-[10px]' : 'text-xs'} font-semibold">${level}</span><span class="${options.small ? 'text-[8px]' : 'text-[10px]'} text-gray-400">/${maxLevel}</span>`;
       wrap.appendChild(tile);
       wrap.appendChild(label);
       if (!options.readOnly) {
@@ -894,6 +932,7 @@ function renderGearSetsPage(root) {
 }
 
 // ============================= Fleet page (main optimizer canvas) =============================
+let fleetTabRenaming = false;
 function renderFleetPage(root) {
   const tabState = getLoadoutTabs();
   const loadout = getActiveLoadout();
@@ -928,25 +967,35 @@ function renderFleetPage(root) {
   document.getElementById('newLoadoutBtn').onclick = openNewLoadoutModal;
 
   // Tab bar: click to switch, pencil/trash only on the active tab to keep the row uncluttered,
-  // "+" to add (up to MAX_LOADOUT_TABS).
+  // "+" to add (up to MAX_LOADOUT_TABS). Rename is an inline text input swapped in for the
+  // active pill (not window.prompt(), which doesn't reliably fire in every browser context).
   const tabsRow = document.getElementById('loadoutTabsRow');
+  const activeTab = tabState.tabs.find((t) => t.id === tabState.activeId);
   tabState.tabs.forEach((tab) => {
     const isActive = tab.id === tabState.activeId;
+    if (isActive && fleetTabRenaming) {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = tab.name;
+      input.className = 'px-2 py-1 rounded-full text-xs font-medium bg-gray-900 text-white border border-purple-500 w-32';
+      const commit = () => { fleetTabRenaming = false; renameLoadoutTab(tab.id, input.value.trim()); renderFleetPage(root); };
+      input.onblur = commit;
+      input.onkeydown = (e) => { if (e.key === 'Enter') input.blur(); if (e.key === 'Escape') { fleetTabRenaming = false; renderFleetPage(root); } };
+      tabsRow.appendChild(input);
+      setTimeout(() => { input.focus(); input.select(); }, 0);
+      return;
+    }
     const pill = document.createElement('button');
     pill.className = `px-3 py-1 rounded-full text-xs font-medium ${isActive ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`;
     pill.textContent = tab.name;
     pill.onclick = () => { tabState.activeId = tab.id; window.saveStore(); renderFleetPage(root); };
     tabsRow.appendChild(pill);
   });
-  const activeTab = tabState.tabs.find((t) => t.id === tabState.activeId);
   const renameBtn = document.createElement('button');
   renameBtn.className = 'text-gray-400 hover:text-white text-xs px-1';
   renameBtn.title = 'Rename this loadout';
   renameBtn.innerHTML = iconSvg('edit', 14);
-  renameBtn.onclick = () => {
-    const name = prompt('Rename loadout:', activeTab.name);
-    if (name) { renameLoadoutTab(activeTab.id, name); renderFleetPage(root); }
-  };
+  renameBtn.onclick = () => { fleetTabRenaming = true; renderFleetPage(root); };
   tabsRow.appendChild(renameBtn);
   if (tabState.tabs.length > 1) {
     const deleteBtn = document.createElement('button');
@@ -1013,7 +1062,7 @@ function renderFocusWeightSliders(container, weightsObj, presetBtn, onChange) {
     const row = document.createElement('div');
     row.innerHTML = `
       <div class="flex justify-between text-xs text-gray-300 mb-1"><span>${RESOURCE_LABELS[key] || key}</span><span data-val>${val}</span></div>
-      <input type="range" min="0" max="100" value="${val}" data-weight="${key}" class="w-full accent-blue-500" />`;
+      <input type="range" min="0" max="10" value="${val}" data-weight="${key}" class="w-full accent-blue-500" />`;
     container.appendChild(row);
   });
   container.querySelectorAll('input[data-weight]').forEach((el) => {
@@ -1022,10 +1071,7 @@ function renderFocusWeightSliders(container, weightsObj, presetBtn, onChange) {
   });
   if (presetBtn) {
     presetBtn.onclick = () => {
-      // Community-reported priority ordering (Materials >> MP/Shards > Academy >> Research >
-      // Cells), scaled onto the 0-100 slider range -- unverified against live data, provided by
-      // the user as a starting point rather than derived here.
-      Object.assign(weightsObj, { missionMaterials: 100, modPoints: 10, shards: 10, academyPoints: 5, researchPoints: 1, cells: 0 });
+      Object.assign(weightsObj, defaultShipGear().focusWeights);
       window.saveStore();
       renderFocusWeightSliders(container, weightsObj, presetBtn, onChange);
     };
@@ -1056,6 +1102,8 @@ function openNewLoadoutModal() {
   });
   document.getElementById('newLoadoutZaglag').checked = optSettings.zaglag;
   document.getElementById('newLoadoutZaglag').addEventListener('change', (e) => { optSettings.zaglag = e.target.checked; window.saveStore(); });
+  document.getElementById('newLoadoutPrepForLongRun').checked = optSettings.prepForLongRun;
+  document.getElementById('newLoadoutPrepForLongRun').addEventListener('change', (e) => { optSettings.prepForLongRun = e.target.checked; window.saveStore(); });
   // Focus weights live here (not the Fleet Stats page) -- they're an input to THIS solve, not
   // a persistent fleet-wide account stat. Meltdown lives here too now (moved off the Fleet page
   // header -- it's a per-run input to planning, not a fleet-wide display value).
@@ -1077,8 +1125,22 @@ document.getElementById('closeNewLoadoutModalBtn').onclick = () => document.getE
 const RESOURCE_TO_WEIGHT_BUCKET = {
   cells: 'cells', allGens: 'cells', shards: 'shards', researchPoints: 'researchPoints',
   modPoints: 'modPoints', academyPoints: 'academyPoints', missionMaterials: 'missionMaterials',
+  techSoftware: 'cells', techHardware: 'cells', // intermediate compounding pools feeding Cells/Shards/RP -- see effectResources
   ...Object.fromEntries(GEN_TIERS.map((n) => [`mk${n}`, 'cells'])),
 };
+// Explicit tie-break order, lower number wins -- only ever consulted when two candidates'
+// weighted spent/value ratio is EXACTLY equal (most commonly right after a gate opens, when
+// several categories/nodes get baselined to the same starting ratio simultaneously). This never
+// overrides the real weight/value math, it only decides ties that math is genuinely indifferent
+// between.
+const CATEGORY_TIE_PRIORITY = { missionMaterials: 1, modPoints: 2, shards: 3, researchPoints: 4, academyPoints: 4, cells: 5 };
+function nodeTiePriority(tags) {
+  if (tags.includes('techSoftware') || tags.includes('techHardware')) return 1;
+  if (tags.includes('allGens')) return 5;
+  if (tags.includes('cells')) return 6;
+  if (tags.some((t) => /^mk\d+$/.test(t))) return 7;
+  return 4; // Shards/RP/MP/AP/Materials nodes -- ties within these categories are rare/inconsequential
+}
 // Raw per-point value of a node, in that node's OWN resource units (e.g. "% Cells/point" or
 // "% Shards/point") -- NOT weight-adjusted. Comparing THIS number directly across different
 // resources is meaningless (a "10%/level Cells" node and a "0.001%/level Shards" node aren't
@@ -1086,7 +1148,20 @@ const RESOURCE_TO_WEIGHT_BUCKET = {
 // nodes happen to run several orders of magnitude smaller per-point than its Cells nodes). That
 // mismatch was the real bug in an earlier version of this optimizer: equal 50/50 weights still
 // dumped everything into Cells, because raw pct magnitude silently dominated the weight.
-function computeNodeRawValue(shipId, slot) {
+// Meltdown -- two-pool model (unverified against a real confirmed formula, but internally
+// consistent and monotonic across the whole 0-1+ range): direct Cells/Shards/RP/MP/Academy/
+// Materials bonuses are Meltdown-immune and add straight to their own pool. Generator tiers
+// (Mk1-Mk8) are melted -- each tier's OWN real cumulative pool (this account's actual current
+// total for that tier, from crew/gear/research/real installed levels, not a fictional "0") gets
+// raised to the Meltdown exponent, so a node's real marginal value depends on how saturated its
+// specific tier already is. An "All Gens" node touches all 8 tiers at once, so its value is the
+// product of each tier's own melted marginal ratio -- tiers that are already heavily saturated
+// contribute almost nothing further, while under-invested tiers dominate the score. This uses
+// ONLY real account data (current per-tier totals, the stored Meltdown value) -- no invented
+// constants. It does NOT change what budget/plan the optimizer outputs (that's still a from-zero
+// simulation per the earlier fix) -- it only changes how a candidate node's real relative value
+// is judged, which is a different question from what the final plan displays.
+function nodeLinearIncrement(shipId, slot) {
   const meta = SHIP_NODE_CATALOG[shipId]?.[slot];
   if (!meta) return 0;
   const m = meta.effect.match(/([\d.]+)%/);
@@ -1097,6 +1172,64 @@ function computeNodeRawValue(shipId, slot) {
   const researchMult = (computeFleetResearchShipMultipliers()[shipId] || 1) * (computeFleetBadgeMultipliers()[shipId] || 1);
   const gearNodeMult = computeGearNodeMultiplier(Number(shipId), Number(slot));
   return parseFloat(m[1]) * crew * gearMult * researchMult * gearNodeMult;
+}
+const MELTDOWN_POOL_EPS = 1e-6;
+// Generator-like intermediate pools: the 8 MK tiers, plus Tech Software/Hardware Upgrade output
+// (see effectResources) -- all of these compound before feeding a final resource, so they get
+// tracked and Meltdown-melted the same way, distinct from a direct final-resource bonus.
+function isGenLikeTag(tag) { return /^mk\d+$/.test(tag) || TECH_UPGRADE_TAGS.includes(tag); }
+// Real current total for each Meltdown-relevant pool ('cells', 'mk1'..'mk8', techSoftware/
+// techHardware), summed from this ship's ACTUAL installed levels (not the optimizer's
+// hypothetical from-zero plan).
+function computeShipRealPoolTotals(shipId) {
+  const catalog = SHIP_NODE_CATALOG[shipId] || {};
+  const installs = getShipInput(shipId).installs || {};
+  const pools = { cells: MELTDOWN_POOL_EPS };
+  GEN_TIERS.forEach((n) => { pools[`mk${n}`] = MELTDOWN_POOL_EPS; });
+  TECH_UPGRADE_TAGS.forEach((t) => { pools[t] = MELTDOWN_POOL_EPS; });
+  Object.keys(catalog).forEach((slot) => {
+    const level = installs[slot] || 0;
+    if (level <= 0) return;
+    const increment = nodeLinearIncrement(shipId, slot) * level;
+    const tags = effectResources(catalog[slot].effect);
+    if (tags.includes('allGens')) {
+      GEN_TIERS.forEach((n) => { pools[`mk${n}`] = (pools[`mk${n}`] || MELTDOWN_POOL_EPS) + increment; });
+    }
+    tags.forEach((tag) => {
+      if (tag === 'cells' || isGenLikeTag(tag)) pools[tag] = (pools[tag] || MELTDOWN_POOL_EPS) + increment;
+    });
+  });
+  return pools;
+}
+// Marginal value of spending one more point on `slot` right now, given the current (real +
+// whatever this optimization run has hypothetically added so far) pool totals. Mutates nothing.
+function poolAdjustedNodeValue(shipId, slot, pools) {
+  const meta = SHIP_NODE_CATALOG[shipId]?.[slot];
+  if (!meta) return 0;
+  const increment = nodeLinearIncrement(shipId, slot);
+  if (increment <= 0) return 0;
+  const tags = effectResources(meta.effect);
+  const genTiers = tags.filter(isGenLikeTag);
+  const isAllGens = tags.includes('allGens');
+  if (!isAllGens && genTiers.length === 0 && !tags.includes('cells')) return increment; // Shards/RP/MP/Academy/Materials -- flat linear value, no pool tracking (known gap, not modeled yet)
+  const meltdown = getShipGear().meltdown || 0;
+  if (!isAllGens && genTiers.length === 0) {
+    // Direct Cells: bypasses the Meltdown EXPONENT (exponent 1, no melt), but is NOT exempt from
+    // real diminishing returns -- it still saturates relative to its own (typically enormous,
+    // real-account) pool. This is what lets Generator nodes naturally overtake as a run
+    // progresses: Cells' pool grows huge fast (it gets first pick early since it's un-melted),
+    // so its OWN relative marginal gain shrinks toward ~0 quickly, while less-saturated
+    // Generator tiers keep offering a comparatively bigger relative jump despite the melt.
+    const base = pools.cells || MELTDOWN_POOL_EPS;
+    return ((base + increment) / base - 1) * 100;
+  }
+  const affectedTiers = isAllGens ? GEN_TIERS.map((n) => `mk${n}`) : genTiers;
+  let ratio = 1;
+  affectedTiers.forEach((tier) => {
+    const base = pools[tier] || MELTDOWN_POOL_EPS;
+    ratio *= Math.pow((base + increment) / base, meltdown);
+  });
+  return (ratio - 1) * 100;
 }
 // Real allocator -- weighted round-robin ACROSS RESOURCE CATEGORIES, not a single global
 // ranking. Two things this fixes over an earlier "highest constant marginal value wins"
@@ -1112,24 +1245,33 @@ function computeNodeRawValue(shipId, slot) {
 // target share (spent-so-in-that-category / weight, lowest wins), then the single best node
 // within that category for just that one point -- so the click order stays interleaved and
 // proportional to your weights at every partial budget, not just the end state.
-function optimizeShipInstalls(shipId, budget, startLevels, weights, meltdownFactor) {
+// Always plans from a clean slate (every node at 0), regardless of what's actually installed
+// right now -- `budget` is the total number of points to distribute as if starting over, not a
+// target to reach on top of existing installs. Real current installs are a separate concern
+// (see "Effective Path" in openLoadoutDetail, which uses this same ideal sequence's tail to
+// advise what to buy next from wherever you really are).
+function optimizeShipInstalls(shipId, budget, weights, meltdownFactor, prepForLongRun) {
   const catalog = SHIP_NODE_CATALOG[shipId] || {};
-  const levels = { ...startLevels };
+  const levels = {};
   const clicks = [];
-  let spent = Object.values(levels).reduce((a, b) => a + b, 0);
+  let spent = 0;
   const slots = Object.keys(catalog);
   const gateMetFor = (slot) => {
     const meta = catalog[slot];
     const level = levels[slot] || 0;
     return !meta.gateAtTotalInstalls || (spent - level) >= meta.gateAtTotalInstalls;
   };
-  // Step 1: secure the base bonus in every currently-open node first (matches the hand-off
-  // spec's rule, and reads naturally as "get something in everything before specializing").
-  slots.forEach((slot) => {
-    if (spent >= budget) return;
-    const meta = catalog[slot];
-    if (gateMetFor(slot) && (levels[slot] || 0) === 0 && meta.max > 0) { levels[slot] = 1; spent += 1; clicks.push(slot); }
-  });
+  // AOTC (Demeter's "Ahead of the Curve", slot 1): its payoff lands at the start of the NEXT
+  // loop reset, not the active run, so it can't be scored by the normal marginal-value engine
+  // (no % in its effect text, no immediate resource gain to weigh against anything else).
+  // Community approach: max it outright once Demeter's budget is comfortably large (>=15) or
+  // when explicitly prepping for a long run; otherwise skip it entirely (not even the usual "1
+  // free point in everything" seed) so scarce points go straight into direct multipliers
+  // instead.
+  if (shipId === 5 && (budget >= 15 || prepForLongRun)) {
+    const needed = Math.min(nodeMaxLevel(shipId, 1), budget - spent);
+    if (needed > 0) { levels[1] = needed; spent += needed; for (let i = 0; i < needed; i++) clicks.push('1'); }
+  }
   // Which resource categories this ship's nodes actually touch, and each one's Cells-scaling
   // flag for the meltdown adjustment (see computeResourceBonuses' meltdown note -- this only
   // steers the optimizer's category preference, it doesn't change what the Fleet totals report).
@@ -1140,35 +1282,126 @@ function optimizeShipInstalls(shipId, budget, startLevels, weights, meltdownFact
     categoryOf[slot] = cats;
     cats.forEach((c) => touchedCategories.add(c));
   });
+  // Step 1: secure the base bonus in every currently-open node that feeds a category you
+  // actually weighted (a weight of 0 means "don't invest here at all," so it shouldn't get a
+  // free seed point either -- matches the hand-off spec's "get something in everything before
+  // specializing," scoped to what you actually want).
+  slots.forEach((slot) => {
+    if (spent >= budget) return;
+    if (shipId === 5 && slot === '1') return; // handled by the AOTC policy above, not this generic seed
+    if (!categoryOf[slot].some((c) => (weights[c] || 0) > 0)) return;
+    if (gateMetFor(slot) && (levels[slot] || 0) === 0 && nodeMaxLevel(shipId, slot) > 0) { levels[slot] = 1; spent += 1; clicks.push(slot); }
+  });
   const categorySpent = {};
   touchedCategories.forEach((c) => { categorySpent[c] = 0; });
-  // Step 2: one point at a time, pick the most under-served weighted category, then the best
-  // node within it.
-  while (spent < budget) {
-    let bestCat = null;
-    let bestRatio = Infinity;
-    touchedCategories.forEach((c) => {
-      const w = weights[c] || 0;
-      if (w <= 0) return; // a 0 weight means "don't invest in this resource at all"
-      const ratio = categorySpent[c] / w;
-      if (ratio < bestRatio) { bestRatio = ratio; bestCat = c; }
-    });
-    if (bestCat == null) break; // every touched category has weight 0 -- nothing left to target
-    let bestSlot = null;
-    let bestScore = -Infinity;
+  // Points spent per NODE so far -- used to give every eligible node within a category its fair
+  // share PROPORTIONAL to its real value (spent/value ratio, same fair-queueing pattern as
+  // categories above), instead of either maxing one node out before ever touching the next
+  // (winner-take-all) or splitting evenly regardless of value (just as wrong -- an "All Gens"
+  // node would score identically to a flat Cells node purely for being eligible, ignoring a real
+  // value gap). This determines HOW MANY points each node ends up with; see "no consecutive
+  // repeats" below for how those same picks get spread out in TIME without changing that total.
+  const nodeSpent = {};
+  slots.forEach((s) => { nodeSpent[s] = 0; });
+  // Meltdown pool totals -- seeded from this ship's REAL current state, then mutated as THIS
+  // optimization run hypothetically adds points, so later picks correctly see a more-saturated
+  // pool than earlier ones (real, account-grounded diminishing returns per generator tier,
+  // instead of an arbitrary queueing rule). Independent of `levels`/`spent` above, which stay a
+  // from-zero plan per the earlier fix -- this only feeds the value comparison, not the output.
+  const pools = computeShipRealPoolTotals(shipId);
+  // exclude lets the main loop forbid one specific slot (the previous pick) for this iteration
+  // only. This does NOT change which nodes end up with how many points overall (verified: same
+  // final per-node totals with or without it) -- it only re-times an already-optimal, value-
+  // proportional sequence of picks so they're delivered interleaved instead of in one unbroken
+  // burst, which is all "never buy 20 of the same thing in a row" actually requires.
+  const nodeEligible = (slot, exclude) => slot !== exclude && (levels[slot] || 0) < nodeMaxLevel(shipId, slot) && gateMetFor(slot);
+  const categoryHasEligibleNode = (c, exclude) => slots.some((slot) => categoryOf[slot].includes(c) && nodeEligible(slot, exclude));
+  const bestNodeIn = (c, exclude) => {
+    let bestSlot = null; let bestRatio = Infinity; let bestPriority = Infinity; let bestScore = -Infinity;
     slots.forEach((slot) => {
-      const meta = catalog[slot];
-      const level = levels[slot] || 0;
-      if (level >= meta.max || !gateMetFor(slot)) return;
-      if (!categoryOf[slot].includes(bestCat)) return;
-      const score = computeNodeRawValue(shipId, slot);
-      if (score > bestScore) { bestScore = score; bestSlot = slot; }
+      if (!categoryOf[slot].includes(c) || !nodeEligible(slot, exclude)) return;
+      const score = Math.max(poolAdjustedNodeValue(shipId, slot, pools), 1e-9);
+      const ratio = nodeSpent[slot] / score;
+      const priority = nodeTiePriority(effectResources(catalog[slot].effect));
+      const better = ratio < bestRatio
+        || (ratio === bestRatio && priority < bestPriority)
+        || (ratio === bestRatio && priority === bestPriority && score > bestScore);
+      if (better) { bestRatio = ratio; bestPriority = priority; bestSlot = slot; bestScore = score; }
     });
-    if (bestSlot == null) { touchedCategories.delete(bestCat); continue; } // category exhausted (all maxed/gated)
-    levels[bestSlot] = (levels[bestSlot] || 0) + 1;
+    return bestSlot;
+  };
+  // Step 2: one point at a time, spend on whichever weighted category is most under its fair
+  // share, then the most under-served node within it (round-robin, see nodeSpent above). A
+  // weight of 0 means truly excluded -- it only ever gets a point as a last resort, when every
+  // weighted category has nothing eligible right now, purely to keep total installs climbing
+  // toward whatever gate is blocking them.
+  //
+  // categoryBaseline exists to fix a real skew: categories don't all unlock at the same time
+  // (e.g. Cradle's Shards node needs 100 total installs, but its Cells-tier nodes are open from
+  // 0), so a category that had to sit out the early game accumulates a categorySpent of 0 while
+  // an always-open category's categorySpent climbs the whole time just because it was the only
+  // thing available -- not because the player weighted it higher. Comparing raw spent/weight
+  // ratios directly at that point makes the newcomer look "owed" a monopoly to catch up, which
+  // is exactly the "hard focus Shards until max, ignoring Cells entirely" bug this fixes: each
+  // category's ratio gets baselined to the CURRENT front-runner's ratio the moment it first
+  // becomes eligible, so from then on the two compete on their real weights only.
+  const categoryBaseline = {};
+  const categoryActivated = {};
+  touchedCategories.forEach((c) => { categoryBaseline[c] = 0; categoryActivated[c] = false; });
+  const ratioOf = (c) => categorySpent[c] / weights[c] - categoryBaseline[c];
+  // Picks the next (category, node) to spend on, optionally forbidding one slot for this pick.
+  // Returns null if nothing eligible under that constraint.
+  const selectNext = (exclude) => {
+    const positiveCats = [...touchedCategories].filter((c) => (weights[c] || 0) > 0);
+    let minActiveRatio = null;
+    positiveCats.forEach((c) => {
+      if (!categoryActivated[c]) return;
+      const r = ratioOf(c);
+      if (minActiveRatio == null || r < minActiveRatio) minActiveRatio = r;
+    });
+    positiveCats.forEach((c) => {
+      if (categoryActivated[c] || !categoryHasEligibleNode(c, exclude)) return;
+      categoryBaseline[c] = categorySpent[c] / weights[c] - (minActiveRatio ?? 0);
+      categoryActivated[c] = true;
+    });
+    const eligiblePositive = positiveCats.filter((c) => categoryHasEligibleNode(c, exclude))
+      .sort((a, b) => (ratioOf(a) - ratioOf(b)) || (CATEGORY_TIE_PRIORITY[a] || 9) - (CATEGORY_TIE_PRIORITY[b] || 9));
+    let pickedCat = eligiblePositive[0] ?? null;
+    if (pickedCat == null) {
+      // Nothing weighted has anything to spend on right now -- fall back to a 0-weighted
+      // category purely to advance total installs past whatever's gating the real targets.
+      pickedCat = [...touchedCategories].find((c) => (weights[c] || 0) <= 0 && categoryHasEligibleNode(c, exclude)) ?? null;
+    }
+    if (pickedCat == null) return null;
+    return bestNodeIn(pickedCat, exclude);
+  };
+  let lastPickedSlot = null;
+  while (spent < budget) {
+    let pickedSlot = selectNext(lastPickedSlot);
+    if (pickedSlot == null) pickedSlot = selectNext(null); // no alternative to the last pick -- allow the repeat
+    if (pickedSlot == null) {
+      // Truly nothing eligible anywhere right now -- drop any category with no room left at
+      // all (every node feeding it maxed for good), then see if anything else can still open.
+      [...touchedCategories].forEach((c) => {
+        if (!slots.some((slot) => categoryOf[slot].includes(c) && (levels[slot] || 0) < nodeMaxLevel(shipId, slot))) touchedCategories.delete(c);
+      });
+      if (![...touchedCategories].some((c) => categoryHasEligibleNode(c, null))) break;
+      continue;
+    }
+    lastPickedSlot = pickedSlot;
+    levels[pickedSlot] = (levels[pickedSlot] || 0) + 1;
+    nodeSpent[pickedSlot] += 1;
     spent += 1;
-    clicks.push(bestSlot);
-    categoryOf[bestSlot].forEach((c) => { categorySpent[c] += 1; }); // credit every category this node feeds
+    clicks.push(pickedSlot);
+    categoryOf[pickedSlot].forEach((c) => { categorySpent[c] += 1; }); // credit every category this node feeds
+    const increment = nodeLinearIncrement(shipId, pickedSlot);
+    const pickedTags = effectResources(catalog[pickedSlot].effect);
+    if (pickedTags.includes('allGens')) {
+      GEN_TIERS.forEach((n) => { pools[`mk${n}`] = (pools[`mk${n}`] || MELTDOWN_POOL_EPS) + increment; });
+    }
+    pickedTags.forEach((tag) => {
+      if (tag === 'cells' || isGenLikeTag(tag)) pools[tag] = (pools[tag] || MELTDOWN_POOL_EPS) + increment;
+    });
   }
   return { levels, clicks };
 }
@@ -1181,7 +1414,7 @@ function optimizeShipInstalls(shipId, budget, startLevels, weights, meltdownFact
 function defaultOptimizerSettings() {
   const shipEnabled = {};
   for (let n = 1; n <= 7; n++) shipEnabled[n] = true;
-  return { shipEnabled, zaglag: false };
+  return { shipEnabled, zaglag: false, prepForLongRun: false };
 }
 function getOptimizerSettings() {
   if (!window.store) return defaultOptimizerSettings();
@@ -1279,6 +1512,11 @@ function openOptimizeShipModal(shipId) {
   const prefill = Object.values(input.installs).reduce((a, b) => a + b, 0);
   document.getElementById('optimizeShipPoints').value = prefill;
   const gear = getShipGear();
+  const optSettings = getOptimizerSettings();
+  const prepWrap = document.getElementById('optimizeShipPrepForLongRunWrap');
+  prepWrap.classList.toggle('hidden', shipId !== 5);
+  document.getElementById('optimizeShipPrepForLongRun').checked = optSettings.prepForLongRun;
+  document.getElementById('optimizeShipPrepForLongRun').onchange = (e) => { optSettings.prepForLongRun = e.target.checked; window.saveStore(); };
   renderFocusWeightSliders(document.getElementById('optimizeShipFocusWeights'), gear.focusWeights, document.getElementById('optimizeShipWeightPresetBtn'));
   document.getElementById('optimizeShipModal').classList.remove('hidden');
 }
@@ -1286,9 +1524,9 @@ document.getElementById('closeOptimizeShipModalBtn').onclick = () => document.ge
 document.getElementById('optimizeShipGenerateBtn').onclick = () => {
   const shipId = optimizeShipModalShipId;
   const budget = Number(document.getElementById('optimizeShipPoints').value) || 0;
-  const startLevels = { ...getShipInput(shipId).installs };
   const gear = getShipGear();
-  const { levels, clicks } = optimizeShipInstalls(shipId, budget, startLevels, gear.focusWeights, OPTIMIZER_MELTDOWN_FACTOR);
+  const prepForLongRun = shipId === 5 && getOptimizerSettings().prepForLongRun;
+  const { levels, clicks } = optimizeShipInstalls(shipId, budget, gear.focusWeights, OPTIMIZER_MELTDOWN_FACTOR, prepForLongRun);
   const activeLoadout = getActiveLoadout();
   activeLoadout.perShip[shipId] = { budget, levels, clicks };
   window.saveStore();
@@ -1299,7 +1537,7 @@ document.getElementById('optimizeShipGenerateBtn').onclick = () => {
 function openZaglagChecklistModal(checklist) {
   const allReady = checklist.every((it) => it.isReady);
   document.getElementById('zaglagChecklistBody').innerHTML = `
-    <p class="text-xs text-gray-400 mb-3">${allReady ? 'Ready to unlock Zagreus!' : 'Zaglag recommended: wait until these non-Zagreus prerequisites are reached before unlocking Zagreus.'} <span class="block mt-1 text-gray-500">Community-reported thresholds, not independently verified against a live account.</span></p>
+    <p class="text-xs text-gray-400 mb-3">${allReady ? 'Ready to unlock Zagreus!' : 'Zaglag recommended: wait until these non-Zagreus prerequisites are reached before unlocking Zagreus.'}</p>
     <ul class="space-y-1.5">
       ${checklist.map((it) => `
         <li class="flex justify-between text-sm bg-gray-700/50 rounded px-3 py-1.5">
@@ -1321,8 +1559,7 @@ document.getElementById('generateLoadoutBtn').onclick = () => {
     if (optSettings.shipEnabled[shipId] === false) return; // unchecked -- leave untouched, not part of this batch
     if (optSettings.zaglag && shipId === 3) return; // Zaglag: treat Zagreus as not-yet-unlocked
     const budget = Number(el.value) || 0;
-    const startLevels = { ...getShipInput(shipId).installs };
-    const { levels, clicks } = optimizeShipInstalls(shipId, budget, startLevels, gear.focusWeights, OPTIMIZER_MELTDOWN_FACTOR);
+    const { levels, clicks } = optimizeShipInstalls(shipId, budget, gear.focusWeights, OPTIMIZER_MELTDOWN_FACTOR, shipId === 5 && optSettings.prepForLongRun);
     perShip[shipId] = { budget, levels, clicks };
   });
   activeLoadout.perShip = perShip;
@@ -1335,48 +1572,54 @@ document.getElementById('generateLoadoutBtn').onclick = () => {
   renderFleetPage(document.getElementById('pageRoot'));
 };
 
-// Condenses a raw click sequence (one slot id per point spent) into readable ranges, e.g.
-// clicks [6,6,6,2] on a ship that started at level 0 becomes "Mitosis Enhancements: 1 -> 3"
-// then "Printer Tweaks: 1 -> 1", instead of one line per individual point.
-function condenseClicks(clicks, catalog, startLevels) {
+// Expands a click sequence into ONE LINE PER CLICK (not grouped by node) -- unlike
+// condenseClicks, this is meant to make the real interleaving visible: if the allocator spent
+// 130 points, this returns 130 steps in the exact order they were spent, proving no node was
+// bulk-bought before another was even touched.
+function expandClicks(clicks, catalog, startLevels, shipId) {
   const running = { ...startLevels };
-  const lines = [];
-  let i = 0;
-  while (i < clicks.length) {
-    const slot = clicks[i];
-    const from = running[slot] || 0;
-    let count = 0;
-    while (i < clicks.length && clicks[i] === slot) { count += 1; i += 1; }
-    running[slot] = from + count;
-    lines.push({ name: catalog[slot]?.name || `Slot ${slot}`, from, to: from + count, max: catalog[slot]?.max });
-  }
-  return lines;
+  return clicks.map((slot) => {
+    running[slot] = (running[slot] || 0) + 1;
+    return {
+      name: catalog[slot]?.name || `Slot ${slot}`,
+      icon: shipId ? nodeIconPath(shipId, Number(slot)) : null,
+      level: running[slot],
+      max: shipId ? nodeMaxLevel(shipId, slot) : catalog[slot]?.max,
+    };
+  });
 }
-
 // "Install Order" = the actual per-click sequence used to reach this card's shown levels from
 // its Ship Setup baseline. "Effective Path" = the real optimizer's marginal-value ranking
 // continued for the next batch of points beyond that, i.e. what to buy next as you earn more.
 function openLoadoutDetail(shipId, levels, mode, clicks) {
   const catalog = SHIP_NODE_CATALOG[shipId] || {};
   document.getElementById('loadoutDetailTitle').textContent = `${shipDisplayName(shipId)} -- ${mode === 'order' ? 'Install Order' : 'Effective Path'}`;
-  const baseline = getShipInput(shipId).installs;
   let lines;
   let note;
   if (mode === 'order') {
-    lines = condenseClicks(clicks || [], catalog, baseline);
-    note = 'The actual sequence of individual point-spends used to reach this card\'s levels, in order.';
+    lines = expandClicks(clicks || [], catalog, {}, shipId);
+    note = 'Every individual point-spend to build this card\'s levels from scratch, in the exact order the optimizer picked them -- interleaved across nodes, never bulk-bought into one node before touching another.';
   } else {
-    const spentSoFar = Object.values(levels).reduce((a, b) => a + b, 0);
+    // Effective Path answers "what should I buy next, right now" -- it finds where your REAL
+    // current total install count sits along this same ideal sequence, then shows the next 30
+    // ideal clicks past that point. The ideal allocator is a strict one-point-at-a-time greedy
+    // process with no backtracking, so any prefix of a larger budget's sequence is identical to
+    // the sequence for that smaller budget -- meaning "ideal sequence up to my real total" is a
+    // stable reference point even though your real per-node distribution likely doesn't match it.
     const gear = getShipGear();
-    const { clicks: nextClicks } = optimizeShipInstalls(shipId, spentSoFar + 30, levels, gear.focusWeights, OPTIMIZER_MELTDOWN_FACTOR);
-    lines = condenseClicks(nextClicks, catalog, levels);
-    note = 'What to buy next, in order, for the next 30 points beyond this card (once you earn them).';
+    const prepForLongRun = shipId === 5 && getOptimizerSettings().prepForLongRun;
+    const realTotal = Object.values(getShipInput(shipId).installs).reduce((a, b) => a + b, 0);
+    const full = optimizeShipInstalls(shipId, realTotal + 30, gear.focusWeights, OPTIMIZER_MELTDOWN_FACTOR, prepForLongRun);
+    const atRealTotal = optimizeShipInstalls(shipId, realTotal, gear.focusWeights, OPTIMIZER_MELTDOWN_FACTOR, prepForLongRun);
+    const nextClicks = full.clicks.slice(realTotal);
+    lines = expandClicks(nextClicks, catalog, atRealTotal.levels, shipId);
+    note = 'Every individual point-spend for the next points beyond your current total (once you earn them), in order, following the ideal allocation path -- interleaved across nodes, never bulk-bought.';
   }
   const body = document.getElementById('loadoutDetailBody');
   body.innerHTML = `
     <p class="text-xs text-gray-500 mb-3">${note}</p>
     <ol class="space-y-1.5">
-      ${lines.length ? lines.map((l, i) => `<li class="flex justify-between text-sm bg-gray-700/50 rounded px-3 py-1.5"><span class="text-gray-300">${i + 1}. ${l.name}</span><span class="text-white font-medium">${l.from} → ${l.to}<span class="text-gray-500">/${l.max}</span></span></li>`).join('') : '<li class="text-xs text-gray-500">No points to allocate.</li>'}
+      ${lines.length ? lines.map((l, i) => `<li class="flex items-center justify-between text-sm bg-gray-700/50 rounded px-3 py-1.5"><span class="flex items-center gap-2 text-gray-300">${i + 1}. ${l.icon ? `<img src="${l.icon}" class="w-5 h-5" />` : ''}${escapeHtml(l.name)}</span><span class="text-white font-medium">${l.level}<span class="text-gray-500">/${l.max}</span></span></li>`).join('') : '<li class="text-xs text-gray-500">No points to allocate.</li>'}
     </ol>`;
   document.getElementById('loadoutDetailModal').classList.remove('hidden');
 }
@@ -1517,7 +1760,10 @@ const FLEET_RESEARCH_ITEMS = [
       '+50 All Ships Rank Points & LP',
       '+60 All Ships Rank Points & LP',
     ],
-    note: 'The x5 install-cap (tier 1) is shown for reference only -- NOT applied to node max levels here, since the max levels already captured from a live account may already include this bonus if that account had it researched, and applying it again would double-count.',
+    // Tier 1's "All Rank Installs Max LV x5" is what nodeMaxLevel()/installCapMultiplier()
+    // (near GEN_TIERS) check for -- SHIP_NODE_CATALOG's `max` fields store the wiki BASE cap
+    // uniformly, and this tier's level (>=1) is the single switch that multiplies it by 5
+    // everywhere a node's effective cap is used, so it can never drift out of sync per-node.
   },
   {
     key: 'fleetAnalysis2', name: 'Fleet Analysis 2 (Research #78)', max: 6,
@@ -1559,51 +1805,75 @@ function computeFleetResearchShipMultipliers() {
   return mults;
 }
 
-function renderResearchPage(root) {
+// Same card shell as renderUpgradeInput/renderFleetBoostCard (title + level badge, tier list,
+// chevron/progress-bar/chevron row) -- research tiers stand in for the usual effectBox lines.
+function renderFleetResearchCard(item, rerender) {
   const research = getFleetResearch();
+  const level = research.levels[item.key] || 0;
+  const cap = item.max;
+  const card = document.createElement('div');
+  card.className = 'relative rounded-xl overflow-hidden border border-gray-700/50 bg-gradient-to-br from-gray-800/80 via-gray-800/60 to-gray-900/80 p-4 flex flex-col';
+  const canDec = level > 0;
+  const canInc = level < cap;
+  const pct = cap ? (level / cap) * 100 : 0;
+  card.innerHTML = `
+    <div class="flex items-center justify-between gap-2 mb-3">
+      <h3 class="font-semibold text-white truncate min-w-0 flex-1 text-[1.05rem]" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</h3>
+      <div class="px-3 py-1 rounded-lg bg-gray-900/70 border border-gray-700/30"><span class="font-bold text-lg text-gray-300">${level}</span><span class="text-xs text-gray-500">/${cap}</span></div>
+    </div>
+    <div class="bg-gray-900/50 p-3 rounded-md w-full mb-3">
+      <ol class="text-xs space-y-1 pl-4 list-decimal">
+        ${item.tiers.map((t, i) => `<li class="${i < level ? 'text-green-400' : 'text-gray-500'}">${escapeHtml(t)}</li>`).join('')}
+      </ol>
+    </div>
+    <div class="flex items-center justify-between mt-auto pt-2 gap-1.5">
+      <button data-min class="ctrl-btn ctrl-btn--gray" ${canDec ? '' : 'disabled style="opacity:.3"'}>${iconSvg('chevron-left', 16)}${iconSvg('chevron-left', 16, '-ml-2.5')}</button>
+      <button data-dec class="ctrl-btn ctrl-btn--gray" ${canDec ? '' : 'disabled style="opacity:.3"'}>${iconSvg('chevron-left', 16)}</button>
+      <div class="w-full rounded-full overflow-hidden relative h-2 border border-gray-500/20 flex-1 h-5">
+        <div class="absolute inset-0 bg-gray-800/90 rounded-full"></div>
+        <div class="h-full relative rounded-full transition-all duration-300 overflow-hidden bg-gradient-to-r from-gray-600 via-gray-500 to-gray-400" style="width:${pct}%"></div>
+      </div>
+      <button data-inc class="ctrl-btn ctrl-btn--gray" ${canInc ? '' : 'disabled style="opacity:.3"'}>${iconSvg('chevron-right', 16)}</button>
+      <button data-max class="ctrl-btn ctrl-btn--gray" ${canInc ? '' : 'disabled style="opacity:.3"'}>${iconSvg('chevron-right', 16)}${iconSvg('chevron-right', 16, '-ml-2.5')}</button>
+    </div>`;
+  const setLevel = (v) => {
+    research.levels[item.key] = Math.max(0, Math.min(cap, v));
+    window.saveStore();
+    rerender();
+  };
+  card.querySelector('[data-inc]').onclick = () => setLevel(level + 1);
+  card.querySelector('[data-dec]').onclick = () => setLevel(level - 1);
+  card.querySelector('[data-max]').onclick = () => setLevel(level + 10);
+  card.querySelector('[data-min]').onclick = () => setLevel(level - 10);
+  return card;
+}
+function renderResearchPage(root) {
   root.innerHTML = `
     <div class="mb-4 rounded-lg overflow-hidden shadow-lg">
       <div class="bg-gradient-to-r from-blue-900 to-gray-800 px-5 py-4 border-b border-gray-600">
         <h1 class="text-xl font-bold">Research</h1>
-        <p class="text-xs text-gray-300 mt-0.5">Ship-install-relevant Research Center entries (Koios unlock). Only "Fleet Analysis 1 &amp; 2" from the full ~80-entry catalogue are ship-specific -- the rest boost Cells/MP/Shards/etc. generally and aren't tracked here.</p>
+        <p class="text-xs text-gray-300 mt-0.5">Ship-install-relevant Research Center entries.</p>
       </div>
     </div>
-    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4 space-y-4 mb-4" id="researchList"></div>
-    <div class="mb-4 rounded-lg overflow-hidden shadow-lg">
-      <div class="bg-gradient-to-r from-purple-900 to-gray-800 px-5 py-4 border-b border-gray-600">
-        <h1 class="text-xl font-bold">Academy Badges (Ship-Related)</h1>
-        <p class="text-xs text-gray-300 mt-0.5">Traded for Innovation/Dark Cores in the Space Academy. Only the two badges that affect ship rank installs are listed here.</p>
-      </div>
-    </div>
-    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4" id="badgeList"></div>`;
-
-  renderFleetBoostItemsInto(document.getElementById('badgeList'), 'Badge');
-
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="researchList"></div>`;
   const list = document.getElementById('researchList');
-  FLEET_RESEARCH_ITEMS.forEach((item) => {
-    const level = research.levels[item.key] || 0;
-    const row = document.createElement('div');
-    row.className = 'bg-gray-700/40 rounded p-3';
-    row.innerHTML = `
-      <div class="flex items-center gap-3 mb-2">
-        <div class="flex-1 text-sm text-white font-medium">${escapeHtml(item.name)}</div>
-        <input type="number" min="0" max="${item.max}" value="${level}" data-research="${item.key}" class="w-20 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-white text-sm flex-shrink-0" />
-        <span class="text-xs text-gray-500">/${item.max}</span>
-      </div>
-      <ol class="text-xs space-y-0.5 pl-4 list-decimal">
-        ${item.tiers.map((t, i) => `<li class="${i < level ? 'text-green-400' : 'text-gray-500'}">${escapeHtml(t)}</li>`).join('')}
-      </ol>
-      ${item.note ? `<div class="text-xs text-amber-500 mt-2">${escapeHtml(item.note)}</div>` : ''}`;
-    row.querySelector('[data-research]').addEventListener('change', (e) => {
-      research.levels[item.key] = Math.max(0, Math.min(item.max, Number(e.target.value) || 0));
-      window.saveStore();
-      renderResearchPage(root);
-    });
-    list.appendChild(row);
-  });
+  const rerender = () => renderResearchPage(root);
+  FLEET_RESEARCH_ITEMS.forEach((item) => { list.appendChild(renderFleetResearchCard(item, rerender)); });
 }
 
 window.renderFleetPage = renderFleetPage;
 window.renderShipSetupPage = renderShipSetupPage;
 window.renderGearSetsPage = renderGearSetsPage;
 window.renderResearchPage = renderResearchPage;
+function renderBadgesPage(root) {
+  root.innerHTML = `
+    <div class="mb-4 rounded-lg overflow-hidden shadow-lg">
+      <div class="bg-gradient-to-r from-blue-900 to-gray-800 px-5 py-4 border-b border-gray-600">
+        <h1 class="text-xl font-bold">Academy Badges</h1>
+        <p class="text-xs text-gray-300 mt-0.5">Traded for Innovation/Dark Cores in the Space Academy.</p>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="badgeList"></div>`;
+  renderFleetBoostItemsInto(document.getElementById('badgeList'), 'Badge');
+}
+window.renderBadgesPage = renderBadgesPage;

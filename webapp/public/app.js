@@ -62,7 +62,7 @@ function freshStore() {
     fleetResearch: {},
     fleetBadges: {},
     unlockedGens: { 1: true, 2: false, 3: false, 4: false, 5: false, 6: false, 7: false, 8: false },
-    optimizerSettings: { shipEnabled: { 1: true, 2: true, 3: true, 4: true, 5: true, 6: true, 7: true }, zaglag: false },
+    optimizerSettings: { shipEnabled: { 1: true, 2: true, 3: true, 4: true, 5: true, 6: true, 7: true }, zaglag: false, prepForLongRun: false },
     loadoutTabs: {
       tabs: [
         { id: 1, name: 'Loadout 1', perShip: {}, zaglagChecklist: null },
@@ -121,7 +121,8 @@ function loadStore() {
       if (!parsed.fleetResearch) parsed.fleetResearch = {};
       if (!parsed.fleetBadges) parsed.fleetBadges = {};
       if (!parsed.unlockedGens) parsed.unlockedGens = { 1: true, 2: false, 3: false, 4: false, 5: false, 6: false, 7: false, 8: false };
-      if (!parsed.optimizerSettings) parsed.optimizerSettings = { shipEnabled: { 1: true, 2: true, 3: true, 4: true, 5: true, 6: true, 7: true }, zaglag: false };
+      if (!parsed.optimizerSettings) parsed.optimizerSettings = { shipEnabled: { 1: true, 2: true, 3: true, 4: true, 5: true, 6: true, 7: true }, zaglag: false, prepForLongRun: false };
+      if (parsed.optimizerSettings.prepForLongRun === undefined) parsed.optimizerSettings.prepForLongRun = false;
       if (!parsed.loadoutTabs) {
         // Migrate a pre-tabs single currentLoadout (if any) into tab 1 instead of discarding it.
         const legacy = parsed.currentLoadout;
@@ -346,6 +347,7 @@ function render() {
   if (route === 'shipsetup') { renderShipSetupPage(root); return; }
   if (route === 'gearsets') { renderGearSetsPage(root); return; }
   if (route === 'research') { renderResearchPage(root); return; }
+  if (route === 'badges') { renderBadgesPage(root); return; }
   if (route === 'settings') { renderSettingsPage(root); return; }
   if (route.startsWith('upgrades/')) { renderUpgradesPage(root, route.slice('upgrades/'.length)); return; }
   renderSimPage(root);
