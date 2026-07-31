@@ -7,7 +7,7 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>tailwind.config = { darkMode: 'class', theme: { extend: { borderWidth: { 3: '3px' } } } };</script>
-<link rel="stylesheet" href="site.css?v=20260729t" />
+<link rel="stylesheet" href="site.css?v=20260729u" />
 <style>
   body { background:#111827; color:#e5e7eb; }
   .stepper-btn { @apply w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed text-white; }
@@ -21,14 +21,17 @@
      (login and the unrelated non-hunter tool pages), plus a Knox tab the real nav also has. -->
 <header class="bg-gray-800 border-b border-gray-700">
   <div class="max-w-[1600px] mx-auto px-4 h-16 flex items-center justify-between">
-    <div class="flex items-center gap-3">
-      <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center text-white font-bold">C</div>
-      <div>
-        <div class="font-semibold text-white leading-tight">CIFI Tools</div>
-        <div class="text-[11px] text-gray-500 leading-tight">Hunter Simulator &amp; Game Tools</div>
+    <div class="flex items-center gap-3 min-w-0">
+      <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center text-white font-bold flex-shrink-0">C</div>
+      <div class="min-w-0 truncate">
+        <div class="font-semibold text-white leading-tight truncate">CIFI Tools</div>
+        <div class="text-[11px] text-gray-500 leading-tight truncate hidden sm:block">Hunter Simulator &amp; Game Tools</div>
       </div>
     </div>
-    <nav class="flex items-center gap-1">
+    <!-- Desktop nav: unchanged, just gated to md+ now that mobile gets its own menu below
+         (a 7-item inline pill bar has no room on a phone-width viewport -- it was overflowing
+         off the right edge of the screen entirely with no way to reach Upgrades/Settings). -->
+    <nav class="hidden md:flex items-center gap-1">
       <a href="#/gems" class="nav-pill" data-nav="gems">Gems</a>
       <button id="hunterBorgeBtn" class="nav-pill" data-nav="borge">Borge</button>
       <button id="hunterOzzyBtn" class="nav-pill" data-nav="ozzy" data-unlock-gem="exodus" data-unlock-lvl="2">Ozzy</button>
@@ -37,10 +40,28 @@
       <a href="#/upgrades/relics" class="nav-pill" data-nav="upgrades">Upgrades</a>
       <a href="#/settings" class="nav-pill" data-nav="settings">Settings</a>
     </nav>
-    <div class="flex items-center gap-2">
-      <button id="importSaveBtn" class="flex items-center space-x-1 px-3 py-1.5 rounded-full bg-gradient-to-r from-green-600 to-green-800 hover:from-green-700 hover:to-green-900 text-white font-semibold shadow-lg transition-colors duration-200 text-xs sm:text-sm"><span id="importSaveBtnIcon"></span><span>Import Save</span></button>
+    <div class="flex items-center gap-2 flex-shrink-0">
+      <button id="importSaveBtn" class="flex items-center space-x-1 px-3 py-1.5 rounded-full bg-gradient-to-r from-green-600 to-green-800 hover:from-green-700 hover:to-green-900 text-white font-semibold shadow-lg transition-colors duration-200 text-xs sm:text-sm"><span id="importSaveBtnIcon"></span><span class="hidden xs:inline">Import Save</span></button>
+      <!-- Mobile menu toggle: same destinations as the desktop nav, just reachable on a phone
+           viewport instead of hidden off-screen. -->
+      <button id="mobileNavToggle" class="md:hidden w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-lg bg-gray-700 hover:bg-gray-600 text-white" aria-label="Open menu" aria-expanded="false">
+        <svg id="mobileNavIconOpen" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+        <svg id="mobileNavIconClose" class="hidden" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+      </button>
     </div>
   </div>
+  <!-- Mobile nav drawer: same links/handlers as the desktop <nav> above (data-nav wiring in
+       app.js queries all [data-nav] elements, so these get the same active-state/gating
+       behavior automatically), just stacked full-width instead of an inline pill row. -->
+  <nav id="mobileNavMenu" class="hidden md:hidden flex-col gap-1 px-4 pb-3 border-t border-gray-700 pt-3">
+    <a href="#/gems" class="nav-pill-mobile" data-nav="gems">Gems</a>
+    <button class="nav-pill-mobile" data-nav="borge">Borge</button>
+    <button class="nav-pill-mobile" data-nav="ozzy" data-unlock-gem="exodus" data-unlock-lvl="2">Ozzy</button>
+    <button class="nav-pill-mobile" data-nav="knox" data-unlock-gem="exodus" data-unlock-lvl="4">Knox</button>
+    <a href="#/fleet" class="nav-pill-mobile" data-nav="fleet">Fleet</a>
+    <a href="#/upgrades/relics" class="nav-pill-mobile" data-nav="upgrades">Upgrades</a>
+    <a href="#/settings" class="nav-pill-mobile" data-nav="settings">Settings</a>
+  </nav>
 </header>
 
 <div class="max-w-[1600px] mx-auto flex">
@@ -439,18 +460,18 @@
   </div>
 </div>
 
-<script src="icons.js?v=20260729t"></script>
-<script src="hunterDefs.js?v=20260729t"></script>
-<script src="shipSchema.js?v=20260729t"></script>
-<script src="shipsPage.js?v=20260729t"></script>
-<script src="upgradeEffects.js?v=20260729t"></script>
-<script src="hunterSimBrowser.js?v=20260729t"></script>
-<script src="optimizerBrowser.js?v=20260729t"></script>
-<script src="beamSearchBrowser.js?v=20260729t"></script>
-<script src="saveImport.js?v=20260729t"></script>
-<script src="buildCode.js?v=20260729t"></script>
-<script src="costFormulas.js?v=20260729t"></script>
-<script src="app.js?v=20260729t"></script>
+<script src="icons.js?v=20260729u"></script>
+<script src="hunterDefs.js?v=20260729u"></script>
+<script src="shipSchema.js?v=20260729u"></script>
+<script src="shipsPage.js?v=20260729u"></script>
+<script src="upgradeEffects.js?v=20260729u"></script>
+<script src="hunterSimBrowser.js?v=20260729u"></script>
+<script src="optimizerBrowser.js?v=20260729u"></script>
+<script src="beamSearchBrowser.js?v=20260729u"></script>
+<script src="saveImport.js?v=20260729u"></script>
+<script src="buildCode.js?v=20260729u"></script>
+<script src="costFormulas.js?v=20260729u"></script>
+<script src="app.js?v=20260729u"></script>
 <script>
   // Custom (non-Tabler) sidebar icons: real game-asset SVG paths copied verbatim from the
   // live site's rendered DOM (Relics/Loop Mods/Milestones use bespoke icons, not Tabler's).

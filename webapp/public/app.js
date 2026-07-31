@@ -354,6 +354,28 @@ function render() {
 }
 window.addEventListener('hashchange', render);
 
+// Mobile nav drawer (see index.html header): open/close toggle, plus auto-close whenever any
+// nav destination is actually reached -- either a hash route changes (Gems/Fleet/Upgrades/
+// Settings links) or a hunter tab is clicked (those don't change the route if you're already
+// on the sim page, so hashchange alone wouldn't close it).
+(function () {
+  const toggle = document.getElementById('mobileNavToggle');
+  const menu = document.getElementById('mobileNavMenu');
+  const iconOpen = document.getElementById('mobileNavIconOpen');
+  const iconClose = document.getElementById('mobileNavIconClose');
+  if (!toggle || !menu) return;
+  const setOpen = (open) => {
+    menu.classList.toggle('hidden', !open);
+    menu.classList.toggle('flex', open);
+    toggle.setAttribute('aria-expanded', String(open));
+    iconOpen.classList.toggle('hidden', open);
+    iconClose.classList.toggle('hidden', !open);
+  };
+  toggle.onclick = () => setOpen(menu.classList.contains('hidden'));
+  menu.querySelectorAll('[data-nav]').forEach((el) => el.addEventListener('click', () => setOpen(false)));
+  window.addEventListener('hashchange', () => setOpen(false));
+})();
+
 // ==================== SIMULATOR PAGE ====================
 
 function renderSimPage(root) {
@@ -1456,9 +1478,12 @@ function switchHunter(h, skipNav) {
   else render();
   updateNavGating();
 }
-document.getElementById('hunterBorgeBtn').onclick = () => switchHunter('borge');
-document.getElementById('hunterOzzyBtn').onclick = () => switchHunter('ozzy');
-document.getElementById('hunterKnoxBtn').onclick = () => switchHunter('knox');
+// Wired via data-nav rather than the old fixed IDs so the mobile drawer's copy of these
+// buttons (added for phone-width viewports, which have no room for the 7-item desktop pill
+// bar) works identically without needing its own duplicated handlers.
+document.querySelectorAll('[data-nav="borge"]').forEach((el) => { el.onclick = () => switchHunter('borge'); });
+document.querySelectorAll('[data-nav="ozzy"]').forEach((el) => { el.onclick = () => switchHunter('ozzy'); });
+document.querySelectorAll('[data-nav="knox"]').forEach((el) => { el.onclick = () => switchHunter('knox'); });
 // Import Save applies globally (it can populate any/all hunters from one save file), so it
 // lives in the app header now instead of being duplicated per-hunter-page.
 document.getElementById('importSaveBtnIcon').innerHTML = iconSvg('download', 16);
