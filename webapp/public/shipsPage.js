@@ -1302,15 +1302,14 @@ function nodeTiePriority(tags) {
 // nodes happen to run several orders of magnitude smaller per-point than its Cells nodes). That
 // mismatch was the real bug in an earlier version of this optimizer: equal 50/50 weights still
 // dumped everything into Cells, because raw pct magnitude silently dominated the weight.
-// Meltdown -- two-pool model (unverified against a real confirmed formula, but internally
-// consistent and monotonic across the whole 0-1+ range): direct Cells/Shards/RP/MP/Academy/
-// Materials bonuses are Meltdown-immune and add straight to their own pool. Generator tiers
-// (Mk1-Mk8) are melted -- each tier's OWN real cumulative pool (this account's actual current
-// total for that tier, from crew/gear/research/real installed levels, not a fictional "0") gets
-// raised to the Meltdown exponent, so a node's real marginal value depends on how saturated its
-// specific tier already is. An "All Gens" node touches all 8 tiers at once, so its value is the
-// product of each tier's own melted marginal ratio -- tiers that are already heavily saturated
-// contribute almost nothing further, while under-invested tiers dominate the score. This uses
+// Meltdown -- confirmed account-side to affect ONLY MK1 output, not MK2-8 (an earlier version
+// applied the same exponent to every generator tier, which was wrong). Direct Cells/Shards/RP/
+// MP/Academy/Materials bonuses, and MK2-8, are all Meltdown-immune and use a plain un-melted
+// ratio (exponent 1). MK1's own real cumulative pool (this account's actual current total, from
+// crew/gear/research/real installed levels, not a fictional "0") gets raised to the Meltdown
+// exponent, so an MK1 node's real marginal value depends on how saturated MK1 already is. An
+// "All Gens" node touches all 8 tiers at once, so its value is the product of each tier's own
+// marginal ratio -- only the MK1 factor is melted, MK2-8 factors are plain ratios. This uses
 // ONLY real account data (current per-tier totals, the stored Meltdown value) -- no invented
 // constants. It does NOT change what budget/plan the optimizer outputs (that's still a from-zero
 // simulation per the earlier fix) -- it only changes how a candidate node's real relative value
@@ -1409,11 +1408,15 @@ function poolAdjustedNodeValue(shipId, slot, pools, runLength) {
     const base = pools.cells || MELTDOWN_POOL_EPS;
     return (((base + increment) / base - 1) * 100) * bias.cells;
   }
+  // Meltdown only melts MK1 -- confirmed account-side, corrects an earlier version that applied
+  // the same exponent to every generator tier. Every other tier (MK2-8, and the MK2-8 slice of
+  // an All-Gens node) uses a plain, un-melted ratio (exponent 1), same as Direct Cells above.
   const affectedTiers = isAllGens ? GEN_TIERS.map((n) => `mk${n}`) : genTiers;
   let ratio = 1;
   affectedTiers.forEach((tier) => {
     const base = pools[tier] || MELTDOWN_POOL_EPS;
-    ratio *= Math.pow((base + increment) / base, meltdown);
+    const exponent = tier === 'mk1' ? meltdown : 1;
+    ratio *= Math.pow((base + increment) / base, exponent);
   });
   return ((ratio - 1) * 100) * bias.gen;
 }
