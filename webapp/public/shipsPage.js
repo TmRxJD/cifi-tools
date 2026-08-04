@@ -1596,25 +1596,33 @@ function renameLoadoutTab(id, name) {
   if (tab && name) { tab.name = name; window.saveStore(); }
 }
 
-// Zaglag readiness checklist -- user-supplied community thresholds (HEP3/HEP6/DEM2 use this
-// project's already-established community-code-equals-catalog-slot convention), NOT
-// independently verified against a live account the way the rest of SHIP_NODE_CATALOG is.
-// The optimal MOMENT to unlock Zagreus can't be determined from a static save snapshot (it
-// depends on real-time progression rate, which this tool has no way to observe) -- so this is
-// deliberately a post-hoc readiness gate, not a predictive timer: computed once "Optimize
-// Loadout" actually runs with Zaglag checked, attached to that result, and surfaced via a
-// checklist icon on the Zagreus card -- never shown before the optimizer has run.
-const ZAGLAG_CHECKLIST = [
-  { shipId: 4, slot: 3, targetLevel: 10, reason: "Primary MP baseline multiplier required before unlocking Zagreus." },
-  { shipId: 4, slot: 6, targetLevel: 10, reason: 'Secondary MP multiplier required.' },
-  { shipId: 5, slot: 2, targetLevel: 2, reason: 'Demeter base shard/MP loop scaler.' },
-];
+// Zaglag readiness checklist -- dynamically built from every non-Zagreus ship's REAL current
+// installs: any node that boosts Mod Points (the resource that drives Zagreus's own rank-up) is
+// a readiness requirement once its own gate is actually open on that ship right now -- 1 point
+// is enough to count as "covered" (this is a readiness gate, not an allocation target). A node
+// still locked behind a gate you haven't reached yet is left off the list entirely rather than
+// demanded early -- "reasonably within reach" per the hand-off, not a hard prerequisite on
+// something you can't even open. Replaces an earlier static 3-item list (HEP3/HEP6/DEM2) that
+// was an unverified placeholder, not derived from the account's real Mod-Points-node layout.
+// The optimal MOMENT to unlock Zagreus still can't be predicted from a static save snapshot (it
+// depends on real-time progression rate this tool has no way to observe) -- so this stays a
+// post-hoc readiness gate, computed once "Optimize Loadout" actually runs with Zaglag checked.
 function computeZaglagChecklist() {
-  return ZAGLAG_CHECKLIST.map((item) => {
-    const currentLevel = getShipInput(item.shipId).installs[item.slot] || 0;
-    const name = SHIP_NODE_CATALOG[item.shipId]?.[item.slot]?.name || `Slot ${item.slot}`;
-    return { ...item, name, currentLevel, isReady: currentLevel >= item.targetLevel };
-  });
+  const items = [];
+  for (let shipId = 1; shipId <= 7; shipId++) {
+    if (shipId === 3) continue; // Zagreus isn't part of its own readiness gate
+    const catalog = SHIP_NODE_CATALOG[shipId] || {};
+    const installs = getShipInput(shipId).installs;
+    const spent = Object.values(installs).reduce((a, b) => a + b, 0);
+    Object.entries(catalog).forEach(([slot, meta]) => {
+      if (!effectResources(meta.effect).includes('modPoints')) return;
+      const currentLevel = installs[slot] || 0;
+      const gateOpen = !meta.gateAtTotalInstalls || (spent - currentLevel) >= meta.gateAtTotalInstalls;
+      if (!gateOpen) return; // not reasonably within reach yet
+      items.push({ shipId, slot: Number(slot), name: meta.name, targetLevel: 1, currentLevel, isReady: currentLevel >= 1 });
+    });
+  }
+  return items;
 }
 
 // Optimizes just ONE ship in place -- prefills its budget the same way "Optimize Loadout"
