@@ -44,6 +44,20 @@ function genBuildId() {
 const STORAGE_KEY = 'huntersim_clone_v2';
 const DEFAULT_CATEGORIES = [{ id: 'active', name: 'Active', isSystem: true }, { id: 'archived', name: 'Archived', isSystem: true }];
 
+// Which parts of a decoded save get applied on Import -- checked by default (all four), plus
+// whether to silently auto-poll the CIFI Bridge for a changed save and re-run the same checked
+// categories automatically (off by default -- it's an opt-in convenience, not a surprise
+// background write).
+function defaultImportPrefs() {
+  return {
+    categories: {
+      hunterBuilds: true, relics: true, inscriptions: true, diamondCards: true, milestone: true, gems: true,
+      shipRanks: true, shipGear: true, unlockedGens: true, gearSets: true, fleetBadges: true, fleetResearch: true,
+    },
+    autoPoll: false,
+  };
+}
+
 function freshStore() {
   const perHunter = {};
   ['borge', 'ozzy', 'knox'].forEach((h) => { perHunter[h] = { hunterStats: { ...SEED_HUNTER_STATS[h] }, builds: [] }; });
@@ -63,6 +77,7 @@ function freshStore() {
     fleetBadges: {},
     unlockedGens: { 1: true, 2: false, 3: false, 4: false, 5: false, 6: false, 7: false, 8: false },
     optimizerSettings: { shipEnabled: { 1: true, 2: true, 3: true, 4: true, 5: true, 6: true, 7: true }, zaglag: false, prepForLongRun: false },
+    importPrefs: defaultImportPrefs(),
     loadoutTabs: {
       tabs: [
         { id: 1, name: 'Loadout 1', perShip: {}, zaglagChecklist: null },
@@ -121,6 +136,13 @@ function loadStore() {
       if (!parsed.fleetResearch) parsed.fleetResearch = {};
       if (!parsed.fleetBadges) parsed.fleetBadges = {};
       if (!parsed.unlockedGens) parsed.unlockedGens = { 1: true, 2: false, 3: false, 4: false, 5: false, 6: false, 7: false, 8: false };
+      if (!parsed.importPrefs) parsed.importPrefs = defaultImportPrefs();
+      // Backfill any category keys added after this account's importPrefs was first saved
+      // (e.g. the original 4-bucket version didn't have per-piece Ship/Relic/Inscryption/etc
+      // toggles) -- default each missing one to checked, matching a fresh install's defaults.
+      Object.entries(defaultImportPrefs().categories).forEach(([key, def]) => {
+        if (!(key in parsed.importPrefs.categories)) parsed.importPrefs.categories[key] = def;
+      });
       if (!parsed.optimizerSettings) parsed.optimizerSettings = { shipEnabled: { 1: true, 2: true, 3: true, 4: true, 5: true, 6: true, 7: true }, zaglag: false, prepForLongRun: false };
       if (parsed.optimizerSettings.prepForLongRun === undefined) parsed.optimizerSettings.prepForLongRun = false;
       if (!parsed.loadoutTabs) {
@@ -341,6 +363,21 @@ function render() {
     el.classList.toggle('bg-gray-800', el.dataset.route === route);
     el.classList.toggle('text-white', el.dataset.route === route);
   });
+  // Top header nav: "Hunters" covers the whole sim route, "Fleet" covers only the literal Fleet
+  // Optimizer page (route === 'fleet' -- Ship Setup/Gear Sets are sidebar-only pages, not this),
+  // "Settings" is an exact match, and "Upgrades" is the catch-all for every OTHER sidebar page
+  // (upgrades/*, shipsetup, gearsets, research, badges, gems) since none of those have their own
+  // dedicated header button. Previously only "Upgrades" itself matched upgrades/* and nothing
+  // else lit up for shipsetup/gearsets/research/gems/badges at all.
+  const DEDICATED_NAV_ROUTES = { sim: 'sim', fleet: 'fleet', settings: 'settings' };
+  document.querySelectorAll('[data-nav]').forEach((el) => {
+    const nav = el.dataset.nav;
+    if (['borge', 'ozzy', 'knox'].includes(nav)) return; // handled by switchHunter's own active-<hunter> styling
+    const isActive = nav === 'upgrades'
+      ? !Object.values(DEDICATED_NAV_ROUTES).includes(route)
+      : DEDICATED_NAV_ROUTES[nav] === route;
+    el.classList.toggle('active', isActive);
+  });
   const root = document.getElementById('pageRoot');
   if (route === 'gems') { renderGemsPage(root); return; }
   if (route === 'fleet') { renderFleetPage(root); return; }
@@ -381,6 +418,11 @@ window.addEventListener('hashchange', render);
 function renderSimPage(root) {
   root.innerHTML = `
     <div class="mb-6 rounded-lg overflow-hidden shadow-lg">
+      <div class="bg-gray-800 pt-3 pb-1 flex items-center justify-center gap-1">
+        <button id="hunterBorgeBtn" class="nav-pill" data-nav="borge">Borge</button>
+        <button id="hunterOzzyBtn" class="nav-pill" data-nav="ozzy" data-unlock-gem="exodus" data-unlock-lvl="2">Ozzy</button>
+        <button id="hunterKnoxBtn" class="nav-pill" data-nav="knox" data-unlock-gem="exodus" data-unlock-lvl="4">Knox</button>
+      </div>
       <div id="hunterBanner" class="bg-gradient-to-r from-red-900 to-gray-800 px-5 py-5 sm:py-0.5 border-b border-gray-600">
         <div class="flex flex-wrap items-center justify-between gap-4">
           <div class="flex items-center gap-4">
@@ -417,6 +459,7 @@ function renderSimPage(root) {
     </div>
     <div id="buildList" class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));"></div>`;
 
+  wireHunterTabs();
   switchHunter(currentHunter, true);
   document.getElementById('newBuildBtn').onclick = () => openBuildModal(newDraftBuild());
   document.getElementById('importBtn').onclick = () => document.getElementById('importModal').classList.remove('hidden');
@@ -1478,12 +1521,13 @@ function switchHunter(h, skipNav) {
   else render();
   updateNavGating();
 }
-// Wired via data-nav rather than the old fixed IDs so the mobile drawer's copy of these
-// buttons (added for phone-width viewports, which have no room for the 7-item desktop pill
-// bar) works identically without needing its own duplicated handlers.
-document.querySelectorAll('[data-nav="borge"]').forEach((el) => { el.onclick = () => switchHunter('borge'); });
-document.querySelectorAll('[data-nav="ozzy"]').forEach((el) => { el.onclick = () => switchHunter('ozzy'); });
-document.querySelectorAll('[data-nav="knox"]').forEach((el) => { el.onclick = () => switchHunter('knox'); });
+// Hunter tabs live on the sim page itself now (not the app header, which just has one
+// "Hunters" link) -- wired here via data-nav rather than fixed IDs so it's a single loop.
+function wireHunterTabs() {
+  document.querySelectorAll('[data-nav="borge"]').forEach((el) => { el.onclick = () => switchHunter('borge'); });
+  document.querySelectorAll('[data-nav="ozzy"]').forEach((el) => { el.onclick = () => switchHunter('ozzy'); });
+  document.querySelectorAll('[data-nav="knox"]').forEach((el) => { el.onclick = () => switchHunter('knox'); });
+}
 // Import Save applies globally (it can populate any/all hunters from one save file), so it
 // lives in the app header now instead of being duplicated per-hunter-page.
 document.getElementById('importSaveBtnIcon').innerHTML = iconSvg('download', 16);
@@ -1579,6 +1623,66 @@ scheduleBridgePoll(bridgePollDelay);
 // while this tab was in the background" without waiting out the current backoff delay.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleBridgePoll(0); });
 window.addEventListener('focus', () => scheduleBridgePoll(0));
+
+// ==================== AUTO-POLL FOR SAVE UPDATES ====================
+// Opt-in (see importPrefs.autoPoll): periodically pulls the raw save text via the CIFI Bridge
+// and re-runs the normal import pipeline (scoped to whatever's checked in the import checklist)
+// only if the content actually changed since the last successful import -- cheap content-hash
+// comparison, not a real diff, since the only thing that matters here is "did anything change."
+const AUTO_POLL_SAVE_INTERVAL_MS = 20000;
+let autoPollSaveTimer = null;
+function cheapHash(text) {
+  let h = 0;
+  for (let i = 0; i < text.length; i++) { h = (Math.imul(31, h) + text.charCodeAt(i)) | 0; }
+  return `${text.length}:${h}`;
+}
+// Surfaced in the Import modal (see wireImportChecklist) so a silently-failing poll is
+// actually visible/debuggable instead of just "nothing seems to happen."
+let autoPollLastStatus = null; // { at: Date, ok: bool, detail: string }
+function setAutoPollStatus(ok, detail) {
+  autoPollLastStatus = { at: new Date(), ok, detail };
+  renderAutoPollStatus();
+}
+function renderAutoPollStatus() {
+  const el = document.getElementById('importAutoPollStatus');
+  if (!el || !autoPollLastStatus) return;
+  const time = autoPollLastStatus.at.toLocaleTimeString();
+  el.textContent = `Last check ${time}: ${autoPollLastStatus.detail}`;
+  el.classList.toggle('text-red-400', !autoPollLastStatus.ok);
+  el.classList.toggle('text-gray-500', autoPollLastStatus.ok);
+}
+async function autoPollSaveTick() {
+  const prefs = getImportPrefs();
+  if (!prefs.autoPoll) return;
+  try {
+    // No explicit short timeout override here -- an artificially tight reconnect window was a
+    // real risk of silently never succeeding if the bridge took even slightly longer to
+    // respond than that. Falls back to tryConnectCifiBridge's own default timeout instead.
+    const ws = bridgeStatusWs && bridgeStatusWs.readyState === WebSocket.OPEN ? bridgeStatusWs : await window.tryConnectCifiBridge();
+    if (!ws) {
+      setAutoPollStatus(false, 'CIFI Bridge not reachable');
+    } else {
+      const rawText = await window.pullCifiSaveViaBridge(ws);
+      const hash = cheapHash(rawText);
+      if (hash !== store.__lastImportedSaveHash) {
+        store.__lastImportedSaveHash = hash;
+        await processImportedSaveText(rawText, true);
+        setAutoPollStatus(true, 'update found and imported');
+      } else {
+        setAutoPollStatus(true, 'no changes');
+      }
+    }
+  } catch (e) {
+    setAutoPollStatus(false, `pull failed (${e.message})`);
+  }
+  scheduleAutoPollSave();
+}
+function scheduleAutoPollSave() {
+  clearTimeout(autoPollSaveTimer);
+  if (!getImportPrefs().autoPoll) return;
+  autoPollSaveTimer = setTimeout(autoPollSaveTick, AUTO_POLL_SAVE_INTERVAL_MS);
+}
+scheduleAutoPollSave();
 
 // ==================== MANAGE CATEGORIES ====================
 
@@ -2657,9 +2761,27 @@ document.getElementById('importWithUpgradesBtn').onclick = () => {
 // the local CIFI Bridge (ADB, auto-detected) or a directly dropped/selected file -- both feed
 // the same decode+map+apply pipeline, so there's no server involved either way.
 
+function getImportPrefs() {
+  if (!store.importPrefs) store.importPrefs = defaultImportPrefs();
+  return store.importPrefs;
+}
+
+function wireImportChecklist() {
+  const prefs = getImportPrefs();
+  document.querySelectorAll('#importSaveModal [data-import-cat]').forEach((cb) => {
+    cb.checked = prefs.categories[cb.dataset.importCat] !== false;
+    cb.onchange = () => { prefs.categories[cb.dataset.importCat] = cb.checked; saveStore(); };
+  });
+  const pollToggle = document.getElementById('importAutoPollToggle');
+  pollToggle.checked = !!prefs.autoPoll;
+  pollToggle.onchange = () => { prefs.autoPoll = pollToggle.checked; saveStore(); scheduleAutoPollSave(); };
+  renderAutoPollStatus();
+}
+
 function openImportSaveModal() {
   document.getElementById('importSaveModal').classList.remove('hidden');
   document.getElementById('importSaveResult').innerHTML = '';
+  wireImportChecklist();
   const statusText = document.getElementById('importSaveBridgeText');
   const pullBtn = document.getElementById('importSaveBridgePullBtn');
   pullBtn.classList.add('hidden');
@@ -2697,65 +2819,129 @@ function renderImportSaveResult(message, isError) {
   el.innerHTML = `<div class="${isError ? 'text-red-400' : 'text-green-400'}">${message}</div>`;
 }
 
-async function processImportedSaveText(rawText) {
-  renderImportSaveResult('Decoding save…');
+async function processImportedSaveText(rawText, silent) {
+  if (!silent) renderImportSaveResult('Decoding save…');
   let save;
   try {
     save = await window.decodeCifiSaveText(rawText);
   } catch (e) {
-    renderImportSaveResult(`Could not decode this file (${e.message}). Make sure it's an unmodified DATA.text or CifiBackup.text.`, true);
-    return;
+    if (!silent) renderImportSaveResult(`Could not decode this file (${e.message}). Make sure it's an unmodified DATA.text or CifiBackup.text.`, true);
+    return null;
   }
+  const prefs = getImportPrefs();
+  const cats = prefs.categories;
   const mapped = window.mapCifiSaveToStore(save);
-  window.applyImportedShipData(save);
+  const applied = [];
 
-  Object.assign(store.globalUpgrades, mapped.globalUpgrades);
-  Object.entries(mapped.gems).forEach(([treeKey, treeState]) => {
-    if (!store.gems[treeKey]) return;
-    store.gems[treeKey].level = treeState.level;
-    treeState.nodes.forEach((on, i) => { store.gems[treeKey].nodes[i] = on; });
-  });
-  // Maintains one dedicated "<Hunter> Build (Scanned)" card per hunter that always reflects
-  // the most recently scanned save -- rather than silently overwriting whatever build
-  // happened to be first in the list. Only touches it (creating or updating) when the
-  // scanned level/talents actually differ from what's already there, so re-importing the
-  // same save repeatedly doesn't keep bumping it or spamming re-renders. Also caches the
-  // raw scanned level/talents per hunter (window.__lastScan, persisted) so the build editor
-  // can offer "load scanned values" independently of this auto-managed card.
-  window.__lastScan = window.__lastScan || {};
-  Object.entries(mapped.perHunter).forEach(([hunterKey, info]) => {
-    if (!store[hunterKey]) return;
-    window.__lastScan[hunterKey] = { level: info.level, talents: { ...(info.talents || {}) }, attributes: { ...(info.attributes || {}) } };
-    const scanName = `${hunterKey[0].toUpperCase()}${hunterKey.slice(1)} Build (Scanned)`;
-    const builds = store[hunterKey].builds;
-    const existing = builds.find((b) => b.name === scanName);
-    const sameKeys = (a, b) => Object.keys({ ...a, ...b }).every((k) => (a[k] || 0) === (b[k] || 0));
-    const unchanged = existing && sameKeys(existing.talents, info.talents || {}) && sameKeys(existing.attributes, info.attributes || {})
-      && existing.level === (info.level ?? existing.level);
-    if (unchanged) return;
-    if (existing) {
-      if (info.level !== undefined) existing.level = info.level;
-      Object.entries(info.talents || {}).forEach(([talentId, level]) => { existing.talents[talentId] = level; });
-      Object.entries(info.attributes || {}).forEach(([attrId, level]) => { existing.attributes[attrId] = level; });
-    } else {
-      const build = newDraftBuild();
-      build.id = genBuildId();
-      build.name = scanName;
-      if (info.level !== undefined) build.level = info.level;
-      Object.entries(info.talents || {}).forEach(([talentId, level]) => { build.talents[talentId] = level; });
-      Object.entries(info.attributes || {}).forEach(([attrId, level]) => { build.attributes[attrId] = level; });
-      builds.push(build);
-    }
-  });
-  localStorage.setItem('huntersim_last_scan', JSON.stringify(window.__lastScan));
+  // Ship-related pieces used to be one all-or-nothing call -- now each is its own checklist
+  // item, so applyImportedShipData takes exactly which ones to apply.
+  const shipCats = {
+    shipRanks: !!cats.shipRanks, shipGear: !!cats.shipGear, unlockedGens: !!cats.unlockedGens,
+    gearSets: !!cats.gearSets, fleetBadges: !!cats.fleetBadges, fleetResearch: !!cats.fleetResearch,
+  };
+  if (Object.values(shipCats).some(Boolean)) {
+    window.applyImportedShipData(save, shipCats);
+    if (shipCats.shipRanks) { autofillShipInputFromSave(); applied.push('ship ranks/crew/installs'); }
+    if (shipCats.shipGear) applied.push('ship progression counters');
+    if (shipCats.unlockedGens) applied.push('unlocked generator tiers');
+    if (shipCats.gearSets) applied.push('gear sets');
+    if (shipCats.fleetBadges) applied.push('academy badges');
+    if (shipCats.fleetResearch) applied.push('fleet research');
+  }
+
+  // globalUpgrades keys are prefixed by category ("relics.x", "inscryptions.iN",
+  // "diamondcards.x", "shardmilestones.m0") -- split by prefix so each can be its own toggle.
+  const applyUpgradesByPrefix = (prefix, label, catOn) => {
+    if (!catOn) return;
+    let any = false;
+    Object.entries(mapped.globalUpgrades).forEach(([key, val]) => {
+      if (!key.startsWith(prefix)) return;
+      store.globalUpgrades[key] = val;
+      any = true;
+    });
+    if (any) applied.push(label);
+  };
+  applyUpgradesByPrefix('relics.', 'relics', cats.relics);
+  applyUpgradesByPrefix('inscryptions.', 'inscryptions', cats.inscriptions);
+  applyUpgradesByPrefix('diamondcards.', 'diamond cards', cats.diamondCards);
+  applyUpgradesByPrefix('shardmilestones.', 'milestone #0', cats.milestone);
+
+  if (cats.gems) {
+    Object.entries(mapped.gems).forEach(([treeKey, treeState]) => {
+      if (!store.gems[treeKey]) return;
+      store.gems[treeKey].level = treeState.level;
+      treeState.nodes.forEach((on, i) => { store.gems[treeKey].nodes[i] = on; });
+    });
+    applied.push('gems');
+  }
+
+  if (cats.hunterBuilds) {
+    // Maintains one dedicated "<Hunter> Build (Scanned)" card per hunter that always reflects
+    // the most recently scanned save -- rather than silently overwriting whatever build
+    // happened to be first in the list. Only touches it (creating or updating) when the
+    // scanned level/talents actually differ from what's already there, so re-importing the
+    // same save repeatedly doesn't keep bumping it or spamming re-renders. Also caches the
+    // raw scanned level/talents per hunter (window.__lastScan, persisted) so the build editor
+    // can offer "load scanned values" independently of this auto-managed card.
+    window.__lastScan = window.__lastScan || {};
+    Object.entries(mapped.perHunter).forEach(([hunterKey, info]) => {
+      if (!store[hunterKey]) return;
+      window.__lastScan[hunterKey] = { level: info.level, talents: { ...(info.talents || {}) }, attributes: { ...(info.attributes || {}) } };
+      const scanName = `${hunterKey[0].toUpperCase()}${hunterKey.slice(1)} Build (Scanned)`;
+      const builds = store[hunterKey].builds;
+      const existing = builds.find((b) => b.name === scanName);
+      const sameKeys = (a, b) => Object.keys({ ...a, ...b }).every((k) => (a[k] || 0) === (b[k] || 0));
+      const unchanged = existing && sameKeys(existing.talents, info.talents || {}) && sameKeys(existing.attributes, info.attributes || {})
+        && existing.level === (info.level ?? existing.level);
+      if (unchanged) return;
+      if (existing) {
+        if (info.level !== undefined) existing.level = info.level;
+        Object.entries(info.talents || {}).forEach(([talentId, level]) => { existing.talents[talentId] = level; });
+        Object.entries(info.attributes || {}).forEach(([attrId, level]) => { existing.attributes[attrId] = level; });
+      } else {
+        const build = newDraftBuild();
+        build.id = genBuildId();
+        build.name = scanName;
+        if (info.level !== undefined) build.level = info.level;
+        Object.entries(info.talents || {}).forEach(([talentId, level]) => { build.talents[talentId] = level; });
+        Object.entries(info.attributes || {}).forEach(([attrId, level]) => { build.attributes[attrId] = level; });
+        builds.push(build);
+      }
+    });
+    localStorage.setItem('huntersim_last_scan', JSON.stringify(window.__lastScan));
+    applied.push('hunter level/talents/attributes');
+  }
+
   saveStore();
-  renderGemsPage(document.getElementById('pageRoot'));
-  if (currentRoute() === 'sim') { renderCategoryTabs(); renderBuildList(); }
+  render();
 
-  const skipped = mapped.unmapped.length
-    ? `<div class="text-gray-400 text-xs mt-1">Not yet mapped (left unchanged): ${mapped.unmapped.join(', ')}</div>`
-    : '';
-  renderImportSaveResult(`Imported relics, inscryptions, diamond cards, gems, hunter level, talents, and attributes.${skipped}`);
+  if (silent) {
+    showImportToast(applied.length ? `Save update detected -- re-imported ${applied.join(', ')}.` : 'Save update detected, but nothing is checked to import.');
+  } else {
+    const skipped = mapped.unmapped.length
+      ? `<div class="text-gray-400 text-xs mt-1">Not yet mapped (left unchanged): ${mapped.unmapped.join(', ')}</div>`
+      : '';
+    const summary = applied.length ? `Imported ${applied.join(', ')}.` : 'Nothing is checked in the list above -- check at least one category to import.';
+    renderImportSaveResult(`${summary}${skipped}`);
+  }
+  return rawText;
+}
+
+// Small transient toast for auto-poll imports -- the import modal isn't necessarily open when
+// this fires, so it can't just write into importSaveResult.
+let importToastTimer = null;
+function showImportToast(message) {
+  let el = document.getElementById('importToast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'importToast';
+    el.className = 'fixed bottom-4 right-4 z-[60] max-w-xs px-4 py-3 rounded-lg bg-gray-800 border border-green-700 text-green-300 text-sm shadow-2xl transition-opacity duration-300';
+    document.body.appendChild(el);
+  }
+  el.textContent = message;
+  el.style.opacity = '1';
+  clearTimeout(importToastTimer);
+  importToastTimer = setTimeout(() => { el.style.opacity = '0'; }, 5000);
 }
 
 const importSaveDropZone = document.getElementById('importSaveDropZone');

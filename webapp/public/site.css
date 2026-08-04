@@ -66,5 +66,7 @@
 .nav-pill.active-borge{background:linear-gradient(to right,#7f1d1d66,#7f1d1d33);color:#fca5a5;border:1px solid #b91c1c80}
 .nav-pill.active-ozzy{background:linear-gradient(to right,#14532d66,#14532d33);color:#86efac;border:1px solid #15803d80}
 .nav-pill.active-knox{background:linear-gradient(to right,#1e3a8a66,#1e3a8a33);color:#93c5fd;border:1px solid #1d4ed880}
+.nav-pill.active{background-color:#374151;color:#fff}
 .nav-pill-mobile{display:block;width:100%;text-align:left;padding:.625rem .875rem;border-radius:.5rem;font-size:15px;font-weight:500;color:#d1d5db;background-color:#374151;transition:all .15s ease}
 .nav-pill-mobile:hover,.nav-pill-mobile:active{color:#fff;background-color:#4b5563}
+.nav-pill-mobile.active,.nav-pill-mobile.active-borge,.nav-pill-mobile.active-ozzy,.nav-pill-mobile.active-knox{color:#fff;background-color:#4b5563}

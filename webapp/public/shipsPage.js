@@ -685,33 +685,47 @@ function computeGearSetBonusMultipliers() {
   return mults;
 }
 
-window.applyImportedShipData = function applyImportedShipData(save) {
+// `cats` is an object of booleans, one per granular import category (see IMPORT_SHIP_CATEGORIES
+// below) -- every piece here used to be a single all-or-nothing call, bundling things like Ship
+// Ranks/Installs, Gear Sets, Academy Badges, and Fleet Research together with no way to import
+// just one. Omit `cats` (or pass nothing truthy) to apply nothing -- callers must opt in per
+// piece, same convention as the rest of the checklist-driven import.
+window.applyImportedShipData = function applyImportedShipData(save, cats = {}) {
   if (!window.store) return;
-  window.store.ships = window.mapCifiSaveToShips(save);
-  window.store.researchUnits = window.mapCifiSaveToResearchUnits(save);
-  Object.assign(getUnlockedGens(), window.mapCifiSaveToUnlockedGens(save));
-  // Fleet Stats & Meltdown and Gear Sets have no existing "raw store + manual Autofill button"
-  // step like Ship Setup does -- apply them straight into the live editable stores on import,
-  // per-field, so a value this save doesn't confirm (loopMods, studiesCompleted) is left as
-  // whatever the user already had instead of being zeroed out.
-  const gearUpdates = window.mapCifiSaveToShipGear(save);
-  const gear = getShipGear();
-  Object.assign(gear, gearUpdates);
-  // Fleet Analysis 1/2 (Research #68/#78) -- direct field match, RU{68,78}Level, never wired up
-  // before (their levels always defaulted to 0/manual-entry only).
-  const research = getFleetResearch();
-  if (save.RU68Level !== undefined) research.levels.fleetAnalysis1 = realNum(save.RU68Level);
-  if (save.RU78Level !== undefined) research.levels.fleetAnalysis2 = realNum(save.RU78Level);
-  const gearLevels = window.mapCifiSaveToGearLevels(save);
-  const gearSets = getGearSets();
-  const seenPerColor = {};
-  gearSets.pieces.forEach((p) => {
-    seenPerColor[p.color] = (seenPerColor[p.color] || 0) + 1;
-    const level = gearLevels[`${p.color}${seenPerColor[p.color]}`];
-    if (level != null) { p.level = level; p.owned = level > 0; }
-  });
-  const badges = getFleetBadges();
-  Object.assign(badges.owned, window.mapCifiSaveToFleetBadges(save));
+  if (cats.shipRanks) {
+    window.store.ships = window.mapCifiSaveToShips(save);
+    window.store.researchUnits = window.mapCifiSaveToResearchUnits(save);
+  }
+  if (cats.unlockedGens) {
+    Object.assign(getUnlockedGens(), window.mapCifiSaveToUnlockedGens(save));
+  }
+  if (cats.shipGear) {
+    // Fleet Stats & Meltdown have no existing "raw store + manual Autofill button" step like
+    // Ship Setup does -- applied straight into the live editable store on import, per-field, so
+    // a value this save doesn't confirm (loopMods, studiesCompleted) is left as whatever the
+    // user already had instead of being zeroed out.
+    const gearUpdates = window.mapCifiSaveToShipGear(save);
+    Object.assign(getShipGear(), gearUpdates);
+  }
+  if (cats.fleetResearch) {
+    // Fleet Analysis 1/2 (Research #68/#78) -- direct field match, RU{68,78}Level.
+    const research = getFleetResearch();
+    if (save.RU68Level !== undefined) research.levels.fleetAnalysis1 = realNum(save.RU68Level);
+    if (save.RU78Level !== undefined) research.levels.fleetAnalysis2 = realNum(save.RU78Level);
+  }
+  if (cats.gearSets) {
+    const gearLevels = window.mapCifiSaveToGearLevels(save);
+    const gearSets = getGearSets();
+    const seenPerColor = {};
+    gearSets.pieces.forEach((p) => {
+      seenPerColor[p.color] = (seenPerColor[p.color] || 0) + 1;
+      const level = gearLevels[`${p.color}${seenPerColor[p.color]}`];
+      if (level != null) { p.level = level; p.owned = level > 0; }
+    });
+  }
+  if (cats.fleetBadges) {
+    Object.assign(getFleetBadges().owned, window.mapCifiSaveToFleetBadges(save));
+  }
   window.saveStore();
 };
 
@@ -746,8 +760,7 @@ function renderShipSetupPage(root) {
   root.innerHTML = `
     <div class="mb-4 rounded-lg overflow-hidden shadow-lg">
       <div class="bg-gradient-to-r from-blue-900 to-gray-800 px-5 py-4 border-b border-gray-600 flex items-center justify-between">
-        <div><h1 class="text-xl font-bold">Ship Setup</h1><p class="text-xs text-gray-300 mt-0.5">Your fleet's current real state -- the Fleet optimizer starts planning from here.</p></div>
-        <button id="autofillAllBtn" class="px-3 py-2 rounded-full bg-gradient-to-r from-green-600 to-green-800 hover:from-green-700 hover:to-green-900 text-white font-semibold shadow-lg text-xs sm:text-sm flex-shrink-0">${iconSvg('download', 16)}<span class="ml-1">Autofill All From Save</span></button>
+        <div><h1 class="text-xl font-bold">Ship Setup</h1><p class="text-xs text-gray-300 mt-0.5">Your fleet's current real state -- the Fleet optimizer starts planning from here. Check "Fleet / Ship Setup" in Import Save to autofill this from your save.</p></div>
       </div>
       <div class="bg-gray-800/70 px-5 py-2.5 flex items-center gap-2 flex-wrap">
         <span class="text-xs text-gray-400 flex-shrink-0">Unlocked Generator Tiers</span>
@@ -755,8 +768,6 @@ function renderShipSetupPage(root) {
       </div>
     </div>
     <div class="grid gap-3" id="shipSetupList" style="grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));"></div>`;
-
-  document.getElementById('autofillAllBtn').onclick = () => { autofillShipInputFromSave(); renderShipSetupPage(root); };
 
   const unlockedGens = getUnlockedGens();
   const gensEl = document.getElementById('shipSetupPageUnlockedGens');

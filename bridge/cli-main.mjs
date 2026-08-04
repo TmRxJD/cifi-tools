@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { ensureAdbReady, registerAdbOnPath } from './adb-setup.mjs'
 import { findInstalledAdbOffPath, resolveAdbExecutable } from './adb-resolve.mjs'
-import { installBootEntry, isBootEntryInstalled, removeBootEntry } from './boot-persistence.mjs'
+import { installBootEntry, isBootEntryInstalled, isBootEntryStale, removeBootEntry } from './boot-persistence.mjs'
 import { BRIDGE_VERSION, startLocalAdbBridge } from './server.mjs'
 import { maybeUpdateBridge } from './update-check.mjs'
 
@@ -134,6 +134,15 @@ async function promptPathSetupIfNeeded(log = console.log) {
 }
 
 async function resolveBootAndBackground(options, log = console.log) {
+  // Self-heal an existing-but-stale boot entry (the pre-fix format that could get "confirmed as
+  // registered" but silently never actually launch at sign-in) unconditionally, even on a
+  // non-interactive boot-triggered daemon launch -- that's specifically the invocation that
+  // would otherwise never reach either branch below (it's launched with --no-boot and no TTY),
+  // so it's also the one invocation where healing actually matters most.
+  if (await isBootEntryStale()) {
+    await installBootEntry(log)
+  }
+
   if (options.boot) {
     await installBootEntry(log)
   } else if (!options.noBoot && process.stdin.isTTY) {
