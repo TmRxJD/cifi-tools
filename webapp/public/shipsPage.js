@@ -919,12 +919,12 @@ function renderHexGrid(container, catalog, levels, options = {}) {
         const img = document.createElement('img');
         img.src = iconPath;
         img.className = locked ? 'opacity-30' : 'opacity-95';
-        img.style.cssText = `position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${Math.round(hexSize * 1.15)}px;height:${Math.round(hexHeight * 1.15)}px;object-fit:contain;pointer-events:none;`;
+        img.style.cssText = `position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${Math.round(hexSize * 1.035)}px;height:${Math.round(hexHeight * 1.035)}px;object-fit:contain;pointer-events:none;`;
         img.onerror = () => img.remove();
         tile.appendChild(img);
       }
       const label = document.createElement('div');
-      label.className = `text-center mt-1 ${locked ? 'text-gray-600' : 'text-gray-200'}`;
+      label.className = `text-center -mt-0.5 ${locked ? 'text-gray-600' : 'text-gray-200'}`;
       label.innerHTML = `<span class="${options.small ? 'text-[10px]' : 'text-xs'} font-semibold">${level}</span><span class="${options.small ? 'text-[8px]' : 'text-[10px]'} text-gray-400">/${maxLevel}</span>`;
       wrap.appendChild(tile);
       wrap.appendChild(label);
@@ -1185,6 +1185,8 @@ function openNewLoadoutModal() {
   document.getElementById('newLoadoutZaglag').addEventListener('change', (e) => { optSettings.zaglag = e.target.checked; window.saveStore(); });
   document.getElementById('newLoadoutPrepForLongRun').checked = optSettings.prepForLongRun;
   document.getElementById('newLoadoutPrepForLongRun').addEventListener('change', (e) => { optSettings.prepForLongRun = e.target.checked; window.saveStore(); });
+  document.getElementById('newLoadoutRunLength').value = optSettings.runLength;
+  document.getElementById('newLoadoutRunLength').addEventListener('change', (e) => { optSettings.runLength = e.target.value; window.saveStore(); });
   // Focus weights live here (not the Fleet Stats page) -- they're an input to THIS solve, not
   // a persistent fleet-wide account stat. Meltdown lives here too now (moved off the Fleet page
   // header -- it's a per-run input to planning, not a fleet-wide display value).
@@ -1297,9 +1299,24 @@ function nodeScalesWithGrowth(gearKey) {
   if (!gearKey) return false;
   return Array.isArray(gearKey) ? gearKey.some((k) => GROWTH_GEAR_KEYS.has(k)) : GROWTH_GEAR_KEYS.has(gearKey);
 }
+// Run Length tactic: skews the optimizer's Cells-vs-Generators preference within the "cells"
+// weight bucket (see RESOURCE_TO_WEIGHT_BUCKET -- both direct Cells nodes and all Generator-tier
+// nodes feed that one slider, so there's otherwise no way to prefer one over the other). Direct
+// Cells nodes pay off immediately; Generator nodes pay off by compounding output over time, so
+// they're worth relatively more the longer the run is. These multipliers are a modest, clearly-
+// flagged heuristic (not a measured constant, same spirit as GROWTH_VALUE_BOOST) -- there's no
+// way to know the "true" relative value without knowing your actual run length in advance.
+const RUN_LENGTH_BIAS = {
+  short: { cells: 1.35, gen: 0.7 },
+  balanced: { cells: 1, gen: 1 },
+  long: { cells: 0.7, gen: 1.35 },
+};
+function runLengthBiasFor(runLength) {
+  return RUN_LENGTH_BIAS[runLength] || RUN_LENGTH_BIAS.balanced;
+}
 // Marginal value of spending one more point on `slot` right now, given the current (real +
 // whatever this optimization run has hypothetically added so far) pool totals. Mutates nothing.
-function poolAdjustedNodeValue(shipId, slot, pools) {
+function poolAdjustedNodeValue(shipId, slot, pools, runLength) {
   const meta = SHIP_NODE_CATALOG[shipId]?.[slot];
   if (!meta) return 0;
   const increment = nodeLinearIncrement(shipId, slot) * (nodeScalesWithGrowth(meta.gearKey) ? GROWTH_VALUE_BOOST : 1);
@@ -1309,6 +1326,7 @@ function poolAdjustedNodeValue(shipId, slot, pools) {
   const isAllGens = tags.includes('allGens');
   if (!isAllGens && genTiers.length === 0 && !tags.includes('cells')) return increment; // Shards/RP/MP/Academy/Materials -- flat linear value, no pool tracking (known gap, not modeled yet)
   const meltdown = getShipGear().meltdown || 0;
+  const bias = runLengthBiasFor(runLength);
   if (!isAllGens && genTiers.length === 0) {
     // Direct Cells: bypasses the Meltdown EXPONENT (exponent 1, no melt), but is NOT exempt from
     // real diminishing returns -- it still saturates relative to its own (typically enormous,
@@ -1317,7 +1335,7 @@ function poolAdjustedNodeValue(shipId, slot, pools) {
     // so its OWN relative marginal gain shrinks toward ~0 quickly, while less-saturated
     // Generator tiers keep offering a comparatively bigger relative jump despite the melt.
     const base = pools.cells || MELTDOWN_POOL_EPS;
-    return ((base + increment) / base - 1) * 100;
+    return (((base + increment) / base - 1) * 100) * bias.cells;
   }
   const affectedTiers = isAllGens ? GEN_TIERS.map((n) => `mk${n}`) : genTiers;
   let ratio = 1;
@@ -1325,7 +1343,7 @@ function poolAdjustedNodeValue(shipId, slot, pools) {
     const base = pools[tier] || MELTDOWN_POOL_EPS;
     ratio *= Math.pow((base + increment) / base, meltdown);
   });
-  return (ratio - 1) * 100;
+  return ((ratio - 1) * 100) * bias.gen;
 }
 // Real allocator -- weighted round-robin ACROSS RESOURCE CATEGORIES, not a single global
 // ranking. Two things this fixes over an earlier "highest constant marginal value wins"
@@ -1346,7 +1364,7 @@ function poolAdjustedNodeValue(shipId, slot, pools) {
 // target to reach on top of existing installs. Real current installs are a separate concern
 // (see "Effective Path" in openLoadoutDetail, which uses this same ideal sequence's tail to
 // advise what to buy next from wherever you really are).
-function optimizeShipInstalls(shipId, budget, weights, meltdownFactor, prepForLongRun) {
+function optimizeShipInstalls(shipId, budget, weights, meltdownFactor, prepForLongRun, runLength) {
   const catalog = SHIP_NODE_CATALOG[shipId] || {};
   const levels = {};
   const clicks = [];
@@ -1428,7 +1446,7 @@ function optimizeShipInstalls(shipId, budget, weights, meltdownFactor, prepForLo
     let bestSlot = null; let bestRatio = Infinity; let bestPriority = Infinity; let bestScore = -Infinity;
     slots.forEach((slot) => {
       if (!categoryOf[slot].includes(c) || !nodeEligible(slot, exclude)) return;
-      const score = Math.max(poolAdjustedNodeValue(shipId, slot, pools), 1e-9);
+      const score = Math.max(poolAdjustedNodeValue(shipId, slot, pools, runLength), 1e-9);
       const ratio = nodeSpent[slot] / score;
       const priority = nodeTiePriority(effectResources(catalog[slot].effect));
       const better = ratio < bestRatio
@@ -1522,11 +1540,12 @@ function optimizeShipInstalls(shipId, budget, weights, meltdownFactor, prepForLo
 function defaultOptimizerSettings() {
   const shipEnabled = {};
   for (let n = 1; n <= 7; n++) shipEnabled[n] = true;
-  return { shipEnabled, zaglag: false, prepForLongRun: false };
+  return { shipEnabled, zaglag: false, prepForLongRun: false, runLength: 'balanced' };
 }
 function getOptimizerSettings() {
   if (!window.store) return defaultOptimizerSettings();
   if (!window.store.optimizerSettings) window.store.optimizerSettings = defaultOptimizerSettings();
+  if (!window.store.optimizerSettings.runLength) window.store.optimizerSettings.runLength = 'balanced';
   return window.store.optimizerSettings;
 }
 
@@ -1625,6 +1644,8 @@ function openOptimizeShipModal(shipId) {
   prepWrap.classList.toggle('hidden', shipId !== 5);
   document.getElementById('optimizeShipPrepForLongRun').checked = optSettings.prepForLongRun;
   document.getElementById('optimizeShipPrepForLongRun').onchange = (e) => { optSettings.prepForLongRun = e.target.checked; window.saveStore(); };
+  document.getElementById('optimizeShipRunLength').value = optSettings.runLength;
+  document.getElementById('optimizeShipRunLength').onchange = (e) => { optSettings.runLength = e.target.value; window.saveStore(); };
   renderFocusWeightSliders(document.getElementById('optimizeShipFocusWeights'), gear.focusWeights, document.getElementById('optimizeShipWeightPresetBtn'));
   document.getElementById('optimizeShipModal').classList.remove('hidden');
 }
@@ -1633,8 +1654,9 @@ document.getElementById('optimizeShipGenerateBtn').onclick = () => {
   const shipId = optimizeShipModalShipId;
   const budget = Number(document.getElementById('optimizeShipPoints').value) || 0;
   const gear = getShipGear();
-  const prepForLongRun = shipId === 5 && getOptimizerSettings().prepForLongRun;
-  const { levels, clicks } = optimizeShipInstalls(shipId, budget, gear.focusWeights, OPTIMIZER_MELTDOWN_FACTOR, prepForLongRun);
+  const optSettings = getOptimizerSettings();
+  const prepForLongRun = shipId === 5 && optSettings.prepForLongRun;
+  const { levels, clicks } = optimizeShipInstalls(shipId, budget, gear.focusWeights, OPTIMIZER_MELTDOWN_FACTOR, prepForLongRun, optSettings.runLength);
   const activeLoadout = getActiveLoadout();
   activeLoadout.perShip[shipId] = { budget, levels, clicks };
   window.saveStore();
@@ -1667,7 +1689,7 @@ document.getElementById('generateLoadoutBtn').onclick = () => {
     if (optSettings.shipEnabled[shipId] === false) return; // unchecked -- leave untouched, not part of this batch
     if (optSettings.zaglag && shipId === 3) return; // Zaglag: treat Zagreus as not-yet-unlocked
     const budget = Number(el.value) || 0;
-    const { levels, clicks } = optimizeShipInstalls(shipId, budget, gear.focusWeights, OPTIMIZER_MELTDOWN_FACTOR, shipId === 5 && optSettings.prepForLongRun);
+    const { levels, clicks } = optimizeShipInstalls(shipId, budget, gear.focusWeights, OPTIMIZER_MELTDOWN_FACTOR, shipId === 5 && optSettings.prepForLongRun, optSettings.runLength);
     perShip[shipId] = { budget, levels, clicks };
   });
   activeLoadout.perShip = perShip;
@@ -1715,10 +1737,11 @@ function openLoadoutDetail(shipId, levels, mode, clicks) {
     // the sequence for that smaller budget -- meaning "ideal sequence up to my real total" is a
     // stable reference point even though your real per-node distribution likely doesn't match it.
     const gear = getShipGear();
-    const prepForLongRun = shipId === 5 && getOptimizerSettings().prepForLongRun;
+    const optSettings = getOptimizerSettings();
+    const prepForLongRun = shipId === 5 && optSettings.prepForLongRun;
     const realTotal = Object.values(getShipInput(shipId).installs).reduce((a, b) => a + b, 0);
-    const full = optimizeShipInstalls(shipId, realTotal + 30, gear.focusWeights, OPTIMIZER_MELTDOWN_FACTOR, prepForLongRun);
-    const atRealTotal = optimizeShipInstalls(shipId, realTotal, gear.focusWeights, OPTIMIZER_MELTDOWN_FACTOR, prepForLongRun);
+    const full = optimizeShipInstalls(shipId, realTotal + 30, gear.focusWeights, OPTIMIZER_MELTDOWN_FACTOR, prepForLongRun, optSettings.runLength);
+    const atRealTotal = optimizeShipInstalls(shipId, realTotal, gear.focusWeights, OPTIMIZER_MELTDOWN_FACTOR, prepForLongRun, optSettings.runLength);
     const nextClicks = full.clicks.slice(realTotal);
     lines = expandClicks(nextClicks, catalog, atRealTotal.levels, shipId);
     note = 'Every individual point-spend for the next points beyond your current total (once you earn them), in order, following the ideal allocation path -- interleaved across nodes, never bulk-bought.';

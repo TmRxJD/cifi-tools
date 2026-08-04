@@ -57,6 +57,7 @@ function defaultImportPrefs() {
     },
     autoPoll: false,
     quiet: false, // suppress the "update found" toast when auto-poll silently re-imports
+    checklistCollapsed: false,
   };
 }
 
@@ -146,6 +147,7 @@ function loadStore() {
         if (!(key in parsed.importPrefs.categories)) parsed.importPrefs.categories[key] = def;
       });
       if (parsed.importPrefs.quiet === undefined) parsed.importPrefs.quiet = false;
+      if (parsed.importPrefs.checklistCollapsed === undefined) parsed.importPrefs.checklistCollapsed = false;
       if (!parsed.optimizerSettings) parsed.optimizerSettings = { shipEnabled: { 1: true, 2: true, 3: true, 4: true, 5: true, 6: true, 7: true }, zaglag: false, prepForLongRun: false };
       if (parsed.optimizerSettings.prepForLongRun === undefined) parsed.optimizerSettings.prepForLongRun = false;
       if (!parsed.loadoutTabs) {
@@ -2784,6 +2786,19 @@ function wireImportChecklist() {
   quietToggle.checked = !!prefs.quiet;
   quietToggle.onchange = () => { prefs.quiet = quietToggle.checked; saveStore(); };
   renderAutoPollStatus();
+
+  const body = document.getElementById('importChecklistBody');
+  const chevron = document.getElementById('importChecklistChevron');
+  const applyCollapsed = () => {
+    body.classList.toggle('hidden', prefs.checklistCollapsed);
+    chevron.style.transform = prefs.checklistCollapsed ? 'rotate(-90deg)' : '';
+  };
+  applyCollapsed();
+  document.getElementById('importChecklistToggleBtn').onclick = () => {
+    prefs.checklistCollapsed = !prefs.checklistCollapsed;
+    saveStore();
+    applyCollapsed();
+  };
 }
 
 function openImportSaveModal() {
