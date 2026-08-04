@@ -316,24 +316,28 @@ function computeFleetBoostTotals() {
   });
   return totals;
 }
-// Sums every Fleet Boost item's pctEffect at its current level for one ship -> { [resource]: pct }
+// Every Fleet Boost item's pctEffect at its current level for one ship -> { [resource]: multiplier }
 // `per: 'rank'` scales by that ship's rank-up count (input.rank); `per: 'crew'` by its crew
-// count (base + boost grants). Additive within a resource, same convention as node effects.
+// count (base + boost grants). Each item's own % converts to its own (1 + pct/100) multiplier and
+// multiplies into the resource's running total -- see computeResourceBonuses for why (matches how
+// node effects now combine too).
 function computeFleetPctBonuses(shipId) {
   const input = getShipInput(shipId);
   const boostTotals = computeFleetBoostTotals()[shipId];
   const crew = (input.crew || 0) + (boostTotals?.crew || 0);
   const rank = (input.rank || 0) + (boostTotals?.rank || 0);
-  const totals = {};
+  const mults = {};
   FLEET_BOOST_ITEMS.forEach((item) => {
     if (!item.pctEffect) return;
     const level = getBoostLevel(item);
     if (!level || !item.pctEffect.ships.includes(shipId)) return;
     const scale = item.pctEffect.per === 'crew' ? crew : rank;
     const pct = item.pctEffect.perLevel * level * scale;
-    totals[item.pctEffect.resource] = (totals[item.pctEffect.resource] || 0) + pct;
+    if (!pct) return;
+    const res = item.pctEffect.resource;
+    mults[res] = (mults[res] || 1) * additiveToMultiplier(pct);
   });
-  return totals;
+  return mults;
 }
 
 // Ship display names + portrait assets (canonical order 1-7; Ship8 is a special/later ship
@@ -467,19 +471,23 @@ function gearMultiplierFor(gearKey, gear) {
   return gear[gearKey] || 0;
 }
 
-// Per cifi.fandom.com/wiki/Calculations_and_Formulas: each node's contribution is additive
-// (c = 1 + sum(a*b) across every source feeding the same resource), where for a ship install
-// node a = %-per-level/100 and b = level * crew * (gear qualifier count, if the effect names
-// one, e.g. "per manually purchased generator"). Every node effect includes "per crew member"
-// -- multiplying by crew was previously MISSING entirely, which is why totals looked far too
-// low compared to real in-game bonuses at high investment. Returns the raw additive-% total
-// per resource (still summed across nodes); convert to the final "x{multiplier}" the game
-// actually displays via additiveToMultiplier() at render time, not here, so callers can keep
-// combining multiple ships' contributions into one grand total before the final +1 conversion.
-// A single node's own additive-% contribution at a given level -- the same per-node term
-// computeResourceBonuses sums across a whole ship, factored out so the node's OWN tooltip can
-// show its real "Total Bonus" (the same value the in-game upgrade detail panel shows for that
-// one node) without duplicating the crew/gear/research/badge math in two places.
+// WITHIN one node, going up a level is confirmed linear/additive (c = 1 + level*a*b/100, a =
+// %-per-level, b = crew * gear qualifier count) -- verified three times against real account
+// data: the wiki's own documented per-level improvement curve (100%, 50%, 33.33%, 25%... i.e.
+// exactly 1/(L-1), which only falls out of a pure linear total) and two live screenshot matches
+// on Cradle's Mitosis Enhancements (level 18 -> x1.23m, level 19 -> x1.30m). ACROSS different
+// nodes/ships/Fleet-Boost-items feeding the SAME resource, combination is multiplicative, not
+// additive: every bonus card the game shows displays an "x" multiplier, never a "+" percentage,
+// and the wiki's Calculations page states the game's default is "all percentage-based bonuses
+// are multiplicative when stacked, unless told otherwise" (no ship-install node is marked
+// "(additive)" in its own effect text). This is an inference from those two signals, not a
+// live cross-source diff (the game doesn't expose a combined-total display to diff against) --
+// treat it at the same confidence tier as a `source: 'wiki'` catalog entry, not `'confirmed'`.
+// A single node's own contribution at a given level, in raw %/100 terms (not yet converted to a
+// multiplier) -- computeResourceBonuses converts THIS to its own (1+pct/100) factor before
+// multiplying it in; factored out separately so the node's OWN tooltip can show its real "Total
+// Bonus" (the same value the in-game upgrade detail panel shows for that one node) without
+// duplicating the crew/gear/research/badge math in two places.
 function nodeOwnBonusPct(shipId, slot, level) {
   const meta = SHIP_NODE_CATALOG[shipId]?.[slot];
   if (!meta || !level) return 0;
@@ -493,30 +501,36 @@ function nodeOwnBonusPct(shipId, slot, level) {
   const gearNodeMult = computeGearNodeMultiplier(Number(shipId), Number(slot));
   return parseFloat(m[1]) * level * crew * gearMult * researchMult * gearNodeMult;
 }
+// Returns { [resource]: multiplier } for one ship -- every node's own (1+pct/100) factor
+// multiplies directly into the running per-resource total (see the note above nodeOwnBonusPct
+// for why this is multiplicative, not additive, across different nodes/items).
 function computeResourceBonuses(shipId, levels) {
   const catalog = SHIP_NODE_CATALOG[shipId] || {};
-  const totals = {};
+  const mults = {};
   Object.entries(levels || {}).forEach(([slot, lvl]) => {
     if (!lvl) return;
     const meta = catalog[slot];
     if (!meta) return;
     const pct = nodeOwnBonusPct(shipId, slot, lvl);
     if (!pct) return;
-    effectResources(meta.effect).forEach((res) => { totals[res] = (totals[res] || 0) + pct; });
+    const factor = additiveToMultiplier(pct);
+    effectResources(meta.effect).forEach((res) => { mults[res] = (mults[res] || 1) * factor; });
   });
   // Fleet Boost items with a pctEffect (Rank Benefits / Crew Motivation Modules, Rule of the
-  // Cradle) grant a flat % to one specific resource, independent of install levels -- added
-  // straight into the same additive-per-resource totals.
-  mergeResourceTotals(totals, computeFleetPctBonuses(shipId));
+  // Cradle) grant a flat % to one specific resource, independent of install levels -- each
+  // item's own factor multiplies into the same per-resource totals as the nodes above.
+  mergeResourceTotals(mults, computeFleetPctBonuses(shipId));
   // Gear Set piece-owned flat multipliers (x25 Shards etc, see computeGearSetBonusMultipliers)
-  // are a multiplier on the FINAL resource total across the whole fleet, not an additive-%
-  // contribution from one ship -- applied once at the Fleet page's grand-total display instead
-  // of per-ship here.
-  return totals;
+  // are a multiplier on the FINAL resource total across the whole fleet, not a per-ship
+  // contribution -- applied once at the Fleet page's grand-total display instead of per-ship
+  // here, same as before.
+  return mults;
 }
 
+// Combines multiple { [resource]: multiplier } maps by multiplying matching keys together (see
+// the note above nodeOwnBonusPct for why cross-source combination is multiplicative).
 function mergeResourceTotals(target, add) {
-  Object.entries(add).forEach(([k, v]) => { target[k] = (target[k] || 0) + v; });
+  Object.entries(add).forEach(([k, v]) => { target[k] = (target[k] || 1) * v; });
   return target;
 }
 
@@ -1031,11 +1045,11 @@ function renderFleetPage(root) {
   const tabState = getLoadoutTabs();
   const loadout = getActiveLoadout();
   const totals = {};
-  // Per-resource, per-ship breakdown of the additive-% contributions that feed each totals-row
-  // multiplier -- kept alongside `totals` (not derived from it) purely so the totals row can show
-  // a hover breakdown of exactly which ships are contributing how much, without re-running
-  // computeResourceBonuses a second time.
-  const breakdown = {}; // res -> [{ shipId, pct }]
+  // Per-resource, per-ship breakdown of the multiplier factors that feed each totals-row's
+  // combined multiplier -- kept alongside `totals` (not derived from it) purely so the totals
+  // row can show a hover breakdown of exactly which ships are contributing how much, without
+  // re-running computeResourceBonuses a second time.
+  const breakdown = {}; // res -> [{ shipId, mult }]
   // Ships the active loadout didn't touch (unchecked, or skipped by Zaglag) still have real
   // current installs contributing real bonuses -- fall back to Ship Setup's baseline for those
   // instead of dropping them out of the total entirely. Ships 1-7 always -- NOT gated on
@@ -1045,9 +1059,9 @@ function renderFleetPage(root) {
   for (let n = 1; n <= 7; n++) {
     const shipTotals = computeResourceBonuses(n, loadout.perShip[n]?.levels || getShipInput(n).installs);
     mergeResourceTotals(totals, shipTotals);
-    Object.entries(shipTotals).forEach(([res, pct]) => {
-      if (!pct) return;
-      (breakdown[res] = breakdown[res] || []).push({ shipId: n, pct });
+    Object.entries(shipTotals).forEach(([res, mult]) => {
+      if (!mult || mult === 1) return;
+      (breakdown[res] = breakdown[res] || []).push({ shipId: n, mult });
     });
   }
   const sortedTotals = sortResourceEntries(totals);
@@ -1061,19 +1075,19 @@ function renderFleetPage(root) {
       </div>
       <div class="bg-gray-800/70 px-3 py-2 border-b border-gray-700 flex items-center gap-2 flex-wrap" id="loadoutTabsRow"></div>
       <div class="bg-gray-800 p-3 flex flex-wrap gap-2" id="fleetTotalsRow">
-        ${sortedTotals.length ? sortedTotals.map(([res, pct]) => {
+        ${sortedTotals.length ? sortedTotals.map(([res, mult]) => {
           const gearSetMult = gearSetMults[res] || 1;
-          const contributors = (breakdown[res] || []).slice().sort((a, b) => b.pct - a.pct)
-            .map(({ shipId, pct: p }) => `${shipDisplayName(shipId)}: +${formatMult(p)}%`);
+          const contributors = (breakdown[res] || []).slice().sort((a, b) => b.mult - a.mult)
+            .map(({ shipId, mult: m }) => `${shipDisplayName(shipId)}: x${formatMult(m)}`);
           const titleLines = [
-            `${RESOURCE_LABELS[res] || res} -- contributing factors:`,
+            `${RESOURCE_LABELS[res] || res} -- contributing factors (multiply together):`,
             ...contributors,
             gearSetMult !== 1 ? `Gear Set Bonus: x${formatMult(gearSetMult)}` : null,
           ].filter(Boolean);
           return `
           <div class="bg-gray-700/60 rounded-lg px-3 py-1.5 text-center cursor-help" title="${escapeHtml(titleLines.join('\n'))}">
             <div class="text-[10px] text-gray-400">${RESOURCE_LABELS[res] || res}</div>
-            <div class="text-sm font-semibold text-green-400">x${formatMult(additiveToMultiplier(pct) * gearSetMult)}</div>
+            <div class="text-sm font-semibold text-green-400">x${formatMult(mult * gearSetMult)}</div>
           </div>`;
         }).join('') : '<div class="text-xs text-gray-500 py-1">No install data yet -- visit Ship Setup to autofill from your save.</div>'}
       </div>
