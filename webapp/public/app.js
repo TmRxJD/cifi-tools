@@ -1844,7 +1844,7 @@ function openTemporaryModal() {
 function effectBox(lines) {
   if (!lines.length) return '';
   return `<div class="bg-gray-900/50 p-3 rounded-md w-full mb-3">${lines.map((l) => `
-      <div class="flex justify-between items-center py-1"><span class="text-gray-400 text-sm">${l.label}</span><span class="text-white font-medium text-sm">${l.value}</span></div>`).join('')}</div>`;
+      <div class="flex justify-between items-start py-1 gap-2"><span class="text-gray-400 text-sm min-w-0 flex-1 break-words">${l.label}</span><span class="text-white font-medium text-sm flex-shrink-0 whitespace-nowrap">${l.value}</span></div>`).join('')}</div>`;
 }
 
 function renderUpgradeInput(catKey, item) {

@@ -1031,13 +1031,25 @@ function renderFleetPage(root) {
   const tabState = getLoadoutTabs();
   const loadout = getActiveLoadout();
   const totals = {};
+  // Per-resource, per-ship breakdown of the additive-% contributions that feed each totals-row
+  // multiplier -- kept alongside `totals` (not derived from it) purely so the totals row can show
+  // a hover breakdown of exactly which ships are contributing how much, without re-running
+  // computeResourceBonuses a second time.
+  const breakdown = {}; // res -> [{ shipId, pct }]
   // Ships the active loadout didn't touch (unchecked, or skipped by Zaglag) still have real
   // current installs contributing real bonuses -- fall back to Ship Setup's baseline for those
   // instead of dropping them out of the total entirely. Ships 1-7 always -- NOT gated on
   // getShipStore() (raw imported-save fields), which can be empty/stale even when
   // getShipInput() (the actual editable install levels used by every other page) has real
   // points in it.
-  for (let n = 1; n <= 7; n++) mergeResourceTotals(totals, computeResourceBonuses(n, loadout.perShip[n]?.levels || getShipInput(n).installs));
+  for (let n = 1; n <= 7; n++) {
+    const shipTotals = computeResourceBonuses(n, loadout.perShip[n]?.levels || getShipInput(n).installs);
+    mergeResourceTotals(totals, shipTotals);
+    Object.entries(shipTotals).forEach(([res, pct]) => {
+      if (!pct) return;
+      (breakdown[res] = breakdown[res] || []).push({ shipId: n, pct });
+    });
+  }
   const sortedTotals = sortResourceEntries(totals);
   const gearSetMults = computeGearSetBonusMultipliers();
 
@@ -1049,11 +1061,21 @@ function renderFleetPage(root) {
       </div>
       <div class="bg-gray-800/70 px-3 py-2 border-b border-gray-700 flex items-center gap-2 flex-wrap" id="loadoutTabsRow"></div>
       <div class="bg-gray-800 p-3 flex flex-wrap gap-2" id="fleetTotalsRow">
-        ${sortedTotals.length ? sortedTotals.map(([res, pct]) => `
-          <div class="bg-gray-700/60 rounded-lg px-3 py-1.5 text-center">
+        ${sortedTotals.length ? sortedTotals.map(([res, pct]) => {
+          const gearSetMult = gearSetMults[res] || 1;
+          const contributors = (breakdown[res] || []).slice().sort((a, b) => b.pct - a.pct)
+            .map(({ shipId, pct: p }) => `${shipDisplayName(shipId)}: +${formatMult(p)}%`);
+          const titleLines = [
+            `${RESOURCE_LABELS[res] || res} -- contributing factors:`,
+            ...contributors,
+            gearSetMult !== 1 ? `Gear Set Bonus: x${formatMult(gearSetMult)}` : null,
+          ].filter(Boolean);
+          return `
+          <div class="bg-gray-700/60 rounded-lg px-3 py-1.5 text-center cursor-help" title="${escapeHtml(titleLines.join('\n'))}">
             <div class="text-[10px] text-gray-400">${RESOURCE_LABELS[res] || res}</div>
-            <div class="text-sm font-semibold text-green-400">x${formatMult(additiveToMultiplier(pct) * (gearSetMults[res] || 1))}</div>
-          </div>`).join('') : '<div class="text-xs text-gray-500 py-1">No install data yet -- visit Ship Setup to autofill from your save.</div>'}
+            <div class="text-sm font-semibold text-green-400">x${formatMult(additiveToMultiplier(pct) * gearSetMult)}</div>
+          </div>`;
+        }).join('') : '<div class="text-xs text-gray-500 py-1">No install data yet -- visit Ship Setup to autofill from your save.</div>'}
       </div>
     </div>
     <div class="grid gap-4" id="fleetCanvas" style="grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));"></div>`;
