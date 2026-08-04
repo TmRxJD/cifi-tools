@@ -925,7 +925,15 @@ function renderHexGrid(container, catalog, levels, options = {}) {
       const bonusLine = options.shipId
         ? `\nTotal Bonus: x${formatMult(additiveToMultiplier(nodeOwnBonusPct(options.shipId, slot, level)))}`
         : '';
-      wrap.title = `${codeLabel}${meta.name}\n${meta.effect.replace(/^\+/, '')}${bonusLine}${locked ? `\nLocked -- needs ${meta.gateAtTotalInstalls}+ total points spent first` : ''}${options.readOnly ? '' : '\nClick: +1  Right-click: -1'}`;
+      // meta.source is either 'confirmed' (the base %/level was directly verified against a real
+      // account's displayed values, e.g. via the Total Bonus cross-check above) or 'wiki' (taken
+      // from the community wiki table, never independently verified -- see the koi1/Venn
+      // Hypothesis bug, which was exactly this: a wiki-sourced node whose real behavior turned
+      // out to depend on a save field this tool was reading wrong). Surfaced here so unconfirmed
+      // nodes are visibly distinguishable instead of silently trusted the same as confirmed ones.
+      const unconfirmed = meta.source === 'wiki';
+      const sourceLine = unconfirmed ? '\n⚠ Unconfirmed (wiki-sourced, not verified against a real account)' : '';
+      wrap.title = `${codeLabel}${meta.name}\n${meta.effect.replace(/^\+/, '')}${bonusLine}${sourceLine}${locked ? `\nLocked -- needs ${meta.gateAtTotalInstalls}+ total points spent first` : ''}${options.readOnly ? '' : '\nClick: +1  Right-click: -1'}`;
       // The icon deliberately overflows the hex frame slightly instead of being clipped to it
       // -- that's how it looks in the real game. So the clip-path hex (`hexBg`) and the icon
       // image are separate layers: hexBg provides the clipped background/border shape, and the
@@ -941,6 +949,12 @@ function renderHexGrid(container, catalog, levels, options = {}) {
       } ${options.readOnly ? '' : locked ? 'cursor-not-allowed' : 'hover:bg-gray-600 cursor-pointer'}`;
       hexBg.style.cssText = 'clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%);border:1px solid #4b5563;';
       tile.appendChild(hexBg);
+      if (unconfirmed && !locked) {
+        const dot = document.createElement('div');
+        dot.className = 'absolute rounded-full bg-amber-500';
+        dot.style.cssText = 'width:6px;height:6px;top:2px;right:2px;box-shadow:0 0 2px #000;';
+        tile.appendChild(dot);
+      }
       const iconPath = options.shipId ? nodeIconPath(options.shipId, slot) : null;
       if (iconPath) {
         const img = document.createElement('img');
@@ -1422,7 +1436,7 @@ function poolAdjustedNodeValue(shipId, slot, pools, runLength) {
 // target to reach on top of existing installs. Real current installs are a separate concern
 // (see "Effective Path" in openLoadoutDetail, which uses this same ideal sequence's tail to
 // advise what to buy next from wherever you really are).
-function optimizeShipInstalls(shipId, budget, weights, meltdownFactor, prepForLongRun, runLength) {
+function optimizeShipInstalls(shipId, budget, weights, prepForLongRun, runLength) {
   const catalog = SHIP_NODE_CATALOG[shipId] || {};
   const levels = {};
   const clicks = [];
@@ -1688,11 +1702,6 @@ function computeZaglagChecklist() {
 // does (current Rank Points + any Fleet Boost SP grants + Research #68's SP), runs the real
 // optimizer, and merges the result into the existing loadout (creating one if none is active
 // yet) rather than replacing every other ship's plan.
-// Meltdown's actual Cell-scaling formula isn't confirmed (the stored value is a 0-1 progress
-// fraction toward the next tier, not a ready-to-use multiplier), so the optimizer stays neutral
-// (1.0) rather than guessing a formula and skewing cell-vs-other-resource balance wrongly.
-// Revisit once that formula is confirmed against a live account.
-const OPTIMIZER_MELTDOWN_FACTOR = 1;
 
 let optimizeShipModalShipId = null;
 // Opens a per-ship version of Optimize Loadout -- its own budget + its own weight sliders
@@ -1723,7 +1732,7 @@ document.getElementById('optimizeShipGenerateBtn').onclick = () => {
   const gear = getShipGear();
   const optSettings = getOptimizerSettings();
   const prepForLongRun = shipId === 5 && optSettings.prepForLongRun;
-  const { levels, clicks } = optimizeShipInstalls(shipId, budget, gear.focusWeights, OPTIMIZER_MELTDOWN_FACTOR, prepForLongRun, optSettings.runLength);
+  const { levels, clicks } = optimizeShipInstalls(shipId, budget, gear.focusWeights, prepForLongRun, optSettings.runLength);
   const activeLoadout = getActiveLoadout();
   activeLoadout.perShip[shipId] = { budget, levels, clicks };
   window.saveStore();
@@ -1763,7 +1772,7 @@ document.getElementById('generateLoadoutBtn').onclick = () => {
     if (optSettings.shipEnabled[shipId] === false) return; // unchecked -- leave untouched, not part of this batch
     if (optSettings.zaglag && shipId === 3 && !zaglagReady) return; // still delaying Zagreus
     const budget = Number(el.value) || 0;
-    const { levels, clicks } = optimizeShipInstalls(shipId, budget, gear.focusWeights, OPTIMIZER_MELTDOWN_FACTOR, shipId === 5 && optSettings.prepForLongRun, optSettings.runLength);
+    const { levels, clicks } = optimizeShipInstalls(shipId, budget, gear.focusWeights, shipId === 5 && optSettings.prepForLongRun, optSettings.runLength);
     perShip[shipId] = { budget, levels, clicks };
   });
   activeLoadout.perShip = perShip;
@@ -1812,8 +1821,8 @@ function openLoadoutDetail(shipId, levels, mode, clicks) {
     const optSettings = getOptimizerSettings();
     const prepForLongRun = shipId === 5 && optSettings.prepForLongRun;
     const realTotal = Object.values(getShipInput(shipId).installs).reduce((a, b) => a + b, 0);
-    const full = optimizeShipInstalls(shipId, realTotal + 30, gear.focusWeights, OPTIMIZER_MELTDOWN_FACTOR, prepForLongRun, optSettings.runLength);
-    const atRealTotal = optimizeShipInstalls(shipId, realTotal, gear.focusWeights, OPTIMIZER_MELTDOWN_FACTOR, prepForLongRun, optSettings.runLength);
+    const full = optimizeShipInstalls(shipId, realTotal + 30, gear.focusWeights, prepForLongRun, optSettings.runLength);
+    const atRealTotal = optimizeShipInstalls(shipId, realTotal, gear.focusWeights, prepForLongRun, optSettings.runLength);
     nextClicks = full.clicks.slice(realTotal);
     lines = expandClicks(nextClicks, catalog, atRealTotal.levels, shipId);
     note = 'Every individual point-spend for the next points beyond your current total (once you earn them), in order, following the ideal allocation path -- interleaved across nodes, never bulk-bought. Click an item once you\'ve actually installed it in-game to confirm your real installs up to that point.';
