@@ -196,6 +196,15 @@ function mapSaveToStore(save) {
   if (save.GaidenCardPurchased !== undefined) globalUpgrades['diamondcards.gaiden'] = save.GaidenCardPurchased ? 1 : 0;
   if (save.IridianCardPurchased !== undefined) globalUpgrades['diamondcards.iridian'] = save.IridianCardPurchased ? 1 : 0;
 
+  // Milestone #0 -> SU0Level (confirmed via a fresh ADB pull + direct value match: the account
+  // holder's real in-game level was 80, and SU0Level was the only field in the whole save
+  // holding exactly 80). "SU" is a distinct, separately-indexed-from-0 shard-upgrade registry --
+  // NOT the same thing as the regular Milestone1-57Progress fields (those are a different,
+  // 1-indexed system) or either Ouro-prefixed field tried earlier (both wrong).
+  if (save.SU0Level !== undefined) {
+    globalUpgrades['shardmilestones.m0'] = realNum(save.SU0Level);
+  }
+
   unmapped.push('researches', 'cms', 'loopmods', 'diamondspecials', 'iap', 'ultima', 'gadgets', 'trinkets', 'shardmilestones');
 
   // Gems: tree level + 6 boolean nodes per tree. Every tree except Exodus stores its nodes

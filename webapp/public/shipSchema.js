@@ -135,11 +135,28 @@ window.mapCifiSaveToUnlockedGens = mapSaveToUnlockedGens;
 // three distinct values, etc).
 //   manualMK2Gens/manualMK3Gens -> CellGeneratorsMK{2,3}Manual (BigDouble, per-tier manual buy
 //     count -- confirmed distinct from the MK1/4-8 tiers Cradle's nodes don't reference).
-//   totalManualGens -> ManualGensAllTime (exact name match; shared by Cradle + Hephaestus).
-//   techUpgrades -> TechUpgradesAllTime (also covers the wiki text's separate-sounding
-//     "Hardware Upgrade purchased" mentions -- no distinct Hardware-only counter was found).
-//   softwareUpgrades -> NO confirmed field (the "Tech/Software AutomationPurchased" fields are
-//     about auto-buy toggles, not purchase counts) -- left unmapped, manual entry only.
+//   totalManualGens -> ManualGensThisLR ("This Loop Reset" = current run). CORRECTED: an earlier
+//     version of this mapping used ManualGensAllTime, which is a LIFETIME-across-traversals
+//     counter (21.9M on the diffed account) -- wildly larger than the real current-run total
+//     (confirmed by summing CellGeneratorsMK{1-8}Manual by hand: ~48.6k, matching
+//     ManualGensThisLR's 48.5k almost exactly, and matching the account holder's own real-time
+//     in-game reading of ~28.7k on just MK1 manual). Ship install nodes want the CURRENT
+//     manually-purchased count, not an all-time-across-resets figure.
+//   hardwareUpgrades/softwareUpgrades -> the REAL per-tier fields, found after the account
+//     holder gave a live reference point (Mk3 Hardware 441 / Software 454). The save has 24
+//     numbered `TU{n}Level` slots (2 per generator tier, up to 12 tiers -- only TU1-16 unlocked
+//     on the diffed account, i.e. 8 tiers). Within each tier's pair the LOWER-numbered slot is
+//     Hardware and the higher is Software (confirmed: TU5=443 / TU6=457 for tier 3, matching the
+//     441/454 reference almost exactly -- the few points of drift are just real-time progress
+//     between when the account holder read their live value and when this save was pulled).
+//     hardwareUpgrades = sum of TU1,3,5,7,9,11,13,15,17,19,21,23 (odd); softwareUpgrades = sum
+//     of TU2,4,6,...,24 (even); techUpgrades (combined, for nodes that don't distinguish) = sum
+//     of both. Summing all 16 unlocked slots on the diffed account (2831 Hardware + 2888
+//     Software = 5719) exactly matches a separate `TechUpsThisLR` field -- cross-confirms this
+//     is the right data. CORRECTED from an earlier version that used TechUpgradesAllTime (a
+//     lifetime-across-traversals counter, 4.1M) and then a second wrong attempt that used
+//     TechUpgradeLevelsThisConstruction (201k, some other combined stat, NOT this) split 50/50
+//     as a guess -- neither was the real per-tier Hardware/Software data.
 //   loopModsOwned -> LoopModLevelsThisTraversal. INTERPRETIVE: no field represents "count of
 //     DISTINCT loop mods owned" (only summed-level aggregates and achievement-tier numbers
 //     exist) -- using the sum-of-levels field on the working assumption that's what "Loop Mod
@@ -178,8 +195,19 @@ function mapSaveToShipGear(save) {
   const gear = {};
   if (save.CellGeneratorsMK2Manual !== undefined) gear.manualMK2Gens = bigDoubleToNumber(save.CellGeneratorsMK2Manual);
   if (save.CellGeneratorsMK3Manual !== undefined) gear.manualMK3Gens = bigDoubleToNumber(save.CellGeneratorsMK3Manual);
-  if (save.ManualGensAllTime !== undefined) gear.totalManualGens = realNum(save.ManualGensAllTime);
-  if (save.TechUpgradesAllTime !== undefined) gear.techUpgrades = realNum(save.TechUpgradesAllTime);
+  if (save.ManualGensThisLR !== undefined) gear.totalManualGens = bigDoubleToNumber(save.ManualGensThisLR);
+  let hardwareUpgrades = 0; let softwareUpgrades = 0; let anyTuField = false;
+  for (let n = 1; n <= 24; n++) {
+    const v = save[`TU${n}Level`];
+    if (v === undefined) continue;
+    anyTuField = true;
+    if (n % 2 === 1) hardwareUpgrades += bigDoubleToNumber(v); else softwareUpgrades += bigDoubleToNumber(v);
+  }
+  if (anyTuField) {
+    gear.hardwareUpgrades = hardwareUpgrades;
+    gear.softwareUpgrades = softwareUpgrades;
+    gear.techUpgrades = hardwareUpgrades + softwareUpgrades;
+  }
   if (save.LoopModLevelsThisTraversal !== undefined) gear.loopModsOwned = realNum(save.LoopModLevelsThisTraversal);
   if (save.LoopsFilled !== undefined) gear.loopFillsThisRun = realNum(save.LoopsFilled);
   if (save.LoopResetsPerformedAllTime !== undefined) gear.loopResetsDone = realNum(save.LoopResetsPerformedAllTime);
