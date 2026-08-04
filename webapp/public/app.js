@@ -55,6 +55,7 @@ function defaultImportPrefs() {
       shipRanks: true, shipGear: true, unlockedGens: true, gearSets: true, fleetBadges: true, fleetResearch: true,
     },
     autoPoll: false,
+    quiet: false, // suppress the "update found" toast when auto-poll silently re-imports
   };
 }
 
@@ -143,6 +144,7 @@ function loadStore() {
       Object.entries(defaultImportPrefs().categories).forEach(([key, def]) => {
         if (!(key in parsed.importPrefs.categories)) parsed.importPrefs.categories[key] = def;
       });
+      if (parsed.importPrefs.quiet === undefined) parsed.importPrefs.quiet = false;
       if (!parsed.optimizerSettings) parsed.optimizerSettings = { shipEnabled: { 1: true, 2: true, 3: true, 4: true, 5: true, 6: true, 7: true }, zaglag: false, prepForLongRun: false };
       if (parsed.optimizerSettings.prepForLongRun === undefined) parsed.optimizerSettings.prepForLongRun = false;
       if (!parsed.loadoutTabs) {
@@ -354,6 +356,13 @@ function currentRoute() {
 
 function navigate(route) { location.hash = `#/${route}`; }
 
+// Top header nav: "Hunters" covers the whole sim route, "Fleet" covers only the literal Fleet
+// Optimizer page (route === 'fleet' -- Ship Setup/Gear Sets are sidebar-only pages, not this),
+// "Settings" is an exact match, and "Upgrades" is the catch-all for every OTHER sidebar page
+// (upgrades/*, shipsetup, gearsets, research, badges, gems) since none of those have their own
+// dedicated header button.
+const DEDICATED_NAV_ROUTES = { sim: 'sim', fleet: 'fleet', settings: 'settings' };
+
 function render() {
   const route = currentRoute();
   updateNavGating();
@@ -363,13 +372,6 @@ function render() {
     el.classList.toggle('bg-gray-800', el.dataset.route === route);
     el.classList.toggle('text-white', el.dataset.route === route);
   });
-  // Top header nav: "Hunters" covers the whole sim route, "Fleet" covers only the literal Fleet
-  // Optimizer page (route === 'fleet' -- Ship Setup/Gear Sets are sidebar-only pages, not this),
-  // "Settings" is an exact match, and "Upgrades" is the catch-all for every OTHER sidebar page
-  // (upgrades/*, shipsetup, gearsets, research, badges, gems) since none of those have their own
-  // dedicated header button. Previously only "Upgrades" itself matched upgrades/* and nothing
-  // else lit up for shipsetup/gearsets/research/gems/badges at all.
-  const DEDICATED_NAV_ROUTES = { sim: 'sim', fleet: 'fleet', settings: 'settings' };
   document.querySelectorAll('[data-nav]').forEach((el) => {
     const nav = el.dataset.nav;
     if (['borge', 'ozzy', 'knox'].includes(nav)) return; // handled by switchHunter's own active-<hunter> styling
@@ -2777,6 +2779,9 @@ function wireImportChecklist() {
   const pollToggle = document.getElementById('importAutoPollToggle');
   pollToggle.checked = !!prefs.autoPoll;
   pollToggle.onchange = () => { prefs.autoPoll = pollToggle.checked; saveStore(); scheduleAutoPollSave(); };
+  const quietToggle = document.getElementById('importAutoPollQuietToggle');
+  quietToggle.checked = !!prefs.quiet;
+  quietToggle.onchange = () => { prefs.quiet = quietToggle.checked; saveStore(); };
   renderAutoPollStatus();
 }
 
@@ -2939,8 +2944,8 @@ async function processImportedSaveText(rawText, silent) {
   }
 
   if (silent) {
-    if (applied.length) showImportToast(`Save update detected -- re-imported ${applied.join(', ')}.`);
-    // else: nothing actually changed (or nothing's checked) -- stay silent, no toast.
+    if (applied.length && !prefs.quiet) showImportToast(`Save update detected -- re-imported ${applied.join(', ')}.`);
+    // else: nothing actually changed (or nothing's checked, or the quiet toggle is on) -- stay silent.
   } else {
     const skipped = mapped.unmapped.length
       ? `<div class="text-gray-400 text-xs mt-1">Not yet mapped (left unchanged): ${mapped.unmapped.join(', ')}</div>`
