@@ -230,15 +230,10 @@
       </div>
       <div class="space-y-3" id="newLoadoutFocusWeights"></div>
       <h3 class="text-white font-medium py-2 border-b border-gray-600 mb-2 mt-4">Tactics</h3>
-      <div class="mb-3" title="Skews the optimizer's Cells-vs-Generators preference: Short favors nodes that pay off immediately (direct Cells), Long favors nodes that compound over time (Generator tiers). Balanced applies no skew.">
-        <label for="newLoadoutRunLength" class="block text-xs font-medium text-gray-300 mb-1">Run Length</label>
-        <select id="newLoadoutRunLength" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white text-sm">
-          <option value="short">Short Run (favor immediate Cells)</option>
-          <option value="balanced">Balanced</option>
-          <option value="long">Long Run (favor Generators)</option>
-        </select>
-      </div>
-      <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer" title="Delays Zagreus's own install investment to maximize Hephaestus/Demeter loop scaling -- Zagreus is skipped entirely by this batch optimize (as if not yet unlocked) while Hephaestus/Demeter are optimized normally. A readiness checklist appears on Zagreus's Fleet card after you generate.">
+      <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer" title="Optimizer defaults to favoring Generator-tier nodes (they compound over time, so they're worth more the longer the run is). Check this to instead favor nodes that pay off immediately (direct Cells) if you're about to reset/traverse soon.">
+        <input type="checkbox" id="newLoadoutShortRun" class="accent-purple-500" /> Short Run (favor immediate Cells over Generators)
+      </label>
+      <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer mt-2" title="Delays Zagreus's own install investment to maximize Hephaestus/Demeter loop scaling -- Zagreus is skipped by this batch optimize (as if not yet unlocked) while other ships are optimized normally, UNTIL every reachable Mod-Points node on the other ships has at least 1 point, at which point Zagreus is automatically included. A readiness checklist appears on Zagreus's Fleet card after you generate.">
         <input type="checkbox" id="newLoadoutZaglag" class="accent-purple-500" /> Zaglag Tactic (delay Zagreus for Hephaestus/Demeter)
       </label>
       <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer mt-2" title="Maxes Demeter's Ahead of the Curve (its payoff only applies at the start of your NEXT loop reset, so the normal marginal-value engine can't score it) -- otherwise it's skipped so scarce points go to Demeter's direct multipliers instead.">
@@ -269,14 +264,9 @@
         <button id="optimizeShipWeightPresetBtn" class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300">Reset</button>
       </div>
       <div class="space-y-3" id="optimizeShipFocusWeights"></div>
-      <div class="mt-4" title="Skews the optimizer's Cells-vs-Generators preference: Short favors nodes that pay off immediately (direct Cells), Long favors nodes that compound over time (Generator tiers). Balanced applies no skew.">
-        <label for="optimizeShipRunLength" class="block text-xs font-medium text-gray-300 mb-1">Run Length</label>
-        <select id="optimizeShipRunLength" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white text-sm">
-          <option value="short">Short Run (favor immediate Cells)</option>
-          <option value="balanced">Balanced</option>
-          <option value="long">Long Run (favor Generators)</option>
-        </select>
-      </div>
+      <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer mt-4" title="Optimizer defaults to favoring Generator-tier nodes (they compound over time, so they're worth more the longer the run is). Check this to instead favor nodes that pay off immediately (direct Cells) if you're about to reset/traverse soon.">
+        <input type="checkbox" id="optimizeShipShortRun" class="accent-purple-500" /> Short Run (favor immediate Cells over Generators)
+      </label>
       <div id="optimizeShipPrepForLongRunWrap">
         <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer mt-4" title="Maxes Demeter's Ahead of the Curve (its payoff only applies at the start of your NEXT loop reset) -- otherwise it's skipped so scarce points go to Demeter's direct multipliers instead.">
           <input type="checkbox" id="optimizeShipPrepForLongRun" class="accent-purple-500" /> Preparing for Long Run (max Ahead of the Curve)

@@ -239,9 +239,14 @@ const FLEET_BOOST_ITEMS = [
 // Academy Badges / Dark Academy Badges (traded for Innovation/Dark Cores) -- binary
 // purchased-or-not toggles that multiply ship rank-install power directly, folded into
 // computeResourceBonuses via `computeFleetBadgeMultipliers()` just like Research #78.
-// Sourced from cifi.fandom.com/wiki/Academy_Badges and /wiki/Dark_Academy_Badges.
+// Dark Innovation Badge is still wiki-sourced (cifi.fandom.com/wiki/Dark_Academy_Badges),
+// unconfirmed against a live account. Innovation Badge's mult was ALSO wiki-sourced as x3
+// (cifi.fandom.com/wiki/Academy_Badges) but corrected to x7 -- account-confirmed directly
+// against a real node's in-game "Total Bonus" readout (Cradle's Mitosis Enhancements showed
+// x1.23m in-game; this tool's own formula, otherwise matching, only reached x175.30k at x3 --
+// x7 closes that exact gap).
 const FLEET_BADGE_ITEMS = [
-  { key: 'badge_innovation', name: 'Innovation Badge', source: 'Badge', ships: [1, 2, 3, 4], mult: 3, note: 'Cradle, Auxesia, Zagreus & Hephaestus rank installs gain x3 power.' },
+  { key: 'badge_innovation', name: 'Innovation Badge', source: 'Badge', ships: [1, 2, 3, 4], mult: 7, note: 'Cradle, Auxesia, Zagreus & Hephaestus rank installs gain x7 power.' },
   { key: 'badge_dark_innovation', name: 'Dark Innovation Badge', source: 'Badge', ships: [1, 2, 3, 4, 5, 6, 7], mult: 3, note: 'All ship rank installs gain x3 power.' },
 ];
 function defaultFleetBadges() {
@@ -471,32 +476,32 @@ function gearMultiplierFor(gearKey, gear) {
 // per resource (still summed across nodes); convert to the final "x{multiplier}" the game
 // actually displays via additiveToMultiplier() at render time, not here, so callers can keep
 // combining multiple ships' contributions into one grand total before the final +1 conversion.
-function computeResourceBonuses(shipId, levels) {
-  const catalog = SHIP_NODE_CATALOG[shipId] || {};
+// A single node's own additive-% contribution at a given level -- the same per-node term
+// computeResourceBonuses sums across a whole ship, factored out so the node's OWN tooltip can
+// show its real "Total Bonus" (the same value the in-game upgrade detail panel shows for that
+// one node) without duplicating the crew/gear/research/badge math in two places.
+function nodeOwnBonusPct(shipId, slot, level) {
+  const meta = SHIP_NODE_CATALOG[shipId]?.[slot];
+  if (!meta || !level) return 0;
+  const m = meta.effect.match(/([\d.]+)%/);
+  if (!m) return 0;
   const gear = getShipGear();
   const crew = (getShipInput(shipId).crew || 0) + (computeFleetBoostTotals()[shipId]?.crew || 0);
-  // Research #78 "Fleet Analysis 2": per-ship "Installs Bonus x5" once that ship's tier is
-  // unlocked. Treated as a x5 multiplier on each node's own effective level for that ship --
-  // an assumption (wiki doesn't spell out the mechanism), separate from #68's install-cap x5
-  // which is deliberately NOT applied (see FLEET_RESEARCH_ITEMS note) to avoid double-counting
-  // against live-captured max levels.
-  // Academy/Dark Academy Badges: "All Rank Installs Power x3" per badge, stacks
-  // multiplicatively with Research #78's x5 (both scale the node's own effective level).
+  const gearMult = gearMultiplierFor(meta.gearKey, gear);
   const badgeMult = computeFleetBadgeMultipliers()[shipId] || 1;
   const researchMult = (computeFleetResearchShipMultipliers()[shipId] || 1) * badgeMult;
+  const gearNodeMult = computeGearNodeMultiplier(Number(shipId), Number(slot));
+  return parseFloat(m[1]) * level * crew * gearMult * researchMult * gearNodeMult;
+}
+function computeResourceBonuses(shipId, levels) {
+  const catalog = SHIP_NODE_CATALOG[shipId] || {};
   const totals = {};
   Object.entries(levels || {}).forEach(([slot, lvl]) => {
     if (!lvl) return;
     const meta = catalog[slot];
     if (!meta) return;
-    const m = meta.effect.match(/([\d.]+)%/);
-    if (!m) return;
-    const gearMult = gearMultiplierFor(meta.gearKey, gear);
-    // Gear piece bonuses (x1.01/x1.02 per level, see REAL_GEAR_PIECES) multiply this ONE
-    // node's own contribution before it joins the resource total, matching how they work
-    // in-game (a buff to that specific install, not the resource as a whole).
-    const gearNodeMult = computeGearNodeMultiplier(Number(shipId), Number(slot));
-    const pct = parseFloat(m[1]) * lvl * crew * gearMult * researchMult * gearNodeMult;
+    const pct = nodeOwnBonusPct(shipId, slot, lvl);
+    if (!pct) return;
     effectResources(meta.effect).forEach((res) => { totals[res] = (totals[res] || 0) + pct; });
   });
   // Fleet Boost items with a pctEffect (Rank Benefits / Crew Motivation Modules, Rule of the
@@ -898,7 +903,15 @@ function renderHexGrid(container, catalog, levels, options = {}) {
       const wrap = document.createElement('div');
       wrap.className = 'flex flex-col items-center select-none';
       const codeLabel = options.shipId ? `${SHIP_CODE_PREFIX[options.shipId] || ''}${slot} -- ` : '';
-      wrap.title = `${codeLabel}${meta.name}\n${meta.effect.replace(/^\+/, '')}${locked ? `\nLocked -- needs ${meta.gateAtTotalInstalls}+ total points spent first` : ''}${options.readOnly ? '' : '\nClick: +1  Right-click: -1'}`;
+      // "Total Bonus" mirrors the in-game upgrade detail panel's own readout for this exact
+      // node (e.g. Cradle's Mitosis Enhancements at level 18 shows "Total Bonus x1.23m" in-game)
+      // -- lets you directly cross-check this tool's formula against what the game itself shows,
+      // rather than trusting the math blind. Only computable with a real shipId + real account
+      // crew/gear/research context, so it's omitted for grid renders that don't provide one.
+      const bonusLine = options.shipId
+        ? `\nTotal Bonus: x${formatMult(additiveToMultiplier(nodeOwnBonusPct(options.shipId, slot, level)))}`
+        : '';
+      wrap.title = `${codeLabel}${meta.name}\n${meta.effect.replace(/^\+/, '')}${bonusLine}${locked ? `\nLocked -- needs ${meta.gateAtTotalInstalls}+ total points spent first` : ''}${options.readOnly ? '' : '\nClick: +1  Right-click: -1'}`;
       // The icon deliberately overflows the hex frame slightly instead of being clipped to it
       // -- that's how it looks in the real game. So the clip-path hex (`hexBg`) and the icon
       // image are separate layers: hexBg provides the clipped background/border shape, and the
@@ -924,7 +937,7 @@ function renderHexGrid(container, catalog, levels, options = {}) {
         tile.appendChild(img);
       }
       const label = document.createElement('div');
-      label.className = `text-center -mt-0.5 ${locked ? 'text-gray-600' : 'text-gray-200'}`;
+      label.className = `text-center -mt-2 ${locked ? 'text-gray-600' : 'text-gray-200'}`;
       label.innerHTML = `<span class="${options.small ? 'text-[10px]' : 'text-xs'} font-semibold">${level}</span><span class="${options.small ? 'text-[8px]' : 'text-[10px]'} text-gray-400">/${maxLevel}</span>`;
       wrap.appendChild(tile);
       wrap.appendChild(label);
@@ -1185,8 +1198,8 @@ function openNewLoadoutModal() {
   document.getElementById('newLoadoutZaglag').addEventListener('change', (e) => { optSettings.zaglag = e.target.checked; window.saveStore(); });
   document.getElementById('newLoadoutPrepForLongRun').checked = optSettings.prepForLongRun;
   document.getElementById('newLoadoutPrepForLongRun').addEventListener('change', (e) => { optSettings.prepForLongRun = e.target.checked; window.saveStore(); });
-  document.getElementById('newLoadoutRunLength').value = optSettings.runLength;
-  document.getElementById('newLoadoutRunLength').addEventListener('change', (e) => { optSettings.runLength = e.target.value; window.saveStore(); });
+  document.getElementById('newLoadoutShortRun').checked = optSettings.runLength === 'short';
+  document.getElementById('newLoadoutShortRun').addEventListener('change', (e) => { optSettings.runLength = e.target.checked ? 'short' : 'long'; window.saveStore(); });
   // Focus weights live here (not the Fleet Stats page) -- they're an input to THIS solve, not
   // a persistent fleet-wide account stat. Meltdown lives here too now (moved off the Fleet page
   // header -- it's a per-run input to planning, not a fleet-wide display value).
@@ -1303,16 +1316,17 @@ function nodeScalesWithGrowth(gearKey) {
 // weight bucket (see RESOURCE_TO_WEIGHT_BUCKET -- both direct Cells nodes and all Generator-tier
 // nodes feed that one slider, so there's otherwise no way to prefer one over the other). Direct
 // Cells nodes pay off immediately; Generator nodes pay off by compounding output over time, so
-// they're worth relatively more the longer the run is. These multipliers are a modest, clearly-
-// flagged heuristic (not a measured constant, same spirit as GROWTH_VALUE_BOOST) -- there's no
-// way to know the "true" relative value without knowing your actual run length in advance.
+// they're worth relatively more the longer the run is. Long is the default (most runs are long
+// relative to how fast a Cells-only node saturates) -- Short is an explicit opt-in for players
+// about to reset/traverse soon. These multipliers are a modest, clearly-flagged heuristic (not a
+// measured constant, same spirit as GROWTH_VALUE_BOOST) -- there's no way to know the "true"
+// relative value without knowing your actual run length in advance.
 const RUN_LENGTH_BIAS = {
   short: { cells: 1.35, gen: 0.7 },
-  balanced: { cells: 1, gen: 1 },
   long: { cells: 0.7, gen: 1.35 },
 };
 function runLengthBiasFor(runLength) {
-  return RUN_LENGTH_BIAS[runLength] || RUN_LENGTH_BIAS.balanced;
+  return RUN_LENGTH_BIAS[runLength] || RUN_LENGTH_BIAS.long;
 }
 // Marginal value of spending one more point on `slot` right now, given the current (real +
 // whatever this optimization run has hypothetically added so far) pool totals. Mutates nothing.
@@ -1531,21 +1545,22 @@ function optimizeShipInstalls(shipId, budget, weights, meltdownFactor, prepForLo
   }
   return { levels, clicks };
 }
-// Per-ship "include in Optimize Loadout" toggle + the Zaglag tactic toggle (per the hand-off
-// spec: "delay of Zagreus unlock to maximize Hephaestus/Demeter loop scaling" -- implemented
-// literally as stated: when active, Zagreus is skipped entirely by the batch optimizer, same as
-// if the player hadn't unlocked it yet, leaving its budget unspent while Hephaestus/Demeter are
-// optimized normally). "Optimize This Ship" (single-ship button) ignores both toggles -- an
-// explicit per-ship action always runs regardless of the batch settings.
+// Per-ship "include in Optimize Loadout" toggle + the Zaglag tactic toggle: while active,
+// Zagreus is skipped by the batch optimizer (as if not yet unlocked, leaving its budget unspent
+// while the other ships are optimized normally) UNTIL computeZaglagChecklist() reports every
+// reachable Mod-Points node ready -- at that point Zagreus is automatically folded back into the
+// batch with no further action needed (see generateLoadoutBtn). "Optimize This Ship" (single-ship
+// button) ignores both toggles -- an explicit per-ship action always runs regardless of batch
+// settings.
 function defaultOptimizerSettings() {
   const shipEnabled = {};
   for (let n = 1; n <= 7; n++) shipEnabled[n] = true;
-  return { shipEnabled, zaglag: false, prepForLongRun: false, runLength: 'balanced' };
+  return { shipEnabled, zaglag: false, prepForLongRun: false, runLength: 'long' };
 }
 function getOptimizerSettings() {
   if (!window.store) return defaultOptimizerSettings();
   if (!window.store.optimizerSettings) window.store.optimizerSettings = defaultOptimizerSettings();
-  if (!window.store.optimizerSettings.runLength) window.store.optimizerSettings.runLength = 'balanced';
+  if (!window.store.optimizerSettings.runLength) window.store.optimizerSettings.runLength = 'long';
   return window.store.optimizerSettings;
 }
 
@@ -1652,8 +1667,8 @@ function openOptimizeShipModal(shipId) {
   prepWrap.classList.toggle('hidden', shipId !== 5);
   document.getElementById('optimizeShipPrepForLongRun').checked = optSettings.prepForLongRun;
   document.getElementById('optimizeShipPrepForLongRun').onchange = (e) => { optSettings.prepForLongRun = e.target.checked; window.saveStore(); };
-  document.getElementById('optimizeShipRunLength').value = optSettings.runLength;
-  document.getElementById('optimizeShipRunLength').onchange = (e) => { optSettings.runLength = e.target.value; window.saveStore(); };
+  document.getElementById('optimizeShipShortRun').checked = optSettings.runLength === 'short';
+  document.getElementById('optimizeShipShortRun').onchange = (e) => { optSettings.runLength = e.target.checked ? 'short' : 'long'; window.saveStore(); };
   renderFocusWeightSliders(document.getElementById('optimizeShipFocusWeights'), gear.focusWeights, document.getElementById('optimizeShipWeightPresetBtn'));
   document.getElementById('optimizeShipModal').classList.remove('hidden');
 }
@@ -1675,7 +1690,7 @@ document.getElementById('optimizeShipGenerateBtn').onclick = () => {
 function openZaglagChecklistModal(checklist) {
   const allReady = checklist.every((it) => it.isReady);
   document.getElementById('zaglagChecklistBody').innerHTML = `
-    <p class="text-xs text-gray-400 mb-3">${allReady ? 'Ready to unlock Zagreus!' : 'Zaglag recommended: wait until these non-Zagreus prerequisites are reached before unlocking Zagreus.'}</p>
+    <p class="text-xs text-gray-400 mb-3">${allReady ? 'Ready! Zagreus was included in this batch.' : 'Zaglag recommended: wait until these non-Zagreus prerequisites are reached -- Zagreus was left out of this batch.'}</p>
     <ul class="space-y-1.5">
       ${checklist.map((it) => `
         <li class="flex justify-between text-sm bg-gray-700/50 rounded px-3 py-1.5">
@@ -1691,20 +1706,24 @@ document.getElementById('generateLoadoutBtn').onclick = () => {
   const optSettings = getOptimizerSettings();
   const gear = getShipGear();
   const activeLoadout = getActiveLoadout();
+  // The Zaglag checklist is computed HERE, before this batch runs, so it can decide whether
+  // Zagreus is still being delayed for THIS generate -- once every reachable Mod-Points node on
+  // the other ships has its 1-point readiness requirement met, Zagreus is automatically folded
+  // back into the batch and optimized normally, same as any other ship. An empty checklist
+  // (nothing reachable yet) does NOT count as ready -- that's "too early to tell", not "done".
+  const zaglagChecklist = optSettings.zaglag ? computeZaglagChecklist() : null;
+  const zaglagReady = !!zaglagChecklist && zaglagChecklist.length > 0 && zaglagChecklist.every((it) => it.isReady);
   const perShip = {};
   document.querySelectorAll('[data-ship-points]').forEach((el) => {
     const shipId = Number(el.dataset.shipPoints);
     if (optSettings.shipEnabled[shipId] === false) return; // unchecked -- leave untouched, not part of this batch
-    if (optSettings.zaglag && shipId === 3) return; // Zaglag: treat Zagreus as not-yet-unlocked
+    if (optSettings.zaglag && shipId === 3 && !zaglagReady) return; // still delaying Zagreus
     const budget = Number(el.value) || 0;
     const { levels, clicks } = optimizeShipInstalls(shipId, budget, gear.focusWeights, OPTIMIZER_MELTDOWN_FACTOR, shipId === 5 && optSettings.prepForLongRun, optSettings.runLength);
     perShip[shipId] = { budget, levels, clicks };
   });
   activeLoadout.perShip = perShip;
-  // The Zaglag checklist is computed HERE, after the optimizer actually ran with Zaglag
-  // checked -- never shown before that, and never used to predict WHEN to unlock Zagreus (that
-  // timing can't be determined from a static save snapshot -- see ZAGLAG_CHECKLIST's comment).
-  activeLoadout.zaglagChecklist = optSettings.zaglag ? computeZaglagChecklist() : null;
+  activeLoadout.zaglagChecklist = zaglagChecklist;
   window.saveStore();
   document.getElementById('newLoadoutModal').classList.add('hidden');
   renderFleetPage(document.getElementById('pageRoot'));
