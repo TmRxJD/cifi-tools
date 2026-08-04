@@ -334,8 +334,12 @@ function computeFleetPctBonuses(shipId) {
     const scale = item.pctEffect.per === 'crew' ? crew : rank;
     const pct = item.pctEffect.perLevel * level * scale;
     if (!pct) return;
-    const res = item.pctEffect.resource;
-    mults[res] = (mults[res] || 1) * additiveToMultiplier(pct);
+    const factor = additiveToMultiplier(pct);
+    // Same per-tier split as node effects (see effectResources/computeResourceBonuses) -- an
+    // "All Gens" Fleet Boost item (e.g. Rule of the Cradle) contributes to each mk1..mk8 total
+    // individually rather than one separate "All Gens" bucket.
+    const resKeys = item.pctEffect.resource === 'allGens' ? GEN_TIERS.map((n) => `mk${n}`) : [item.pctEffect.resource];
+    resKeys.forEach((res) => { mults[res] = (mults[res] || 1) * factor; });
   });
   return mults;
 }
@@ -417,7 +421,18 @@ const RESOURCE_KEYWORDS = [
 // ("MK1-MK4 output") -- all matches get the same per-level percentage from that one node.
 function effectResources(effect) {
   const tags = RESOURCE_KEYWORDS.filter(([, re]) => re.test(effect)).map(([r]) => r);
-  if (/all generators|all gens\b/i.test(effect)) tags.push('allGens');
+  // 'allGens' is kept as a marker tag (poolAdjustedNodeValue/nodeTiePriority/etc still check
+  // for it to detect "this is an all-gens effect"), but the actual per-tier mk1..mk8 tags are
+  // ALSO pushed here so every resource-totals consumer (computeResourceBonuses/nodeOwnBonusPct)
+  // folds an All-Gens node's contribution into each tier's OWN total individually, instead of
+  // bucketing it under one separate "All Gens" pseudo-resource -- each generator tier needs to
+  // be factored separately (not lumped together) for Meltdown to correctly apply to only MK1's
+  // share of an All-Gens bonus in the displayed totals, same as it already does in the
+  // optimizer's internal ranking (see poolAdjustedNodeValue).
+  if (/all generators|all gens\b/i.test(effect)) {
+    tags.push('allGens');
+    GEN_TIERS.forEach((n) => tags.push(`mk${n}`));
+  }
   const mkRange = effect.match(/mk\s?(\d)(?:\s?[-–&](?:\s?mk\s?)?(\d))?/i);
   if (mkRange) {
     const start = parseInt(mkRange[1], 10);
@@ -514,7 +529,11 @@ function computeResourceBonuses(shipId, levels) {
     const pct = nodeOwnBonusPct(shipId, slot, lvl);
     if (!pct) return;
     const factor = additiveToMultiplier(pct);
-    effectResources(meta.effect).forEach((res) => { mults[res] = (mults[res] || 1) * factor; });
+    // 'allGens' is a detection-only marker (see effectResources) -- its equivalent contribution
+    // is already fully captured via the individual mk1..mk8 tags pushed alongside it, so it's
+    // skipped here to avoid a redundant separate "All Gens" total that would double-count
+    // against each tier's own total and can't correctly reflect MK1-only Meltdown anyway.
+    effectResources(meta.effect).forEach((res) => { if (res === 'allGens') return; mults[res] = (mults[res] || 1) * factor; });
   });
   // Fleet Boost items with a pctEffect (Rank Benefits / Crew Motivation Modules, Rule of the
   // Cradle) grant a flat % to one specific resource, independent of install levels -- each
@@ -1344,10 +1363,10 @@ function computeShipRealPoolTotals(shipId) {
     const level = installs[slot] || 0;
     if (level <= 0) return;
     const increment = nodeLinearIncrement(shipId, slot) * level;
+    // effectResources already expands an "All Gens" effect into individual mk1..mk8 tags (plus
+    // the 'allGens' marker, skipped below) -- no separate allGens-specific credit pass needed,
+    // that would double-count every tier's pool.
     const tags = effectResources(catalog[slot].effect);
-    if (tags.includes('allGens')) {
-      GEN_TIERS.forEach((n) => { pools[`mk${n}`] = (pools[`mk${n}`] || MELTDOWN_POOL_EPS) + increment; });
-    }
     tags.forEach((tag) => {
       if (tag === 'cells' || isGenLikeTag(tag)) pools[tag] = (pools[tag] || MELTDOWN_POOL_EPS) + increment;
     });
@@ -1596,10 +1615,9 @@ function optimizeShipInstalls(shipId, budget, weights, prepForLongRun, runLength
     clicks.push(pickedSlot);
     categoryOf[pickedSlot].forEach((c) => { categorySpent[c] += 1; }); // credit every category this node feeds
     const increment = nodeLinearIncrement(shipId, pickedSlot);
+    // Same expansion as computeShipRealPoolTotals -- effectResources already lists every
+    // individual mk1..mk8 tag for an All-Gens node, no separate allGens-specific credit pass.
     const pickedTags = effectResources(catalog[pickedSlot].effect);
-    if (pickedTags.includes('allGens')) {
-      GEN_TIERS.forEach((n) => { pools[`mk${n}`] = (pools[`mk${n}`] || MELTDOWN_POOL_EPS) + increment; });
-    }
     pickedTags.forEach((tag) => {
       if (tag === 'cells' || isGenLikeTag(tag)) pools[tag] = (pools[tag] || MELTDOWN_POOL_EPS) + increment;
     });
