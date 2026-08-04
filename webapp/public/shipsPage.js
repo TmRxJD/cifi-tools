@@ -1170,6 +1170,7 @@ function renderFleetPage(root) {
       </div>
       <div class="flex gap-3 text-[10px] text-gray-400 mb-2 self-start" title="Rank/Crew are your real Ship Setup values -- Installs is the total shown in the grid below (this loadout's plan, or your real current installs if this ship wasn't touched).">
         <span>Rank <span class="text-gray-200 font-semibold">${input.rank || 0}</span></span>
+        <span>Evo <span class="text-gray-200 font-semibold">${input.evo || 0}</span></span>
         <span>Crew <span class="text-gray-200 font-semibold">${input.crew || 0}</span></span>
         <span>Installs <span class="text-gray-200 font-semibold">${totalInstalls}</span></span>
       </div>
