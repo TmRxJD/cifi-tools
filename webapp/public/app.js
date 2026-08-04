@@ -1626,16 +1626,12 @@ window.addEventListener('focus', () => scheduleBridgePoll(0));
 
 // ==================== AUTO-POLL FOR SAVE UPDATES ====================
 // Opt-in (see importPrefs.autoPoll): periodically pulls the raw save text via the CIFI Bridge
-// and re-runs the normal import pipeline (scoped to whatever's checked in the import checklist)
-// only if the content actually changed since the last successful import -- cheap content-hash
-// comparison, not a real diff, since the only thing that matters here is "did anything change."
+// and re-runs the normal import pipeline (scoped to whatever's checked in the import checklist).
+// processImportedSaveText's own diffApply logic decides whether anything semantically changed --
+// only THAT (not "did the raw bytes differ") gates the toast, since an idle game's raw save
+// drifts on nearly every pull regardless of whether anything the user cares about changed.
 const AUTO_POLL_SAVE_INTERVAL_MS = 20000;
 let autoPollSaveTimer = null;
-function cheapHash(text) {
-  let h = 0;
-  for (let i = 0; i < text.length; i++) { h = (Math.imul(31, h) + text.charCodeAt(i)) | 0; }
-  return `${text.length}:${h}`;
-}
 // Surfaced in the Import modal (see wireImportChecklist) so a silently-failing poll is
 // actually visible/debuggable instead of just "nothing seems to happen."
 let autoPollLastStatus = null; // { at: Date, ok: bool, detail: string }
@@ -1663,14 +1659,13 @@ async function autoPollSaveTick() {
       setAutoPollStatus(false, 'CIFI Bridge not reachable');
     } else {
       const rawText = await window.pullCifiSaveViaBridge(ws);
-      const hash = cheapHash(rawText);
-      if (hash !== store.__lastImportedSaveHash) {
-        store.__lastImportedSaveHash = hash;
-        await processImportedSaveText(rawText, true);
-        setAutoPollStatus(true, 'update found and imported');
-      } else {
-        setAutoPollStatus(true, 'no changes');
-      }
+      // No hash short-circuit here -- an idle game's raw save differs on nearly every pull
+      // (currency/timers/tick counters drift constantly) even when nothing meaningful changed,
+      // so a raw-content hash can't tell "real update" from "background drift" anyway. The
+      // real, semantic diff happens inside processImportedSaveText (see diffApply) -- that's
+      // what actually decides whether a toast fires, so trust its result here instead.
+      const result = await processImportedSaveText(rawText, true);
+      setAutoPollStatus(true, result.applied.length ? `update found (${result.applied.join(', ')})` : 'no changes');
     }
   } catch (e) {
     setAutoPollStatus(false, `pull failed (${e.message})`);
@@ -2768,10 +2763,17 @@ function getImportPrefs() {
 
 function wireImportChecklist() {
   const prefs = getImportPrefs();
-  document.querySelectorAll('#importSaveModal [data-import-cat]').forEach((cb) => {
+  const checkboxes = document.querySelectorAll('#importSaveModal [data-import-cat]');
+  checkboxes.forEach((cb) => {
     cb.checked = prefs.categories[cb.dataset.importCat] !== false;
     cb.onchange = () => { prefs.categories[cb.dataset.importCat] = cb.checked; saveStore(); };
   });
+  const setAll = (checked) => {
+    checkboxes.forEach((cb) => { cb.checked = checked; prefs.categories[cb.dataset.importCat] = checked; });
+    saveStore();
+  };
+  document.getElementById('importSelectAllBtn').onclick = () => setAll(true);
+  document.getElementById('importDeselectAllBtn').onclick = () => setAll(false);
   const pollToggle = document.getElementById('importAutoPollToggle');
   pollToggle.checked = !!prefs.autoPoll;
   pollToggle.onchange = () => { prefs.autoPoll = pollToggle.checked; saveStore(); scheduleAutoPollSave(); };
@@ -2826,12 +2828,25 @@ async function processImportedSaveText(rawText, silent) {
     save = await window.decodeCifiSaveText(rawText);
   } catch (e) {
     if (!silent) renderImportSaveResult(`Could not decode this file (${e.message}). Make sure it's an unmodified DATA.text or CifiBackup.text.`, true);
-    return null;
+    return { applied: [], error: e.message };
   }
   const prefs = getImportPrefs();
   const cats = prefs.categories;
   const mapped = window.mapCifiSaveToStore(save);
-  const applied = [];
+  const applied = []; // categories that were checked AND actually changed something
+
+  // Snapshots a store slice before mutating it, then reports whether anything in it actually
+  // differs afterward -- an idle game's raw save changes almost every single pull (currency,
+  // timers, tick counters all drift constantly), so "was this category checked" is NOT the same
+  // question as "did applying it actually change anything the user would care about." Silent
+  // auto-poll imports use this to decide whether to notify at all; even the manual modal result
+  // now reports real changes instead of just echoing back whichever boxes were checked.
+  const diffApply = (label, getSlice, apply) => {
+    const before = JSON.stringify(getSlice());
+    apply();
+    const after = JSON.stringify(getSlice());
+    if (before !== after) applied.push(label);
+  };
 
   // Ship-related pieces used to be one all-or-nothing call -- now each is its own checklist
   // item, so applyImportedShipData takes exactly which ones to apply.
@@ -2840,26 +2855,29 @@ async function processImportedSaveText(rawText, silent) {
     gearSets: !!cats.gearSets, fleetBadges: !!cats.fleetBadges, fleetResearch: !!cats.fleetResearch,
   };
   if (Object.values(shipCats).some(Boolean)) {
-    window.applyImportedShipData(save, shipCats);
-    if (shipCats.shipRanks) { autofillShipInputFromSave(); applied.push('ship ranks/crew/installs'); }
-    if (shipCats.shipGear) applied.push('ship progression counters');
-    if (shipCats.unlockedGens) applied.push('unlocked generator tiers');
-    if (shipCats.gearSets) applied.push('gear sets');
-    if (shipCats.fleetBadges) applied.push('academy badges');
-    if (shipCats.fleetResearch) applied.push('fleet research');
+    diffApply('ship data', () => ({
+      ships: store.ships, researchUnits: store.researchUnits, shipInputs: store.shipInputs,
+      shipGear: store.shipGear, unlockedGens: store.unlockedGens, gearSets: store.gearSets,
+      fleetBadges: store.fleetBadges, fleetResearch: store.fleetResearch,
+    }), () => {
+      window.applyImportedShipData(save, shipCats);
+      if (shipCats.shipRanks) autofillShipInputFromSave();
+    });
   }
 
   // globalUpgrades keys are prefixed by category ("relics.x", "inscryptions.iN",
   // "diamondcards.x", "shardmilestones.m0") -- split by prefix so each can be its own toggle.
   const applyUpgradesByPrefix = (prefix, label, catOn) => {
     if (!catOn) return;
-    let any = false;
-    Object.entries(mapped.globalUpgrades).forEach(([key, val]) => {
-      if (!key.startsWith(prefix)) return;
-      store.globalUpgrades[key] = val;
-      any = true;
+    diffApply(label, () => {
+      const slice = {};
+      Object.keys(store.globalUpgrades).forEach((k) => { if (k.startsWith(prefix)) slice[k] = store.globalUpgrades[k]; });
+      return slice;
+    }, () => {
+      Object.entries(mapped.globalUpgrades).forEach(([key, val]) => {
+        if (key.startsWith(prefix)) store.globalUpgrades[key] = val;
+      });
     });
-    if (any) applied.push(label);
   };
   applyUpgradesByPrefix('relics.', 'relics', cats.relics);
   applyUpgradesByPrefix('inscryptions.', 'inscryptions', cats.inscriptions);
@@ -2867,12 +2885,13 @@ async function processImportedSaveText(rawText, silent) {
   applyUpgradesByPrefix('shardmilestones.', 'milestone #0', cats.milestone);
 
   if (cats.gems) {
-    Object.entries(mapped.gems).forEach(([treeKey, treeState]) => {
-      if (!store.gems[treeKey]) return;
-      store.gems[treeKey].level = treeState.level;
-      treeState.nodes.forEach((on, i) => { store.gems[treeKey].nodes[i] = on; });
+    diffApply('gems', () => store.gems, () => {
+      Object.entries(mapped.gems).forEach(([treeKey, treeState]) => {
+        if (!store.gems[treeKey]) return;
+        store.gems[treeKey].level = treeState.level;
+        treeState.nodes.forEach((on, i) => { store.gems[treeKey].nodes[i] = on; });
+      });
     });
-    applied.push('gems');
   }
 
   if (cats.hunterBuilds) {
@@ -2884,6 +2903,7 @@ async function processImportedSaveText(rawText, silent) {
     // raw scanned level/talents per hunter (window.__lastScan, persisted) so the build editor
     // can offer "load scanned values" independently of this auto-managed card.
     window.__lastScan = window.__lastScan || {};
+    let anyHunterChanged = false;
     Object.entries(mapped.perHunter).forEach(([hunterKey, info]) => {
       if (!store[hunterKey]) return;
       window.__lastScan[hunterKey] = { level: info.level, talents: { ...(info.talents || {}) }, attributes: { ...(info.attributes || {}) } };
@@ -2894,6 +2914,7 @@ async function processImportedSaveText(rawText, silent) {
       const unchanged = existing && sameKeys(existing.talents, info.talents || {}) && sameKeys(existing.attributes, info.attributes || {})
         && existing.level === (info.level ?? existing.level);
       if (unchanged) return;
+      anyHunterChanged = true;
       if (existing) {
         if (info.level !== undefined) existing.level = info.level;
         Object.entries(info.talents || {}).forEach(([talentId, level]) => { existing.talents[talentId] = level; });
@@ -2909,22 +2930,27 @@ async function processImportedSaveText(rawText, silent) {
       }
     });
     localStorage.setItem('huntersim_last_scan', JSON.stringify(window.__lastScan));
-    applied.push('hunter level/talents/attributes');
+    if (anyHunterChanged) applied.push('hunter level/talents/attributes');
   }
 
-  saveStore();
-  render();
+  if (applied.length) {
+    saveStore();
+    render();
+  }
 
   if (silent) {
-    showImportToast(applied.length ? `Save update detected -- re-imported ${applied.join(', ')}.` : 'Save update detected, but nothing is checked to import.');
+    if (applied.length) showImportToast(`Save update detected -- re-imported ${applied.join(', ')}.`);
+    // else: nothing actually changed (or nothing's checked) -- stay silent, no toast.
   } else {
     const skipped = mapped.unmapped.length
       ? `<div class="text-gray-400 text-xs mt-1">Not yet mapped (left unchanged): ${mapped.unmapped.join(', ')}</div>`
       : '';
-    const summary = applied.length ? `Imported ${applied.join(', ')}.` : 'Nothing is checked in the list above -- check at least one category to import.';
+    const summary = applied.length
+      ? `Imported ${applied.join(', ')}.`
+      : (Object.values(cats).some(Boolean) ? 'Save decoded -- no changes from what\'s already stored.' : 'Nothing is checked in the list above -- check at least one category to import.');
     renderImportSaveResult(`${summary}${skipped}`);
   }
-  return rawText;
+  return { applied };
 }
 
 // Small transient toast for auto-poll imports -- the import modal isn't necessarily open when
