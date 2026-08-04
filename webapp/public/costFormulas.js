@@ -352,7 +352,7 @@
     if (typeof n !== 'number' || Number.isNaN(n) || n === 0) return '0';
     const mag = Math.floor(Math.log10(n) / 3);
     if (mag < 0 || n < 1000) return n.toFixed(2);
-    if (mag >= SUFFIXES.length) return n.toExponential(2);
+    if (mag >= SUFFIXES.length) return n.toExponential(2).replace('e+', 'e');
     return `${(n / Math.pow(10, 3 * mag)).toFixed(2)}${SUFFIXES[mag]}`;
   }
 

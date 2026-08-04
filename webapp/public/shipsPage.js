@@ -543,7 +543,7 @@ function additiveToMultiplier(additivePct) { return 1 + additivePct / 100; }
 // 1000 it still needs more than 2 decimals for tiny bonuses (fmtBig floors those to "1.00",
 // same misleading "looks like zero" problem toFixed(2) had) -- scale precision there instead.
 function formatMult(x) {
-  if (x >= 1000) return window.CostFormulas ? window.CostFormulas.fmtBig(x) : x.toExponential(2);
+  if (x >= 1000) return window.CostFormulas ? window.CostFormulas.fmtBig(x) : x.toExponential(2).replace('e+', 'e');
   if (x >= 10) return x.toFixed(1);
   if (x >= 1.01) return x.toFixed(2);
   return x.toFixed(4);
@@ -1152,6 +1152,8 @@ function renderFleetPage(root) {
     const levels = loadout.perShip[n]?.levels || getShipInput(n).installs;
     const clicks = loadout.perShip[n]?.clicks || [];
     const portrait = SHIP_PORTRAITS[n];
+    const input = getShipInput(n);
+    const totalInstalls = Object.values(levels).reduce((a, b) => a + (b || 0), 0);
     const card = document.createElement('div');
     card.className = 'relative bg-gray-800 rounded-lg border border-gray-700 p-3 flex flex-col items-center';
     // The Zaglag checklist icon only appears on Zagreus's card, and only once a loadout has
@@ -1165,6 +1167,11 @@ function renderFleetPage(root) {
       <div class="flex items-center gap-2 mb-2 self-start">
         ${portrait ? `<img src="assets/ships/${portrait}.png" class="w-8 h-8 object-contain" alt="${shipDisplayName(n)}" />` : ''}
         <span class="font-medium text-white text-sm">${shipDisplayName(n)}</span>
+      </div>
+      <div class="flex gap-3 text-[10px] text-gray-400 mb-2 self-start" title="Rank/Crew are your real Ship Setup values -- Installs is the total shown in the grid below (this loadout's plan, or your real current installs if this ship wasn't touched).">
+        <span>Rank <span class="text-gray-200 font-semibold">${input.rank || 0}</span></span>
+        <span>Crew <span class="text-gray-200 font-semibold">${input.crew || 0}</span></span>
+        <span>Installs <span class="text-gray-200 font-semibold">${totalInstalls}</span></span>
       </div>
       <div data-hexgrid></div>
       <div class="flex gap-2 w-full mt-3">
@@ -1789,6 +1796,7 @@ function openLoadoutDetail(shipId, levels, mode, clicks) {
   document.getElementById('loadoutDetailTitle').textContent = `${shipDisplayName(shipId)} -- ${mode === 'order' ? 'Install Order' : 'Effective Path'}`;
   let lines;
   let note;
+  let nextClicks = null; // only set for 'path' mode -- needed below to commit a confirmed prefix
   if (mode === 'order') {
     lines = expandClicks(clicks || [], catalog, {}, shipId);
     note = 'Every individual point-spend to build this card\'s levels from scratch, in the exact order the optimizer picked them -- interleaved across nodes, never bulk-bought into one node before touching another.';
@@ -1805,16 +1813,47 @@ function openLoadoutDetail(shipId, levels, mode, clicks) {
     const realTotal = Object.values(getShipInput(shipId).installs).reduce((a, b) => a + b, 0);
     const full = optimizeShipInstalls(shipId, realTotal + 30, gear.focusWeights, OPTIMIZER_MELTDOWN_FACTOR, prepForLongRun, optSettings.runLength);
     const atRealTotal = optimizeShipInstalls(shipId, realTotal, gear.focusWeights, OPTIMIZER_MELTDOWN_FACTOR, prepForLongRun, optSettings.runLength);
-    const nextClicks = full.clicks.slice(realTotal);
+    nextClicks = full.clicks.slice(realTotal);
     lines = expandClicks(nextClicks, catalog, atRealTotal.levels, shipId);
-    note = 'Every individual point-spend for the next points beyond your current total (once you earn them), in order, following the ideal allocation path -- interleaved across nodes, never bulk-bought.';
+    note = 'Every individual point-spend for the next points beyond your current total (once you earn them), in order, following the ideal allocation path -- interleaved across nodes, never bulk-bought. Click an item once you\'ve actually installed it in-game to confirm your real installs up to that point.';
   }
   const body = document.getElementById('loadoutDetailBody');
   body.innerHTML = `
     <p class="text-xs text-gray-500 mb-3">${note}</p>
     <ol class="space-y-1.5">
-      ${lines.length ? lines.map((l, i) => `<li class="flex items-center justify-between text-sm bg-gray-700/50 rounded px-3 py-1.5"><span class="flex items-center gap-2 text-gray-300">${i + 1}. ${l.icon ? `<img src="${l.icon}" class="w-5 h-5" />` : ''}${escapeHtml(l.name)}</span><span class="text-white font-medium">${l.level}<span class="text-gray-500">/${l.max}</span></span></li>`).join('') : '<li class="text-xs text-gray-500">No points to allocate.</li>'}
+      ${lines.length ? lines.map((l, i) => `
+        <li data-path-item="${i}" class="flex items-center justify-between text-sm bg-gray-700/50 rounded px-3 py-1.5 ${mode === 'path' ? 'cursor-pointer hover:bg-gray-700' : ''}">
+          <span class="flex items-center gap-2 text-gray-300">${i + 1}. ${l.icon ? `<img src="${l.icon}" class="w-5 h-5" />` : ''}${escapeHtml(l.name)}</span>
+          <span class="flex items-center gap-2">
+            <span class="text-white font-medium">${l.level}<span class="text-gray-500">/${l.max}</span></span>
+            ${mode === 'path' ? `<button data-confirm-up-to="${i}" class="hidden w-6 h-6 flex-shrink-0 rounded-full bg-green-600 hover:bg-green-500 text-white items-center justify-center text-xs" title="I've installed up to here -- update my real installs">✓</button>` : ''}
+          </span>
+        </li>`).join('') : '<li class="text-xs text-gray-500">No points to allocate.</li>'}
     </ol>`;
+  if (mode === 'path' && nextClicks.length) {
+    // Click a row to reveal its confirm checkmark (only one revealed at a time); the checkmark
+    // itself commits every click UP TO AND INCLUDING that row into the ship's real installs,
+    // then re-opens this same modal so it recomputes from the new real total.
+    body.querySelectorAll('[data-path-item]').forEach((li) => {
+      li.onclick = () => {
+        body.querySelectorAll('[data-confirm-up-to]').forEach((b) => { b.classList.add('hidden'); b.classList.remove('flex'); });
+        const btn = li.querySelector('[data-confirm-up-to]');
+        btn.classList.remove('hidden');
+        btn.classList.add('flex');
+      };
+    });
+    body.querySelectorAll('[data-confirm-up-to]').forEach((btn) => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const upTo = Number(btn.dataset.confirmUpTo);
+        const installs = getShipInput(shipId).installs;
+        nextClicks.slice(0, upTo + 1).forEach((slot) => { installs[slot] = (installs[slot] || 0) + 1; });
+        window.saveStore();
+        openLoadoutDetail(shipId, levels, 'path', clicks);
+        renderFleetPage(document.getElementById('pageRoot'));
+      };
+    });
+  }
   document.getElementById('loadoutDetailModal').classList.remove('hidden');
 }
 document.getElementById('closeLoadoutDetailModalBtn').onclick = () => document.getElementById('loadoutDetailModal').classList.add('hidden');
