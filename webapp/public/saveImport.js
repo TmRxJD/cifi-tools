@@ -99,10 +99,16 @@ window.decodeCifiSaveText = decodeSaveText;
 //     (AORTier2Levels[] obscured array), inscryptions (IS{n}Level), diamond cards
 //     (GaidenCardPurchased/IridianCardPurchased), hunter level/highest stage, talents
 //     (Skill{n}Level, positional per hunter's own talent order).
+//   PATTERN-CONFIRMED (field name matches the established RU{id}Level / {Name}Level
+//     conventions exactly, but reads 0 on every account checked so far -- no live nonzero
+//     diff yet): hunter researches (#81/#95/#105 -> RU81/95/105Level), Diamond Ultima
+//     (-> DiamondUltimaLevel).
 //   NOT MAPPED (left untouched on import): hunter base stats (HP/ATK/etc -- the save only
 //     stores upgrade-LEVEL ints, not the final displayed stat number, and the level->stat
 //     formula isn't reverse-engineered yet), attributes (no per-attribute field exists in
-//     the save at all, only an aggregate spent-points counter), researches, loop mods,
+//     the save at all, only an aggregate spent-points counter), Crew Motivation modules
+//     (CM1-26 booleans exist but their in-game meaning is unconfirmed), loop mods (per-mod
+//     LM{n}Level fields exist but the id->wiki-mod offset isn't confirmed -- see shipSchema.js),
 //     diamond specials, IAP, trinkets, and gem named-upgrade fields (GU-index order
 ///    unconfirmed) -- these need a save with nonzero values in each to pin down exactly.
 
@@ -205,7 +211,22 @@ function mapSaveToStore(save) {
     globalUpgrades['shardmilestones.m0'] = realNum(save.SU0Level);
   }
 
-  unmapped.push('researches', 'cms', 'loopmods', 'diamondspecials', 'iap', 'ultima', 'gadgets', 'trinkets', 'shardmilestones');
+  // Hunter Researches (#81/#95/#105) -> the same RU{id}Level registry already confirmed for
+  // Fleet Research (RU68/RU78) and every per-ship install node -- these three ids just happen
+  // to be hunter-facing instead of ship-facing. Field exists and reads 0 on the account this
+  // was checked against (matches the in-game state: none of the three had been leveled), so
+  // this is pattern-confirmed but not yet value-diff-confirmed against a nonzero real number.
+  if (save.RU81Level !== undefined) globalUpgrades['researches.res81'] = realNum(save.RU81Level);
+  if (save.RU95Level !== undefined) globalUpgrades['researches.res95'] = realNum(save.RU95Level);
+  if (save.RU105Level !== undefined) globalUpgrades['researches.res105'] = realNum(save.RU105Level);
+
+  // Diamond Ultima -> DiamondUltimaLevel. Exact name match to the "Diamond Ultima" upgrade
+  // page, same {Name}Level convention as every other confirmed field -- reads 0 on the account
+  // this was checked against (matches in-game state), so pattern-confirmed, not yet
+  // value-diff-confirmed against a nonzero real number.
+  if (save.DiamondUltimaLevel !== undefined) globalUpgrades['ultima.ulti'] = realNum(save.DiamondUltimaLevel);
+
+  unmapped.push('cms', 'loopmods', 'diamondspecials', 'iap', 'gadgets', 'trinkets');
 
   // Gems: tree level + 6 boolean nodes per tree. Every tree except Exodus stores its nodes
   // as individual `${prefix}GemNode{n}Level` fields; Exodus alone stores them as a single

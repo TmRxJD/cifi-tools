@@ -53,6 +53,7 @@ function defaultImportPrefs() {
     categories: {
       hunterBuilds: true, relics: true, inscriptions: true, diamondCards: true, milestone: true, gems: true,
       shipRanks: true, shipGear: true, unlockedGens: true, gearSets: true, fleetBadges: true, fleetResearch: true,
+      researches: true, diamondUltima: true,
     },
     autoPoll: false,
     quiet: false, // suppress the "update found" toast when auto-poll silently re-imports
@@ -2888,6 +2889,8 @@ async function processImportedSaveText(rawText, silent) {
   applyUpgradesByPrefix('inscryptions.', 'inscryptions', cats.inscriptions);
   applyUpgradesByPrefix('diamondcards.', 'diamond cards', cats.diamondCards);
   applyUpgradesByPrefix('shardmilestones.', 'milestone #0', cats.milestone);
+  applyUpgradesByPrefix('researches.', 'researches', cats.researches);
+  applyUpgradesByPrefix('ultima.', 'diamond ultima', cats.diamondUltima);
 
   if (cats.gems) {
     diffApply('gems', () => store.gems, () => {
