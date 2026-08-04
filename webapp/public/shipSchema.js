@@ -168,8 +168,14 @@ window.mapCifiSaveToUnlockedGens = mapSaveToUnlockedGens;
 //   automationsUnlocked -> derived by counting the 12 `MK{n}AutomationPurchased` booleans.
 //   ticksThisLoop -> TicksThisLoop (BigDouble) -- NOT TicksAllTime (an earlier version of this
 //     mapping wrongly used the all-time total; Hephaestus's nodes want the CURRENT loop's count).
-//   operationsCompleted -> NewSMOperationsAllTime (BigDouble; shared by Demeter + Koios --
-//     the legacy `SMOperationsAllTime` field is dead/always 0 on the diffed account).
+//   operationsCompleted -> NewSMOperationsThisLoop (BigDouble; shared by Demeter + Koios).
+//     CORRECTED 2026-08 -- an earlier version used NewSMOperationsAllTime, which turned out to
+//     be a near-dead/tiny counter (159,460 on the account this was diffed against) compared to
+//     NewSMOperationsThisLoop/NewSMOperationsCompleted (29.19 BILLION, identical to each other)
+//     -- confirmed via Koios's "The Venn Hypothesis" node, whose in-game "Total Bonus" (x73.56b)
+//     only reconciled (within a plausible live-growth margin) once ThisLoop was used instead of
+//     AllTime. The legacy (non-"New") `SMOperationsAllTime` field really is dead/always 0, which
+//     is a separate fact from this.
 //   studiesThisLR -> StudiesThisLoop (BigDouble; "LR" = Loop Reset, i.e. "this loop").
 //   researchLevels -> ResearchLevelsThisConstruction (sum of levels across the Research
 //     Catalogue tree, matching the node text's "level in Researches").
@@ -219,7 +225,7 @@ function mapSaveToShipGear(save) {
   }
   if (anyAutomationField) gear.automationsUnlocked = automationsUnlocked;
   if (save.TicksThisLoop !== undefined) gear.ticksThisLoop = bigDoubleToNumber(save.TicksThisLoop);
-  if (save.NewSMOperationsAllTime !== undefined) gear.operationsCompleted = bigDoubleToNumber(save.NewSMOperationsAllTime);
+  if (save.NewSMOperationsThisLoop !== undefined) gear.operationsCompleted = bigDoubleToNumber(save.NewSMOperationsThisLoop);
   if (save.StudiesThisLoop !== undefined) gear.studiesThisLR = bigDoubleToNumber(save.StudiesThisLoop);
   if (save.ResearchLevelsThisConstruction !== undefined) gear.researchLevels = realNum(save.ResearchLevelsThisConstruction);
   if (save.FullyCompletedResearches !== undefined) gear.totalCompletedResearch = realNum(save.FullyCompletedResearches);
