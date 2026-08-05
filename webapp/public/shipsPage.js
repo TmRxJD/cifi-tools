@@ -792,17 +792,31 @@ function computeGearEffectivePath(resource, steps = 30) {
   }
   return path;
 }
+// Same list layout as openLoadoutDetail's ship Effective Path (icon(s) + name on the left,
+// level readout on the right) -- reused here rather than a new one-off layout. "Gear pair" =
+// the piece's own 2 target installs (install1/install2), shown as their real ship-node icons
+// (the same nodeIconPath assets the ship pages already use -- no separate gear-piece art exists).
 function openGearEffectivePath(resource) {
   const path = computeGearEffectivePath(resource, 30);
   document.getElementById('loadoutDetailTitle').textContent = `Gear Effective Path -- ${RESOURCE_LABELS[resource] || resource}`;
   let cumulative = 0;
   const body = document.getElementById('loadoutDetailBody');
+  // Confidence caveat lives in a hover tooltip on each row (same convention as the amber-dot
+  // unconfirmed-node warning on ship hexes), not as inline paragraph text.
+  const costNote = 'Cost is unconfirmed (community-sourced, not verified against a real account) -- see this piece\'s row for detail.';
   body.innerHTML = `
-    <p class="text-xs text-gray-500 mb-3">Next 30 gear level-ups ranked by Academy Points cost-per-value toward ${RESOURCE_LABELS[resource] || resource}, starting from your real current gear levels -- cheapest ROI first, not just biggest raw bonus. Cost data is unconfirmed (see REAL_GEAR_PIECES note) -- treat the exact order as a rough guide until cross-checked against your real Academy Points costs.</p>
+    <p class="text-xs text-gray-500 mb-3">Next 30 gear level-ups toward ${RESOURCE_LABELS[resource] || resource}, cheapest Academy-Points-per-value first, starting from your real current gear levels.</p>
     <ol class="space-y-1.5">
       ${path.length ? path.map((step, i) => {
         cumulative += step.cost;
-        return `<li class="flex items-center justify-between text-sm bg-gray-700/50 rounded px-3 py-1.5"><span class="text-gray-300">${i + 1}. ${escapeHtml(step.piece.name)} <span class="text-gray-500">(${step.piece.color})</span></span><span class="text-white font-medium">Lv ${step.level} <span class="text-gray-500">-- ${formatMult(step.cost)} AP (${formatMult(cumulative)} total)</span></span></li>`;
+        const i1 = parseInstallCode(step.piece.install1);
+        const i2 = parseInstallCode(step.piece.install2);
+        const icon1 = i1 ? nodeIconPath(i1.ship, i1.code) : null;
+        const icon2 = i2 ? nodeIconPath(i2.ship, i2.code) : null;
+        return `<li class="flex items-center justify-between text-sm bg-gray-700/50 rounded px-3 py-1.5" title="${escapeHtml(costNote)}">
+          <span class="flex items-center gap-2 text-gray-300">${i + 1}. ${icon1 ? `<img src="${icon1}" class="w-5 h-5" onerror="this.remove()" />` : ''}${icon2 ? `<img src="${icon2}" class="w-5 h-5 -ml-1" onerror="this.remove()" />` : ''}${escapeHtml(step.piece.name)}</span>
+          <span class="text-white font-medium">Lv ${step.level}<span class="text-gray-500"> · ${formatMult(step.cost)} AP (${formatMult(cumulative)} total)</span></span>
+        </li>`;
       }).join('') : '<li class="text-xs text-gray-500">No gear pieces feed this resource.</li>'}
     </ol>`;
   document.getElementById('loadoutDetailModal').classList.remove('hidden');
