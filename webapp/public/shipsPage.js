@@ -765,62 +765,107 @@ function gearPieceResourceValue(piece, resource) {
   if (i2 && SHIP_NODE_CATALOG[i2.ship]?.[i2.code] && effectResources(SHIP_NODE_CATALOG[i2.ship][i2.code].effect).includes(resource)) value += 2;
   return value;
 }
-// Gear Effective Path: greedy, one level-up at a time, from REAL current piece levels (like
-// optimizeShipInstalls' "cost-adjusted marginal value" spirit, but for Gear's Academy Points
-// cost against one chosen resource). Each step buys whichever eligible piece (nonzero value
-// toward `resource`) gives the best value-per-AP-cost for its own NEXT level -- ROI-ranked, not
-// "biggest raw bonus first". A piece's %/level value is constant regardless of its current level
-// (a pure multiplicative compounding factor -- 1.01^(L+1)/1.01^L is always 1.01), but its COST
-// grows every level (costScalar^level), so lower-level/cheaper-to-level pieces naturally win
-// early and the ranking shifts toward whichever piece is currently cheapest per value point.
-function computeGearEffectivePath(resource, steps = 30) {
+// Gear Effective Path: greedy, one level-up at a time, from REAL current piece levels. Ranked by
+// RAW value only, NOT cost-adjusted -- the Academy Points cost data (REAL_GEAR_PIECES'
+// costBase/costScalar) turned out to be wrong (community-sourced, never confirmed), so cost is
+// deliberately left out of the ranking entirely until a real cost formula is found, rather than
+// ranking by a number known to be inaccurate. A piece's %/level value is constant regardless of
+// level (a pure multiplicative factor -- 1.01^(L+1)/1.01^L is always 1.01), so with no cost to
+// weigh against it, the single highest-value eligible piece would otherwise dominate every step;
+// `lastPicked` exclusion (same pattern as optimizeShipInstalls' "no consecutive repeats") spreads
+// ties across every piece sharing the top value instead of parking on just one.
+function computeGearEffectivePath(scoreFn, steps) {
   const gearSets = getGearSets();
   const levels = {};
   gearSets.pieces.forEach((p) => { levels[p.name] = p.level || 0; });
-  const eligible = gearSets.pieces.filter((p) => gearPieceResourceValue(p, resource) > 0);
+  const eligible = gearSets.pieces.filter((p) => scoreFn(p) > 0);
   const path = [];
+  let lastPicked = null;
   for (let i = 0; i < steps; i++) {
-    let best = null; let bestScore = -Infinity; let bestCost = 0;
-    eligible.forEach((p) => {
-      const cost = gearPieceCostAtLevel(p, levels[p.name] + 1);
-      const score = gearPieceResourceValue(p, resource) / cost;
-      if (score > bestScore) { bestScore = score; best = p; bestCost = cost; }
-    });
-    if (!best) break;
-    levels[best.name] += 1;
-    path.push({ piece: best, level: levels[best.name], cost: bestCost });
+    if (!eligible.length) break;
+    const maxScore = Math.max(...eligible.map(scoreFn));
+    const candidates = eligible.filter((p) => scoreFn(p) === maxScore);
+    const pick = candidates.find((p) => p.name !== lastPicked) || candidates[0];
+    levels[pick.name] += 1;
+    path.push({ piece: pick, level: levels[pick.name] });
+    lastPicked = pick.name;
   }
   return path;
 }
-// Same list layout as openLoadoutDetail's ship Effective Path (icon(s) + name on the left,
-// level readout on the right) -- reused here rather than a new one-off layout. "Gear pair" =
-// the piece's own 2 target installs (install1/install2), shown as their real ship-node icons
-// (the same nodeIconPath assets the ship pages already use -- no separate gear-piece art exists).
-function openGearEffectivePath(resource) {
-  const path = computeGearEffectivePath(resource, 30);
-  document.getElementById('loadoutDetailTitle').textContent = `Gear Effective Path -- ${RESOURCE_LABELS[resource] || resource}`;
-  let cumulative = 0;
+// Shared renderer for both the per-resource and fleet-wide weighted Gear Effective Path --
+// same list layout as openLoadoutDetail's ship Effective Path (icon(s) + name on the left,
+// level readout on the right), including the same click-a-row-to-reveal-a-confirm-checkmark
+// interaction: confirming commits every step up to and including that row into the real Gear
+// Sets levels (last simulated level per piece wins), then recomputes from the new baseline.
+// "Gear pair" = the piece's own 2 target installs (install1/install2), shown as their real
+// ship-node icons (the same nodeIconPath assets the ship pages already use -- no separate
+// gear-piece art exists).
+function renderGearEffectivePathModal(title, path, reopen) {
+  document.getElementById('loadoutDetailTitle').textContent = title;
   const body = document.getElementById('loadoutDetailBody');
-  // Confidence caveat lives in a hover tooltip on each row (same convention as the amber-dot
-  // unconfirmed-node warning on ship hexes), not as inline paragraph text.
-  const costNote = 'Cost is unconfirmed (community-sourced, not verified against a real account) -- see this piece\'s row for detail.';
   body.innerHTML = `
-    <p class="text-xs text-gray-500 mb-3">Next 30 gear level-ups toward ${RESOURCE_LABELS[resource] || resource}, cheapest Academy-Points-per-value first, starting from your real current gear levels.</p>
+    <p class="text-xs text-gray-500 mb-3">Ranked by raw bonus value (no cost weighting yet -- Academy Points cost data isn't confirmed, see this piece's row). Click a step once you've actually leveled it in-game to confirm your real gear levels up to that point.</p>
     <ol class="space-y-1.5">
       ${path.length ? path.map((step, i) => {
-        cumulative += step.cost;
         const i1 = parseInstallCode(step.piece.install1);
         const i2 = parseInstallCode(step.piece.install2);
         const icon1 = i1 ? nodeIconPath(i1.ship, i1.code) : null;
         const icon2 = i2 ? nodeIconPath(i2.ship, i2.code) : null;
-        return `<li class="flex items-center justify-between text-sm bg-gray-700/50 rounded px-3 py-1.5" title="${escapeHtml(costNote)}">
+        return `<li data-gear-path-item="${i}" class="flex items-center justify-between text-sm bg-gray-700/50 rounded px-3 py-1.5 cursor-pointer hover:bg-gray-700">
           <span class="flex items-center gap-2 text-gray-300">${i + 1}. ${icon1 ? `<img src="${icon1}" class="w-5 h-5" onerror="this.remove()" />` : ''}${icon2 ? `<img src="${icon2}" class="w-5 h-5 -ml-1" onerror="this.remove()" />` : ''}${escapeHtml(step.piece.name)}</span>
-          <span class="text-white font-medium">Lv ${step.level}<span class="text-gray-500"> · ${formatMult(step.cost)} AP (${formatMult(cumulative)} total)</span></span>
+          <span class="flex items-center gap-2">
+            <span class="text-white font-medium">Lv ${step.level}</span>
+            <button data-confirm-gear-up-to="${i}" class="hidden w-6 h-6 flex-shrink-0 rounded-full bg-green-600 hover:bg-green-500 text-white items-center justify-center text-xs" title="I've leveled up to here -- update my real gear levels">✓</button>
+          </span>
         </li>`;
-      }).join('') : '<li class="text-xs text-gray-500">No gear pieces feed this resource.</li>'}
+      }).join('') : '<li class="text-xs text-gray-500">No gear pieces feed anything weighted here.</li>'}
     </ol>`;
+  if (path.length) {
+    body.querySelectorAll('[data-gear-path-item]').forEach((li) => {
+      li.onclick = () => {
+        body.querySelectorAll('[data-confirm-gear-up-to]').forEach((b) => { b.classList.add('hidden'); b.classList.remove('flex'); });
+        const btn = li.querySelector('[data-confirm-gear-up-to]');
+        btn.classList.remove('hidden');
+        btn.classList.add('flex');
+      };
+    });
+    body.querySelectorAll('[data-confirm-gear-up-to]').forEach((btn) => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const upTo = Number(btn.dataset.confirmGearUpTo);
+        const gearSets = getGearSets();
+        const finalLevels = {};
+        path.slice(0, upTo + 1).forEach((step) => { finalLevels[step.piece.name] = step.level; });
+        Object.entries(finalLevels).forEach(([name, lvl]) => {
+          const piece = gearSets.pieces.find((p) => p.name === name);
+          if (piece) piece.level = lvl;
+        });
+        window.saveStore();
+        reopen();
+        if (document.getElementById('gearPiecesContainer')) renderGearSetsPage(document.getElementById('pageRoot'));
+        if (document.getElementById('fleetCanvas')) renderFleetPage(document.getElementById('pageRoot'));
+      };
+    });
+  }
   document.getElementById('loadoutDetailModal').classList.remove('hidden');
 }
+function openGearEffectivePath(resource) {
+  const path = computeGearEffectivePath((p) => gearPieceResourceValue(p, resource), 30);
+  renderGearEffectivePathModal(`Gear Effective Path -- ${RESOURCE_LABELS[resource] || resource}`, path, () => openGearEffectivePath(resource));
+}
+// Fleet-wide combined path: one list mixing every resource type, weighted by the SAME Focus
+// Weights sliders used for Optimize Loadout/This Ship (getShipGear().focusWeights) -- a piece
+// feeding a heavily-weighted resource ranks above one feeding a 0-weighted resource, instead of
+// treating every resource as equally important.
+function openGearEffectivePathWeighted() {
+  const weights = getShipGear().focusWeights;
+  const path = computeGearEffectivePath(
+    (p) => GEAR_EFFECTIVE_PATH_RESOURCES.reduce((sum, res) => sum + gearPieceResourceValue(p, res) * (weights[res] || 0), 0),
+    50,
+  );
+  renderGearEffectivePathModal('Gear Effective Path -- Weighted (Focus Weights)', path, openGearEffectivePathWeighted);
+}
+window.openGearEffectivePathWeighted = openGearEffectivePathWeighted;
 window.openGearEffectivePath = openGearEffectivePath;
 
 // `cats` is an object of booleans, one per granular import category (see IMPORT_SHIP_CATEGORIES
@@ -1218,7 +1263,10 @@ function renderFleetPage(root) {
     <div class="mb-4 rounded-lg overflow-hidden shadow-lg">
       <div class="bg-gradient-to-r from-blue-900 to-gray-800 px-5 py-4 border-b border-gray-600 flex items-center justify-between gap-3 flex-wrap">
         <div><h1 class="text-xl font-bold">Fleet Optimizer</h1><p class="text-xs text-gray-300 mt-0.5">Ships not touched by the active loadout show their current Ship Setup baseline.</p></div>
-        <button id="newLoadoutBtn" class="flex items-center space-x-1 px-3 py-2 rounded-full bg-gradient-to-r from-purple-600 to-purple-800 hover:from-purple-700 hover:to-purple-900 text-white font-semibold shadow-lg text-xs sm:text-sm flex-shrink-0">${iconSvg('plus', 16)}<span>Optimize Loadout</span></button>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <button id="fleetGearPathBtn" class="flex items-center space-x-1 px-3 py-2 rounded-full bg-gray-700 hover:bg-gray-600 text-white font-semibold shadow-lg text-xs sm:text-sm" title="Gear Effective Path weighted by the same Focus Weights used for Optimize Loadout, combining every resource into one list.">${iconSvg('settings', 16)}<span>Gear Path</span></button>
+          <button id="newLoadoutBtn" class="flex items-center space-x-1 px-3 py-2 rounded-full bg-gradient-to-r from-purple-600 to-purple-800 hover:from-purple-700 hover:to-purple-900 text-white font-semibold shadow-lg text-xs sm:text-sm">${iconSvg('plus', 16)}<span>Optimize Loadout</span></button>
+        </div>
       </div>
       <div class="bg-gray-800/70 px-3 py-2 border-b border-gray-700 flex items-center gap-2 flex-wrap" id="loadoutTabsRow"></div>
       <div class="bg-gray-800 p-3 flex flex-wrap gap-2" id="fleetTotalsRow">
@@ -1242,6 +1290,7 @@ function renderFleetPage(root) {
     <div class="grid gap-4" id="fleetCanvas" style="grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));"></div>`;
 
   document.getElementById('newLoadoutBtn').onclick = openNewLoadoutModal;
+  document.getElementById('fleetGearPathBtn').onclick = openGearEffectivePathWeighted;
 
   // Tab bar: click to switch, pencil/trash only on the active tab to keep the row uncluttered,
   // "+" to add (up to MAX_LOADOUT_TABS). Rename is an inline text input swapped in for the
