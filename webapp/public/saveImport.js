@@ -192,9 +192,16 @@ function mapSaveToStore(save) {
     });
   }
 
-  // Inscryptions
+  // Inscryptions -- the raw save field for "Inscryption #N" (as labeled in this app and
+  // in-game) is IS{N+12}Level, NOT IS{N}Level. Confirmed directly against a real account:
+  // its #58/#59/#60/#61/#62 levels (2/1/3/1/0) matched IS70/IS71/IS72/IS73/IS74Level exactly,
+  // five-for-five, while IS58-62Level themselves were all 0 (why #60 always imported as 0
+  // regardless of the account's real level -- every id was silently reading the wrong slot,
+  // consistently 12 short). The save's IS-array is evidently a denser internal registry that
+  // starts 12 entries before this app's own inscription numbering, not a 1:1 index into it.
+  const INSCRYPTION_SAVE_OFFSET = 12;
   [...INSCRYPTION_IDS, ...FLEET_INSCRYPTION_IDS].forEach((n) => {
-    const v = save[`IS${n}Level`];
+    const v = save[`IS${n + INSCRYPTION_SAVE_OFFSET}Level`];
     if (v !== undefined) globalUpgrades[`inscryptions.i${n}`] = realNum(v);
   });
 

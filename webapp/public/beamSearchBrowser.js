@@ -380,17 +380,28 @@
       if (cfg.currentTalents && cfg.currentAttrs) seeds.push(sanitizeSeed(cfg.currentTalents, cfg.currentAttrs));
       for (const h of seedCandidates) seeds.push(sanitizeSeed(h.talentAlloc, h.attrAlloc));
 
-      // Two greedy marginal-value passes (one strict, one with a little exploration on near-
-      // ties) give the beam a strong starting point instead of relying purely on random
-      // mutation to stumble onto a good allocation -- this is what actually closes the gap
-      // against hand-tuned/community builds (see the big comment on greedyMarginalSeed above).
+      // Several greedy marginal-value passes at increasing exploration (EPSILONS below) give
+      // the beam a strong, diverse starting point instead of relying purely on random mutation
+      // to stumble onto a good allocation -- this is what actually closes the gap against
+      // hand-tuned/community builds (see the big comment on greedyMarginalSeed above).
+      const EPSILONS = [0, 0.15, 0.3, 0.45];
       let greedyEvalsUsed = 0;
-      const greedyStart = Date.now();
-      // Rough total step estimate for the progress bar: 2 greedy passes, each ~(budget) steps.
-      const greedyStepsEstimate = 2 * (cfg.TALENT_BUDGET + cfg.ATTRIBUTE_BUDGET);
+      // ONE timer anchor for the entire pass, set before any work starts. This used to be two
+      // separate `Date.now()` anchors -- `greedyStart` for the seeding phase, then a second
+      // fresh `start` declared only after seeding finished for every phase after that -- so
+      // the instant seeding ended, elapsed time reported relative to the NEW anchor and
+      // visibly dropped back near zero. That's exactly the "elapsed time resets partway
+      // through" bug: not a display issue, the underlying timestamp really was restarting.
+      const passStart = Date.now();
+      // Total step estimate for the progress bar: one pass per EPSILONS entry, each
+      // ~(budget) steps. This used to be hardcoded to "2 greedy passes" while EPSILONS
+      // actually had 4 entries, so the seeding progress bar blew past 100% partway through the
+      // 3rd/4th pass instead of tracking real progress -- now derived from the same array the
+      // loop below actually iterates, so it can't drift out of sync again.
+      const greedyStepsEstimate = EPSILONS.length * (cfg.TALENT_BUDGET + cfg.ATTRIBUTE_BUDGET);
       const reportGreedyProgress = (passOffset, step) => onProgress({
         evalsDone: 0, targetEvals, generation: 0, bestScore: null,
-        elapsedMs: Date.now() - greedyStart, phase: 'greedy-seeding',
+        elapsedMs: Date.now() - passStart, phase: 'greedy-seeding',
         greedyStep: passOffset + step, greedyStepsEstimate,
       });
       onProgress({ evalsDone: 0, targetEvals, generation: 0, bestScore: null, elapsedMs: 0, phase: 'greedy-seeding', greedyStep: 0, greedyStepsEstimate });
@@ -406,7 +417,6 @@
       // few "worse-right-now" moves that a single deterministic pass never would, giving the
       // beam actually different regions to refine instead of near-identical variants of one
       // greedy path.
-      const EPSILONS = [0, 0.15, 0.3, 0.45];
       const greedyRuns = [];
       for (let i = 0; i < EPSILONS.length; i++) {
         if (shouldCancel()) break;
@@ -426,15 +436,25 @@
         });
       }
 
-      let evalsDone = greedyEvalsUsed;
-      const start = Date.now();
+      // `genEvalsDone` tracks ONLY the generation loop's own spend, deliberately NOT seeded
+      // with greedyEvalsUsed. On a real account with a large point budget, the greedy-seeding
+      // passes above (4 epsilon passes, each stepping through the whole budget) can cost far
+      // more than targetEvals/RESTARTS by themselves -- confirmed directly: a level-80 account
+      // (320 combined talent+attribute points) can burn 10,000+ evals on seeding alone against
+      // a 1500-eval per-restart budget. Folding that cost into the SAME counter the generation
+      // `while` loop checks meant the loop's own condition (`evalsDone < targetEvals`) was
+      // already false before it ever ran once -- generation stayed stuck at 0 and the search
+      // silently skipped straight from seeding to polish every time, on every real account.
+      // `totalEvalsDone()` still reports the true combined cost for progress display/accounting.
+      let genEvalsDone = 0;
+      const totalEvalsDone = () => greedyEvalsUsed + genEvalsDone;
       const seedScores = await pool.scoreBatch(seeds, mode, searchIterations);
-      evalsDone += seeds.length;
+      genEvalsDone += seeds.length;
       let beam = dedupTopK(seeds.map((s, i) => ({ ...s, score: seedScores[i] })), beamWidth);
 
       const allSeen = new Map();
       beam.forEach((b) => allSeen.set(sigOf(b), b));
-      onProgress({ evalsDone, targetEvals, generation: 0, bestScore: beam[0].score, elapsedMs: Date.now() - start });
+      onProgress({ evalsDone: totalEvalsDone(), targetEvals, generation: 0, bestScore: beam[0].score, elapsedMs: Date.now() - passStart });
 
       // Stagnation escape: on a large point budget (dozens of attributes/talents), a single
       // 1-point mutation per neighbor barely perturbs the allocation, and dedupTopK keeps
@@ -450,7 +470,7 @@
       let lastBestScore = beam[0].score;
 
       let generation = 0;
-      while (evalsDone < targetEvals && !shouldCancel()) {
+      while (genEvalsDone < targetEvals && !shouldCancel()) {
         const stagnant = stagnantGens >= STAGNATION_LIMIT;
         const mutationHops = stagnant ? 3 : 1;
         const candidates = [];
@@ -478,7 +498,7 @@
           }
         }
         const scores = await pool.scoreBatch(candidates, mode, searchIterations);
-        evalsDone += candidates.length;
+        genEvalsDone += candidates.length;
         const scoredCandidates = candidates.map((c, i) => ({ ...c, score: scores[i] }));
         scoredCandidates.forEach((c) => {
           const sig = sigOf(c);
@@ -498,7 +518,7 @@
         generation++;
         if (beam[0].score > lastBestScore) { lastBestScore = beam[0].score; stagnantGens = 0; }
         else stagnantGens++;
-        onProgress({ evalsDone, targetEvals, generation, bestScore: beam[0].score, elapsedMs: Date.now() - start });
+        onProgress({ evalsDone: totalEvalsDone(), targetEvals, generation, bestScore: beam[0].score, elapsedMs: Date.now() - passStart });
       }
 
       // Beam search sampled random neighbors; it never verified that every simple single-point
@@ -515,15 +535,15 @@
         let bestPolished = null;
         for (const candidate of toPolish) {
           if (shouldCancel()) break;
-          onProgress({ evalsDone, targetEvals, generation, bestScore: beam[0].score, elapsedMs: Date.now() - start, phase: 'polish' });
+          onProgress({ evalsDone: totalEvalsDone(), targetEvals, generation, bestScore: beam[0].score, elapsedMs: Date.now() - passStart, phase: 'polish' });
           const polished = await hillClimbPolish(cfg, pool, mode, searchIterations, candidate, {
             shouldCancel,
             onStep: ({ round, maxRounds }) => onProgress({
-              evalsDone, targetEvals, generation, bestScore: beam[0].score, elapsedMs: Date.now() - start,
+              evalsDone: totalEvalsDone(), targetEvals, generation, bestScore: beam[0].score, elapsedMs: Date.now() - passStart,
               phase: 'polish', polishRound: round, polishRoundsEstimate: maxRounds,
             }),
           });
-          evalsDone += polished.evalsUsed;
+          genEvalsDone += polished.evalsUsed;
           if (!bestPolished || polished.score > bestPolished.score) bestPolished = polished;
         }
         if (bestPolished && bestPolished.score > beam[0].score) {
@@ -534,10 +554,16 @@
 
       if (beam.length) {
         const repaired = await repairLegality(cfg, pool, mode, searchIterations, beam[0]);
-        if (repaired) { beam[0] = repaired; evalsDone += repaired.evalsUsed; allSeen.set(sigOf(beam[0]), beam[0]); }
+        if (repaired) { beam[0] = repaired; genEvalsDone += repaired.evalsUsed; allSeen.set(sigOf(beam[0]), beam[0]); }
       }
 
-      return { beam, allSeen: [...allSeen.values()], generations: generation, evalsDone };
+      // Field name is `evalsDone` (not `evalsUsed`) -- matched by beamSearchBrowser's
+      // `totalEvalsDone += result.evalsUsed` below, which was a stale typo referencing a field
+      // that never existed on this return value. That meant `totalEvalsDone` became NaN after
+      // the very first restart pass, corrupting the progress display (and its eval counts) for
+      // every restart after the first -- fixed by renaming the accumulator on the caller side
+      // to match this field instead of guessing which name was "right."
+      return { beam, allSeen: [...allSeen.values()], generations: generation, evalsDone: totalEvalsDone() };
     }
   }
 
@@ -556,9 +582,34 @@
     const minVal = cfg.ATTRIBUTE_MIN_VALUE || {};
     let evalsUsed = 0;
     const attrAlloc = { ...entry.attrAlloc };
-    const before = JSON.stringify(attrAlloc);
+    const talentAlloc = { ...entry.talentAlloc };
+    let changed = false;
+
+    const attrBefore = JSON.stringify(attrAlloc);
     Optimizer.clearInvalidDescendants(cfg.ATTRIBUTES, deps, minVal, attrAlloc);
-    if (JSON.stringify(attrAlloc) === before) return null;
+    if (JSON.stringify(attrAlloc) !== attrBefore) changed = true;
+
+    // Talent budget can end up overflowed by mutation steps that were each individually legal
+    // in isolation but never re-validated as a composed whole -- confirmed directly: a real
+    // winning candidate landed at 46/45 talent points after a swap mutation, and nothing
+    // downstream caught it until app.js's OWN unrelated over-budget guard (added for a level-
+    // downgrade bug) silently trimmed the exact point the search had just added back off,
+    // making "Optimize" look like a complete no-op even though the dialog correctly reported a
+    // real score improvement for the (illegal) candidate it never should have returned. Trim
+    // here, before this candidate can ever become a final answer: remove points from whichever
+    // talent currently holds the most, until back within budget, same heuristic app.js uses.
+    let talentSpent = cfg.TALENTS.reduce((s, t) => s + (talentAlloc[t.id] || 0), 0);
+    if (talentSpent > cfg.TALENT_BUDGET) {
+      changed = true;
+      while (talentSpent > cfg.TALENT_BUDGET) {
+        let topId = null; let topLevel = 0;
+        cfg.TALENTS.forEach((t) => { if ((talentAlloc[t.id] || 0) > topLevel) { topLevel = talentAlloc[t.id]; topId = t.id; } });
+        if (!topId) break;
+        talentAlloc[topId]--; talentSpent--;
+      }
+    }
+
+    if (!changed) return null;
 
     let leftover = cfg.ATTRIBUTE_BUDGET - Optimizer.costOf(cfg.ATTRIBUTES, attrAlloc);
     let guard = 0;
@@ -566,7 +617,7 @@
       const eligible = cfg.ATTRIBUTES.filter((a) => (a.cost || 1) <= leftover && Optimizer.isEligible(a, cfg.ATTRIBUTES, deps, minVal, attrAlloc));
       if (!eligible.length) break;
       const topupScores = await pool.scoreBatch(
-        eligible.map((a) => ({ talentAlloc: entry.talentAlloc, attrAlloc: { ...attrAlloc, [a.id]: (attrAlloc[a.id] || 0) + 1 } })),
+        eligible.map((a) => ({ talentAlloc, attrAlloc: { ...attrAlloc, [a.id]: (attrAlloc[a.id] || 0) + 1 } })),
         mode, searchIterations,
       );
       evalsUsed += eligible.length;
@@ -582,25 +633,26 @@
     // than the illegal build it replaced. Route the topped-up allocation through the exhaustive
     // swap-based polish (which tries every reallocation, not just a greedy fill) so the freed
     // budget actually gets optimized instead of dumped wherever looked best in isolation.
-    const polished = await hillClimbPolish(cfg, pool, mode, searchIterations, { talentAlloc: entry.talentAlloc, attrAlloc }, {});
+    const polished = await hillClimbPolish(cfg, pool, mode, searchIterations, { talentAlloc, attrAlloc }, {});
     evalsUsed += polished.evalsUsed;
     return { talentAlloc: polished.talentAlloc, attrAlloc: polished.attrAlloc, score: polished.score, evalsUsed };
   }
 
   // Runs beam search until `targetEvals` cumulative WASM evaluations have been spent (the
-  // user-selectable "number of evaluations" knob), calling onProgress after every
-  // generation with {evalsDone, targetEvals, generation, bestScore, elapsedMs}.
+  // user-selectable "number of evaluations" knob), calling onProgress with
+  // {evalsDone, targetEvals, generation, bestScore, elapsedMs, phase}.
   //
-  // Multi-restart: a single greedy-seed pass can get permanently anchored on one region of the
-  // allocation space (confirmed on a real cold-start, level-only Borge search: even with 4
-  // greedy epsilons and polishing the top 3 beam candidates, it still landed ~12.7% below the
-  // hand-tuned import). Running the ENTIRE pipeline several independent times -- fresh random
-  // mutations, fresh random restarts, a fresh trajectory through the whole search each time --
-  // and keeping whichever run converges highest is what actually closes that gap, because each
-  // restart has a real chance of landing in a different, better basin instead of just refining
-  // the same one. Cold starts (no existing build to warm-start from) get the most restarts since
-  // they have the least information to work with; a build that's already being edited only needs
-  // one, since its own current allocation already anchors the search near a good region.
+  // A SINGLE pass: greedy-seed -> beam generations -> exhaustive polish -> legality repair,
+  // once, start to finish, using the full evaluation budget. This used to run the entire
+  // pipeline 2-4 times ("multi-restart") and keep whichever attempt scored highest, on the
+  // theory that a single run can get anchored on one region of the allocation space. In
+  // practice that produced a progress dialog no one could make sense of -- a best score that
+  // appears then visibly resets, a bar that jumps and free-falls at each restart boundary,
+  // runs that "stop early" because a later, weaker pass's smaller sub-budget ran out -- and it
+  // was never something the user asked for. Cut back to one pass using the FULL budget: still
+  // greedy-seed -> beam -> polish, still legality-repaired, just not repeated. If search
+  // quality on very large accounts turns out to need more than one pass's worth of budget,
+  // that's solved by raising targetEvals for a single deeper pass, not by re-adding restarts.
   async function beamSearchBrowser(cfg, {
     mode = 'loot', targetEvals = 3000, beamWidth = 8, neighborsPerMember = 3,
     searchIterations = 100, poolSize = navigator.hardwareConcurrency || 4,
@@ -612,49 +664,33 @@
     if (shouldCancel()) { pool.terminate(); return { beam: [], allSeen: [] }; }
 
     try {
-      const hasSeedBuild = !!(cfg.currentTalents && cfg.currentAttrs);
-      const RESTARTS = hasSeedBuild ? 2 : 4;
-      const perPassEvals = Math.max(500, Math.floor(targetEvals / RESTARTS));
-
-      let globalBeam = [];
-      const globalAllSeen = new Map();
-      let totalEvalsDone = 0;
-      let totalGenerations = 0;
-
-      for (let r = 0; r < RESTARTS; r++) {
-        if (shouldCancel()) break;
-        const result = await runOnePass(cfg, pool, {
-          mode, targetEvals: perPassEvals, beamWidth, neighborsPerMember, searchIterations, seedCandidates,
-          shouldCancel,
-          onProgress: (p) => onProgress({ ...p, restart: r, restartsTotal: RESTARTS, evalsDone: totalEvalsDone + p.evalsDone, targetEvals }),
-        });
-        totalEvalsDone += result.evalsUsed;
-        totalGenerations += result.generations;
-        result.allSeen.forEach((c) => {
-          const sig = sigOf(c);
-          if (!globalAllSeen.has(sig) || globalAllSeen.get(sig).score < c.score) globalAllSeen.set(sig, c);
-        });
-        globalBeam = dedupTopK([...globalBeam, ...result.beam], beamWidth);
-      }
+      const result = await runOnePass(cfg, pool, {
+        mode, targetEvals, beamWidth, neighborsPerMember, searchIterations, seedCandidates,
+        shouldCancel, onProgress,
+      });
+      let beam = dedupTopK(result.beam, beamWidth);
+      const allSeen = new Map();
+      result.allSeen.forEach((c) => allSeen.set(sigOf(c), c));
+      let evalsDone = result.evalsDone;
 
       // app.js's shortlist takes the top 5 beam entries (not just #1) and re-scores all of them
-      // to pick the final answer -- repairing only globalBeam[0] left ranks #2-#5 completely
-      // unchecked, and confirmed on a real Knox cold-start run: the illegal allocation (A
+      // to pick the final answer -- repairing only beam[0] left ranks #2-#5 completely
+      // unchecked, and confirmed on a real Knox cold-start run: an illegal allocation (A
       // Pirates Life For Knox at 0 while the gated Timeless Mastery stayed maxed) reached the
       // saved build because app.js's own re-scoring picked one of those never-repaired lower
       // ranks, not beam[0]. Repair every entry that could realistically end up in that
       // shortlist, not just the presumptive #1.
-      for (let i = 0; i < globalBeam.length; i++) {
-        const repaired = await repairLegality(cfg, pool, mode, searchIterations, globalBeam[i]);
+      for (let i = 0; i < beam.length; i++) {
+        const repaired = await repairLegality(cfg, pool, mode, searchIterations, beam[i]);
         if (repaired) {
-          globalBeam[i] = repaired;
-          totalEvalsDone += repaired.evalsUsed;
-          globalAllSeen.set(sigOf(globalBeam[i]), globalBeam[i]);
+          beam[i] = repaired;
+          evalsDone += repaired.evalsUsed;
+          allSeen.set(sigOf(beam[i]), beam[i]);
         }
       }
-      globalBeam = dedupTopK(globalBeam, beamWidth);
+      beam = dedupTopK(beam, beamWidth);
 
-      return { beam: globalBeam, allSeen: [...globalAllSeen.values()], generations: totalGenerations, evalsDone: totalEvalsDone };
+      return { beam, allSeen: [...allSeen.values()], generations: result.generations, evalsDone };
     } finally {
       pool.terminate();
     }

@@ -252,6 +252,13 @@
   // object; i3 has no entry in the live table (its cost isn't modeled by this formula on the
   // real site either -- it may be a flat/free unlock), so it's intentionally omitted rather
   // than guessed.
+  //
+  // i4 (Borge's Inscryption #4, visible in the UI and imported from real saves) is ALSO
+  // missing here, but unlike i3 that gap was never confirmed/explained -- flagging it rather
+  // than silently treating it the same as a verified free unlock. Until a real cost is
+  // transcribed, baseStatCostAtLevel-style callers (inscryptionCostAtLevel) return `undefined`
+  // for it, which the build-card Effective Path allocator already skips as "unpriceable"
+  // rather than guessing a number.
   const INSCRYPTION_TABLE = {
     i11: { startValue: 70, multiplier: 4 }, i13: { startValue: 310, multiplier: 1.2419354838709675 },
     i14: { startValue: 600, multiplier: 1.7 }, i23: { startValue: 3200, multiplier: 1.4 },
@@ -388,7 +395,7 @@
 
   global.CostFormulas = {
     HUNTER_RESOURCES, resourceLabel, resourceAbbr, baseStatResource, relicResource, inscryptionResource,
-    baseStatCostRange, relicCostRange, inscryptionCostRange, gadgetCostRange, gemAliasCostRange,
-    projCostRange, collectionTimeMinutes, fmtBig,
+    baseStatCostAtLevel, baseStatCostRange, relicCostRange, inscryptionCostAtLevel, inscryptionCostRange,
+    gadgetCostRange, gemAliasCostRange, projCostRange, collectionTimeMinutes, fmtBig,
   };
 })(window);

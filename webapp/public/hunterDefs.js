@@ -56,6 +56,12 @@ window.HUNTER_DEFS = {
     },
     baseStatKeys: ['hp', 'atk', 'regen', 'dr', 'evade', 'effect', 'critchance', 'critpower', 'atkspeed', 'stage'],
     globalUpgrades: {
+      // Tier 2 relics (t2r-prefixed ids) are a SEPARATE numbering track from tier 1 -- t2r7
+      // ("Arthur's Sword") and tier-1 r7 ("Manifestation Core: Titan") both really are "#7"
+      // in-game, just in different tiers, not a data-entry duplicate. Kept as bare "#N"
+      // labels (matching the real game) -- renderUpgradesPage (app.js) groups items by the
+      // t2-prefix and renders a "Tier 2" section header, rather than repeating "Tier 2" in
+      // every item's own label. Ordered ascending within each tier, tier 1 first.
       relics: {
         label: 'Relics', items: [
           { id: 'r4', label: '#4 The Disk of Dawn', maxLevel: 100 },

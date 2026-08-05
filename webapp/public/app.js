@@ -544,6 +544,7 @@ const ACTION_BUTTONS = [
   { act: 'overrides', icon: 'adjustments-horizontal', title: 'Overrides' },
   { act: 'compareEfficiency', icon: 'scale', title: 'Compare upgrade efficiency' },
   { act: 'buildStats', icon: 'chart-bar', title: 'Show Build Statistics' },
+  { act: 'effectivePath', icon: 'chart-arrows-vertical', title: 'Effective Path (recommended stat/inscription upgrades)' },
   { act: 'export', icon: 'share', title: 'Share build code' },
   { act: 'archive', icon: 'archive', title: 'Archive build' },
   { act: 'delete', icon: 'trash', title: 'Delete build', extra: 'hover:text-red-400' },
@@ -1428,6 +1429,7 @@ async function renderBuildList() {
     card.querySelector('[data-act=overrideCosts]').onclick = () => openOverrideCostsModal(build);
     card.querySelector('[data-act=compareEfficiency]').onclick = () => openCompareEfficiencyModal(build);
     card.querySelector('[data-act=buildStats]').onclick = () => openBuildStatsModal(build);
+    card.querySelector('[data-act=effectivePath]').onclick = () => openBuildEffectivePathModal(build);
     card.querySelector('[data-act=screenshot]').onclick = () => screenshotCard(card, build);
     wrapper.appendChild(card);
     list.appendChild(wrapper);
@@ -1985,11 +1987,29 @@ function renderUpgradesPage(root, catKey) {
     return;
   }
 
+  // Relics are the one category with a real second numbering tier (t2-prefixed ids) -- give
+  // it its own "Tier 2" section header instead of repeating "Tier 2" in every item's label
+  // (which read as an unexplained duplicate against tier 1's same-numbered items).
+  const isRelics = catKey === 'relics';
+  // ALL_UPGRADE_CATEGORIES merges each hunter's relic list in hunter-processing order
+  // (borge, ozzy, knox) and only appends an item the first time its id is new -- so a later
+  // hunter's own relic (e.g. Ozzy's #17, Knox's Tier-2 #5) lands wherever it happened to be
+  // first introduced, not in numeric position (confirmed: merged order was #4,#7,#16,#19,
+  // Tier2#7,#17,Tier2#5). Sort by the number in each item's own "#N" label instead of trusting
+  // merge-insertion order.
+  const numOf = (item) => parseInt((item.label.match(/#(\d+)/) || [])[1] || '0', 10);
+  const byNumber = (a, b) => numOf(a) - numOf(b);
+  const tier1Items = (isRelics ? cat.items.filter((i) => !i.id.startsWith('t2')) : cat.items).slice().sort(isRelics ? byNumber : () => 0);
+  const tier2Items = (isRelics ? cat.items.filter((i) => i.id.startsWith('t2')) : []).slice().sort(byNumber);
+
   root.innerHTML = `
     <h1 class="text-2xl font-bold text-white text-center mb-4">${cat.label}</h1>
     <div class="text-center text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Tier 1</div>
     ${catKey === 'loopmods' ? '<div class="flex justify-center mb-4"><button id="fleetModsToggle" class="flex items-center gap-2 text-xs text-gray-400"><span>Show Fleet Mods</span></button></div>' : ''}
-    <div id="upgradeItemsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>`;
+    <div id="upgradeItemsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+    ${tier2Items.length ? `
+    <div class="text-center text-sm font-semibold text-gray-500 uppercase tracking-wider mt-8 mb-4">Tier 2</div>
+    <div id="upgradeItemsGridTier2" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>` : ''}`;
   const grid = document.getElementById('upgradeItemsGrid');
   if (catKey === 'loopmods') {
     const toggleBtn = document.getElementById('fleetModsToggle');
@@ -1997,7 +2017,11 @@ function renderUpgradesPage(root, catKey) {
     toggleBtn.onclick = () => { showFleetLoopMods = !showFleetLoopMods; renderUpgradesPage(root, catKey); };
     if (showFleetLoopMods) { window.renderFleetBoostItemsInto(grid, 'Loop Mod'); return; }
   }
-  cat.items.forEach((item) => { grid.appendChild(renderUpgradeInput(catKey, item)); });
+  tier1Items.forEach((item) => { grid.appendChild(renderUpgradeInput(catKey, item)); });
+  if (tier2Items.length) {
+    const grid2 = document.getElementById('upgradeItemsGridTier2');
+    tier2Items.forEach((item) => { grid2.appendChild(renderUpgradeInput(catKey, item)); });
+  }
 }
 
 // ==================== SETTINGS PAGE ====================
@@ -2542,7 +2566,48 @@ function renderAttributes() {
   });
 }
 function costOfAttrs(d, alloc) { return d.attributes.reduce((s, a) => s + (alloc[a.id] || 0) * (a.cost || 1), 0); }
-function onBuildChanged() { renderBudgetHeader(); renderTalents(); renderAttributes(); }
+
+// Dropping a build's level shrinks its talent/attribute point budget, but nothing removed the
+// points already spent under the OLD, larger budget -- the editor's own header just displayed
+// an over-budget "spent/budget" pair (e.g. 46/45) without ever fixing it. Optimize then used
+// that still-over-budget allocation as its "current build" seed/baseline, and since the wasm
+// sim just evaluates whatever raw levels it's given (it has no concept of "budget" itself),
+// the illegal extra point(s) made that stale allocation score artificially high and kept
+// winning every comparison -- which is why lowering the level and re-running Optimize kept
+// acting like the build was still at its old, higher level. Refund points (starting from
+// whichever talent/attribute currently holds the most, then repairing any dependency chain a
+// removal stranded) until the allocation actually fits the new budget, same as the real game
+// would refund on a level-down.
+function trimAllocationToBudget(hunter, level) {
+  const d = window.HUNTER_DEFS[hunter];
+  const { talentBudget, attributeBudget } = budgetsForLevel(level);
+  const talents = editingBuild.talents;
+  const attributes = editingBuild.attributes;
+
+  let talentSpent = d.talents.reduce((s, t) => s + (talents[t.id] || 0), 0);
+  while (talentSpent > talentBudget) {
+    let topId = null; let topLevel = 0;
+    d.talents.forEach((t) => { if ((talents[t.id] || 0) > topLevel) { topLevel = talents[t.id]; topId = t.id; } });
+    if (!topId) break;
+    talents[topId]--; talentSpent--;
+  }
+
+  const deps = d.attributeDependencies || {};
+  const minVal = d.attributeMinValue || {};
+  let guard = 0;
+  while (Optimizer.costOf(d.attributes, attributes) > attributeBudget && guard++ < 1000) {
+    let topId = null; let topLevel = 0;
+    d.attributes.forEach((a) => { if ((attributes[a.id] || 0) > topLevel) { topLevel = attributes[a.id]; topId = a.id; } });
+    if (!topId) break;
+    attributes[topId]--;
+  }
+  Optimizer.clearInvalidDescendants(d.attributes, deps, minVal, attributes);
+}
+
+function onBuildChanged() {
+  trimAllocationToBudget(currentHunter, editingBuild.level);
+  renderBudgetHeader(); renderTalents(); renderAttributes();
+}
 
 document.getElementById('levelInput').addEventListener('input', (e) => {
   editingBuild.level = Math.max(1, Math.floor(Number(e.target.value) || 1));
@@ -3041,71 +3106,38 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
     const result = await beamSearchBrowser(cfg, {
       mode, targetEvals, beamWidth: 8, neighborsPerMember: 3, searchIterations: 100, seedCandidates,
       shouldCancel: () => cancelRequested,
+      // ONE pass now (see beamSearchBrowser.js) -- no restarts to blend across, so this is
+      // just a plain, honest percent-complete: seeding counts as the first 40% of the run,
+      // beam refinement the next 50% (tracked via the real evalsDone/targetEvals), final
+      // polish the last 10%. Monotonically increasing, no resets, no frozen plateaus.
       onProgress: (raw) => {
-        // Defensive: with multi-restart, evalsDone is threaded through several layers
-        // (totalEvalsDone + this-pass's own count) across restart boundaries -- if any one of
-        // those ever comes through as undefined/non-finite (a stale/partial progress event,
-        // a future refactor that misses a field), arithmetic on it silently produces NaN,
-        // which then prints literally as the text "NaN" in the dialog instead of a number.
-        // Coerce every numeric field to a safe finite fallback before it's ever used in a
-        // template string, so a bad upstream value degrades to "0" instead of "NaN".
         const safe = (v, fallback = 0) => (Number.isFinite(v) ? v : fallback);
         const {
-          evalsDone, targetEvals: target, generation, bestScore, elapsedMs, phase,
-          greedyStep, greedyStepsEstimate, polishRound, polishRoundsEstimate, restart, restartsTotal,
+          bestScore, elapsedMs, phase, greedyStep, greedyStepsEstimate,
+          polishRound, polishRoundsEstimate, evalsDone, targetEvals: target,
         } = {
           ...raw,
-          evalsDone: safe(raw.evalsDone),
-          targetEvals: safe(raw.targetEvals, targetEvals),
-          generation: safe(raw.generation),
           elapsedMs: safe(raw.elapsedMs),
           greedyStep: safe(raw.greedyStep),
           greedyStepsEstimate: safe(raw.greedyStepsEstimate, 0),
           polishRound: safe(raw.polishRound),
           polishRoundsEstimate: safe(raw.polishRoundsEstimate, 0),
+          evalsDone: safe(raw.evalsDone),
+          targetEvals: safe(raw.targetEvals, targetEvals),
         };
-        // beamSearchBrowser runs the whole greedy-seed -> beam-search -> polish pipeline
-        // several independent times (multi-restart, see the big comment on beamSearchBrowser
-        // in beamSearchBrowser.js) and keeps whichever attempt converges highest -- confirmed
-        // necessary to reliably match hand-tuned builds from a cold start. Without labeling
-        // it, the dialog looked like it was randomly restarting/glitching (seeding far past
-        // its own estimate, jumping straight to polish, then starting over) with no
-        // explanation. Prefix every phase with which attempt this is so the same underlying
-        // behavior reads as a deliberate, structured process instead of a bug.
-        const attemptPrefix = Number.isFinite(restart) && restartsTotal > 1
-          ? `Attempt ${restart + 1} of ${restartsTotal} — ` : '';
-        // The greedy-seeding phase (see beamSearchBrowser.js) runs before any beam generations
-        // and used to report nothing at all here -- on a large real-account budget it could look
-        // completely frozen (0/target evaluations, "Generation 0") for a long stretch even
-        // though it was actively working and Cancel was fully functional. Show its own step
-        // count instead of leaving the bar/eval-count static during that phase.
+        let pct;
         if (phase === 'greedy-seeding') {
-          const pct = greedyStepsEstimate ? Math.min(100, (greedyStep / greedyStepsEstimate) * 100) : 0;
-          document.getElementById('progressBar').style.width = `${pct}%`;
-          document.getElementById('progressEvals').textContent =
-            `${attemptPrefix}Finding a strong starting point (${greedyStep} / ~${greedyStepsEstimate} steps)…`;
-          document.getElementById('progressElapsed').textContent = `${(elapsedMs / 1000).toFixed(1)}s`;
-          document.getElementById('progressGen').textContent = '-';
-          document.getElementById('progressBest').textContent = '-';
-          return;
+          pct = 40 * (greedyStepsEstimate ? Math.min(1, greedyStep / greedyStepsEstimate) : 0);
+        } else if (phase === 'polish') {
+          pct = 90 + 10 * (polishRoundsEstimate ? Math.min(1, polishRound / polishRoundsEstimate) : 1);
+        } else {
+          pct = 40 + 50 * (target ? Math.min(1, evalsDone / target) : 0);
         }
-        // Final exhaustive polish (see hillClimbPolish): runs after the beam search's normal
-        // eval budget is spent, so it needs its own indicator instead of showing a stalled
-        // "evalsDone / target" bar sitting at 100% while this still keeps working.
-        if (phase === 'polish') {
-          document.getElementById('progressBar').style.width = '100%';
-          document.getElementById('progressEvals').textContent = polishRoundsEstimate
-            ? `${attemptPrefix}Verifying no single point-move improves this build (round ${polishRound} / up to ${polishRoundsEstimate})…`
-            : `${attemptPrefix}Verifying no single point-move improves this build…`;
-          document.getElementById('progressElapsed').textContent = `${(elapsedMs / 1000).toFixed(1)}s`;
-          document.getElementById('progressGen').textContent = generation;
-          document.getElementById('progressBest').textContent = fmt(bestScore);
-          return;
-        }
-        document.getElementById('progressBar').style.width = `${Math.min(100, (evalsDone / target) * 100)}%`;
-        document.getElementById('progressEvals').textContent = `${attemptPrefix}${evalsDone} / ${target} evaluations`;
+        pct = Math.min(100, pct);
+
+        document.getElementById('progressBar').style.width = `${pct}%`;
+        document.getElementById('progressPercent').textContent = `${Math.round(pct)}%`;
         document.getElementById('progressElapsed').textContent = `${(elapsedMs / 1000).toFixed(1)}s`;
-        document.getElementById('progressGen').textContent = generation;
         document.getElementById('progressBest').textContent = fmt(bestScore);
       },
     });
@@ -3140,17 +3172,33 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
       }
       let bestIdx = 0;
       for (let i = 1; i < shortlist.length; i++) if (scores[i] > scores[bestIdx]) bestIdx = i;
+      let bestSearchIdx = 0; // best among the SEARCH's own candidates only, excluding the current-build entry
+      for (let i = 1; i < currentIdx; i++) if (scores[i] > scores[bestSearchIdx]) bestSearchIdx = i;
 
       // The build you started with is always in the shortlist -- if nothing the search found
       // actually beats it (within noise), keep it as-is instead of silently swapping in a
       // same-or-worse allocation just because it happened to be a different candidate.
+      //
+      // The progress dialog's "best score so far" comes from the search's own fast internal
+      // scoring (100 iterations per candidate, for speed across thousands of candidates) --
+      // this final check re-evaluates the shortlist at full fidelity (1000 iterations x 3
+      // samples averaged) before committing anything. Those two numbers are NOT the same
+      // measurement and can legitimately disagree: a candidate that looked best during the
+      // fast search can fail to hold up once checked carefully, which is what "the dialog
+      // showed a better score but nothing changed" actually means -- not a bug, a deliberate
+      // check that stopped a noise-driven downgrade. Says so explicitly instead of a bare
+      // "no improvement found", which read as broken/stuck.
       if (bestIdx === currentIdx) {
-        alert(`No improvement found (best candidate: ${fmt(scores[bestIdx])}, current: ${fmt(scores[currentIdx])}). Keeping your existing build unchanged.`);
+        alert(`The search's quick estimate found a candidate that looked better, but a careful re-check (full precision) found your current build (${fmt(scores[currentIdx])}) still comes out ahead of its best candidate (${fmt(scores[bestSearchIdx])}). Your build was left unchanged. Try again, or raise "Number of evaluations" for a deeper search.`);
       } else {
         editingBuild.talents = shortlist[bestIdx].talentAlloc;
         editingBuild.attributes = shortlist[bestIdx].attrAlloc;
-        editingBuild.name = 'Optimized';
-        document.getElementById('buildNameInput').value = editingBuild.name;
+        // Only fill in a name when the field is actually blank -- this used to always stomp
+        // whatever name the user (or a prior save) already had, discarding it every time.
+        if (!editingBuild.name.trim()) {
+          editingBuild.name = 'Optimized';
+          document.getElementById('buildNameInput').value = editingBuild.name;
+        }
         onBuildChanged();
       }
     }

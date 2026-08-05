@@ -235,6 +235,13 @@
 
   // Fast-path compiled evaluator, same idea as the Node version: resolve every constant
   // param once, then only overwrite the talent/attribute slots per call.
+  //
+  // Base-stat purchase planning (hunterStatPathBrowser.js) needs a candidate's hunterStats
+  // to vary too, which the original version baked into staticState at compile time. Passing
+  // `cfg.STAT_KEYS` (a hunter's baseStatKeys) opts a given stat key into the same per-call
+  // `dynamic` slot mechanism as talents/attributes -- evalFast's new 4th arg (`statAlloc`)
+  // overrides cfg.hunterStats[key] per call instead of using the compiled-in value. Existing
+  // callers (beamSearchBrowser.js) that don't pass STAT_KEYS or a 4th arg are unaffected.
   async function compileEvaluator(hunter, cfg) {
     const PARAMS = await loadParams();
     const names = PARAMS[hunter];
@@ -246,6 +253,18 @@
     };
     const talentIds = new Set(cfg.TALENTS.map((d) => d.id));
     const attrIds = new Set(cfg.ATTRIBUTES.map((d) => d.id));
+    const statKeys = new Set(cfg.STAT_KEYS || []);
+    // Full wasm param names (e.g. "upgrades.inscryptions.i13") for the build-card Effective
+    // Path allocator (hunterStatPathBrowser.js's greedyUpgradePath), which also ranks
+    // inscription-level candidates alongside base stats. Inscriptions are account-wide
+    // (state.upgrades.inscryptions), same as base stats, so they're keyed by the same
+    // dynamic-slot mechanism, just addressed by full param name instead of a bare stat key.
+    const inscryptionParams = new Set(cfg.INSCRYPTION_PARAMS || []);
+    const currentInscryptionLevels = {};
+    (cfg.INSCRYPTION_PARAMS || []).forEach((p) => {
+      const id = p.split('.')[2];
+      currentInscryptionLevels[p] = cfg.globalUpgrades?.inscryptions?.[id] || 0;
+    });
 
     const baseArgs = new Array(names.length);
     const dynamic = [];
@@ -254,6 +273,8 @@
       if (name === 'iterations') dynamic.push({ index: i, kind: 'iterations' });
       else if (!overridden && talentIds.has(name)) dynamic.push({ index: i, kind: 'talent', id: name });
       else if (!overridden && attrIds.has(name)) dynamic.push({ index: i, kind: 'attribute', id: name });
+      else if (!overridden && statKeys.has(name)) dynamic.push({ index: i, kind: 'stat', id: name });
+      else if (!overridden && inscryptionParams.has(name)) dynamic.push({ index: i, kind: 'inscryption', id: name });
       else baseArgs[i] = resolveParam(name, staticState);
     });
 
@@ -264,11 +285,13 @@
     // otherwise the beam search would be comparing candidates scored from different points
     // in a drifting internal RNG state, which is both non-reproducible and an unfair
     // comparison between candidates.
-    return async function evalFast(talentAlloc, attrAlloc, iterations) {
+    return async function evalFast(talentAlloc, attrAlloc, iterations, statAlloc, inscryptionAlloc) {
       for (const d of dynamic) {
         if (d.kind === 'iterations') args[d.index] = iterations ?? 1000;
         else if (d.kind === 'talent') args[d.index] = talentAlloc[d.id] || 0;
-        else args[d.index] = attrAlloc[d.id] || 0;
+        else if (d.kind === 'attribute') args[d.index] = attrAlloc[d.id] || 0;
+        else if (d.kind === 'stat') args[d.index] = (statAlloc && statAlloc[d.id] !== undefined) ? statAlloc[d.id] : (cfg.hunterStats?.[d.id] || 0);
+        else args[d.index] = (inscryptionAlloc && inscryptionAlloc[d.id] !== undefined) ? inscryptionAlloc[d.id] : currentInscryptionLevels[d.id];
       }
       const instance = await WebAssembly.instantiate(mod, IMPORT_OBJECT);
       const ex = instance.exports;
