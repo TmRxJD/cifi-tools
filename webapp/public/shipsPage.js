@@ -655,29 +655,38 @@ function parseInstallCode(code) {
   if (!m) return null;
   return { ship: GEAR_SHIP_PREFIX_TO_ID[m[1]], code: Number(m[2]) };
 }
+// costBase/costScalar: cost(level) = costBase * costScalar^level (Academy Points to reach that
+// level from level-1) -- UNCONFIRMED, source: a community fan spreadsheet's "Pre-Calc" tab
+// (Google Sheets, provided by the account holder), not the wiki and not this account's own real
+// data. Treat at LOWER confidence than a `source: 'wiki'` catalog entry: that sheet's own formula
+// cells were broken (#REF! errors) at the time this was harvested, Red's "Gamma Round" base (44)
+// is a suspicious outlier next to its neighbors (3/5/6/7), and all 3 Purple pieces show the
+// identical base/scalar pair, which may mean Purple really is uniform or may mean the reference
+// that varies per-piece got flattened by the same corruption. Cross-check against your own
+// account's real Academy Points cost before trusting the Gear Effective Path's exact ordering.
 const REAL_GEAR_PIECES = [
-  { name: 'Oceanic Specimen', color: 'Purple', setBonus: 'x25 Shards Gained', install1: 'KOI6', install2: 'DEM2' },
-  { name: 'Venomous Specimen', color: 'Purple', setBonus: 'x999 Cells Gained', install1: 'KOI4', install2: 'HEPH3' },
-  { name: 'Curious Specimen', color: 'Purple', setBonus: 'x25 Research Points Gained', install1: 'KOI5', install2: 'AUX6' },
-  { name: 'Terran Fuel Cell', color: 'Orange', setBonus: 'x1.5 Academy Points Gained', install1: 'KOI7', install2: 'AUX5' },
-  { name: 'Diamond Infused Cell', color: 'Orange', setBonus: 'Gain 3000 Diamonds', install1: 'KOI3', install2: 'AUX4' },
-  { name: 'Ceti-Powered Energy Cell', color: 'Orange', setBonus: 'x7 Research Points Gained', install1: 'KOI6', install2: 'AUX1' },
-  { name: 'Ixion Infused Cell', color: 'Orange', setBonus: 'x7 Shards Gained', install1: 'KOI2', install2: 'AUX3' },
-  { name: 'Cell Based Loop Tank', color: 'Red', setBonus: 'x75 Cells Gained', install1: 'HEPH1', install2: 'ZAG3' },
-  { name: 'Field Hard Drive', color: 'Red', setBonus: 'x2 Research Points Gained', install1: 'DEM1', install2: 'ZAG4' },
-  { name: 'Gravity Bomb', color: 'Red', setBonus: 'x1.5 Academy Points Gained', install1: 'ZAG2', install2: 'ZAG5' },
-  { name: 'Gamma Round', color: 'Red', setBonus: 'x60 Cells Gained', install1: 'ZAG7', install2: 'ZAG1' },
-  { name: 'Loop Gun', color: 'Red', setBonus: 'x10 Mod Points Gained', install1: 'DEM6', install2: 'ZAG6' },
-  { name: 'Cell Battery', color: 'Green', setBonus: 'x500 Cells Gained', install1: 'CRA1', install2: 'HEPH5' },
-  { name: 'Constructor Suit', color: 'Green', setBonus: 'x2.5 Mod Points Gained', install1: 'ZAG2', install2: 'HEPH6' },
-  { name: 'Research Supplies', color: 'Green', setBonus: 'x8 Research Points Gained', install1: 'KOI5', install2: 'HEPH1' },
-  { name: 'Cell Gun', color: 'Green', setBonus: 'x1.5 Academy Points Gained', install1: 'DEM6', install2: 'HEPH7' },
-  { name: 'Drone Shield', color: 'Green', setBonus: 'x750 Cells Gained', install1: 'HEPH4', install2: 'HEPH2' },
-  { name: 'Scout Droid', color: 'Blue', setBonus: 'x10 Research Points Gained', install1: 'AUX2', install2: 'DEM3' },
-  { name: 'Mining Drone', color: 'Blue', setBonus: 'x15 Shards Gained', install1: 'DEM2', install2: 'DEM1' },
-  { name: 'Chrysis Suit', color: 'Blue', setBonus: 'x320 Cells Gained', install1: 'HEPH5', install2: 'DEM4' },
-  { name: 'Beta-Rounds', color: 'Blue', setBonus: 'x80 Cells Gained', install1: 'HEPH3', install2: 'DEM7' },
-  { name: 'Shard Gun', color: 'Blue', setBonus: 'x1.5 Academy Points Gained', install1: 'DEM6', install2: 'DEM5' },
+  { name: 'Oceanic Specimen', color: 'Purple', setBonus: 'x25 Shards Gained', install1: 'KOI6', install2: 'DEM2', costBase: 10, costScalar: 1.14 },
+  { name: 'Venomous Specimen', color: 'Purple', setBonus: 'x999 Cells Gained', install1: 'KOI4', install2: 'HEPH3', costBase: 10, costScalar: 1.14 },
+  { name: 'Curious Specimen', color: 'Purple', setBonus: 'x25 Research Points Gained', install1: 'KOI5', install2: 'AUX6', costBase: 10, costScalar: 1.14 },
+  { name: 'Terran Fuel Cell', color: 'Orange', setBonus: 'x1.5 Academy Points Gained', install1: 'KOI7', install2: 'AUX5', costBase: 4, costScalar: 1.1 },
+  { name: 'Diamond Infused Cell', color: 'Orange', setBonus: 'Gain 3000 Diamonds', install1: 'KOI3', install2: 'AUX4', costBase: 4, costScalar: 1.13 },
+  { name: 'Ceti-Powered Energy Cell', color: 'Orange', setBonus: 'x7 Research Points Gained', install1: 'KOI6', install2: 'AUX1', costBase: 4, costScalar: 1.14 },
+  { name: 'Ixion Infused Cell', color: 'Orange', setBonus: 'x7 Shards Gained', install1: 'KOI2', install2: 'AUX3', costBase: 4, costScalar: 1.11 },
+  { name: 'Cell Based Loop Tank', color: 'Red', setBonus: 'x75 Cells Gained', install1: 'HEPH1', install2: 'ZAG3', costBase: 5, costScalar: 1.12 },
+  { name: 'Field Hard Drive', color: 'Red', setBonus: 'x2 Research Points Gained', install1: 'DEM1', install2: 'ZAG4', costBase: 3, costScalar: 1.1 },
+  { name: 'Gravity Bomb', color: 'Red', setBonus: 'x1.5 Academy Points Gained', install1: 'ZAG2', install2: 'ZAG5', costBase: 44, costScalar: 1.11 }, // 44 is the suspicious outlier -- see note above
+  { name: 'Gamma Round', color: 'Red', setBonus: 'x60 Cells Gained', install1: 'ZAG7', install2: 'ZAG1', costBase: 6, costScalar: 1.13 },
+  { name: 'Loop Gun', color: 'Red', setBonus: 'x10 Mod Points Gained', install1: 'DEM6', install2: 'ZAG6', costBase: 7, costScalar: 1.14 },
+  { name: 'Cell Battery', color: 'Green', setBonus: 'x500 Cells Gained', install1: 'CRA1', install2: 'HEPH5', costBase: 3, costScalar: 1.1 },
+  { name: 'Constructor Suit', color: 'Green', setBonus: 'x2.5 Mod Points Gained', install1: 'ZAG2', install2: 'HEPH6', costBase: 7, costScalar: 1.14 },
+  { name: 'Research Supplies', color: 'Green', setBonus: 'x8 Research Points Gained', install1: 'KOI5', install2: 'HEPH1', costBase: 4, costScalar: 1.11 },
+  { name: 'Cell Gun', color: 'Green', setBonus: 'x1.5 Academy Points Gained', install1: 'DEM6', install2: 'HEPH7', costBase: 5, costScalar: 1.12 },
+  { name: 'Drone Shield', color: 'Green', setBonus: 'x750 Cells Gained', install1: 'HEPH4', install2: 'HEPH2', costBase: 6, costScalar: 1.13 },
+  { name: 'Scout Droid', color: 'Blue', setBonus: 'x10 Research Points Gained', install1: 'AUX2', install2: 'DEM3', costBase: 5, costScalar: 1.12 },
+  { name: 'Mining Drone', color: 'Blue', setBonus: 'x15 Shards Gained', install1: 'DEM2', install2: 'DEM1', costBase: 3, costScalar: 1.1 },
+  { name: 'Chrysis Suit', color: 'Blue', setBonus: 'x320 Cells Gained', install1: 'HEPH5', install2: 'DEM4', costBase: 4, costScalar: 1.11 },
+  { name: 'Beta-Rounds', color: 'Blue', setBonus: 'x80 Cells Gained', install1: 'HEPH3', install2: 'DEM7', costBase: 6, costScalar: 1.13 },
+  { name: 'Shard Gun', color: 'Blue', setBonus: 'x1.5 Academy Points Gained', install1: 'DEM6', install2: 'DEM5', costBase: 7, costScalar: 1.14 },
 ];
 function defaultGearSets() {
   return { pieces: REAL_GEAR_PIECES.map((p) => ({ ...p, level: 0, owned: false })) };
@@ -685,6 +694,14 @@ function defaultGearSets() {
 function getGearSets() {
   if (!window.store) return defaultGearSets();
   if (!window.store.gearSets || !('pieces' in window.store.gearSets)) window.store.gearSets = defaultGearSets();
+  // Backfill costBase/costScalar onto any piece saved before the Gear Effective Path feature
+  // added them -- without this, an existing account's stored pieces silently lack cost data and
+  // gearPieceCostAtLevel falls through to its Infinity guard.
+  window.store.gearSets.pieces.forEach((p) => {
+    if (p.costBase != null && p.costScalar != null) return;
+    const real = REAL_GEAR_PIECES.find((r) => r.name === p.name);
+    if (real) { p.costBase = real.costBase; p.costScalar = real.costScalar; }
+  });
   return window.store.gearSets;
 }
 // A gear piece's own level buffs its 2 target installs MULTIPLICATIVELY (x1.01/level for
@@ -703,25 +720,94 @@ function computeGearNodeMultiplier(shipId, slot) {
   });
   return mult;
 }
-// Each piece's own Set Bonus (e.g. "x25 Shards Gained") activates once THAT piece is owned --
-// confirmed per-piece, not per-color: pieces sharing a color have distinct bonus text (e.g.
-// Purple's 3 pieces grant x25 Shards / x999 Cells / x25 Research Points respectively), so this
-// cannot be "one shared bonus once the whole color is complete." A flat multiplier on top of
-// the whole resource total, independent of install level. Returns { [resource]: multiplier }
-// (multiple owned pieces hitting the same resource stack multiplicatively). Non-resource
-// bonuses (flat Diamond grants) aren't tracked -- no Diamond total exists in this tool.
+// CORRECTED 2026-08, account-confirmed: every piece's own Set Bonus (e.g. "x25 Shards Gained")
+// only activates once ALL pieces of that piece's COLOR are owned -- not per-piece as an earlier
+// version of this tool assumed. Each piece still keeps its own distinct bonus text (Purple's 3
+// pieces grant x25 Shards / x999 Cells / x25 Research Points respectively, not one shared
+// bonus) -- completing the color simply unlocks all of those pieces' bonuses simultaneously,
+// rather than each unlocking individually as it's owned. A flat multiplier on top of the whole
+// resource total, independent of install level. Returns { [resource]: multiplier } (multiple
+// active pieces hitting the same resource stack multiplicatively). Non-resource bonuses (flat
+// Diamond grants) aren't tracked -- no Diamond total exists in this tool.
 function computeGearSetBonusMultipliers() {
   const gearSets = getGearSets();
+  const byColor = {};
+  gearSets.pieces.forEach((p) => { (byColor[p.color] = byColor[p.color] || []).push(p); });
   const mults = {};
-  gearSets.pieces.forEach((p) => {
-    if (!p.owned) return;
-    const m = p.setBonus.match(/^x([\d.]+)\s+(.+?)\s+Gained$/i);
-    if (!m) return;
-    const resources = effectResources(m[2]);
-    resources.forEach((res) => { mults[res] = (mults[res] || 1) * parseFloat(m[1]); });
+  Object.values(byColor).forEach((pieces) => {
+    if (!pieces.every((p) => p.owned)) return; // whole color must be complete
+    pieces.forEach((p) => {
+      const m = p.setBonus.match(/^x([\d.]+)\s+(.+?)\s+Gained$/i);
+      if (!m) return;
+      const resources = effectResources(m[2]);
+      resources.forEach((res) => { mults[res] = (mults[res] || 1) * parseFloat(m[1]); });
+    });
   });
   return mults;
 }
+
+// Gear piece leveling cost -- see REAL_GEAR_PIECES' costBase/costScalar note for the (low)
+// confidence tier this is at. `level` is the level being bought (1-indexed): cost to go from
+// level-1 to level.
+function gearPieceCostAtLevel(piece, level) {
+  if (!piece.costBase || !piece.costScalar || level < 1) return Infinity;
+  return piece.costBase * Math.pow(piece.costScalar, level - 1);
+}
+// Which resource(s) a gear piece's installs feed, and how much %/level each install is worth
+// toward them (install1 = x1.01/level = 1, install2 = x1.02/level = 2) -- summed if BOTH
+// installs happen to feed the SAME resource, since one level-up buffs both installs at once for
+// one shared cost.
+function gearPieceResourceValue(piece, resource) {
+  let value = 0;
+  const i1 = parseInstallCode(piece.install1);
+  const i2 = parseInstallCode(piece.install2);
+  if (i1 && SHIP_NODE_CATALOG[i1.ship]?.[i1.code] && effectResources(SHIP_NODE_CATALOG[i1.ship][i1.code].effect).includes(resource)) value += 1;
+  if (i2 && SHIP_NODE_CATALOG[i2.ship]?.[i2.code] && effectResources(SHIP_NODE_CATALOG[i2.ship][i2.code].effect).includes(resource)) value += 2;
+  return value;
+}
+// Gear Effective Path: greedy, one level-up at a time, from REAL current piece levels (like
+// optimizeShipInstalls' "cost-adjusted marginal value" spirit, but for Gear's Academy Points
+// cost against one chosen resource). Each step buys whichever eligible piece (nonzero value
+// toward `resource`) gives the best value-per-AP-cost for its own NEXT level -- ROI-ranked, not
+// "biggest raw bonus first". A piece's %/level value is constant regardless of its current level
+// (a pure multiplicative compounding factor -- 1.01^(L+1)/1.01^L is always 1.01), but its COST
+// grows every level (costScalar^level), so lower-level/cheaper-to-level pieces naturally win
+// early and the ranking shifts toward whichever piece is currently cheapest per value point.
+function computeGearEffectivePath(resource, steps = 30) {
+  const gearSets = getGearSets();
+  const levels = {};
+  gearSets.pieces.forEach((p) => { levels[p.name] = p.level || 0; });
+  const eligible = gearSets.pieces.filter((p) => gearPieceResourceValue(p, resource) > 0);
+  const path = [];
+  for (let i = 0; i < steps; i++) {
+    let best = null; let bestScore = -Infinity; let bestCost = 0;
+    eligible.forEach((p) => {
+      const cost = gearPieceCostAtLevel(p, levels[p.name] + 1);
+      const score = gearPieceResourceValue(p, resource) / cost;
+      if (score > bestScore) { bestScore = score; best = p; bestCost = cost; }
+    });
+    if (!best) break;
+    levels[best.name] += 1;
+    path.push({ piece: best, level: levels[best.name], cost: bestCost });
+  }
+  return path;
+}
+function openGearEffectivePath(resource) {
+  const path = computeGearEffectivePath(resource, 30);
+  document.getElementById('loadoutDetailTitle').textContent = `Gear Effective Path -- ${RESOURCE_LABELS[resource] || resource}`;
+  let cumulative = 0;
+  const body = document.getElementById('loadoutDetailBody');
+  body.innerHTML = `
+    <p class="text-xs text-gray-500 mb-3">Next 30 gear level-ups ranked by Academy Points cost-per-value toward ${RESOURCE_LABELS[resource] || resource}, starting from your real current gear levels -- cheapest ROI first, not just biggest raw bonus. Cost data is unconfirmed (see REAL_GEAR_PIECES note) -- treat the exact order as a rough guide until cross-checked against your real Academy Points costs.</p>
+    <ol class="space-y-1.5">
+      ${path.length ? path.map((step, i) => {
+        cumulative += step.cost;
+        return `<li class="flex items-center justify-between text-sm bg-gray-700/50 rounded px-3 py-1.5"><span class="text-gray-300">${i + 1}. ${escapeHtml(step.piece.name)} <span class="text-gray-500">(${step.piece.color})</span></span><span class="text-white font-medium">Lv ${step.level} <span class="text-gray-500">-- ${formatMult(step.cost)} AP (${formatMult(cumulative)} total)</span></span></li>`;
+      }).join('') : '<li class="text-xs text-gray-500">No gear pieces feed this resource.</li>'}
+    </ol>`;
+  document.getElementById('loadoutDetailModal').classList.remove('hidden');
+}
+window.openGearEffectivePath = openGearEffectivePath;
 
 // `cats` is an object of booleans, one per granular import category (see IMPORT_SHIP_CATEGORIES
 // below) -- every piece here used to be a single all-or-nothing call, bundling things like Ship
@@ -1027,16 +1113,30 @@ function installMultDisplay(code, perLevelMult, level) {
     <span class="text-white font-medium">x${formatMult(computed)}</span>
   </div>`;
 }
+const GEAR_EFFECTIVE_PATH_RESOURCES = ['cells', 'shards', 'researchPoints', 'modPoints', 'academyPoints', 'missionMaterials'];
 function renderGearSetsPage(root) {
   const gearSets = getGearSets();
   root.innerHTML = `
     <div class="mb-4 rounded-lg overflow-hidden shadow-lg">
       <div class="bg-gradient-to-r from-blue-900 to-gray-800 px-5 py-4 border-b border-gray-600">
         <h1 class="text-xl font-bold">Gear Sets</h1>
-        <p class="text-xs text-gray-300 mt-0.5">Crafted/leveled with Academy Points (unlocked via Zeus). Data transcribed from cifi.fandom.com/wiki/Gear_Sets. Each piece's own level buffs its 2 target installs multiplicatively (x1.01/level, x1.02/level), and each piece's own Set Bonus applies once owned -- both feed into the Fleet page's resource totals.</p>
+        <p class="text-xs text-gray-300 mt-0.5">Crafted/leveled with Academy Points (unlocked via Zeus). Data transcribed from cifi.fandom.com/wiki/Gear_Sets. Each piece's own level buffs its 2 target installs multiplicatively (x1.01/level, x1.02/level), and each piece's own Set Bonus applies once its whole color is owned -- both feed into the Fleet page's resource totals.</p>
+      </div>
+      <div class="bg-gray-800/70 px-4 py-3 border-t border-gray-700">
+        <h3 class="text-xs font-semibold text-gray-300 mb-2">Gear Effective Path -- what to buy next, by resource</h3>
+        <div class="flex flex-wrap gap-2" id="gearEffectivePathBtns"></div>
       </div>
     </div>
     <div class="bg-gray-800 rounded-lg border border-gray-700 p-4" id="gearPiecesContainer"></div>`;
+
+  const pathBtns = document.getElementById('gearEffectivePathBtns');
+  GEAR_EFFECTIVE_PATH_RESOURCES.forEach((res) => {
+    const btn = document.createElement('button');
+    btn.className = 'px-3 py-1.5 rounded-md bg-gray-700 hover:bg-gray-600 text-white text-xs';
+    btn.textContent = RESOURCE_LABELS[res] || res;
+    btn.onclick = () => openGearEffectivePath(res);
+    pathBtns.appendChild(btn);
+  });
 
   const container = document.getElementById('gearPiecesContainer');
   const byColor = {};
