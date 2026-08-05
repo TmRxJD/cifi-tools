@@ -765,28 +765,38 @@ function gearPieceResourceValue(piece, resource) {
   if (i2 && SHIP_NODE_CATALOG[i2.ship]?.[i2.code] && effectResources(SHIP_NODE_CATALOG[i2.ship][i2.code].effect).includes(resource)) value += 2;
   return value;
 }
-// Gear Effective Path: greedy, one level-up at a time, from REAL current piece levels. Ranked by
-// RAW value only, NOT cost-adjusted -- the Academy Points cost data (REAL_GEAR_PIECES'
-// costBase/costScalar) turned out to be wrong (community-sourced, never confirmed), so cost is
-// deliberately left out of the ranking entirely until a real cost formula is found, rather than
-// ranking by a number known to be inaccurate. A piece's %/level value is constant regardless of
-// level (a pure multiplicative factor -- 1.01^(L+1)/1.01^L is always 1.01), so with no cost to
-// weigh against it, the single highest-value eligible piece would otherwise dominate every step;
-// `lastPicked` exclusion (same pattern as optimizeShipInstalls' "no consecutive repeats") spreads
-// ties across every piece sharing the top value instead of parking on just one.
-function computeGearEffectivePath(scoreFn, steps) {
+// Gear Effective Path: greedy, one level-up at a time, from REAL current piece levels. Only
+// pieces you've actually acquired (owned) are eligible -- Gear pieces drop randomly and can't be
+// leveled at all until you have them, so an unowned piece is never recommended regardless of how
+// good its value would be. Ranked by RAW value only, NOT AP-cost-adjusted -- the Academy Points
+// cost data (REAL_GEAR_PIECES' costBase/costScalar) turned out to be wrong (community-sourced,
+// never confirmed), so real cost is deliberately left out of the ranking until a real formula is
+// found, rather than ranking by a number known to be inaccurate. A piece's %/level value is
+// otherwise constant regardless of level (a pure multiplicative factor -- 1.01^(L+1)/1.01^L is
+// always 1.01), so with no real cost to weigh against it, `rawValue(p)` alone would just park on
+// whichever piece(s) score highest for all 30/50 steps -- to prevent that without inventing a
+// specific AP number, `scoreFor` divides by (1 + picks already made TO THIS PIECE WITHIN THIS
+// SIMULATION, not the piece's real starting level -- real levels can already be in the hundreds,
+// which would make a per-real-level penalty far too weak to ever matter across just 30-50 steps)
+// as a deliberately-labeled SPREAD heuristic, not a cost claim: all else equal, prefer whichever
+// eligible piece this path hasn't already leaned on, so it rotates across every eligible piece
+// instead of parking on one.
+function computeGearEffectivePath(rawValueFn, steps) {
   const gearSets = getGearSets();
   const levels = {};
-  gearSets.pieces.forEach((p) => { levels[p.name] = p.level || 0; });
-  const eligible = gearSets.pieces.filter((p) => scoreFn(p) > 0);
+  const picks = {};
+  gearSets.pieces.forEach((p) => { levels[p.name] = p.level || 0; picks[p.name] = 0; });
+  const eligible = gearSets.pieces.filter((p) => p.owned && rawValueFn(p) > 0);
+  const scoreFor = (p) => rawValueFn(p) / (picks[p.name] + 1);
   const path = [];
   let lastPicked = null;
   for (let i = 0; i < steps; i++) {
     if (!eligible.length) break;
-    const maxScore = Math.max(...eligible.map(scoreFn));
-    const candidates = eligible.filter((p) => scoreFn(p) === maxScore);
+    const maxScore = Math.max(...eligible.map(scoreFor));
+    const candidates = eligible.filter((p) => scoreFor(p) === maxScore);
     const pick = candidates.find((p) => p.name !== lastPicked) || candidates[0];
     levels[pick.name] += 1;
+    picks[pick.name] += 1;
     path.push({ piece: pick, level: levels[pick.name] });
     lastPicked = pick.name;
   }
