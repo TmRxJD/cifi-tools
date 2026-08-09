@@ -113,8 +113,15 @@ think one is wrong, disprove it with a test.
   level 12, ~60ms at level 79, both at 100 iterations).
 - **A share code does not fully determine a loot score.** Run
   `node tools/bench/params-report.js <hunter>` for the gap: Knox reads 91 sim params and its
-  code carries 46. A code-only evaluation can legitimately land *below* a score recorded on a
-  real account; it can never legitimately land *above* one.
+  code carries 46, so a code-only evaluation and a score recorded on a real account are not
+  measuring the same thing.
+  **Do NOT assume the difference has a sign.** An earlier version of this document claimed a
+  code-only evaluation "can never legitimately land above" a recorded score, and the full
+  182-build sweep disproved it: three builds overcount (+4.7% to +7.2%) and three undercount
+  (−5.4%), with the direction flipping between adjacent levels (72/73/74). They cluster at the
+  stage-300 boss-kill boundary, where the metric is threshold-sensitive — a build that barely
+  kills the boss swings hard either way. Treat a parity mismatch as "these two numbers describe
+  different states", not as evidence about which side is wrong.
 - **`upgrades.gems_nodes.attraction_lootKnox` reaches the wasm but changes the returned loot
   score by exactly nothing** (arg 0 vs 150 → bit-identical). Don't chase it as a cause.
 - **Legality is a state predicate, not a path predicate.** A node at level > 0 is legal iff it's
@@ -166,16 +173,39 @@ node tools/bench/show.js               # pretty-print the last results.json
 The optimizer gate replays every real build code in `compare-mcp/known-builds*.mjs` (182 of
 them) through two checks:
 
-- **Parity** — clone's loot score vs the score recorded for that code. **Asymmetric on purpose:**
-  clone *below* recorded is expected (account state a code can't carry); clone *above* recorded is
-  a hard failure (nothing missing can inflate a score).
+- **Parity** — clone's loot score vs the score recorded for that code. Currently asymmetric
+  (below = expected, above = hard failure). **This rule is known to be wrong and needs
+  replacing** — see the parity invariant above; the sign assumption it rests on does not hold at
+  high level. The 3 remaining gate failures are all this rule misfiring, not optimizer defects.
+  The fix is to judge parity against what the ORIGINAL TOOL reports for the same code
+  (`compare-mcp/batch-test.mjs` already drives the live site) rather than against a recorded
+  number that may describe different account state.
 - **Quality** — given exactly the budget the import spent, the optimizer matches or beats it on
   *that build's own objective* (loot builds on loot/min, push builds on average stage). The other
   metric is reported as a warning, never fatal — pushing deeper genuinely costs loot/min, and
   gating both would fail a push build for succeeding.
 
+**Last full result (all 182 builds, all three hunters):**
+
+| | builds | levels | met or beat | strictly beat | parity failures |
+|---|---|---|---|---|---|
+| Borge | 82 | 12–79 | 82/82 | 13 | 2 |
+| Ozzy | 66 | 11–70 | 66/66 | 25 | 1 |
+| Knox | 34 | 12–37 | 34/34 | 13 | 0 |
+
+**Zero quality regressions.** Median delta 0.00% — the optimizer reproducing already-optimal
+community builds exactly, which is the expected result, not a null one. The 3 parity failures are
+the broken rule described above, not optimizer defects.
+
+**The gate is resumable, and you will need that.** Long runs get killed part way through
+(every hunter above took two attempts). Results are written after every batch and `--resume`
+skips what is already done, so re-invoke the same command until it reports `0 build(s) to run`.
+Use `--out=` to give each hunter its own file. Summarize any file, partial included, with
+`node tools/bench/summarize.js <file...>`.
+
 Supporting tools: `decode.js` (what a build code actually carries), `params-report.js` (which sim
-params a code can/can't carry), `capcheck.js`, `profile.js`, `ts-readiness.js`.
+params a code can/can't carry), `fuzz-space.js` (move generators vs their own legality
+predicate), `capcheck.js`, `profile.js`, `ts-readiness.js`.
 
 **Manual cross-check against the original tool** is the ultimate arbiter and is cheap: export the
 build code, import it into cifi-tools.com as a guest, compare Loot Score / Ø Stage / Ø Time /
