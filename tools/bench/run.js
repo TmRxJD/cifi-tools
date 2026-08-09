@@ -24,8 +24,16 @@
 //   node tools/bench/run.js borge              # one hunter
 //   node tools/bench/run.js borge 0 10         # a slice
 //   node tools/bench/run.js --batch=6          # override batch size
+//   node tools/bench/run.js borge --all --resume --out=borge.json
 //
-// Writes per-build detail to tools/bench/results.json.
+// RESUMABLE. A full sweep runs for hours, and long runs here have repeatedly been killed part
+// way through with their buffered stdout lost -- which made every attempt start over from zero.
+// Results are therefore written after EVERY batch, and `--resume` skips whatever the target
+// results file already contains. Re-invoking the same command until it reports no remaining
+// builds converges on a complete run instead of restarting. Use `--out=` to give each hunter its
+// own file so resuming one never picks up another's results.
+//
+// Summarize any results file (including a partial one) with tools/bench/summarize.js.
 
 const os = require('node:os');
 const fs = require('node:fs');
@@ -34,14 +42,19 @@ const { Worker } = require('node:worker_threads');
 const H = require('./harness.js');
 
 const WORKER_FILE = path.join(__dirname, 'worker.js');
-const RESULTS_FILE = path.join(__dirname, 'results.json');
+const DEFAULT_RESULTS_FILE = path.join(__dirname, 'results.json');
 
 function parseArgs(argv) {
   const flags = argv.filter((a) => a.startsWith('--'));
   const positional = argv.filter((a) => !a.startsWith('--'));
   const batchFlag = flags.find((f) => f.startsWith('--batch='));
+  const outFlag = flags.find((f) => f.startsWith('--out='));
   return {
     runAll: flags.includes('--all'),
+    resume: flags.includes('--resume'),
+    // A separate results file per run keeps hunters independent, so --resume can never carry
+    // one hunter's results into another's run.
+    outFile: outFlag ? outFlag.slice('--out='.length) : DEFAULT_RESULTS_FILE,
     batchSize: batchFlag ? Number(batchFlag.split('=')[1]) : Math.max(1, os.cpus().length - 1),
     hunter: positional[0],
     from: positional[1] !== undefined ? Number(positional[1]) : 0,
@@ -128,10 +141,27 @@ function runBatch(fixtures) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const fixtures = selectFixtures(args);
-  console.log(`${fixtures.length} build(s), batches of ${args.batchSize}, ${args.runAll ? 'running all' : 'stopping at first failure'}\n`);
+  const resultsFile = args.outFile;
+  let fixtures = selectFixtures(args);
 
+  // --resume: carry forward whatever a previous (possibly interrupted) run already finished and
+  // only run what is left. A full sweep takes hours and has been observed dying partway through
+  // with its buffered tail lost, which made every attempt start from zero. Combined with the
+  // per-batch write above, repeated invocations now converge instead of restarting.
   const results = [];
+  let totalTarget = 0;
+  if (args.resume && fs.existsSync(resultsFile)) {
+    const prior = JSON.parse(fs.readFileSync(resultsFile, 'utf8'));
+    const done = new Set(prior.map((r) => `${r.hunter}/${r.set}#${r.index}`));
+    results.push(...prior);
+    const before = fixtures.length;
+    fixtures = fixtures.filter((f) => !done.has(`${f.hunter}/${f.set}#${f.index}`));
+    console.log(`resuming: ${prior.length} build(s) already done, ${before - fixtures.length} skipped`);
+  }
+
+  totalTarget = results.length + fixtures.length;
+  console.log(`${fixtures.length} build(s) to run, batches of ${args.batchSize}, ${args.runAll ? 'running all' : 'stopping at first failure'}\n`);
+
   const startedAt = Date.now();
   let aborted = false;
 
@@ -141,13 +171,13 @@ async function main() {
     batchResults.sort((a, b) => (a.level || 0) - (b.level || 0));
     for (const res of batchResults) {
       results.push(res);
-      console.log(`[${results.length}/${fixtures.length}] ${describe(res)}`);
+      console.log(`[${results.length}/${totalTarget}] ${describe(res)}`);
     }
     // Persist after EVERY batch, not just at the end. A full sweep is ~2 hours; losing all of it
     // because the process was interrupted at build 150 is avoidable, and stdout redirected to a
     // file is block-buffered, so a killed run leaves a truncated log and nothing else. Now the
     // completed work is always on disk and readable with `node tools/bench/show.js`.
-    fs.writeFileSync(RESULTS_FILE, JSON.stringify(results, null, 2));
+    fs.writeFileSync(resultsFile, JSON.stringify(results, null, 2));
 
     if (!args.runAll && batchResults.some((r) => failureOf(r))) {
       aborted = true;
@@ -161,7 +191,7 @@ async function main() {
   const lootDeltas = quality.map((r) => r.lootDeltaPct).sort((a, b) => a - b);
 
   console.log('\n' + '='.repeat(74));
-  console.log(`ran ${results.length}/${fixtures.length} build(s) in ${((Date.now() - startedAt) / 1000 / 60).toFixed(1)} min`);
+  console.log(`have ${results.length}/${totalTarget} build(s); this run took ${((Date.now() - startedAt) / 1000 / 60).toFixed(1)} min`);
   const undercounts = results.filter((r) => r.ok && r.parity === 'undercount');
   console.log(`parity match    : ${results.filter((r) => r.ok && r.parity === 'match').length}`);
   console.log(`parity overcount: ${results.filter((r) => r.ok && r.parity === 'overcount').length}  (fatal -- clone math wrong)`);
@@ -175,7 +205,7 @@ async function main() {
   console.log(`secondary down  : ${warnings.length} (not fatal -- the other metric traded off)`);
   for (const { res, why } of failures) console.log(`  FAIL ${res.hunter}/${res.set}#${res.index} lvl${res.level ?? '?'}: ${why}`);
   for (const { res, why } of warnings) console.log(`  warn ${res.hunter}/${res.set}#${res.index} lvl${res.level ?? '?'} ${res.mode}: ${why}`);
-  console.log(`\ndetail written to ${path.relative(process.cwd(), RESULTS_FILE)}`);
+  console.log(`\ndetail written to ${path.relative(process.cwd(), resultsFile)}`);
 
   process.exit(failures.length ? 1 : 0);
 }
