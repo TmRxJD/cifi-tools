@@ -6,7 +6,12 @@
 // its real marginal effect on lootPerMin (see hunterStatPath.js) -- there is no hardcoded
 // notion of "defensive" vs "offensive" stats or of game phases baked into the ranking itself.
 (function (global) {
-  const SEARCH_ITERATIONS = 150; // coarse per-candidate iteration count, matches beamSearchBrowser.js's own convention
+  // Coarse per-candidate fidelity, taken from the optimizer rather than chosen again here.
+  // This file previously carried TWO different values (150 for the stat-only path, 100 for the
+  // build-card path) for the same kind of screening, so the same candidate could rank
+  // differently depending on which entry point you came through. There is one coarse fidelity
+  // in this app and optimizer/search.js defines it.
+  const SEARCH_ITERATIONS = global.HunterOptimizer.SCREEN_ITERATIONS;
 
   function buildStatCandidates(hunter, def, CF) {
     return def.baseStatKeys
@@ -28,19 +33,25 @@
     return groups;
   }
 
-  function costOf(hunter, CF, cand, nextLevel) {
+  function purchaseCostOf(hunter, CF, cand, nextLevel) {
     return cand.kind === 'stat' ? CF.baseStatCostAtLevel(cand.key, nextLevel, hunter) : CF.inscryptionCostAtLevel(cand.key, nextLevel);
   }
   function capOf(def, cand) {
     return cand.kind === 'stat' ? def.statCaps?.[cand.key] : cand.maxLevel;
   }
 
-  // Yields to the browser's rendering pipeline so a long run of sequential wasm calls doesn't
-  // block the UI thread for the whole computation -- without this the modal appears (it's
-  // inserted before any of this runs) but the page stops responding/repainting until the
-  // entire multi-hundred-call computation finishes, which reads as "hard lag."
+  // Yields between steps so a long run of sequential wasm calls doesn't block the UI thread for
+  // the whole computation -- without this the modal appears (it's inserted before any of this
+  // runs) but the page stops responding/repainting until the entire multi-hundred-call
+  // computation finishes, which reads as "hard lag."
+  //
+  // setTimeout, NOT requestAnimationFrame. rAF is paused entirely in a backgrounded tab, so the
+  // walk made zero progress whenever the tab wasn't visible -- switch away mid-computation and
+  // you came back to a modal frozen exactly where you left it (confirmed directly:
+  // document.hidden === true and the run sat at the same step indefinitely). A macrotask yield
+  // still lets the browser repaint between steps and keeps running when hidden.
   function yieldToUI() {
-    return new Promise((resolve) => requestAnimationFrame(resolve));
+    return new Promise((resolve) => setTimeout(resolve, 0));
   }
 
   // One resource's independent greedy walk -- candidates here only vary THIS resource's own
@@ -67,7 +78,7 @@
         const nextLevel = curLevel + 1;
         const cap = capOf(def, cand);
         if (isFinite(cap) && nextLevel > cap) continue;
-        const cost = costOf(hunter, CF, cand, nextLevel);
+        const cost = purchaseCostOf(hunter, CF, cand, nextLevel);
         if (!cost || cost <= 0) continue;
 
         const candStats = cand.kind === 'stat' ? { ...stats, [cand.key]: nextLevel } : stats;
@@ -102,51 +113,43 @@
     return [...new Set(candidates.map((c) => c.resource))];
   }
 
-  // cfg: { level, talents, attributes, hunterStats, baseOverrides, globalUpgrades,
-  //        gemPlannerStore, TALENTS, ATTRIBUTES }
-  // onProgress(resource, done, total) is called as each resource's column advances.
-  async function greedyStatPath(hunter, cfg, targetSteps, onProgress) {
-    const def = window.HUNTER_DEFS[hunter];
-    const CF = window.CostFormulas;
-    const candidates = buildStatCandidates(hunter, def, CF);
-    const evalFast = await HunterSim.compileEvaluator(hunter, { ...cfg, STAT_KEYS: candidates.map((c) => c.key) });
-
-    // Resources are independent currencies, so their columns are computed in parallel --
-    // this also roughly halves/thirds wall-clock time vs. running them one after another.
-    const entries = Object.entries(groupByResource(candidates));
-    const results = await Promise.all(entries.map(([resource, group]) => greedyResourceColumn(
-      hunter, cfg, evalFast, def, CF, group, cfg.hunterStats, {}, targetSteps, SEARCH_ITERATIONS,
-      onProgress && ((done, total) => onProgress(resource, done, total)),
-    )));
-    const columns = {};
-    entries.forEach(([resource], i) => { columns[resource] = results[i]; });
-    return { columns };
-  }
-
-  // Build-card "Effective Path": same independent-per-resource-column walk, but the candidate
-  // pool also includes this hunter's inscription levels (talents/attributes are excluded --
-  // they're point-budget-gated by level, not currency-gated, and already have their own
-  // dedicated Optimize flow; relics are left out, different currency/harder to model). This
-  // pool is bigger per-column than greedyStatPath's (stats + up to a dozen+ inscription
-  // items sharing one resource), so it runs at a lower iteration count to stay responsive.
-  const UPGRADE_PATH_ITERATIONS = 100;
-  async function greedyUpgradePath(hunter, cfg, targetSteps, onProgress) {
+  /**
+   * THE purchase-path walk. One implementation, two candidate pools.
+   *
+   * `includeInscriptions` false -> base stats only (the Hunter Stats page's "Effective Path").
+   * `includeInscriptions` true  -> stats plus this hunter's inscription levels (the build
+   * card's "Effective Path"). Talents/attributes are deliberately excluded from both: they are
+   * point-budget-gated by level rather than currency-gated, and belong to the Optimize flow.
+   * Relics are excluded too -- different currency, not modeled.
+   *
+   * These were two near-identical functions that had already drifted apart on fidelity. Same
+   * walk, same ranking, one place to change.
+   *
+   * cfg: { level, talents, attributes, hunterStats, baseOverrides, globalUpgrades,
+   *        gemPlannerStore, TALENTS, ATTRIBUTES }
+   * onProgress(resource, done, total) fires as each resource's column advances.
+   */
+  async function greedyPurchasePath(hunter, cfg, targetSteps, includeInscriptions, onProgress) {
     const def = window.HUNTER_DEFS[hunter];
     const CF = window.CostFormulas;
     const statCandidates = buildStatCandidates(hunter, def, CF);
-    const inscCandidates = buildInscryptionCandidates(hunter, def, CF);
+    const inscCandidates = includeInscriptions ? buildInscryptionCandidates(hunter, def, CF) : [];
     const inscryptionParams = inscCandidates.map((c) => `upgrades.inscryptions.${c.key}`);
 
     const evalFast = await HunterSim.compileEvaluator(hunter, {
-      ...cfg, STAT_KEYS: statCandidates.map((c) => c.key), INSCRYPTION_PARAMS: inscryptionParams,
+      ...cfg,
+      STAT_KEYS: statCandidates.map((c) => c.key),
+      INSCRYPTION_PARAMS: inscryptionParams,
     });
 
     const currentInsc = {};
     inscryptionParams.forEach((p) => { currentInsc[p] = cfg.globalUpgrades?.inscryptions?.[p.split('.')[2]] || 0; });
 
+    // Resources are independent currencies, so their columns are computed in parallel -- this
+    // also roughly halves/thirds wall-clock time vs. running them one after another.
     const entries = Object.entries(groupByResource([...statCandidates, ...inscCandidates]));
     const results = await Promise.all(entries.map(([resource, group]) => greedyResourceColumn(
-      hunter, cfg, evalFast, def, CF, group, cfg.hunterStats, currentInsc, targetSteps, UPGRADE_PATH_ITERATIONS,
+      hunter, cfg, evalFast, def, CF, group, cfg.hunterStats, currentInsc, targetSteps, SEARCH_ITERATIONS,
       onProgress && ((done, total) => onProgress(resource, done, total)),
     )));
     const columns = {};
@@ -155,7 +158,5 @@
   }
 
   global.resourcesFor = resourcesFor;
-
-  global.greedyStatPath = greedyStatPath;
-  global.greedyUpgradePath = greedyUpgradePath;
+  global.greedyPurchasePath = greedyPurchasePath;
 })(window);

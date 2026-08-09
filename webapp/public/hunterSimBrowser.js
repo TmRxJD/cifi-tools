@@ -1,5 +1,12 @@
-// Browser port of hunterSim.js -- same resolveParam/compileEvaluator logic, using fetch()
-// instead of fs.
+// THE simulation entry point. Resolves a build's named parameters into the positional array
+// release.wasm expects, and runs it.
+//
+// This is the only implementation. It runs unmodified in the page, in the optimizer's Web
+// Workers, and under Node in tools/bench (which supplies a small fetch shim for the two
+// assets). There used to be a second Node copy in tools/hunterSim.js; it had drifted into a
+// materially different resolver -- no gem handling, no bossLootRate default -- so validation
+// run through it disagreed with the app for reasons that looked like optimizer bugs. Deleted
+// rather than resynced: two copies of this logic will always drift again.
 //
 // IMPORTANT: the wasm module carries its own internal PRNG state as a persistent global
 // (not reset between calls, and not fed by any JS-side seed -- WebAssembly.Module.imports()
@@ -17,16 +24,27 @@
   const WASM_EXPORT = { borge: 'EVALBORGE_WASM', ozzy: 'EVALOZZY_WASM', knox: 'EVALKNOX_WASM' };
   const IMPORT_OBJECT = { env: { abort: (a, b, c, d) => { throw new Error(`wasm abort at ${b}:${c}:${d}`); } } };
 
+  // params.json and release.wasm sit next to this file at the site root, but relative fetch()
+  // resolves against the *caller's* location -- and a Web Worker's location is the worker
+  // script's own directory. A worker loaded from optimizer/ therefore asked for
+  // optimizer/params.json and got a 404 ("Not found" is not valid JSON) at init. Resolving
+  // against an explicit base fixes it for any load location instead of constraining where
+  // workers are allowed to live; a worker in a subdirectory sets HUNTERSIM_ASSET_BASE before
+  // importing this file (see optimizer/worker.js).
+  function assetUrl(name) {
+    return new URL(name, global.HUNTERSIM_ASSET_BASE || (typeof location !== 'undefined' ? location.href : undefined)).href;
+  }
+
   let paramsPromise = null;
   function loadParams() {
-    if (!paramsPromise) paramsPromise = fetch('params.json').then((r) => r.json());
+    if (!paramsPromise) paramsPromise = fetch(assetUrl('params.json')).then((r) => r.json());
     return paramsPromise;
   }
 
   let wasmModulePromise = null;
   function loadWasmModule() {
     if (!wasmModulePromise) {
-      wasmModulePromise = fetch('release.wasm')
+      wasmModulePromise = fetch(assetUrl('release.wasm'))
         .then((r) => r.arrayBuffer())
         .then((buf) => WebAssembly.compile(buf));
     }
@@ -241,7 +259,7 @@
   // `cfg.STAT_KEYS` (a hunter's baseStatKeys) opts a given stat key into the same per-call
   // `dynamic` slot mechanism as talents/attributes -- evalFast's new 4th arg (`statAlloc`)
   // overrides cfg.hunterStats[key] per call instead of using the compiled-in value. Existing
-  // callers (beamSearchBrowser.js) that don't pass STAT_KEYS or a 4th arg are unaffected.
+  // callers (optimizer/worker.js) that don't pass STAT_KEYS or a 4th arg are unaffected.
   async function compileEvaluator(hunter, cfg) {
     const PARAMS = await loadParams();
     const names = PARAMS[hunter];
@@ -255,7 +273,7 @@
     const attrIds = new Set(cfg.ATTRIBUTES.map((d) => d.id));
     const statKeys = new Set(cfg.STAT_KEYS || []);
     // Full wasm param names (e.g. "upgrades.inscryptions.i13") for the build-card Effective
-    // Path allocator (hunterStatPathBrowser.js's greedyUpgradePath), which also ranks
+    // Path allocator (hunterStatPathBrowser.js's greedyPurchasePath), which also ranks
     // inscription-level candidates alongside base stats. Inscriptions are account-wide
     // (state.upgrades.inscryptions), same as base stats, so they're keyed by the same
     // dynamic-slot mechanism, just addressed by full param name instead of a bare stat key.
@@ -282,7 +300,7 @@
     const mod = await loadWasmModule();
 
     // Every scoring call gets its OWN fresh instance (see the top-of-file note on why) --
-    // otherwise the beam search would be comparing candidates scored from different points
+    // otherwise the optimizer would be comparing candidates scored from different points
     // in a drifting internal RNG state, which is both non-reproducible and an unfair
     // comparison between candidates.
     return async function evalFast(talentAlloc, attrAlloc, iterations, statAlloc, inscryptionAlloc) {

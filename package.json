@@ -1,0 +1,19 @@
+{
+  "name": "huntersim",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Build simulator/optimizer for CIFI's Borge, Ozzy and Knox hunters",
+  "scripts": {
+    "start": "node webapp/server.js",
+    "check": "tsc --noEmit -p jsconfig.json",
+    "test:schema": "node tools/bench/schema-test.js",
+    "test:optimizer": "node tools/bench/run.js",
+    "test:optimizer:all": "node tools/bench/run.js --all",
+    "bench:show": "node tools/bench/show.js",
+    "report:params": "node tools/bench/params-report.js",
+    "report:ts": "node tools/bench/ts-readiness.js"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}

@@ -18,13 +18,10 @@
 // site's own EVAL_PARAMS list includes it (resolved from hunterStats.stage), and leaving
 // it at 0 visibly breaks the simulation (flat 100-100 stage range with zero Monte Carlo
 // variance). 1 is the minimal honest value true of any account, real or brand new.
-const SEED_HUNTER_STATS = {
-  borge: { hp: 0, atk: 0, regen: 0, dr: 0, evade: 0, effect: 0, critchance: 0, critpower: 0, atkspeed: 0, stage: 1 },
-  ozzy: { hp: 0, atk: 0, regen: 0, dr: 0, evade: 0, effect: 0, multichance: 0, multipower: 0, atkspeed: 0, stage: 1 },
-  knox: { hp: 0, atk: 0, regen: 0, dr: 0, block: 0, effect: 0, charge: 0, chargeGain: 0, reload: 0, proj: 0, stage: 1 },
-};
-
-const SEED_GLOBAL_UPGRADES = {};
+// Seeded per-hunter base stats now come from storeSchema.js's seedHunterStats(), which derives
+// the key list from HUNTER_DEFS[h].baseStatKeys rather than repeating it -- the hand-written
+// copy here had to be edited every time a hunter's stat list changed, and silently disagreed
+// with baseStatKeys if you forgot.
 
 // Every build id used to be `String(Date.now())` (optionally +hunterKey), which collides
 // whenever two builds get created/saved within the same millisecond -- e.g. running the
@@ -42,57 +39,11 @@ function genBuildId() {
 }
 
 const STORAGE_KEY = 'huntersim_clone_v2';
-const DEFAULT_CATEGORIES = [{ id: 'active', name: 'Active', isSystem: true }, { id: 'archived', name: 'Archived', isSystem: true }];
 
-// Which parts of a decoded save get applied on Import -- checked by default (all four), plus
-// whether to silently auto-poll the CIFI Bridge for a changed save and re-run the same checked
-// categories automatically (off by default -- it's an opt-in convenience, not a surprise
-// background write).
-function defaultImportPrefs() {
-  return {
-    categories: {
-      hunterBuilds: true, relics: true, inscriptions: true, diamondCards: true, milestone: true, gems: true,
-      shipRanks: true, shipGear: true, unlockedGens: true, gearSets: true, fleetBadges: true, fleetResearch: true,
-      researches: true, diamondUltima: true,
-    },
-    autoPoll: false,
-    quiet: false, // suppress the "update found" toast when auto-poll silently re-imports
-    checklistCollapsed: false,
-  };
-}
-
-function freshStore() {
-  const perHunter = {};
-  ['borge', 'ozzy', 'knox'].forEach((h) => { perHunter[h] = { hunterStats: { ...SEED_HUNTER_STATS[h] }, builds: [] }; });
-  return {
-    globalUpgrades: { ...SEED_GLOBAL_UPGRADES },
-    gems: window.defaultGemState(),
-    categories: JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)),
-    viewMode: 'vertical',
-    ships: {},
-    researchUnits: {},
-    shipBuilds: {},
-    shipInputs: {},
-    shipGear: {},
-    gearSets: {},
-    fleetBoosts: {},
-    fleetResearch: {},
-    fleetBadges: {},
-    unlockedGens: { 1: true, 2: false, 3: false, 4: false, 5: false, 6: false, 7: false, 8: false },
-    optimizerSettings: { shipEnabled: { 1: true, 2: true, 3: true, 4: true, 5: true, 6: true, 7: true }, zaglag: false, prepForLongRun: false },
-    importPrefs: defaultImportPrefs(),
-    loadoutTabs: {
-      tabs: [
-        { id: 1, name: 'Loadout 1', perShip: {}, zaglagChecklist: null },
-        { id: 2, name: 'Loadout 2', perShip: {}, zaglagChecklist: null },
-        { id: 3, name: 'Loadout 3', perShip: {}, zaglagChecklist: null },
-      ],
-      activeId: 1,
-      nextId: 4,
-    },
-    ...perHunter,
-  };
-}
+// Both of these are the schema (storeSchema.js), not separate shape declarations. Adding a
+// store field is a one-line change there and needs no edit here.
+const freshStore = () => window.StoreSchema.freshStore();
+const defaultImportPrefs = () => window.StoreSchema.defaultImportPrefs();
 
 // One-time repair for data saved before genBuildId() existed: every build/category id used
 // to be String(Date.now()) (optionally +hunterKey), which collides whenever two were
@@ -125,46 +76,25 @@ function loadStore() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (!parsed.gems) parsed.gems = window.defaultGemState();
-      if (!parsed.categories) parsed.categories = JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
-      if (!parsed.viewMode) parsed.viewMode = 'vertical';
-      if (!parsed.knox) parsed.knox = { hunterStats: { ...SEED_HUNTER_STATS.knox }, builds: [] };
-      if (!parsed.ships) parsed.ships = {};
-      if (!parsed.researchUnits) parsed.researchUnits = {};
-      if (!parsed.shipBuilds) parsed.shipBuilds = {};
-      if (!parsed.shipInputs) parsed.shipInputs = {};
-      if (!parsed.shipGear) parsed.shipGear = {};
-      if (!parsed.gearSets) parsed.gearSets = {};
-      if (!parsed.fleetBoosts) parsed.fleetBoosts = {};
-      if (!parsed.fleetResearch) parsed.fleetResearch = {};
-      if (!parsed.fleetBadges) parsed.fleetBadges = {};
-      if (!parsed.unlockedGens) parsed.unlockedGens = { 1: true, 2: false, 3: false, 4: false, 5: false, 6: false, 7: false, 8: false };
-      if (!parsed.importPrefs) parsed.importPrefs = defaultImportPrefs();
-      // Backfill any category keys added after this account's importPrefs was first saved
-      // (e.g. the original 4-bucket version didn't have per-piece Ship/Relic/Inscryption/etc
-      // toggles) -- default each missing one to checked, matching a fresh install's defaults.
-      Object.entries(defaultImportPrefs().categories).forEach(([key, def]) => {
-        if (!(key in parsed.importPrefs.categories)) parsed.importPrefs.categories[key] = def;
-      });
-      if (parsed.importPrefs.quiet === undefined) parsed.importPrefs.quiet = false;
-      if (parsed.importPrefs.checklistCollapsed === undefined) parsed.importPrefs.checklistCollapsed = false;
-      if (!parsed.optimizerSettings) parsed.optimizerSettings = { shipEnabled: { 1: true, 2: true, 3: true, 4: true, 5: true, 6: true, 7: true }, zaglag: false, prepForLongRun: false };
-      if (parsed.optimizerSettings.prepForLongRun === undefined) parsed.optimizerSettings.prepForLongRun = false;
-      if (!parsed.loadoutTabs) {
-        // Migrate a pre-tabs single currentLoadout (if any) into tab 1 instead of discarding it.
-        const legacy = parsed.currentLoadout;
-        parsed.loadoutTabs = {
-          tabs: [
-            { id: 1, name: legacy?.name || 'Loadout 1', perShip: legacy?.perShip || {}, zaglagChecklist: null },
-            { id: 2, name: 'Loadout 2', perShip: {}, zaglagChecklist: null },
-            { id: 3, name: 'Loadout 3', perShip: {}, zaglagChecklist: null },
-          ],
-          activeId: 1,
-          nextId: 4,
-        };
+
+      // Carry a pre-tabs single `currentLoadout` into tab 1 before the schema fills in a fresh
+      // loadoutTabs and the retired key gets dropped. This is the one genuine data TRANSFORM in
+      // the migration; everything else is "fill in what's missing", which the schema does.
+      if (!parsed.loadoutTabs && parsed.currentLoadout) {
+        parsed.loadoutTabs = window.StoreSchema.defaultLoadoutTabs();
+        parsed.loadoutTabs.tabs[0].name = parsed.currentLoadout.name || parsed.loadoutTabs.tabs[0].name;
+        parsed.loadoutTabs.tabs[0].perShip = parsed.currentLoadout.perShip || {};
       }
-      delete parsed.currentLoadout;
-      if (dedupeStoreIds(parsed)) {
+
+      const migration = window.StoreSchema.migrateStore(parsed);
+      const problems = window.StoreSchema.validateStore(parsed);
+      if (problems.length) {
+        // Log loudly but do not throw: a validation bug must never lock someone out of their
+        // own data, and this app has no backend to restore from. The benchmark treats the same
+        // violations as hard failures, which is where they get caught before shipping.
+        console.error(`[store] ${problems.length} invariant violation(s) after load:\n  ${problems.join('\n  ')}`);
+      }
+      if (migration.changed || dedupeStoreIds(parsed)) {
         // Persist the repair immediately rather than waiting for the next unrelated save --
         // otherwise a read-only session (just browsing, no edits) would silently re-detect
         // and "fix" the same already-in-memory duplicates every reload without ever writing
@@ -275,10 +205,17 @@ if (__storeWasFreshOnLoad) {
     if (!json) return;
     try {
       const recovered = JSON.parse(json);
-      if (!recovered.gems) recovered.gems = window.defaultGemState();
-      if (!recovered.categories) recovered.categories = JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
-      if (!recovered.viewMode) recovered.viewMode = 'vertical';
-      if (!recovered.knox) recovered.knox = { hunterStats: { ...SEED_HUNTER_STATS.knox }, builds: [] };
+      // Same schema migration as the localStorage path -- NOT a second, shorter copy of it.
+      // This branch used to backfill only gems/categories/viewMode/knox, so a store restored
+      // from the IndexedDB mirror came back missing importPrefs, optimizerSettings, loadoutTabs,
+      // ships and the rest, and then threw on the first screen that touched one. A backup path
+      // that only half-restores is worse than no backup path, and it could only ever be caught
+      // by someone actually losing their localStorage.
+      window.StoreSchema.migrateStore(recovered);
+      const recoveredProblems = window.StoreSchema.validateStore(recovered);
+      if (recoveredProblems.length) {
+        console.error(`[store] ${recoveredProblems.length} invariant violation(s) in the IndexedDB backup:\n  ${recoveredProblems.join('\n  ')}`);
+      }
       dedupeStoreIds(recovered);
       Object.keys(store).forEach((k) => delete store[k]);
       Object.assign(store, recovered);
@@ -293,6 +230,29 @@ if (__storeWasFreshOnLoad) {
 function defs() { return window.HUNTER_DEFS[currentHunter]; }
 function budgetsForLevel(level) { return { talentBudget: window.talentBudgetForLevel(level), attributeBudget: window.attributeBudgetForLevel(level) }; }
 
+// THE canonical evaluation state for a build. Every HunterSim.evaluate/evaluateDetailed call
+// in this file goes through here.
+//
+// This used to be a copy-pasted object literal at each call site -- the build card, the stats
+// modal, the compare-efficiency modal, the share dialog -- differing only in key order. That is
+// how a field goes missing from one path and nowhere else: the optimizer's worker config once
+// omitted gemPlannerStore, so the search scored candidates in a gem-less world while the build
+// card scored them in the real one, and the two disagreed for reasons nothing in the UI could
+// explain. One builder means a field can only be missing everywhere at once, which is a bug you
+// notice immediately rather than a silent per-surface divergence.
+function evalStateFor(build, iterations) {
+  return {
+    level: build.level,
+    iterations,
+    hunterStats: store[currentHunter].hunterStats,
+    talents: build.talents,
+    attributes: build.attributes,
+    overrides: build.overrides || {},
+    upgrades: window.buildNestedUpgrades(store.globalUpgrades),
+    gemPlannerStore: { gemStates: store.gems },
+  };
+}
+
 const MAT_LABELS = ['Obsidian', 'Behlium', 'Hellish-Biomatter'];
 const HUNTER_TITLES = { borge: 'Borge Simulator', ozzy: 'Ozzy Simulator', knox: 'Knox Simulator' };
 const HUNTER_ACCENTS = { borge: 'red', ozzy: 'green', knox: 'blue' };
@@ -303,16 +263,47 @@ function newDraftBuild() {
   return { id: null, name: '', level: 1, talents, attributes, categoryId: 'active', overrides: {} };
 }
 
+// THE canonical purchase-path config, for greedyPurchasePath (hunterStatPathBrowser.js).
+//
+// A third shape exists because that walk varies BASE STATS and inscription levels while
+// holding talents/attributes fixed -- the mirror image of the optimizer, which varies
+// talents/attributes while holding everything else fixed. Hence `talents`/`attributes` as
+// pinned inputs here versus `currentTalents`/`currentAttrs` as a starting point in cfgFor().
+// It was written out as an identical object literal at both call sites in
+// hunterStatPathPage.js; this is that literal, once.
+function statPathCfgFor(hunter, baseline) {
+  const d = window.HUNTER_DEFS[hunter];
+  return {
+    level: baseline.level,
+    talents: baseline.talents,
+    attributes: baseline.attributes,
+    hunterStats: store[hunter].hunterStats,
+    baseOverrides: {},
+    globalUpgrades: window.buildNestedUpgrades(store.globalUpgrades),
+    gemPlannerStore: { gemStates: store.gems },
+    TALENTS: d.talents,
+    ATTRIBUTES: d.attributes,
+  };
+}
+
+// THE canonical optimizer config for a build -- the sibling of evalStateFor() above.
+//
+// Two builders exist because HunterSim exposes two entry points with different shapes:
+// evaluate() takes a state (`overrides`, `upgrades`), compileEvaluator() takes a config
+// (`baseOverrides`, `globalUpgrades`) plus the search's node tables and budgets. They MUST
+// describe the same account state, or the optimizer searches a different world than the build
+// card displays. Both read the same `store` fields for exactly that reason; if you add an
+// account-state field to one, add it to the other in the same change.
 function cfgFor(hunter, build) {
   const d = window.HUNTER_DEFS[hunter];
   const { talentBudget, attributeBudget } = budgetsForLevel(build.level);
   const mergedUpgrades = window.buildNestedUpgrades(store.globalUpgrades);
-  // The optimizer/beam search must never allocate points into an advanced talent (e.g. The
-  // Legacy of Ultima) that isn't unlocked yet -- it was previously getting the FULL
-  // unfiltered talent list, so "Optimize within budget" could spend points there even while
-  // the talent stayed hidden in the editor, skewing the rest of the distribution. Existing
-  // points already in an advanced talent are kept (it's still a valid current allocation),
-  // just no NEW points get assigned unless the talent is actually visible/unlocked.
+  // The optimizer must never allocate points into an advanced talent (e.g. The Legacy of
+  // Ultima) that isn't unlocked yet -- it was previously getting the FULL unfiltered talent
+  // list, so "Optimize within budget" could spend points there even while the talent stayed
+  // hidden in the editor, skewing the rest of the distribution. Existing points already in an
+  // advanced talent are kept (it's still a valid current allocation), just no NEW points get
+  // assigned unless the talent is actually visible/unlocked.
   const showAdvanced = shouldShowAdvancedTalents(hunter);
   const talents = d.talents.filter((t) => !t.advanced || showAdvanced || (build.talents[t.id] || 0) > 0);
   return {
@@ -941,11 +932,7 @@ async function openOverrideCostsModal(build) {
   let perDayRate = {};
   try {
     const iterations = Number(document.getElementById('baseIterations')?.value) || 1000;
-    const r = await HunterSim.evaluate(currentHunter, {
-      level: build.level, hunterStats: store[currentHunter].hunterStats, talents: build.talents, attributes: build.attributes,
-      overrides: build.overrides || {}, upgrades: window.buildNestedUpgrades(store.globalUpgrades),
-      gemPlannerStore: { gemStates: store.gems }, iterations,
-    });
+    const r = await HunterSim.evaluate(currentHunter, evalStateFor(build, iterations));
     const runsPerDay = r.avgTime ? 1440 / r.avgTime : 0;
     perDayRate = { mat1: r.mat1 * runsPerDay, mat2: r.mat2 * runsPerDay, mat3: r.mat3 * runsPerDay };
   } catch { /* Collection Time just won't be shown if evaluation fails */ }
@@ -1122,18 +1109,14 @@ async function openCompareEfficiencyModal(build) {
   const overlay = titledModal('scale', `Upgrade Efficiency: ${escapeHtml(build.name || 'Unnamed')}`,
     '<p class="text-sm text-gray-400">Evaluating...</p>', 'compareEfficiencyModal');
   const iterations = Number(document.getElementById('baseIterations').value) || 1000;
-  const baseState = {
-    level: build.level, hunterStats: store[currentHunter].hunterStats, talents: build.talents, attributes: build.attributes,
-    overrides: build.overrides || {}, upgrades: window.buildNestedUpgrades(store.globalUpgrades),
-    gemPlannerStore: { gemStates: store.gems }, iterations,
-  };
+  const baseState = evalStateFor(build, iterations);
   const base = await HunterSim.evaluate(currentHunter, baseState);
   const d = defs();
   const { talentBudget, attributeBudget } = budgetsForLevel(build.level);
   const talentSpent = d.talents.reduce((s, t) => s + (build.talents[t.id] || 0), 0);
-  const attrSpent = costOfAttrs(d, build.attributes);
-  const deps = d.attributeDependencies || {};
-  const minVal = d.attributeMinValue || {};
+  const attrSpent = AllocSpace.costOf(d.attributes, build.attributes);
+  const deps = d.attributeDependencies;
+  const minVal = d.attributeMinValue;
 
   const candidates = [];
   const showAdvancedForCompare = shouldShowAdvancedTalents(currentHunter);
@@ -1145,7 +1128,7 @@ async function openCompareEfficiencyModal(build) {
   });
   d.attributes.forEach((a) => {
     const level = build.attributes[a.id] || 0;
-    const canInc = Optimizer.isEligible(a, d.attributes, deps, minVal, build.attributes)
+    const canInc = AllocSpace.isEligible(a, d.attributes, deps, minVal, build.attributes)
       && attrSpent + (a.cost || 1) <= attributeBudget;
     if (canInc) candidates.push({ label: a.label, kind: 'attribute', apply: (attrs) => { attrs[a.id] = level + 1; } });
   });
@@ -1185,11 +1168,7 @@ async function openBuildStatsModal(build) {
   const overlay = titledModal('chart-bar', `Build Statistics: ${escapeHtml(build.name || 'Unnamed')}`,
     '<p class="text-sm text-gray-400">Evaluating...</p>', 'buildStatsModal');
   const iterations = Number(document.getElementById('baseIterations').value) || 1000;
-  const r = await HunterSim.evaluateDetailed(currentHunter, {
-    level: build.level, hunterStats: store[currentHunter].hunterStats, talents: build.talents, attributes: build.attributes,
-    overrides: build.overrides || {}, upgrades: window.buildNestedUpgrades(store.globalUpgrades),
-    gemPlannerStore: { gemStates: store.gems }, iterations,
-  });
+  const r = await HunterSim.evaluateDetailed(currentHunter, evalStateFor(build, iterations));
 
   const dist = r.stageDistribution || [];
   const maxCount = Math.max(1, ...dist.map((d) => d.count));
@@ -1435,12 +1414,7 @@ async function renderBuildList() {
     list.appendChild(wrapper);
 
     const iterations = Number(document.getElementById('baseIterations').value) || 1000;
-    const evalPromise = HunterSim.evaluate(currentHunter, {
-      level: build.level, iterations, hunterStats: store[currentHunter].hunterStats,
-      talents: build.talents, attributes: build.attributes, overrides: build.overrides || {},
-      upgrades: window.buildNestedUpgrades(store.globalUpgrades),
-      gemPlannerStore: { gemStates: store.gems },
-    });
+    const evalPromise = HunterSim.evaluate(currentHunter, evalStateFor(build, iterations));
     if (buildIdx === 0) {
       comparisonBaseline = await evalPromise;
       // A newer renderBuildList() call started while we were paused here -- it already
@@ -2128,8 +2102,8 @@ function renderSettingsPage(root) {
         : `<div class="text-xs text-gray-600">No advanced talents for this hunter.</div>`}`;
     if (hasAdvancedTalent) {
       card.querySelector('[data-toggle]').onclick = () => {
-        store.settings = store.settings || {};
-        store.settings.advancedTalents = store.settings.advancedTalents || {};
+        // store.settings.advancedTalents is guaranteed present by the schema (storeSchema.js);
+        // no lazy `|| {}` init needed, and none should be added back.
         store.settings.advancedTalents[h] = !shown;
         saveStore();
         renderSettingsPage(root);
@@ -2512,8 +2486,6 @@ function talentMaxLevel(t, build) {
 // build imported/scanned with real Ultima points immediately reveals the talent instead of
 // silently hiding data the account actually has.
 function shouldShowAdvancedTalents(hunter) {
-  store.settings = store.settings || {};
-  store.settings.advancedTalents = store.settings.advancedTalents || {};
   if (store.settings.advancedTalents[hunter]) return true;
   const d = window.HUNTER_DEFS[hunter];
   const advancedIds = d.talents.filter((t) => t.advanced).map((t) => t.id);
@@ -2549,8 +2521,8 @@ function renderAttributes() {
   const deps = d.attributeDependencies; const minVal = d.attributeMinValue;
   d.attributes.forEach((a) => {
     const level = editingBuild.attributes[a.id] || 0;
-    const canInc = Optimizer.isEligible(a, d.attributes, deps, minVal, editingBuild.attributes)
-      && costOfAttrs(d, editingBuild.attributes) + (a.cost || 1) <= budgetsForLevel(editingBuild.level).attributeBudget;
+    const canInc = AllocSpace.isEligible(a, d.attributes, deps, minVal, editingBuild.attributes)
+      && AllocSpace.costOf(d.attributes, editingBuild.attributes) + (a.cost || 1) <= budgetsForLevel(editingBuild.level).attributeBudget;
     const canDec = level > 0;
     const card = renderStepperCard({
       label: a.label, subLabel: `(Cost: ${a.cost || 1} point${(a.cost || 1) > 1 ? 's' : ''})`,
@@ -2558,14 +2530,13 @@ function renderAttributes() {
       onInc: () => { editingBuild.attributes[a.id] = level + 1; onBuildChanged(); },
       onDec: () => {
         editingBuild.attributes[a.id] = level - 1;
-        Optimizer.clearInvalidDescendants(d.attributes, deps, minVal, editingBuild.attributes);
+        AllocSpace.clearInvalidDescendants(d.attributes, deps, minVal, editingBuild.attributes);
         onBuildChanged();
       },
     });
     grid.appendChild(card);
   });
 }
-function costOfAttrs(d, alloc) { return d.attributes.reduce((s, a) => s + (alloc[a.id] || 0) * (a.cost || 1), 0); }
 
 // Dropping a build's level shrinks its talent/attribute point budget, but nothing removed the
 // points already spent under the OLD, larger budget -- the editor's own header just displayed
@@ -2581,27 +2552,11 @@ function costOfAttrs(d, alloc) { return d.attributes.reduce((s, a) => s + (alloc
 function trimAllocationToBudget(hunter, level) {
   const d = window.HUNTER_DEFS[hunter];
   const { talentBudget, attributeBudget } = budgetsForLevel(level);
-  const talents = editingBuild.talents;
-  const attributes = editingBuild.attributes;
-
-  let talentSpent = d.talents.reduce((s, t) => s + (talents[t.id] || 0), 0);
-  while (talentSpent > talentBudget) {
-    let topId = null; let topLevel = 0;
-    d.talents.forEach((t) => { if ((talents[t.id] || 0) > topLevel) { topLevel = talents[t.id]; topId = t.id; } });
-    if (!topId) break;
-    talents[topId]--; talentSpent--;
-  }
-
-  const deps = d.attributeDependencies || {};
-  const minVal = d.attributeMinValue || {};
-  let guard = 0;
-  while (Optimizer.costOf(d.attributes, attributes) > attributeBudget && guard++ < 1000) {
-    let topId = null; let topLevel = 0;
-    d.attributes.forEach((a) => { if ((attributes[a.id] || 0) > topLevel) { topLevel = attributes[a.id]; topId = a.id; } });
-    if (!topId) break;
-    attributes[topId]--;
-  }
-  Optimizer.clearInvalidDescendants(d.attributes, deps, minVal, attributes);
+  // Both blocks trim through the same canonical routine (optimizer/space.js). This used to be
+  // two separate hand-rolled loops here -- same "remove from whichever holds the most" rule
+  // written twice, with only the attribute one repairing stranded dependencies afterwards.
+  AllocSpace.trimToBudget(d.talents, {}, {}, talentBudget, editingBuild.talents);
+  AllocSpace.trimToBudget(d.attributes, d.attributeDependencies, d.attributeMinValue, attributeBudget, editingBuild.attributes);
 }
 
 function onBuildChanged() {
@@ -2657,12 +2612,7 @@ async function exportBuildCode(build) {
     const iterations = Number(document.getElementById('baseIterations')?.value) || 1000;
     let lootScore = 0;
     try {
-      const r = await HunterSim.evaluate(currentHunter, {
-        level: build.level, iterations, hunterStats: store[currentHunter].hunterStats,
-        talents: build.talents, attributes: build.attributes, overrides: build.overrides || {},
-        upgrades: window.buildNestedUpgrades(store.globalUpgrades),
-        gemPlannerStore: { gemStates: store.gems },
-      });
+      const r = await HunterSim.evaluate(currentHunter, evalStateFor(build, iterations));
       lootScore = r.lootPerMin;
     } catch { /* share still works without a loot score line */ }
     openShareModal(build, code, lootScore);
@@ -3087,121 +3037,73 @@ document.getElementById('cancelOptimizeSetup').onclick = () => document.getEleme
 
 let cancelRequested = false;
 
+// The optimizer's real phases (optimizer/search.js), each with the slice of the progress bar
+// it owns and the label shown while it runs. Spans are proportional to each phase's measured
+// share of the work, so the bar advances monotonically -- no resets, no stalls at a fixed
+// number, and no phase the UI doesn't have a name for.
+const OPTIMIZE_PHASES = {
+  enumerate: { span: [0, 2], label: 'Enumerating every legal attribute combination' },
+  screen: { span: [2, 20], label: 'Screening combinations' },
+  survey: { span: [20, 65], label: 'Tuning the strongest candidates' },
+  refine: { span: [65, 95], label: 'Refining finalists to a fixpoint' },
+  final: { span: [95, 99], label: 'Full-precision comparison' },
+  done: { span: [99, 100], label: 'Done' },
+};
+
 document.getElementById('startOptimizeBtn').onclick = async () => {
   const mode = document.getElementById('optimizeMode').value;
-  const targetEvals = Math.max(100, Number(document.getElementById('targetEvals').value) || 3000);
   document.getElementById('optimizeSetupModal').classList.add('hidden');
   document.getElementById('optimizeProgressModal').classList.remove('hidden');
   cancelRequested = false;
 
   const cfg = cfgFor(currentHunter, editingBuild);
-  const historyKey = `${currentHunter}_${mode}_${editingBuild.level}`;
-  const seedCandidates = loadHistory(historyKey);
 
-  // Everything below used to run outside any try/catch: if beamSearchBrowser threw (e.g. a
-  // worker failing to initialize) the progress modal was left open forever with no way to
-  // close it and no feedback -- indistinguishable from "stuck at optimizing, cancel does
-  // nothing", because Cancel only ever set a flag this code never got back around to reading.
+  const startedAt = Date.now();
   try {
-    const result = await beamSearchBrowser(cfg, {
-      mode, targetEvals, beamWidth: 8, neighborsPerMember: 3, searchIterations: 100, seedCandidates,
+    const result = await runOptimizer(cfg, {
+      mode,
       shouldCancel: () => cancelRequested,
-      // ONE pass now (see beamSearchBrowser.js) -- no restarts to blend across, so this is
-      // just a plain, honest percent-complete: seeding counts as the first 40% of the run,
-      // beam refinement the next 50% (tracked via the real evalsDone/targetEvals), final
-      // polish the last 10%. Monotonically increasing, no resets, no frozen plateaus.
-      onProgress: (raw) => {
-        const safe = (v, fallback = 0) => (Number.isFinite(v) ? v : fallback);
-        const {
-          bestScore, elapsedMs, phase, greedyStep, greedyStepsEstimate,
-          polishRound, polishRoundsEstimate, evalsDone, targetEvals: target,
-        } = {
-          ...raw,
-          elapsedMs: safe(raw.elapsedMs),
-          greedyStep: safe(raw.greedyStep),
-          greedyStepsEstimate: safe(raw.greedyStepsEstimate, 0),
-          polishRound: safe(raw.polishRound),
-          polishRoundsEstimate: safe(raw.polishRoundsEstimate, 0),
-          evalsDone: safe(raw.evalsDone),
-          targetEvals: safe(raw.targetEvals, targetEvals),
-        };
-        let pct;
-        if (phase === 'greedy-seeding') {
-          pct = 40 * (greedyStepsEstimate ? Math.min(1, greedyStep / greedyStepsEstimate) : 0);
-        } else if (phase === 'polish') {
-          pct = 90 + 10 * (polishRoundsEstimate ? Math.min(1, polishRound / polishRoundsEstimate) : 1);
-        } else {
-          pct = 40 + 50 * (target ? Math.min(1, evalsDone / target) : 0);
-        }
-        pct = Math.min(100, pct);
-
+      onProgress: ({ phase, done, total }) => {
+        const entry = OPTIMIZE_PHASES[phase];
+        if (!entry) throw new Error(`Optimizer reported an unknown phase "${phase}"`);
+        const [from, to] = entry.span;
+        const pct = Math.min(100, from + (to - from) * (total ? Math.min(1, done / total) : 0));
         document.getElementById('progressBar').style.width = `${pct}%`;
         document.getElementById('progressPercent').textContent = `${Math.round(pct)}%`;
-        document.getElementById('progressElapsed').textContent = `${(elapsedMs / 1000).toFixed(1)}s`;
-        document.getElementById('progressBest').textContent = fmt(bestScore);
+        document.getElementById('progressElapsed').textContent = `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
+        document.getElementById('progressPhase').textContent = total > 1 ? `${entry.label} (${done}/${total})` : entry.label;
       },
     });
 
-    saveHistory(historyKey, result.allSeen);
+    if (result.cancelled || !result.best) return;
 
-    if (result.beam.length) {
-      const shortlist = result.beam.slice(0, 5);
-      const currentIdx = shortlist.length;
-      shortlist.push({ talentAlloc: editingBuild.talents, attrAlloc: editingBuild.attributes });
-      // A single 1000-iteration evaluate() carries real Monte Carlo noise (fresh wasm RNG
-      // state every call, see hunterSimBrowser.js) -- with only one sample per candidate, it
-      // was possible for that noise alone to make a candidate that's actually no better than
-      // (or even worse than) the build you started with LOOK like the winner, replacing your
-      // build with a "downgrade" that only exists because of evaluation variance. Averaging 3
-      // independent evaluate() calls per candidate shrinks that noise by ~sqrt(3) so the
-      // comparison reflects the real difference between allocations, not RNG luck.
-      const SAMPLES = 3;
-      const scores = [];
-      for (const c of shortlist) {
-        let sum = 0;
-        for (let i = 0; i < SAMPLES; i++) {
-          const r = await HunterSim.evaluate(currentHunter, {
-            level: editingBuild.level, iterations: 1000, hunterStats: store[currentHunter].hunterStats,
-            talents: c.talentAlloc, attributes: c.attrAlloc, overrides: editingBuild.overrides || {},
-            upgrades: window.buildNestedUpgrades(store.globalUpgrades),
-            gemPlannerStore: { gemStates: store.gems },
-          });
-          sum += mode === 'push' ? r.avgStage : r.lootPerMin;
-        }
-        scores.push(sum / SAMPLES);
-      }
-      let bestIdx = 0;
-      for (let i = 1; i < shortlist.length; i++) if (scores[i] > scores[bestIdx]) bestIdx = i;
-      let bestSearchIdx = 0; // best among the SEARCH's own candidates only, excluding the current-build entry
-      for (let i = 1; i < currentIdx; i++) if (scores[i] > scores[bestSearchIdx]) bestSearchIdx = i;
-
-      // The build you started with is always in the shortlist -- if nothing the search found
-      // actually beats it (within noise), keep it as-is instead of silently swapping in a
-      // same-or-worse allocation just because it happened to be a different candidate.
-      //
-      // The progress dialog's "best score so far" comes from the search's own fast internal
-      // scoring (100 iterations per candidate, for speed across thousands of candidates) --
-      // this final check re-evaluates the shortlist at full fidelity (1000 iterations x 3
-      // samples averaged) before committing anything. Those two numbers are NOT the same
-      // measurement and can legitimately disagree: a candidate that looked best during the
-      // fast search can fail to hold up once checked carefully, which is what "the dialog
-      // showed a better score but nothing changed" actually means -- not a bug, a deliberate
-      // check that stopped a noise-driven downgrade. Says so explicitly instead of a bare
-      // "no improvement found", which read as broken/stuck.
-      if (bestIdx === currentIdx) {
-        alert(`The search's quick estimate found a candidate that looked better, but a careful re-check (full precision) found your current build (${fmt(scores[currentIdx])}) still comes out ahead of its best candidate (${fmt(scores[bestSearchIdx])}). Your build was left unchanged. Try again, or raise "Number of evaluations" for a deeper search.`);
-      } else {
-        editingBuild.talents = shortlist[bestIdx].talentAlloc;
-        editingBuild.attributes = shortlist[bestIdx].attrAlloc;
-        // Only fill in a name when the field is actually blank -- this used to always stomp
-        // whatever name the user (or a prior save) already had, discarding it every time.
-        if (!editingBuild.name.trim()) {
-          editingBuild.name = 'Optimized';
-          document.getElementById('buildNameInput').value = editingBuild.name;
-        }
-        onBuildChanged();
-      }
+    // The winner's score needs no re-check here. It is the search's own final-stage number,
+    // computed at the same fidelity the build card displays (optimizer/search.js's
+    // FINAL_ITERATIONS), with the incumbent build competing in that same comparison. A second
+    // measurement at this point is exactly what used to produce "the dialog said better but
+    // your build didn't change": the search maximized a 100-iteration estimate and a different
+    // 1000-iteration re-scoring then overruled it.
+    //
+    // Compare by VALUE, not JSON.stringify -- key order differs between an allocation built by
+    // the search and one loaded from storage, so stringify reports two identical allocations as
+    // different and would claim an improvement that isn't there.
+    const d = window.HUNTER_DEFS[currentHunter];
+    const unchanged = AllocSpace.sameAlloc(d.talents, result.best.talentAlloc, editingBuild.talents)
+      && AllocSpace.sameAlloc(d.attributes, result.best.attrAlloc, editingBuild.attributes);
+    if (unchanged) {
+      alert(`Your build is already the best allocation found. Every legal attribute combination was enumerated (${result.supportsRealizable} of ${result.supportsEnumerated} are reachable at this budget) and none beat what you have.`);
+      return;
     }
+
+    editingBuild.talents = result.best.talentAlloc;
+    editingBuild.attributes = result.best.attrAlloc;
+    // Only fill in a name when the field is actually blank -- this used to always stomp
+    // whatever name the user (or a prior save) already had, discarding it every time.
+    if (!editingBuild.name.trim()) {
+      editingBuild.name = 'Optimized';
+      document.getElementById('buildNameInput').value = editingBuild.name;
+    }
+    onBuildChanged();
   } catch (err) {
     console.error('Optimizer failed', err);
     alert(`Optimizer failed to run: ${err.message || err}`);
@@ -3210,14 +3112,6 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
   }
 };
 document.getElementById('cancelOptimizeRunBtn').onclick = () => { cancelRequested = true; };
-
-function loadHistory(key) {
-  try { return JSON.parse(localStorage.getItem(`huntersim_history_${key}`) || '[]'); } catch { return []; }
-}
-function saveHistory(key, candidates) {
-  const top = [...candidates].sort((a, b) => b.score - a.score).slice(0, 20);
-  localStorage.setItem(`huntersim_history_${key}`, JSON.stringify(top));
-}
 
 // ==================== INIT ====================
 

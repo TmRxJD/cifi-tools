@@ -54,8 +54,12 @@ http.createServer((req, res) => {
     return;
   }
 
-  let filePath = path.join(PUBLIC_DIR, decodeURIComponent(req.url.split('?')[0]));
-  if (req.url === '/' || req.url === '') filePath = path.join(PUBLIC_DIR, 'index.html');
+  // Strip the query string ONCE, up front, and route on the resulting pathname. The index
+  // fallback used to test `req.url === '/'`, which is false the moment any query string is
+  // attached ("/?x=1"), so the request fell through to reading the directory itself and 404'd.
+  // Asset URLs carry ?v= cache-busters and worked by accident; the root did not.
+  const pathname = decodeURIComponent(req.url.split('?')[0]);
+  let filePath = path.join(PUBLIC_DIR, pathname === '/' || pathname === '' ? 'index.html' : pathname);
   if (!filePath.startsWith(PUBLIC_DIR)) { res.writeHead(403); res.end('Forbidden'); return; }
 
   fs.readFile(filePath, (err, data) => {

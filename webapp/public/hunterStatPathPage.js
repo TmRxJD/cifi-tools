@@ -3,7 +3,7 @@
 // (mat1/mat2/mat3, plus Ozzy's separate inscription currency HBM where relevant): these are
 // independent currencies that never compete with each other, so each column is its own
 // self-contained ordered queue of the next N recommended purchases, with its own confirm
-// state, computed by greedyStatPath/greedyUpgradePath (hunterStatPathBrowser.js).
+// state, computed by greedyPurchasePath (hunterStatPathBrowser.js).
 //
 // Two entry points:
 //  - openHunterStatPathModal(): from the Hunter Stats modal -- base stats only.
@@ -180,15 +180,9 @@
     let result, rates;
     const baseline = getBaselineBuild(currentHunter);
     try {
-      const h = store[currentHunter];
-      const cfg = {
-        level: baseline.level, talents: baseline.talents, attributes: baseline.attributes, hunterStats: h.hunterStats,
-        baseOverrides: {}, globalUpgrades: window.buildNestedUpgrades(store.globalUpgrades),
-        gemPlannerStore: { gemStates: store.gems },
-        TALENTS: window.HUNTER_DEFS[currentHunter].talents, ATTRIBUTES: window.HUNTER_DEFS[currentHunter].attributes,
-      };
+      const cfg = statPathCfgFor(currentHunter, baseline);
       [result, rates] = await Promise.all([
-        greedyStatPath(currentHunter, cfg, TARGET_STEPS, (resource, done, total) => updateProgress(overlay, resource, done, total)),
+        greedyPurchasePath(currentHunter, cfg, TARGET_STEPS, false, (resource, done, total) => updateProgress(overlay, resource, done, total)),
         baseline.real ? IncomeModel.currentRates(currentHunter, store, baseline, 1000) : null,
       ]);
     } catch (err) {
@@ -211,15 +205,9 @@
     const attributes = build.attributes || {};
     const baseline = { level: build.level || 1, talents, attributes, real: hasMeaningfulAllocation(talents, attributes) };
     try {
-      const h = store[currentHunter];
-      const cfg = {
-        level: baseline.level, talents: baseline.talents, attributes: baseline.attributes, hunterStats: h.hunterStats,
-        baseOverrides: {}, globalUpgrades: window.buildNestedUpgrades(store.globalUpgrades),
-        gemPlannerStore: { gemStates: store.gems },
-        TALENTS: window.HUNTER_DEFS[currentHunter].talents, ATTRIBUTES: window.HUNTER_DEFS[currentHunter].attributes,
-      };
+      const cfg = statPathCfgFor(currentHunter, baseline);
       [result, rates] = await Promise.all([
-        greedyUpgradePath(currentHunter, cfg, TARGET_STEPS, (resource, done, total) => updateProgress(overlay, resource, done, total)),
+        greedyPurchasePath(currentHunter, cfg, TARGET_STEPS, true, (resource, done, total) => updateProgress(overlay, resource, done, total)),
         baseline.real ? IncomeModel.currentRates(currentHunter, store, baseline, 1000) : null,
       ]);
     } catch (err) {

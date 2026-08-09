@@ -1,0 +1,36 @@
+{
+  "//": [
+    "Type-checks the pure logic modules with no build step and no runtime change: your editor",
+    "and `npx tsc --noEmit -p jsconfig.json` both read this. See the TypeScript section of",
+    "CLAUDE.md for why this is step 1 rather than a full .ts conversion.",
+    "",
+    "`include` deliberately covers only the pure, well-bounded modules. app.js and shipsPage.js",
+    "are DOM-heavy (364 untyped element lookups, 86 innerHTML templates between them) and would",
+    "produce hundreds of narrowing errors that drown out real findings. Add them once they have",
+    "JSDoc annotations, not before -- a check everyone ignores is worse than no check."
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "WebWorker"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "checkJs": true,
+    "allowJs": true,
+    "noEmit": true,
+    "strict": true,
+    "noImplicitAny": false,
+    "noUncheckedIndexedAccess": false,
+    "resolveJsonModule": true
+  },
+  "include": [
+    "types/globals.d.ts",
+    "webapp/public/optimizer/*.js",
+    "webapp/public/storeSchema.js",
+    "webapp/public/hunterSimBrowser.js",
+    "webapp/public/costFormulas.js",
+    "webapp/public/buildCode.js",
+    "webapp/public/incomeModel.js",
+    "webapp/public/hunterStatPath.js"
+  ],
+  "exclude": ["node_modules", "**/node_modules"]
+}

@@ -7,7 +7,7 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>tailwind.config = { darkMode: 'class', theme: { extend: { borderWidth: { 3: '3px' } } } };</script>
-<link rel="stylesheet" href="site.css?v=20260729u" />
+<link rel="stylesheet" href="site.css?v=20260809b" />
 <style>
   body { background:#111827; color:#e5e7eb; }
   .stepper-btn { @apply w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed text-white; }
@@ -468,10 +468,11 @@
         <option value="push">Ø Stage (push)</option>
       </select>
     </div>
-    <div class="mb-3">
-      <label class="block text-sm text-gray-300 mb-1">Number of evaluations</label>
-      <input id="targetEvals" type="number" min="100" step="100" value="3000" class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white" />
-    </div>
+    <p class="mb-3 text-xs text-gray-400">
+      Every legal combination of attributes is enumerated and the strongest are tuned to a
+      fixpoint, so there is nothing to configure &mdash; the same build always produces the same
+      result. Higher-level builds take longer.
+    </p>
     <div class="flex justify-end gap-2 mt-4">
       <button id="cancelOptimizeSetup" class="px-4 py-2 rounded-md bg-gray-700 hover:bg-gray-600 text-white">Cancel</button>
       <button id="startOptimizeBtn" class="px-4 py-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white">Start</button>
@@ -491,8 +492,8 @@
       <span id="progressElapsed">0.0s</span>
     </div>
     <div class="bg-gray-900/50 rounded p-2 text-sm mb-4">
-      <div class="text-xs text-gray-400">Best build found so far</div>
-      <div id="progressBest" class="text-white font-semibold">-</div>
+      <div class="text-xs text-gray-400">Stage</div>
+      <div id="progressPhase" class="text-white font-semibold">Starting&hellip;</div>
     </div>
     <div class="flex justify-end">
       <button id="cancelOptimizeRunBtn" class="px-4 py-2 rounded-md bg-red-700 hover:bg-red-600 text-white">Cancel</button>
@@ -500,22 +501,25 @@
   </div>
 </div>
 
-<script src="icons.js?v=20260729u"></script>
-<script src="hunterDefs.js?v=20260729u"></script>
-<script src="shipSchema.js?v=20260729u"></script>
-<script src="shipsPage.js?v=20260729u"></script>
-<script src="upgradeEffects.js?v=20260729u"></script>
-<script src="hunterSimBrowser.js?v=20260729u"></script>
-<script src="optimizerBrowser.js?v=20260729u"></script>
-<script src="beamSearchBrowser.js?v=20260729u"></script>
-<script src="saveImport.js?v=20260729u"></script>
-<script src="buildCode.js?v=20260729u"></script>
-<script src="costFormulas.js?v=20260729u"></script>
-<script src="incomeModel.js?v=20260729u"></script>
-<script src="hunterStatPath.js?v=20260729u"></script>
-<script src="hunterStatPathBrowser.js?v=20260729u"></script>
-<script src="hunterStatPathPage.js?v=20260729u"></script>
-<script src="app.js?v=20260729u"></script>
+<script src="icons.js?v=20260809b"></script>
+<script src="hunterDefs.js?v=20260809b"></script>
+<script src="shipSchema.js?v=20260809b"></script>
+<script src="shipsPage.js?v=20260809b"></script>
+<script src="upgradeEffects.js?v=20260809b"></script>
+<script src="hunterSimBrowser.js?v=20260809b"></script>
+<script src="optimizer/space.js?v=20260809b"></script>
+<!-- storeSchema depends on HUNTER_DEFS (hunterDefs.js) and AllocSpace (optimizer/space.js). -->
+<script src="storeSchema.js?v=20260809b"></script>
+<script src="optimizer/search.js?v=20260809b"></script>
+<script src="optimizer/runner.js?v=20260809b"></script>
+<script src="saveImport.js?v=20260809b"></script>
+<script src="buildCode.js?v=20260809b"></script>
+<script src="costFormulas.js?v=20260809b"></script>
+<script src="incomeModel.js?v=20260809b"></script>
+<script src="hunterStatPath.js?v=20260809b"></script>
+<script src="hunterStatPathBrowser.js?v=20260809b"></script>
+<script src="hunterStatPathPage.js?v=20260809b"></script>
+<script src="app.js?v=20260809b"></script>
 <script>
   // Custom (non-Tabler) sidebar icons: real game-asset SVG paths copied verbatim from the
   // live site's rendered DOM (Relics/Loop Mods/Milestones use bespoke icons, not Tabler's).
