@@ -14,3 +14,6 @@ tools/bench/results.json
 
 # TypeScript checker (devDependency only -- no build step, see CLAUDE.md)
 package-lock.json
+
+# Extracted game assets / APK working files -- large, and not ours to redistribute.
+tools/save/upgrade-names.json
