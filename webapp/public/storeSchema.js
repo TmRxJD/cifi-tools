@@ -52,13 +52,19 @@
     return { categories, autoPoll: false, quiet: false, checklistCollapsed: false };
   }
 
-  function defaultLoadoutTabs() {
-    return {
-      tabs: [1, 2, 3].map((id) => ({ id, name: `Loadout ${id}`, perShip: {}, zaglagChecklist: null })),
-      activeId: 1,
-      nextId: 4,
-    };
+  // The Fleet domain (shipsPage.js) owns the shapes of its own store fields; this file names
+  // them but does not redefine them. Resolved lazily because shipsPage.js is a sibling script,
+  // and a missing factory is a load-order bug worth failing loudly on rather than silently
+  // substituting an empty object -- which is precisely what this schema used to do.
+  function fleetDefault(key) {
+    const factory = global.FleetStoreDefaults && global.FleetStoreDefaults[key];
+    if (typeof factory !== 'function') {
+      throw new Error(`storeSchema: FleetStoreDefaults.${key} is missing (shipsPage.js must load before storeSchema.js)`);
+    }
+    return factory();
   }
+
+  const defaultLoadoutTabs = () => fleetDefault('loadoutTabs');
 
   // Every top-level field of the store, with a factory for its default value. `deep: true`
   // means "recurse into this object and fill missing sub-keys too" -- used for the settings
@@ -69,27 +75,21 @@
     gems: { make: () => global.defaultGemState() },
     categories: { make: () => JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)) },
     viewMode: { make: () => 'vertical' },
+    // Genuinely free-form maps, keyed by ship/gen id as the user fills them in.
     ships: { make: () => ({}) },
     researchUnits: { make: () => ({}) },
     shipBuilds: { make: () => ({}) },
     shipInputs: { make: () => ({}) },
-    shipGear: { make: () => ({}) },
-    gearSets: { make: () => ({}) },
-    fleetBoosts: { make: () => ({}) },
-    fleetResearch: { make: () => ({}) },
-    fleetBadges: { make: () => ({}) },
-    unlockedGens: {
-      deep: true,
-      make: () => ({ 1: true, 2: false, 3: false, 4: false, 5: false, 6: false, 7: false, 8: false }),
-    },
-    optimizerSettings: {
-      deep: true,
-      make: () => ({
-        shipEnabled: { 1: true, 2: true, 3: true, 4: true, 5: true, 6: true, 7: true },
-        zaglag: false,
-        prepForLongRun: false,
-      }),
-    },
+    // Fleet-domain fields: shapes owned by shipsPage.js, named here. `deep` so a field added to
+    // one of those factories reaches existing accounts on next load instead of only appearing
+    // once the relevant page is opened.
+    shipGear: { deep: true, make: () => fleetDefault('shipGear') },
+    gearSets: { deep: true, make: () => fleetDefault('gearSets') },
+    fleetBoosts: { deep: true, make: () => fleetDefault('fleetBoosts') },
+    fleetResearch: { deep: true, make: () => fleetDefault('fleetResearch') },
+    fleetBadges: { deep: true, make: () => fleetDefault('fleetBadges') },
+    unlockedGens: { deep: true, make: () => fleetDefault('unlockedGens') },
+    optimizerSettings: { deep: true, make: () => fleetDefault('optimizerSettings') },
     importPrefs: { deep: true, make: defaultImportPrefs },
     loadoutTabs: { make: defaultLoadoutTabs },
     // advancedTalents[hunter]: has the user opted into showing this hunter's advanced talent

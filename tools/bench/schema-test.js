@@ -158,6 +158,34 @@ check('the same build is rejected when the gem node is off', () => {
   return S.validateStore(store).some((p) => /ll = 12 exceeds max 10/.test(p)) ? null : 'not caught';
 });
 
+// The Fleet domain owns its own store shapes; the schema names them rather than re-declaring
+// them. These two checks are what stop the pair silently drifting apart again -- which is how
+// `optimizerSettings.runLength` came to exist only after a UI accessor happened to run, and
+// gearSets/shipGear/fleetBadges came to be declared as bare `{}` in the schema while their real
+// shapes lived behind lazy getters.
+check('every fleet store field the schema names has a factory in shipsPage', () => {
+  const missing = Object.keys(sb.FleetStoreDefaults || {}).filter((k) => typeof sb.FleetStoreDefaults[k] !== 'function');
+  return missing.length ? `not functions: ${missing.join(', ')}` : null;
+});
+
+check('a fresh store already contains the real fleet shapes, not empty objects', () => {
+  const fresh = S.freshStore();
+  const checks = [
+    ['optimizerSettings', 'runLength'],
+    ['optimizerSettings', 'shipEnabled'],
+    ['gearSets', 'pieces'],
+    ['fleetBadges', 'owned'],
+    ['fleetBoosts', 'levels'],
+    ['fleetResearch', 'levels'],
+  ];
+  for (const [field, key] of checks) {
+    if (!fresh[field] || !(key in fresh[field])) return `fresh store's ${field} is missing "${key}"`;
+  }
+  if (!Object.keys(fresh.shipGear).length) return 'fresh store shipGear is empty';
+  if (!Object.keys(fresh.unlockedGens).length) return 'fresh store unlockedGens is empty';
+  return null;
+});
+
 check('duplicate build ids are rejected', () => {
   const store = S.freshStore();
   store.borge.builds.push({ id: 'dup', name: 'a', level: 1, talents: {}, attributes: {} },

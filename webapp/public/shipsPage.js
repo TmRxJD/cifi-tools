@@ -2314,3 +2314,27 @@ function renderBadgesPage(root) {
   renderFleetBoostItemsInto(document.getElementById('badgeList'), 'Badge');
 }
 window.renderBadgesPage = renderBadgesPage;
+
+// ---------------------------------------------------------------------------------------
+// Store-shape ownership
+// ---------------------------------------------------------------------------------------
+// The Fleet domain owns the SHAPE of its own store fields -- this file is where they are
+// defined and where they change. storeSchema.js (the single declaration of the whole store)
+// references these factories rather than re-declaring the shapes, so there is exactly one
+// definition of each and they cannot drift.
+//
+// Before this, storeSchema declared gearSets/shipGear/fleetBadges/fleetBoosts/fleetResearch/
+// unlockedGens as bare `{}` while the real shapes lived here behind lazy `getX()` accessors, and
+// `optimizerSettings.runLength` existed only after an accessor happened to run. A fresh store
+// therefore did not describe itself, and validateStore() could not check fields it did not know
+// about. defaultLoadoutTabs() was defined in both files outright.
+window.FleetStoreDefaults = {
+  unlockedGens: defaultUnlockedGens,
+  shipGear: defaultShipGear,
+  gearSets: defaultGearSets,
+  fleetBadges: defaultFleetBadges,
+  fleetBoosts: defaultFleetBoosts,
+  fleetResearch: defaultFleetResearch,
+  optimizerSettings: defaultOptimizerSettings,
+  loadoutTabs: defaultLoadoutTabs,
+};

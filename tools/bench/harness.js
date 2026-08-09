@@ -46,11 +46,40 @@ function browserSandbox() {
       };
     },
   };
+  // shipsPage.js owns the Fleet store shapes that storeSchema.js references, so it has to load
+  // here too. It is a UI module: give it just enough of a DOM to reach its top-level exports
+  // without executing any rendering (nothing here calls a render function).
+  // shipsPage.js binds click handlers at module scope (document.getElementById(x).onclick = ...),
+  // so the stub must return an inert ELEMENT rather than null or loading throws immediately.
+  const makeEl = () => ({
+    style: {},
+    value: '',
+    textContent: '',
+    innerHTML: '',
+    checked: false,
+    classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
+    appendChild() {},
+    addEventListener() {},
+    removeEventListener() {},
+    querySelector: () => makeEl(),
+    querySelectorAll: () => [],
+    closest: () => null,
+  });
+  sb.document = {
+    getElementById: () => makeEl(),
+    querySelector: () => makeEl(),
+    querySelectorAll: () => [],
+    createElement: () => makeEl(),
+    addEventListener() {},
+    body: makeEl(),
+  };
+  sb.navigator = { hardwareConcurrency: 4 };
+  sb.requestAnimationFrame = (fn) => setTimeout(fn, 0);
   sb.window = sb;
   sb.self = sb;
   sb.globalThis = sb;
   vm.createContext(sb);
-  for (const f of ['hunterDefs.js', 'buildCode.js', 'hunterSimBrowser.js', 'optimizer/space.js', 'storeSchema.js']) {
+  for (const f of ['hunterDefs.js', 'shipSchema.js', 'shipsPage.js', 'buildCode.js', 'hunterSimBrowser.js', 'optimizer/space.js', 'storeSchema.js']) {
     vm.runInContext(fs.readFileSync(path.join(PUBLIC, f), 'utf8'), sb, { filename: f });
   }
   sandbox = sb;

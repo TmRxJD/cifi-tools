@@ -143,13 +143,17 @@ async function main() {
       results.push(res);
       console.log(`[${results.length}/${fixtures.length}] ${describe(res)}`);
     }
+    // Persist after EVERY batch, not just at the end. A full sweep is ~2 hours; losing all of it
+    // because the process was interrupted at build 150 is avoidable, and stdout redirected to a
+    // file is block-buffered, so a killed run leaves a truncated log and nothing else. Now the
+    // completed work is always on disk and readable with `node tools/bench/show.js`.
+    fs.writeFileSync(RESULTS_FILE, JSON.stringify(results, null, 2));
+
     if (!args.runAll && batchResults.some((r) => failureOf(r))) {
       aborted = true;
       console.log('\nStopping early: this batch contained a failure. Re-run with --all for the full picture.');
     }
   }
-
-  fs.writeFileSync(RESULTS_FILE, JSON.stringify(results, null, 2));
 
   const failures = results.map((r) => ({ res: r, why: failureOf(r) })).filter((x) => x.why);
   const warnings = results.map((r) => ({ res: r, why: secondaryWarningOf(r) })).filter((x) => x.why);
