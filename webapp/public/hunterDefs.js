@@ -9,7 +9,25 @@ window.HUNTER_DEFS = {
       { id: 'ua', label: 'The Unfair Advantage', maxLevel: 5 },
       { id: 'impeccable', label: 'Impeccable Impacts', maxLevel: 10 },
       { id: 'omen', label: 'The Omen Of Defeat', maxLevel: 10 },
-      { id: 'll', label: 'Call Me Lucky Loot', maxLevel: 10 },
+      // The ONE node in the game whose cap is not a constant. Attraction gem node 2 raises it
+      // from 10 to 12 -- ported verbatim from the live bundle's own talent table:
+      //   getMaxValue:(e={})=>{const t=e.gemPlannerStore?.gemStates?.attraction?.nodes?.[1],
+      //     n=e.buildOverrides?.["upgrades.gems_nodes.attraction_gem2"];return t||n?12:10}
+      // Confirmed empirically before modelling it: two real level-49/50 Borge builds carry
+      // ll=12, and evaluating them at 12 reproduces their recorded Loot Score to within 0.22%
+      // while clamping to 10 lands 8% low. `maxLevel` stays the base value so anything that
+      // hasn't been taught about dynamic caps still reads a sane number; resolveMaxLevels()
+      // below is what applies the rule.
+      {
+        id: 'll',
+        label: 'Call Me Lucky Loot',
+        maxLevel: 10,
+        dynamicMaxLevel: (ctx) => (
+          ctx?.gemPlannerStore?.gemStates?.attraction?.nodes?.[1]
+          || ctx?.buildOverrides?.['upgrades.gems_nodes.attraction_gem2']
+            ? 12 : 10
+        ),
+      },
       { id: 'pog', label: 'Presence Of A God', maxLevel: 15 },
       // Real, confirmed straight from the live bundle's own talent table and params.json
       // (EVAL_PARAMS already includes "ultima" for borge/ozzy -- the wasm has always
@@ -287,6 +305,24 @@ window.HUNTER_DEFS = {
       },
     },
   },
+};
+
+/**
+ * THE way to get a node list with its caps resolved for a given account/build context.
+ *
+ * A node's cap is usually a constant, but not always (see borge's `ll`). Every consumer that
+ * cares about caps -- the optimizer's allocation space, the editor's +/- gating, store
+ * validation -- must go through here rather than reading `maxLevel` off the raw defs, or they
+ * will disagree with each other and with the live site the moment a dynamic cap applies.
+ *
+ * Returns a NEW array of shallow copies with `maxLevel` set to the effective value, so
+ * downstream code keeps reading a plain `maxLevel` and needs no awareness of the mechanism.
+ *
+ * @param {Array} defs      talents or attributes from HUNTER_DEFS
+ * @param {object} ctx      { gemPlannerStore, buildOverrides } -- same shape the live site uses
+ */
+window.resolveMaxLevels = function resolveMaxLevels(defs, ctx) {
+  return defs.map((d) => (d.dynamicMaxLevel ? { ...d, maxLevel: d.dynamicMaxLevel(ctx) } : d));
 };
 
 // Level <-> point budget relationship, confirmed against real builds (Borge lvl39 ->

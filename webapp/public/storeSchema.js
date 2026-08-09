@@ -187,7 +187,7 @@
         if (!Number.isInteger(b.level) || b.level < 1) note(`${where}.level is ${b.level}, expected an integer >= 1`);
         if (!isPlainObject(b.talents)) note(`${where}.talents is not an object`);
         if (!isPlainObject(b.attributes)) note(`${where}.attributes is not an object`);
-        problems.push(...validateAllocation(h, b, where));
+        problems.push(...validateAllocation(h, b, where, store.gems));
       });
     }
 
@@ -210,10 +210,20 @@
    * to be violated silently: illegal allocations reached saved builds and then scored as if they
    * were real, because nothing ever checked a build after it was written.
    */
-  function validateAllocation(hunter, build, where) {
+  function validateAllocation(hunter, build, where, gems) {
     const problems = [];
-    const d = global.HUNTER_DEFS[hunter];
-    if (!d || !isPlainObject(build.talents) || !isPlainObject(build.attributes)) return problems;
+    const rawDefs = global.HUNTER_DEFS[hunter];
+    if (!rawDefs || !isPlainObject(build.talents) || !isPlainObject(build.attributes)) return problems;
+
+    // Caps must be resolved for this build's context before checking them. Borge's Call Me
+    // Lucky Loot caps at 12 rather than 10 once Attraction gem node 2 is active, so validating
+    // against the static maxLevel would flag a perfectly legal saved build as corrupt.
+    const capCtx = { gemPlannerStore: { gemStates: gems || {} }, buildOverrides: build.overrides || {} };
+    const d = {
+      ...rawDefs,
+      talents: global.resolveMaxLevels(rawDefs.talents, capCtx),
+      attributes: global.resolveMaxLevels(rawDefs.attributes, capCtx),
+    };
 
     const talentBudget = global.talentBudgetForLevel(build.level);
     const attributeBudget = global.attributeBudgetForLevel(build.level);

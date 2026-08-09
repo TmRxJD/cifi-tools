@@ -123,6 +123,41 @@ check('a legal allocation passes', () => {
   return problems.length ? problems.join('; ') : null;
 });
 
+// Borge's Call Me Lucky Loot is the one node in the game with a non-constant cap: Attraction
+// gem node 2 raises it 10 -> 12. Ported verbatim from the live bundle's getMaxValue, and
+// confirmed against two real fixtures whose recorded Loot Score only reproduces at ll=12.
+check('the dynamic Lucky Loot cap follows the live rule', () => {
+  const capWith = (ctx) => sb.resolveMaxLevels(sb.HUNTER_DEFS.borge.talents, ctx).find((t) => t.id === 'll').maxLevel;
+  const none = { gemPlannerStore: { gemStates: {} }, buildOverrides: {} };
+  const node = { gemPlannerStore: { gemStates: { attraction: { nodes: [false, true] } } }, buildOverrides: {} };
+  const override = { gemPlannerStore: { gemStates: {} }, buildOverrides: { 'upgrades.gems_nodes.attraction_gem2': 1 } };
+  return eq(capWith(none), 10, 'no attraction node')
+    || eq(capWith(node), 12, 'via gem node')
+    || eq(capWith(override), 12, 'via build override')
+    || eq(sb.resolveMaxLevels(sb.HUNTER_DEFS.ozzy.talents, node).find((t) => t.id === 'll').maxLevel, 10, "ozzy's ll is unaffected");
+});
+
+check('a build at the raised Lucky Loot cap validates when the gem node is on', () => {
+  const store = S.freshStore();
+  store.gems.attraction.nodes[1] = true;
+  // 2 + 5 + 12 + 15 + 15 = 49, exactly a level-49 talent budget.
+  store.borge.builds.push({
+    id: 'b', name: '', level: 49, categoryId: 'active', overrides: {},
+    talents: { revival: 2, impeccable: 5, ll: 12, pog: 15, tfow: 15 }, attributes: {},
+  });
+  const problems = S.validateStore(store);
+  return problems.length ? problems.join('; ') : null;
+});
+
+check('the same build is rejected when the gem node is off', () => {
+  const store = S.freshStore();
+  store.borge.builds.push({
+    id: 'b', name: '', level: 49, categoryId: 'active', overrides: {},
+    talents: { revival: 2, impeccable: 5, ll: 12, pog: 15, tfow: 15 }, attributes: {},
+  });
+  return S.validateStore(store).some((p) => /ll = 12 exceeds max 10/.test(p)) ? null : 'not caught';
+});
+
 check('duplicate build ids are rejected', () => {
   const store = S.freshStore();
   store.borge.builds.push({ id: 'dup', name: 'a', level: 1, talents: {}, attributes: {} },

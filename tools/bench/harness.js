@@ -86,10 +86,19 @@ function cfgForImport(hunter, build) {
 
   // Same advanced-talent rule as cfgFor(): an advanced talent is only available to the search
   // if the build being compared against already has points in it.
-  const talents = d.talents.filter((t) => !t.advanced || (build.talents[t.id] || 0) > 0);
+  //
+  // Caps must be RESOLVED for this build's context, not read raw: Borge's Call Me Lucky Loot
+  // caps at 12 rather than 10 once Attraction gem node 2 is active, and two real fixtures carry
+  // ll=12. Reading the static maxLevel made the optimizer reject its own (legal) incumbent.
+  const ctx = { buildOverrides: overrides, gemPlannerStore: { gemStates: {} } };
+  const sb = browserSandbox();
+  const talents = sb.resolveMaxLevels(
+    d.talents.filter((t) => !t.advanced || (build.talents[t.id] || 0) > 0), ctx,
+  );
+  const attributes = sb.resolveMaxLevels(d.attributes, ctx);
 
   const talentSpent = talents.reduce((s, t) => s + (build.talents[t.id] || 0), 0);
-  const attrSpent = Space.costOf(d.attributes, build.attributes);
+  const attrSpent = Space.costOf(attributes, build.attributes);
 
   return {
     hunter,
@@ -99,7 +108,7 @@ function cfgForImport(hunter, build) {
     gemPlannerStore: { gemStates: {} },
     baseOverrides: overrides,
     TALENTS: talents,
-    ATTRIBUTES: d.attributes,
+    ATTRIBUTES: attributes,
     ATTRIBUTE_DEPENDENCIES: d.attributeDependencies,
     ATTRIBUTE_MIN_VALUE: d.attributeMinValue,
     TALENT_BUDGET: talentSpent,

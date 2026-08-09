@@ -228,6 +228,23 @@ if (__storeWasFreshOnLoad) {
 }
 
 function defs() { return window.HUNTER_DEFS[currentHunter]; }
+
+// THE cap-resolution context for a build. A node's max level is usually constant but not always
+// (hunterDefs.js `dynamicMaxLevel`), and the rule reads both account-wide gem state and this
+// build's own overrides -- the same two inputs the live site's getMaxValue uses.
+function capContextFor(build) {
+  return { gemPlannerStore: { gemStates: store.gems }, buildOverrides: (build && build.overrides) || {} };
+}
+
+/** A hunter's talents/attributes with caps resolved for the given build. */
+function cappedDefs(hunter, build) {
+  const d = window.HUNTER_DEFS[hunter];
+  const ctx = capContextFor(build);
+  return {
+    talents: window.resolveMaxLevels(d.talents, ctx),
+    attributes: window.resolveMaxLevels(d.attributes, ctx),
+  };
+}
 function budgetsForLevel(level) { return { talentBudget: window.talentBudgetForLevel(level), attributeBudget: window.attributeBudgetForLevel(level) }; }
 
 // THE canonical evaluation state for a build. Every HunterSim.evaluate/evaluateDetailed call
@@ -305,11 +322,16 @@ function cfgFor(hunter, build) {
   // advanced talent are kept (it's still a valid current allocation), just no NEW points get
   // assigned unless the talent is actually visible/unlocked.
   const showAdvanced = shouldShowAdvancedTalents(hunter);
-  const talents = d.talents.filter((t) => !t.advanced || showAdvanced || (build.talents[t.id] || 0) > 0);
+  // Caps resolved for THIS account/build (see resolveMaxLevels in hunterDefs.js) -- Borge's
+  // Call Me Lucky Loot caps at 12 rather than 10 once Attraction gem node 2 is active.
+  const capCtx = capContextFor(build);
+  const talents = window.resolveMaxLevels(
+    d.talents.filter((t) => !t.advanced || showAdvanced || (build.talents[t.id] || 0) > 0), capCtx,
+  );
   return {
     hunter, level: build.level, hunterStats: store[hunter].hunterStats,
     globalUpgrades: mergedUpgrades, gemPlannerStore: { gemStates: store.gems }, baseOverrides: build.overrides || {},
-    TALENTS: talents, ATTRIBUTES: d.attributes,
+    TALENTS: talents, ATTRIBUTES: window.resolveMaxLevels(d.attributes, capCtx),
     ATTRIBUTE_DEPENDENCIES: d.attributeDependencies, ATTRIBUTE_MIN_VALUE: d.attributeMinValue,
     TALENT_BUDGET: talentBudget, ATTRIBUTE_BUDGET: attributeBudget,
     currentTalents: build.talents, currentAttrs: build.attributes,
@@ -1112,23 +1134,24 @@ async function openCompareEfficiencyModal(build) {
   const baseState = evalStateFor(build, iterations);
   const base = await HunterSim.evaluate(currentHunter, baseState);
   const d = defs();
+  const capped = cappedDefs(currentHunter, build);
   const { talentBudget, attributeBudget } = budgetsForLevel(build.level);
-  const talentSpent = d.talents.reduce((s, t) => s + (build.talents[t.id] || 0), 0);
-  const attrSpent = AllocSpace.costOf(d.attributes, build.attributes);
+  const talentSpent = capped.talents.reduce((s, t) => s + (build.talents[t.id] || 0), 0);
+  const attrSpent = AllocSpace.costOf(capped.attributes, build.attributes);
   const deps = d.attributeDependencies;
   const minVal = d.attributeMinValue;
 
   const candidates = [];
   const showAdvancedForCompare = shouldShowAdvancedTalents(currentHunter);
-  d.talents.filter((t) => !t.advanced || showAdvancedForCompare || (build.talents[t.id] || 0) > 0).forEach((t) => {
+  capped.talents.filter((t) => !t.advanced || showAdvancedForCompare || (build.talents[t.id] || 0) > 0).forEach((t) => {
     const level = build.talents[t.id] || 0;
-    if (level < talentMaxLevel(t, build) && talentSpent < talentBudget) {
+    if (level < t.maxLevel && talentSpent < talentBudget) {
       candidates.push({ label: t.label, kind: 'talent', apply: (talents) => { talents[t.id] = level + 1; } });
     }
   });
-  d.attributes.forEach((a) => {
+  capped.attributes.forEach((a) => {
     const level = build.attributes[a.id] || 0;
-    const canInc = AllocSpace.isEligible(a, d.attributes, deps, minVal, build.attributes)
+    const canInc = AllocSpace.isEligible(a, capped.attributes, deps, minVal, build.attributes)
       && attrSpent + (a.cost || 1) <= attributeBudget;
     if (canInc) candidates.push({ label: a.label, kind: 'attribute', apply: (attrs) => { attrs[a.id] = level + 1; } });
   });
@@ -2470,14 +2493,11 @@ function renderStepperCard({ label, subLabel, level, maxLevel, accentColor, canI
 // talent table (`getMaxValue`): it's 10 normally but 12 once the Attraction gem tree's 2nd
 // node is unlocked (or the equivalent gem-node override is set on the build). Every other
 // talent's cap is static.
-function talentMaxLevel(t, build) {
-  if (t.id === 'll') {
-    const nodeActive = store.gems?.attraction?.nodes?.[1];
-    const overrideActive = build?.overrides?.['upgrades.gems_nodes.attraction_gem2'];
-    if (nodeActive || overrideActive) return 12;
-  }
-  return t.maxLevel;
-}
+// talentMaxLevel() used to live here: a hardcoded `if (t.id === 'll')` special case consulted by
+// exactly two render paths. The optimizer never called it, so the search believed Lucky Loot
+// capped at 10 while the editor let you take it to 12 -- and the search then rejected a legal
+// imported build as illegal. The rule now lives once, as `dynamicMaxLevel` on the node itself in
+// hunterDefs.js, and every consumer gets it by resolving defs through cappedDefs()/cfgFor().
 
 // Verbatim port of the live site's advanced-talent visibility rule: a manual per-hunter
 // "Show Advanced" toggle (store.settings.advancedTalents[hunter], set from the Settings
@@ -2499,10 +2519,11 @@ function renderTalents() {
   grid.innerHTML = '';
   const { talentBudget } = budgetsForLevel(editingBuild.level);
   const showAdvanced = shouldShowAdvancedTalents(currentHunter);
-  defs().talents.filter((t) => !t.advanced || showAdvanced || (editingBuild.talents[t.id] || 0) > 0).forEach((t) => {
+  const talentDefs = cappedDefs(currentHunter, editingBuild).talents;
+  talentDefs.filter((t) => !t.advanced || showAdvanced || (editingBuild.talents[t.id] || 0) > 0).forEach((t) => {
     const level = editingBuild.talents[t.id] || 0;
-    const spent = defs().talents.reduce((s, tt) => s + (editingBuild.talents[tt.id] || 0), 0);
-    const maxLevel = talentMaxLevel(t, editingBuild);
+    const spent = talentDefs.reduce((s, tt) => s + (editingBuild.talents[tt.id] || 0), 0);
+    const maxLevel = t.maxLevel;
     const canInc = level < maxLevel && spent < talentBudget;
     const canDec = level > 0;
     const card = renderStepperCard({
