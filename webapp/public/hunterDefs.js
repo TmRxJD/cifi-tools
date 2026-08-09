@@ -321,8 +321,17 @@ window.HUNTER_DEFS = {
  * @param {Array} defs      talents or attributes from HUNTER_DEFS
  * @param {object} ctx      { gemPlannerStore, buildOverrides } -- same shape the live site uses
  */
+// Resolved nodes must be PLAIN DATA -- the `dynamicMaxLevel` function is dropped, not carried
+// through. cfgFor() hands these node lists to the optimizer's Web Workers via postMessage, which
+// uses structured clone, and structured clone cannot clone a function: keeping it threw
+// "could not be cloned" and broke the optimizer outright for the one hunter that has a dynamic
+// cap. The rule belongs to the definition; the resolved node is just its result.
 window.resolveMaxLevels = function resolveMaxLevels(defs, ctx) {
-  return defs.map((d) => (d.dynamicMaxLevel ? { ...d, maxLevel: d.dynamicMaxLevel(ctx) } : d));
+  return defs.map((d) => {
+    if (!d.dynamicMaxLevel) return d;
+    const { dynamicMaxLevel, ...plain } = d;
+    return { ...plain, maxLevel: dynamicMaxLevel(ctx) };
+  });
 };
 
 // Level <-> point budget relationship, confirmed against real builds (Borge lvl39 ->

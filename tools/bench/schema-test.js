@@ -137,6 +137,28 @@ check('the dynamic Lucky Loot cap follows the live rule', () => {
     || eq(sb.resolveMaxLevels(sb.HUNTER_DEFS.ozzy.talents, node).find((t) => t.id === 'll').maxLevel, 10, "ozzy's ll is unaffected");
 });
 
+// cfgFor() sends resolved node lists to the optimizer's Web Workers via postMessage, which uses
+// structured clone. A resolved node carrying a function is not cloneable, and shipping one broke
+// the optimizer in the browser for the only hunter with a dynamic cap -- while every Node test
+// passed, because the benchmark scores in-process and never crosses a worker boundary. Assert
+// the property the workers actually require.
+check('resolved node lists are plain data (structured-cloneable for postMessage)', () => {
+  const ctx = { gemPlannerStore: { gemStates: { attraction: { nodes: [false, true] } } }, buildOverrides: {} };
+  for (const hunter of S.HUNTERS) {
+    for (const kind of ['talents', 'attributes']) {
+      const resolved = sb.resolveMaxLevels(sb.HUNTER_DEFS[hunter][kind], ctx);
+      const fnField = resolved.flatMap((n) => Object.entries(n)).find(([, v]) => typeof v === 'function');
+      if (fnField) return `${hunter}.${kind} node carries function field "${fnField[0]}"`;
+      try {
+        structuredClone(resolved);
+      } catch (err) {
+        return `${hunter}.${kind} is not structured-cloneable: ${err.message}`;
+      }
+    }
+  }
+  return null;
+});
+
 check('a build at the raised Lucky Loot cap validates when the gem node is on', () => {
   const store = S.freshStore();
   store.gems.attraction.nodes[1] = true;
