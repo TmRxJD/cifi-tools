@@ -7,7 +7,7 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>tailwind.config = { darkMode: 'class', theme: { extend: { borderWidth: { 3: '3px' } } } };</script>
-<link rel="stylesheet" href="site.css?v=20260809d" />
+<link rel="stylesheet" href="site.css?v=20260809e" />
 <style>
   body { background:#111827; color:#e5e7eb; }
   .stepper-btn { @apply w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed text-white; }
@@ -367,6 +367,30 @@
       <div>Drop <code class="text-gray-300">DATA.text</code> or <code class="text-gray-300">CifiBackup.text</code> here, or click to choose a file</div>
       <input id="importSaveFileInput" type="file" class="hidden" accept=".text,.txt,text/plain" />
     </div>
+
+    <!-- Paste path: for setups where the save file cannot reach this browser as a FILE. Cloud
+         emulators (LDCloud/LDPlayer Cloud, BlueStacks Cloud, Genymotion Cloud) are the main
+         case: there is no local device for the ADB bridge to talk to, and no straightforward
+         way to download a file out of the instance -- but they all sync the clipboard. The save
+         is plain ASCII text, so copy-paste carries it perfectly. -->
+    <details id="importSavePasteWrap" class="rounded-lg border border-gray-700 bg-gray-900/50 p-3 mb-3">
+      <summary class="cursor-pointer text-xs font-semibold text-gray-300">Paste the save text instead (cloud emulators, no file access)</summary>
+      <div class="mt-2 space-y-2">
+        <p class="text-xs text-gray-400">
+          Using a cloud emulator (LDCloud, BlueStacks Cloud, Genymotion Cloud) or any setup where you
+          can read the file but not download it? Open
+          <code class="text-gray-300">DATA.text</code> in a text editor or file manager on the device,
+          select all, copy, then paste it here — the clipboard carries it fine, it's plain text.
+        </p>
+        <textarea id="importSavePasteInput" rows="4" spellcheck="false"
+          class="w-full bg-gray-800 border border-gray-600 rounded px-2 py-2 text-white text-xs font-mono"
+          placeholder="Paste the entire contents of DATA.text or CifiBackup.text…"></textarea>
+        <div class="flex items-center justify-between gap-2">
+          <span id="importSavePasteInfo" class="text-xs text-gray-500"></span>
+          <button id="importSavePasteBtn" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-sm whitespace-nowrap">Import Pasted Save</button>
+        </div>
+      </div>
+    </details>
     <div class="rounded-lg border border-gray-700 bg-gray-900/50 p-3 mb-3">
       <button id="importChecklistToggleBtn" type="button" class="w-full flex items-center justify-between">
         <h3 class="text-xs font-semibold text-gray-300">What to import</h3>
@@ -501,25 +525,25 @@
   </div>
 </div>
 
-<script src="icons.js?v=20260809d"></script>
-<script src="hunterDefs.js?v=20260809d"></script>
-<script src="shipSchema.js?v=20260809d"></script>
-<script src="shipsPage.js?v=20260809d"></script>
-<script src="upgradeEffects.js?v=20260809d"></script>
-<script src="hunterSimBrowser.js?v=20260809d"></script>
-<script src="optimizer/space.js?v=20260809d"></script>
+<script src="icons.js?v=20260809e"></script>
+<script src="hunterDefs.js?v=20260809e"></script>
+<script src="shipSchema.js?v=20260809e"></script>
+<script src="shipsPage.js?v=20260809e"></script>
+<script src="upgradeEffects.js?v=20260809e"></script>
+<script src="hunterSimBrowser.js?v=20260809e"></script>
+<script src="optimizer/space.js?v=20260809e"></script>
 <!-- storeSchema depends on HUNTER_DEFS (hunterDefs.js) and AllocSpace (optimizer/space.js). -->
-<script src="storeSchema.js?v=20260809d"></script>
-<script src="optimizer/search.js?v=20260809d"></script>
-<script src="optimizer/runner.js?v=20260809d"></script>
-<script src="saveImport.js?v=20260809d"></script>
-<script src="buildCode.js?v=20260809d"></script>
-<script src="costFormulas.js?v=20260809d"></script>
-<script src="incomeModel.js?v=20260809d"></script>
-<script src="hunterStatPath.js?v=20260809d"></script>
-<script src="hunterStatPathBrowser.js?v=20260809d"></script>
-<script src="hunterStatPathPage.js?v=20260809d"></script>
-<script src="app.js?v=20260809d"></script>
+<script src="storeSchema.js?v=20260809e"></script>
+<script src="optimizer/search.js?v=20260809e"></script>
+<script src="optimizer/runner.js?v=20260809e"></script>
+<script src="saveImport.js?v=20260809e"></script>
+<script src="buildCode.js?v=20260809e"></script>
+<script src="costFormulas.js?v=20260809e"></script>
+<script src="incomeModel.js?v=20260809e"></script>
+<script src="hunterStatPath.js?v=20260809e"></script>
+<script src="hunterStatPathBrowser.js?v=20260809e"></script>
+<script src="hunterStatPathPage.js?v=20260809e"></script>
+<script src="app.js?v=20260809e"></script>
 <script>
   // Custom (non-Tabler) sidebar icons: real game-asset SVG paths copied verbatim from the
   // live site's rendered DOM (Relics/Loop Mods/Milestones use bespoke icons, not Tabler's).

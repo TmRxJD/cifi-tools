@@ -12,7 +12,7 @@
   // Bump alongside the ?v= on the <script> tags in index.html. A Worker URL is cached
   // independently of the page, so without this a worker.js change silently keeps running the
   // previous version after a reload.
-  const WORKER_VERSION = '20260809d';
+  const WORKER_VERSION = '20260809e';
 
   // Each worker compiles and holds its OWN copy of the WASM module and churns a fresh instance
   // per evaluation (required for determinism -- the evaluator's RNG state lives in mutable wasm
@@ -122,7 +122,16 @@
     const pool = new ScoringPool(cfg, mode, size);
     try {
       const initError = await pool.ready();
-      if (initError) throw new Error(`Optimizer worker failed to initialize: ${initError}`);
+      if (initError) {
+        // "worker failed to load" almost always means the PAGE is stale, not that the optimizer
+        // is broken: a cached index.html requests asset URLs from an older release, and any that
+        // were renamed or deleted 404. Say so, because the raw message sends people looking in
+        // the wrong place. app.js's reloadIfShellIsStale() normally repairs this automatically.
+        const stale = /failed to load/i.test(initError)
+          ? ' This usually means the page is a cached older version — reload (or pull to refresh) and try again.'
+          : '';
+        throw new Error(`Optimizer worker failed to initialize: ${initError}.${stale}`);
+      }
       return await global.HunterOptimizer.optimize(cfg, {
         mode,
         scorer: (pairs, iterations) => pool.score(pairs, iterations),

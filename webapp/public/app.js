@@ -3044,6 +3044,28 @@ importSaveFileInput.onchange = () => {
   const file = importSaveFileInput.files?.[0];
   if (file) readImportSaveFile(file);
 };
+// Paste path -- same decode/apply pipeline as a dropped file, just a different way of getting
+// the bytes here. Exists for setups with no local device for the ADB bridge and no practical way
+// to download a file (cloud emulators being the common case); the save is plain ASCII, so the
+// clipboard is a perfectly good transport.
+const importSavePasteInput = document.getElementById('importSavePasteInput');
+const importSavePasteInfo = document.getElementById('importSavePasteInfo');
+importSavePasteInput.addEventListener('input', () => {
+  const n = importSavePasteInput.value.trim().length;
+  // A real save is ~190KB of base64. Showing the length turns "nothing happened" into
+  // "you pasted 400 characters", which is the actual problem when a paste gets truncated.
+  importSavePasteInfo.textContent = n ? `${n.toLocaleString()} characters pasted` : '';
+});
+document.getElementById('importSavePasteBtn').onclick = async () => {
+  const raw = importSavePasteInput.value.trim();
+  if (!raw) { renderImportSaveResult('Paste the contents of DATA.text or CifiBackup.text first.', true); return; }
+  const result = await processImportedSaveText(raw);
+  // Only clear on success: leaving a failed paste in place means the user can fix it rather than
+  // paste the whole thing again.
+  if (!result.error) importSavePasteInput.value = '';
+  importSavePasteInput.dispatchEvent(new Event('input'));
+};
+
 function readImportSaveFile(file) {
   const reader = new FileReader();
   reader.onload = () => processImportedSaveText(String(reader.result));
@@ -3134,6 +3156,49 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
 };
 document.getElementById('cancelOptimizeRunBtn').onclick = () => { cancelRequested = true; };
 
+// ==================== STALE SHELL RECOVERY ====================
+
+// GitHub Pages serves index.html with `Cache-Control: max-age=600`, and mobile browsers
+// routinely hold it far longer than that. A cached index.html keeps requesting the asset URLs it
+// was built with -- so after a release that renames or removes a file, the browser loads an old
+// page whose scripts 404. That is not a hypothetical: it shipped as
+// "Optimizer failed to run: Optimizer worker failed to initialize: worker failed to load",
+// because the stale shell was still asking for the deleted beamWorker.js.
+//
+// The check compares the version token of the RUNNING page against the one in the live
+// index.html, fetched with `cache: 'no-store'`. Deriving both from the same `?v=` that already
+// cache-busts every asset means there is no second source of truth to keep in sync -- bumping
+// `?v=` (which a release does anyway) is the whole contract.
+//
+// Reloads at most once per version per tab, so a genuinely broken deploy degrades to "old page"
+// rather than an infinite reload loop.
+const APP_VERSION = (() => {
+  const tag = document.querySelector('script[src*="app.js"]');
+  const m = tag && tag.getAttribute('src').match(/[?&]v=([^&]+)/);
+  return m ? m[1] : null;
+})();
+
+async function reloadIfShellIsStale() {
+  if (!APP_VERSION) return;
+  try {
+    const res = await fetch(`index.html?_=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) return;
+    const html = await res.text();
+    const live = html.match(/app\.js\?v=([^"']+)/);
+    if (!live || live[1] === APP_VERSION) return;
+
+    const key = `huntersim_reloaded_for_${live[1]}`;
+    if (sessionStorage.getItem(key)) {
+      console.warn(`[shell] still on ${APP_VERSION} after reloading for ${live[1]} -- not retrying`);
+      return;
+    }
+    sessionStorage.setItem(key, '1');
+    console.warn(`[shell] cached page is ${APP_VERSION}, live is ${live[1]} -- reloading`);
+    location.reload();
+  } catch { /* offline or blocked: keep running the page we have */ }
+}
+
 // ==================== INIT ====================
 
 render();
+reloadIfShellIsStale();
