@@ -206,16 +206,20 @@
     // not: the game says StartCost 30 where his table starts at 3, and they diverge again by
     // level 3. The game wins.
     //
-    // Their CAPS are still unresolved (see the note in relicMaxLevel) -- the game's scene data
-    // carries no MaxLevel for either. Costs and caps are separate questions and only one of them
-    // is settled here.
-    r5: { capUnresolved: 'the game scene declares no MaxLevel; Ryther says 8, raised to 11 by Power Gem Node 1', start: 1, add: 5, exp: 20, corr: [] },
-    r6: { capUnresolved: 'the game scene declares no MaxLevel; Ryther says 8 (11 with Power Gem Node 1), and the live fragment planner implies 11 rising to 16 with Exodus node 2', start: 30, add: 20, exp: 9, corr: [] },
+    // Their CAPS come from the ORIGINAL TOOL, which is authoritative for anything it models (see
+    // "Where a value has to come from" in CLAUDE.md). Its relic list states
+    // `{id:"r5",...,maxLevel:8,canBeUpgraded:!0}` and the same for r6, which also reconciles the
+    // community tables: Ryther's "8, raised later" was the base cap plus the raise, reported as
+    // one number. We take the BASE cap and do not model the raise -- the raised value is not
+    // stated alongside the flag, and offering levels the account cannot buy is the
+    // silent-optimism failure this file exists to avoid.
+    r5: { maxLevel: 8, start: 1, add: 5, exp: 20, corr: [] },
+    r6: { maxLevel: 8, start: 30, add: 20, exp: 9, corr: [] },
     r7: { maxLevel: 100, start: 2, add: 1.8, exp: 1.14, corr: [[1.01, 10], [1.02, 20]] },
     r8: { maxLevel: 100, start: 5, add: 4, exp: 1.2, corr: [[1.1, 10]] },
-    // r9's cap is likewise Exodus-node-gated in the live fragment planner (100 -> 105 with
-    // Exodus node 2). It is not a hunter sim param either, so same treatment as r5/r6.
-    r9: { capUnresolved: 'the live fragment planner declares 100 rising to 105 with Exodus node 2', start: 8, add: 1.8, exp: 1.18, corr: [[1.03, 10], [1.08, 20]] },
+    // r9 likewise: the original tool's relic list states maxLevel 100. Its fragment planner shows
+    // that rising to 105 with Exodus node 2; same treatment as r5/r6, we hold the base cap.
+    r9: { maxLevel: 100, start: 8, add: 1.8, exp: 1.18, corr: [[1.03, 10], [1.08, 20]] },
     // r10 subtracts a flat rebate per level band instead of applying correction multipliers.
     r10: {
       maxLevel: 8,

@@ -927,7 +927,13 @@ function genericModal(title, bodyHtml, id) {
 // body, as opposed to genericModal's plain max-w-lg dialog used for smaller popups.
 function titledModal(icon, title, bodyHtml, id) {
   const existing = document.getElementById(id);
-  if (existing) existing.remove();
+  // Reopening replaces the old overlay, which is just as much a close as clicking the X -- so it
+  // has to fire the same event, or a re-open would orphan whatever the previous instance had in
+  // flight. This is the exact path that stacked abandoned Effective Path runs.
+  if (existing) {
+    existing.dispatchEvent(new CustomEvent('modal-close'));
+    existing.remove();
+  }
   const overlay = document.createElement('div');
   overlay.id = id;
   overlay.className = 'fixed inset-0 z-50 overflow-y-auto bg-gray-900/80 flex items-center justify-center p-2 sm:p-4 pb-[70px] pt-[50px] sm:py-0';
@@ -940,7 +946,14 @@ function titledModal(icon, title, bodyHtml, id) {
       <div class="p-5">${bodyHtml}</div>
     </div>`;
   document.body.appendChild(overlay);
-  const close = () => overlay.remove();
+  // Announce the close BEFORE removing, so a feature with work in flight can cancel it. Without
+  // this, a modal that kicked off a long async computation leaves it running after the user
+  // closes -- invisible, uncancellable, and still competing for the main thread and for wasm
+  // instantiation. See the Effective Path modal, which listens for this.
+  const close = () => {
+    overlay.dispatchEvent(new CustomEvent('modal-close'));
+    overlay.remove();
+  };
   overlay.querySelector('[data-close]').onclick = close;
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
   return overlay;

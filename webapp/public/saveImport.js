@@ -220,16 +220,57 @@ function mapSaveToStore(save) {
     });
   }
 
-  // Inscryptions -- the raw save field for "Inscryption #N" (as labeled in this app and
-  // in-game) is IS{N+12}Level, NOT IS{N}Level. Confirmed directly against a real account:
-  // its #58/#59/#60/#61/#62 levels (2/1/3/1/0) matched IS70/IS71/IS72/IS73/IS74Level exactly,
-  // five-for-five, while IS58-62Level themselves were all 0 (why #60 always imported as 0
-  // regardless of the account's real level -- every id was silently reading the wrong slot,
-  // consistently 12 short). The save's IS-array is evidently a denser internal registry that
-  // starts 12 entries before this app's own inscription numbering, not a 1:1 index into it.
-  const INSCRYPTION_SAVE_OFFSET = 12;
+  // Inscryptions -- "Inscryption #N" (as labeled in this app and in-game) is stored as
+  // IS{slot}Level, where the slot is NOT N and the difference is NOT a constant.
+  //
+  // The game's own scene settles this without inference: each shop row is a GameObject named
+  // `ChrystosEmporiumUpgrade<slot>`, and for every row the developers renamed, the name also
+  // carries the displayed id -- `ChrystosEmporiumUpgrade72-ID60` is slot 72 shown as "#60". The
+  // slot half is cross-checked against MultiverseMarket's own `IS<slot>IDText` reference, so the
+  // pair is confirmed from two directions. See tools/bench/extract-inscryption-slots.js, which
+  // regenerates tools/reference/inscryption-slots.json; INSCRYPTION_SLOT below is asserted equal
+  // to it by tools/bench/inscryption-slot-test.js.
+  //
+  // What that shows, and why the previous rule was half right:
+  //   #57-#62   live at slots 69-74  (+12)  <- exactly the five-for-five value match that the
+  //                                            earlier +12 rule was (correctly) drawn from
+  //   #75-#110  live at slots 75-110 ( +0)  <- where the blanket +12 was wrong
+  //
+  // The +12 was therefore generalised from a range where it held to ranges where it does not.
+  // Two consequences that were silently corrupting imports:
+  //   - #103/#104/#105 read IS115/116/117Level, which do not exist (the registry stops at 110),
+  //     so those three NEVER imported at all regardless of the account.
+  //   - #80-#92 read a slot 12 too high, i.e. another inscryption's level.
+  //
+  // The rows the developers did not rename (#1-#56, #63-#74) carry no displayed id in the scene,
+  // but they are pinned by exhaustion rather than left to a guess. The shop has exactly one row
+  // family (`ChrystosEmporiumUpgrade<N>`, 110 rows -- there is no second inscryption shop, so the
+  // fleet inscryptions #64/#65/#67/#68 that shipsPage.js consumes must live in this one). 110
+  // slots therefore carry 110 displayed ids, and the mapping is a bijection. Removing the proven
+  // pairs leaves displays {1-56, 63-74} for slots {1-56, 57-68} -- two contiguous blocks, so
+  // displays 1-56 sit at slots 1-56 and displays 63-74 at slots 57-68.
+  //
+  // The reference account confirms that reading and refutes the blanket +12 outright:
+  //   - slots 1-12 are leveled 5,10,8,6,3,7,10,3,6,9,3,5. Under +12 no displayed id maps to them
+  //     at all, i.e. twelve leveled slots owned by nothing. Under the bijection they are #1-#12.
+  //   - the level profile becomes monotone in exactly the way progression is: slots 1-56 mean
+  //     7.05 (#1-#56 finished), slots 69-74 mean 2.00 (#57-#62 in progress), slots 57-68 mean
+  //     0.33 (#63-#74 barely started), slots 75-110 all zero (#75+ not reached).
+  //   - the fleet inscryptions read 8,10,8,7,7,5,4,5 for the early ships instead of all zero,
+  //     which is what an account with six ranked-up ships should look like.
+  //
+  // So: identity everywhere except the 57-74 block, which is permuted -- #57-#62 sit AFTER
+  // #63-#74 in slot order.
+  const INSCRYPTION_SLOT = (n) => {
+    if (n >= 1 && n <= 56) return n;         // identity (by exhaustion + account profile)
+    if (n >= 57 && n <= 62) return n + 12;   // PROVEN by the scene's -ID<n> row names
+    if (n >= 63 && n <= 74) return n - 6;    // by exhaustion: the only slots left
+    if (n >= 75 && n <= 110) return n;       // PROVEN by the scene's -ID<n> row names
+    throw new Error(`inscryption #${n} is outside the game's 1-110 registry`);
+  };
+
   [...INSCRYPTION_IDS, ...FLEET_INSCRYPTION_IDS].forEach((n) => {
-    const v = save[`IS${n + INSCRYPTION_SAVE_OFFSET}Level`];
+    const v = save[`IS${INSCRYPTION_SLOT(n)}Level`];
     if (v !== undefined) globalUpgrades[`inscryptions.i${n}`] = realNum(v);
   });
 

@@ -55,6 +55,36 @@
     if (box) { box.classList.remove('max-w-5xl'); box.classList.add('max-w-7xl'); }
   }
 
+  /**
+   * At most ONE Effective Path computation per modal, cancelled when it stops being wanted.
+   *
+   * Two ways it stops being wanted, and both used to leak a running walk:
+   *   - the user closes the modal (or reopens it, which replaces the overlay -- `titledModal`
+   *     dispatches `modal-close` for that too);
+   *   - the user picks a different objective, which supersedes the run already in progress.
+   *
+   * A leaked walk is invisible but not free: it keeps evaluating, competing with the visible run
+   * for the main thread and for wasm instantiation, so each abandoned run makes the next one
+   * slower. Returns a function that aborts the previous run and hands back a fresh signal.
+   */
+  function abortableRuns(overlay) {
+    let current = null;
+    overlay.addEventListener('modal-close', () => {
+      if (current) current.abort();
+      current = null;
+    });
+    return () => {
+      if (current) current.abort();
+      current = new AbortController();
+      return current.signal;
+    };
+  }
+
+  /** An abort is the user's own doing, so it is not an error to report to them. */
+  function isAbort(err) {
+    return err && err.name === window.HUNTER_STAT_PATH_ABORT_ERROR;
+  }
+
   // Same visual language as the existing talent/attribute Optimize progress dialog
   // (#optimizeProgressModal in index.html: purple progress bar, gray-900/50 stat tiles) so
   // both features' "something is computing" states read as one consistent system.
@@ -251,7 +281,9 @@
     widenModal(overlay);
     bindProgressLabels(overlay, currentHunter, resources);
 
+    const nextSignal = abortableRuns(overlay);
     const run = async (mode) => {
+      const signal = nextSignal();
       overlay.querySelector('.p-5').innerHTML = renderProgressPanel(resources);
       bindProgressLabels(overlay, currentHunter, resources);
       let result; let rates;
@@ -259,13 +291,17 @@
       try {
         const cfg = statPathCfgFor(currentHunter, baseline);
         [result, rates] = await Promise.all([
-          greedyPurchasePath(currentHunter, cfg, TARGET_STEPS, false, mode, (resource, done, total) => updateProgress(overlay, resource, done, total)),
+          greedyPurchasePath(currentHunter, cfg, TARGET_STEPS, false, mode, (resource, done, total) => updateProgress(overlay, resource, done, total), signal),
           baseline.real ? IncomeModel.currentRates(currentHunter, store, baseline, 1000) : null,
         ]);
       } catch (err) {
+        if (isAbort(err)) return;
         overlay.querySelector('.p-5').innerHTML = `<div class="text-red-400 py-8 text-center">Failed to compute Effective Path: ${escapeHtml(err.message || String(err))}</div>`;
         return;
       }
+      // The rates half is not abortable (it is ~150ms), so a run can still finish just after
+      // being superseded. Rendering then would overwrite the newer run's progress panel.
+      if (signal.aborted) return;
       const timingNote = baseline.real ? '' : ' Create a build to unlock timing estimates.';
       renderColumnsModal(overlay, result.columns, rates, (r) => STAT_LABELS[r.key] || r.key, currentHunter,
         `${pathSubtitle(mode)}${timingNote}`, mode, result.locked);
@@ -284,20 +320,26 @@
     const attributes = build.attributes || {};
     const baseline = { level: build.level || 1, talents, attributes, real: hasMeaningfulAllocation(talents, attributes) };
 
+    const nextSignal = abortableRuns(overlay);
     const run = async (mode) => {
+      const signal = nextSignal();
       overlay.querySelector('.p-5').innerHTML = renderProgressPanel(resources);
       bindProgressLabels(overlay, currentHunter, resources);
       let result; let rates;
       try {
         const cfg = statPathCfgFor(currentHunter, baseline);
         [result, rates] = await Promise.all([
-          greedyPurchasePath(currentHunter, cfg, TARGET_STEPS, true, mode, (resource, done, total) => updateProgress(overlay, resource, done, total)),
+          greedyPurchasePath(currentHunter, cfg, TARGET_STEPS, true, mode, (resource, done, total) => updateProgress(overlay, resource, done, total), signal),
           baseline.real ? IncomeModel.currentRates(currentHunter, store, baseline, 1000) : null,
         ]);
       } catch (err) {
+        if (isAbort(err)) return;
         overlay.querySelector('.p-5').innerHTML = `<div class="text-red-400 py-8 text-center">Failed to compute Effective Path: ${escapeHtml(err.message || String(err))}</div>`;
         return;
       }
+      // See the note in openHunterStatPathModal: the rates half is not abortable, so a superseded
+      // run can still land here and would otherwise clobber the newer run's panel.
+      if (signal.aborted) return;
       const timingNote = baseline.real ? '' : ' Allocate talent/attribute points on this build to unlock timing estimates.';
       renderColumnsModal(overlay, result.columns, rates,
         (r) => (r.kind === 'stat' ? (STAT_LABELS[r.key] || r.key) : (r.label || r.key)), currentHunter,

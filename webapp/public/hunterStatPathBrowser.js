@@ -98,6 +98,24 @@
     return new Promise((resolve) => setTimeout(resolve, 0));
   }
 
+  // Closing the modal removes it from the DOM but does NOT stop the walk -- it is a chain of
+  // awaited promises with no handle on it. Without cancellation, closing and reopening leaves the
+  // abandoned run competing for the same main thread and the same wasm instantiation, so the
+  // visible run gets slower every time you do it. (This is not hypothetical: a stack of abandoned
+  // runs is what made a 7.5s path look like it took ten minutes during testing.)
+  //
+  // AbortError is thrown rather than returning a partial result, because a partial purchase path
+  // is not a lesser answer -- it is a wrong one. The caller distinguishes it by `name` and stays
+  // silent, since an abort is the user's own action rather than a failure to report.
+  const ABORT_ERROR = 'HunterStatPathAborted';
+  function throwIfAborted(signal) {
+    if (signal && signal.aborted) {
+      const err = new Error('Effective Path computation was cancelled');
+      err.name = ABORT_ERROR;
+      throw err;
+    }
+  }
+
   // One resource's independent greedy walk -- candidates here only vary THIS resource's own
   // stats/inscriptions; everything outside this group stays pinned at the player's current
   // real values, since the point is that this column's recommendation shouldn't depend on
@@ -107,7 +125,7 @@
   // positive -- the point of this view is "here's the next N in ranked order for this
   // resource," not "here's how many are worth buying." It only stops early if literally
   // nothing is purchasable anymore (every candidate capped out or missing a cost formula).
-  async function greedyResourceColumn(hunter, cfg, evalFast, def, CF, candidates, currentStats, currentUpgrades, targetSteps, iterations, mode, onProgress) {
+  async function greedyResourceColumn(hunter, cfg, evalFast, def, CF, candidates, currentStats, currentUpgrades, targetSteps, iterations, mode, onProgress, signal) {
     const stats = { ...currentStats };
     const upgrades = { ...currentUpgrades };
     let baselineSim = await evalFast(cfg.talents, cfg.attributes, iterations, stats, upgrades);
@@ -115,9 +133,13 @@
     const steps = [];
     for (let i = 0; i < targetSteps; i++) {
       await yieldToUI();
+      throwIfAborted(signal);
       if (onProgress) onProgress(i, targetSteps);
       let best = null;
       for (const cand of candidates) {
+        // Checked per candidate, not just per step: a step is the whole candidate sweep, so a
+        // step-only check would keep burning evaluations long after the user closed the modal.
+        throwIfAborted(signal);
         const param = cand.kind === 'stat' ? null : upgradeParamOf(cand);
         const curLevel = param ? (upgrades[param] || 0) : (stats[cand.key] || 0);
         const nextLevel = curLevel + 1;
@@ -187,7 +209,7 @@
    *        gemPlannerStore, TALENTS, ATTRIBUTES }
    * onProgress(resource, done, total) fires as each resource's column advances.
    */
-  async function greedyPurchasePath(hunter, cfg, targetSteps, includeAccountUpgrades, mode = 'loot', onProgress) {
+  async function greedyPurchasePath(hunter, cfg, targetSteps, includeAccountUpgrades, mode = 'loot', onProgress, signal) {
     // Fail loudly on an unknown or path-inapplicable mode. A mode with pinnedAttrs (bossTimeless)
     // cannot behave differently here -- the path never reallocates attributes -- so accepting it
     // would show the user a choice that silently does nothing.
@@ -220,7 +242,7 @@
     const entries = Object.entries(groupByResource([...statCandidates, ...upgradeCandidates]));
     const results = await Promise.all(entries.map(([resource, group]) => greedyResourceColumn(
       hunter, cfg, evalFast, def, CF, group, cfg.hunterStats, currentUpgrades, targetSteps, SEARCH_ITERATIONS, mode,
-      onProgress && ((done, total) => onProgress(resource, done, total)),
+      onProgress && ((done, total) => onProgress(resource, done, total)), signal,
     )));
     const columns = {};
     entries.forEach(([resource], i) => { columns[resource] = results[i]; });
@@ -234,4 +256,7 @@
 
   global.resourcesFor = resourcesFor;
   global.greedyPurchasePath = greedyPurchasePath;
+  // Exported so callers can tell "the user closed the modal" from "the computation failed"
+  // without string-matching a message.
+  global.HUNTER_STAT_PATH_ABORT_ERROR = ABORT_ERROR;
 })(window);

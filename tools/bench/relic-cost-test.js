@@ -213,20 +213,20 @@ check('a level range sums the individual level costs', () => {
 // static cost tables carry 11 entries. Reading the table length as the cap (which is what this
 // module did when the table first landed) silently offers three levels the account cannot buy.
 // Same shape as Borge's Call Me Lucky Loot, and the same class of bug: optimistic default.
-// Two independent sources disagree about where r5/r6/r9's caps start and which gem node raises
-// them (see costFormulas.js). None are hunter sim params, so nothing consumes the number --
-// refusing to state one is strictly better than picking a side and being confidently wrong.
-check('a relic with an unresolved cap chain refuses to state a max level', () => {
+// r5/r6/r9 previously refused to state a cap, because two community tables disagreed about where
+// those caps start and which gem node raises them. That is settled: the ORIGINAL TOOL states them
+// directly (r5 and r6 maxLevel 8 with canBeUpgraded, r9 maxLevel 100), and cifi-tools is
+// authoritative for anything it models. We hold the BASE cap and do not model the raise -- the
+// raised value is not published next to the flag, and offering unbuyable levels is the
+// silent-optimism bug this file guards against.
+const ORIGINAL_TOOL_CAPS = { r5: 8, r6: 8, r9: 100 };
+check("r5/r6/r9 use the original tool's stated base caps", () => {
   const unresolved = CF.unresolvedRelicCaps();
-  for (const id of ['r5', 'r6', 'r9']) {
-    if (!unresolved[id]) return `${id} should be marked cap-unresolved`;
-    try {
-      const v = CF.relicMaxLevel(id);
-      return `${id} returned max level ${v} despite an unresolved cap chain`;
-    } catch (err) {
-      if (!/unresolved cap chain/.test(err.message)) return `${id} threw the wrong error: ${err.message}`;
-    }
-    // Costs are still exact and must still be available.
+  for (const [id, expected] of Object.entries(ORIGINAL_TOOL_CAPS)) {
+    if (unresolved[id]) return `${id} is still marked cap-unresolved`;
+    const got = CF.relicMaxLevel(id);
+    if (got !== expected) return `${id} caps at ${got}, the original tool says ${expected}`;
+    // Costs must remain exact and available.
     if (!(CF.relicCostAtLevel(id, 5) > 0)) return `${id} lost its cost formula`;
   }
   // Relics with a KNOWN cap must still answer.
@@ -234,6 +234,17 @@ check('a relic with an unresolved cap chain refuses to state a max level', () =>
     if (unresolved[id]) return `${id} is wrongly marked unresolved`;
     if (!(CF.relicMaxLevel(id) > 0)) return `${id} has no usable max level`;
   }
+  return null;
+});
+
+// The refusal mechanism itself must survive even though no tier-1 relic uses it any more: tier-2
+// caps still are not in the extracted dataset, and a future relic may land unresolved again.
+check('the cap-refusal mechanism still works when a cap genuinely is unresolved', () => {
+  if (typeof CF.unresolvedRelicCaps() !== 'object') return 'unresolvedRelicCaps no longer returns a map';
+  try {
+    CF.relicMaxLevel('r999');
+    return 'an unknown relic returned a max level instead of throwing';
+  } catch { /* expected */ }
   return null;
 });
 

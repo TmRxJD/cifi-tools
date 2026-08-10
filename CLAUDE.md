@@ -33,6 +33,27 @@ point, not decoration.
    carry hard-won empirical findings. Preserve that. When you remove a workaround, say what it
    was compensating for.
 
+### Where a value has to come from
+
+**cifi-tools.com was built in collaboration with the game's developers. For anything that site
+models, matching its bundle IS the verification — treat it as authoritative and stop there.** Do
+not go digging through the APK to "confirm" a number the original tool already publishes; that is
+effort spent re-deriving something already settled, and it invites disagreeing with a source that
+is more trustworthy than the derivation.
+
+**What genuinely needs independent proof is everything the site does NOT model.** Two categories,
+and they are where the real risk lives:
+
+- **Save-file mappings.** cifi-tools has no save importer, so no save field name, index or offset
+  can be confirmed from it. These must be proven against the APK, the scene, or the account
+  itself. The inscryption slot map is the cautionary tale: a plausible uniform offset, drawn from
+  a real five-value match, was wrong for most ids and silently dropped three of them entirely.
+- **Fleet / ship optimizer data.** Largely our own territory, so the bundle cannot arbitrate it.
+
+When you record a fact, say which of these it is. "Matches the original tool" and "matches the
+game" are different claims with different strengths, and conflating them is how an unverified
+number acquires a verified-looking comment.
+
 ### Project history you need to know
 
 This codebase went through a long stretch of AI-assisted development where fixes were layered
@@ -78,6 +99,7 @@ There is exactly one place for each of these. **Do not add a second.**
 | Relic + fragment costs | `webapp/public/costFormulas.js` (`RELIC_SPECS`, `fragmentsOnHand`) |
 | Upgrade unlock gates | `webapp/public/hunterDefs.js` (`UPGRADE_GATES`, `isUpgradeUnlocked`) |
 | Full gem/gate reference (all 97) | `tools/reference/gem-gates.json`, `tools/reference/gem-trees.json` |
+| Inscryption display-id -> save slot | `tools/reference/inscryption-slots.json` (+ the resolver in `saveImport.js`) |
 | Game's own definition data (17 families) | `tools/reference/scene-defs.json` |
 | Loop-mod definitions + name mapping | `tools/reference/loop-mods.json`, `loopmod-names.json` |
 | Pulled APK / save / IL2CPP / captures | `tools/gamefiles/` (gitignored; see its README) |
@@ -276,6 +298,34 @@ think one is wrong, disprove it with a test.
     what is wanted and no formula is needed. Three non-obvious names: Ozzy's Multistrike
     Chance/Power are stored under the CRIT names; Knox's `reload` is `AtkSpeed`; Knox's `proj` is
     `SalvoSize`.
+  - **The inscryption display-id → save-slot map is a BIJECTION, not an offset, and the old
+    blanket `+12` was wrong for most ids.** `IS<slot>Level` holds "Inscryption #N", but slot ≠ N
+    and the difference is not constant. The game's scene settles it: each shop row is a GameObject
+    named `ChrystosEmporiumUpgrade<slot>`, and every row the devs renamed also carries the
+    displayed id (`ChrystosEmporiumUpgrade72-ID60` = slot 72 shown as #60), cross-checked against
+    MultiverseMarket's own `IS<slot>IDText` reference. That proves **#57-#62 → slots 69-74 (+12)**
+    and **#75-#110 → slots 75-110 (+0)**. The remainder is pinned by exhaustion: there is exactly
+    one 110-row shop family (so the fleet inscryptions #64/#65/#67/#68 that `shipsPage.js`
+    consumes live in it), 110 slots carry 110 ids, and removing the proven pairs leaves displays
+    {1-56, 63-74} for slots {1-56, 57-68} — two contiguous blocks. Net: **identity everywhere
+    except the 57-74 block, which is permuted so #57-#62 sit AFTER #63-#74.**
+    The `+12` rule was generalised from the one range where it holds. It was silently corrupting
+    imports: **#103/#104/#105 resolved to IS115/116/117, which do not exist**, so they never
+    imported at all; #80-#92 read a slot 12 too high; and slots 1-12 (leveled 5,10,8,6,3,7,10,3,
+    6,9,3,5 on the reference account) were owned by **no displayed id whatsoever** — which is the
+    structural contradiction that disproves it, independent of any value match.
+    The account profile corroborates the replacement: slots 1-56 mean 7.05 (#1-#56 finished),
+    69-74 mean 2.00 (#57-#62 in progress), 57-68 mean 0.33 (#63-#74 barely started), 75-110 all
+    zero — and the fleet inscryptions read 8,10,8,7,7,5,4,5 instead of all zero, which is what an
+    account with six ranked-up ships should look like.
+    Regenerate with `tools/bench/extract-inscryption-slots.js`; `inscryption-slot-test.js` asserts
+    the shipped resolver against it **and that the map is a bijection** — the property the old rule
+    failed.
+    Inscryption COSTS are a separate question from slots, and they are settled: all 36 entries in
+    `INSCRYPTION_TABLE` match the original tool's own `mV` object exactly, checked by
+    `tools/bench/inscryption-cost-check.js <live-bundle.js>` (verified with a negative control, so
+    it does fail when a value is wrong). The scene does not carry `IS<N>StartCost` — inscryption
+    costs are assigned in code — but per the sourcing rule above that does not matter here.
   - **`gadgets` now import**, and the index question is settled by direct confirmation: the player
     reported wrench 50 / zaptron 40 in game, and the save reads `Gadget5Level` 50 /
     `Gadget6Level` 40 — matching `costFormulas`' own `g5`/`g6`/`g15` aliases. Worth remembering
@@ -356,11 +406,29 @@ think one is wrong, disprove it with a test.
 - **`getMaxValue` appears exactly ONCE in the live bundle** — Borge's Call Me Lucky Loot. Verified
   by counting, not assumed: the other four mentions are call sites. There is no second dynamic
   talent/attribute cap to find.
-- **r5/r6/r9 have an unresolved cap chain and `relicMaxLevel` refuses for them.** Ryther's data
-  says r5/r6 cap at 8 rising to 11 with Power Gem Node 1; the live bundle's fragment planner says
-  r6 caps at 11 rising to 16 with Exodus node 2 (and r9 100 → 105). Probably a chain, but that
-  ordering is inference. None are hunter sim params, so nothing consumes the number — refusing
-  beats picking a side. Costs are still exact; use `relicPriceableLevels()` to walk them.
+- **r5/r6/r9 caps are RESOLVED, from the original tool.** They used to refuse, because Ryther's
+  data said r5/r6 cap at 8 rising to 11 with Power Gem Node 1 while the live fragment planner
+  implied r6 at 11 rising to 16 with Exodus node 2 (and r9 100 → 105) — two sources, no way to
+  pick. The sourcing rule settles it: cifi-tools' own relic list states
+  `{id:"r5",…,maxLevel:8,canBeUpgraded:!0}`, the same for r6, and `maxLevel:100` for r9. That also
+  reconciles the community table — Ryther's "8 rising to 11" was the base cap and the raise
+  reported as one number.
+  **We hold the BASE cap and deliberately do not model the raise**: the raised value is not
+  published next to the `canBeUpgraded` flag, and offering levels the account cannot buy is the
+  same silent-optimism failure as defaulting a gate to unlocked. Costs were always exact;
+  `relicPriceableLevels()` still walks further than the cap for callers that need it. The refusal
+  mechanism stays (tier-2 caps are still not in the extracted dataset) and is still tested.
+- **A modal that starts async work must cancel it on close, and `titledModal` fires `modal-close`
+  so it can.** Closing used to just `remove()` the overlay, leaving the Effective Path walk
+  running: invisible, uncancellable, and still competing for the main thread and for wasm
+  instantiation, so every abandoned run made the next one slower. **This cost real debugging
+  time** — a stack of abandoned runs made a 7.5s path look like it took ten minutes, and the
+  slowdown was initially misdiagnosed as a regression in the walk itself. Reopening counts as
+  closing (`titledModal` replaces a same-id overlay), and so does switching objective, so both
+  abort the previous run. Cancellation is checked **per candidate, not per step** — a step is a
+  whole candidate sweep, and step-only checking still burns 16 evaluations after the abort
+  where per-candidate does 0. `path-abort-test.js` asserts on work done AFTER the abort for
+  exactly that reason; it was verified to FAIL when the per-candidate check is removed.
 - **Legality is a state predicate, not a path predicate.** A node at level > 0 is legal iff it's
   within `maxLevel`, every dependency parent is > 0, and any `minValue` tier threshold is met by
   points spent in strictly-lower-threshold nodes. Order of purchase never matters. This is what
@@ -452,14 +520,17 @@ node tools/bench/schema-test.js        # store schema invariants (fast, run alwa
 node tools/bench/relic-cost-test.js    # relic cost table + fragment arithmetic (fast)
 node tools/bench/relic-arg-probe.js    # every declared relic reaches the wasm (fast)
 node tools/bench/path-relic-test.js    # effective path never recommends an inert relic
+node tools/bench/path-abort-test.js    # closing the Effective Path actually stops the work
 node tools/bench/relic-sweep.js        # which relics actually move the sim (slow)
 node tools/bench/gem-coverage-test.js  # every gem param is reachable from the Gem Planner
 node tools/bench/gem-tree-test.js      # tree shape + every unlock gate is satisfiable
+node tools/bench/inscryption-slot-test.js # inscryption slot map vs the game; must be a bijection
 node tools/bench/save-gate-test.js     # caps/gates vs a REAL save (skips if none pulled)
 node tools/save/inspect.js <DATA.text> [regex]            # decode + inspect a real save
 node tools/bench/save-coverage.js      # which tool inputs the save could auto-fill (report)
 node tools/bench/loopmod-test.js       # loop-mod table vs a real save (report)
 node tools/bench/scene-defs-test.js    # our caps/costs vs the GAME's own scene data
+node tools/bench/inscryption-cost-check.js <live-bundle.js> # inscryption costs vs the original
 node tools/bench/gate-coverage.js <live-bundle.js>        # our gates vs the bundle's
 node tools/bench/live-override-diff.js <live-bundle.js>   # gap check vs the original tool
 node tools/bench/run.js --sample=12    # THE EVERYDAY GATE: stratified handful, ~minutes
