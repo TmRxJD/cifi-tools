@@ -190,6 +190,23 @@ think one is wrong, disprove it with a test.
   and reports what it excluded; the Overrides cards show the requirement but do NOT hard-disable
   the input, because our picture of gem levels comes from the Gem Planner the user may not have
   filled in.
+- **The APK cannot currently be decompiled, and that is a tooling limit, not a choice.** CIFI
+  0.7.3.54 is Unity **6000.3.8f1** with IL2CPP metadata **v39**; Il2CppDumper supports up to v31
+  (checked against master, not just the 2024 release) and no other public dumper goes further.
+  Typetrees are stripped from the shipped assets, so UnityPy reads MonoBehaviour headers but not
+  script fields, and the only TextAssets are profanity filters. So VALUES cannot be read out of
+  the APK today. What the APK *did* verify is STRUCTURE, from the metadata string table and
+  MonoScript class list (`OuroRelics`, `GemNodes`, `HuntersAttributes`, `HunterBorge/Ozzy/Knox`,
+  and the `<Tree>GemNode<N>Level` field names). Revisit when a v39-capable dumper exists.
+- **The SAVE FILE is the value-level oracle instead, and it works.** `tools/save/inspect.js`
+  decodes it (4,466 fields). Field naming, corroborated against the game's own metadata:
+  `AOR<N>Level` = tier-1 relic levels ("Academy Of Relics"), `<Tree>QualityLevel` = the gem level
+  gates compare against, `<Tree>GemNode<N>Level` (Exodus uses an `ExodusGemNodeLevels[]` array
+  instead), `<Tree>GU<N>Level` = gem upgrade levels, `Gadget<N>Level`, `CM<N>`.
+  `save-gate-test.js` checks our caps and gates against it. **Note what one account can and
+  cannot prove**: the game writes no save field for content the account has never reached, so an
+  absent field is *consistent with* a gate but does not confirm it. That test reports actively
+  confirmed and not-testable separately rather than showing a green tick that overstates it.
 - **The FULL gate/prereq map is extracted, not guessed** — 97 gated entries, every one resolved
   to a tree and level, in `tools/reference/gem-gates.json` (+ `gem-trees.json` for the tree
   structure itself). Regenerate with `tools/bench/extract-gates.js` / `extract-gem-trees.js`
@@ -301,6 +318,8 @@ node tools/bench/path-relic-test.js    # effective path never recommends an iner
 node tools/bench/relic-sweep.js        # which relics actually move the sim (slow)
 node tools/bench/gem-coverage-test.js  # every gem param is reachable from the Gem Planner
 node tools/bench/gem-tree-test.js      # tree shape + every unlock gate is satisfiable
+node tools/bench/save-gate-test.js     # caps/gates vs a REAL save (skips if none pulled)
+node tools/save/inspect.js <DATA.text> [regex]            # decode + inspect a real save
 node tools/bench/gate-coverage.js <live-bundle.js>        # our gates vs the bundle's
 node tools/bench/live-override-diff.js <live-bundle.js>   # gap check vs the original tool
 node tools/bench/run.js --sample=12    # THE EVERYDAY GATE: stratified handful, ~minutes
