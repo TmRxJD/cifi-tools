@@ -304,7 +304,21 @@ think one is wrong, disprove it with a test.
     DU10 Cells (17), DU11 MP (25), DU12 Gens, DU13 Shards (10), DU14 RP (8), DU15 AP (15),
     DU16 OP (30); DU0 is the generator amplifier and DU1–8 are the MK1–8 gen boosters
     (`DU1MK1StartCost` in the dump confirms the MK numbering).
-  - `trinkets`, `iap` — **absent from THIS save, which is not the same as never persisted.** Searched exhaustively by both our ids and the game's own labels ("Traversal
+  - **`trinkets` are FOUND but deliberately not mapped, on a semantics question.** The save stores
+    them as `T<N>FLevel` / `T<N>FTier` ("F-Trinkets", matching the `f-trinket-tier-bonus` gem
+    upgrade) — confirmed exactly against player-reported in-game values: T1F 230/tier 14 (all-gen
+    booster), T2F 197/tier 12 (mod booster), T3F 178/tier 11 (shard booster). Our three trinket
+    ids are cifi-tools' lore names for these; `Handbook`, `Codex` and `Amplifier` appear nowhere
+    in the game.
+    **What blocks the mapping:** the only sim consumer is
+    `upgrades.gems_nodes.creation_galvTrinketsCount`, which the live bundle names "Galvarium
+    Trinkets **Count**" while our `resolveParam` **sums** `state.upgrades.trinkets`. Sum-of-levels
+    is 605; a count of owned trinkets is 3. A 200× error on a sim parameter is not worth guessing,
+    and it is currently moot anyway — the param is gated at Creation gem 4 and the reference
+    account is at Creation 1, so it resolves to 0 either way. Settle the Count-vs-sum question
+    before wiring this up. (Per-trinket identity does NOT need settling: whichever way round the
+    three go, the consumer aggregates them.)
+  - `iap` — **absent from THIS save, which is not the same as never persisted.** Searched exhaustively by both our ids and the game's own labels ("Traversal
     Pack", "Hunter Loot Booster", "Revive Boost"), plus an inverted search: `tools/save/unclaimed.js`
     lists every field no importer reads, so nothing can hide behind an unexpected name. Zero hits.
     But the game clearly DOES persist purchases — 175 `*Purchased` booleans exist, and
