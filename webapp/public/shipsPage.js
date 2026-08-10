@@ -394,6 +394,18 @@ const CODE_TO_GRID = Object.fromEntries(GRID_TO_CODE.map((code, i) => [code, i +
 // past MK8 to write into before now).
 const GEN_TIERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
+// Demeter's "Ahead of the Curve" (ship 5, slot 1). Its payoff lands at the start of the NEXT
+// loop reset rather than the active run, so the marginal-value engine cannot score it: there is
+// no % in its effect text and no immediate resource gain to weigh against anything else. The
+// policy is to max it outright once the budget is comfortably large, or when explicitly prepping
+// for a long run, and otherwise skip it entirely so scarce points go to direct multipliers.
+//
+// Named rather than left as bare `shipId === 5 && slot === '1'` literals scattered across the
+// file -- the rule is unusual enough that it needs to be findable when it next comes up.
+const AOTC_SHIP_ID = 5;
+const AOTC_SLOT = '1';
+const AOTC_AUTO_MAX_BUDGET = 15;
+
 // SHIP_NODE_CATALOG's `max` fields store the WIKI BASE level cap (confirmed against
 // cifi.fandom.com's per-ship pages 2026-07-30) -- NOT the researched value. Research #68 "Fleet
 // Analysis 1" tier 1 ("All Rank Installs Max LV x5") multiplies EVERY ship's install caps by 5
@@ -1661,7 +1673,7 @@ function optimizeShipInstalls(shipId, budget, weights, prepForLongRun, runLength
   // when explicitly prepping for a long run; otherwise skip it entirely (not even the usual "1
   // free point in everything" seed) so scarce points go straight into direct multipliers
   // instead.
-  if (shipId === 5 && (budget >= 15 || prepForLongRun)) {
+  if (shipId === AOTC_SHIP_ID && (budget >= AOTC_AUTO_MAX_BUDGET || prepForLongRun)) {
     const needed = Math.min(nodeMaxLevel(shipId, 1), budget - spent);
     if (needed > 0) { levels[1] = needed; spent += needed; for (let i = 0; i < needed; i++) clicks.push('1'); }
   }
@@ -1681,7 +1693,7 @@ function optimizeShipInstalls(shipId, budget, weights, prepForLongRun, runLength
   // specializing," scoped to what you actually want).
   slots.forEach((slot) => {
     if (spent >= budget) return;
-    if (shipId === 5 && slot === '1') return; // handled by the AOTC policy above, not this generic seed
+    if (shipId === AOTC_SHIP_ID && slot === AOTC_SLOT) return; // handled by the AOTC policy above, not this generic seed
     if (!categoryOf[slot].some((c) => (weights[c] || 0) > 0)) return;
     if (gateMetFor(slot) && (levels[slot] || 0) === 0 && nodeMaxLevel(shipId, slot) > 0) { levels[slot] = 1; spent += 1; clicks.push(slot); }
   });
@@ -1707,7 +1719,15 @@ function optimizeShipInstalls(shipId, budget, weights, prepForLongRun, runLength
   // final per-node totals with or without it) -- it only re-times an already-optimal, value-
   // proportional sequence of picks so they're delivered interleaved instead of in one unbroken
   // burst, which is all "never buy 20 of the same thing in a row" actually requires.
-  const nodeEligible = (slot, exclude) => slot !== exclude && (levels[slot] || 0) < nodeMaxLevel(shipId, slot) && gateMetFor(slot);
+  // AOTC below its threshold is skipped ENTIRELY, per the policy above -- including here in the
+  // main loop, not just in the seed step. Excluding it from the seed alone was not enough: the
+  // allocator could still pick it, so a small-budget Demeter plan spent points on a node whose
+  // payoff lands next loop, which is exactly what the policy exists to avoid.
+  const aotcSuppressed = shipId === AOTC_SHIP_ID && !(budget >= AOTC_AUTO_MAX_BUDGET || prepForLongRun);
+  const nodeEligible = (slot, exclude) => slot !== exclude
+    && !(aotcSuppressed && slot === AOTC_SLOT)
+    && (levels[slot] || 0) < nodeMaxLevel(shipId, slot)
+    && gateMetFor(slot);
   const categoryHasEligibleNode = (c, exclude) => slots.some((slot) => categoryOf[slot].includes(c) && nodeEligible(slot, exclude));
   const bestNodeIn = (c, exclude) => {
     let bestSlot = null; let bestRatio = Infinity; let bestPriority = Infinity; let bestScore = -Infinity;
@@ -1757,16 +1777,30 @@ function optimizeShipInstalls(shipId, budget, weights, prepForLongRun, runLength
       categoryBaseline[c] = categorySpent[c] / weights[c] - (minActiveRatio ?? 0);
       categoryActivated[c] = true;
     });
-    const eligiblePositive = positiveCats.filter((c) => categoryHasEligibleNode(c, exclude))
-      .sort((a, b) => (ratioOf(a) - ratioOf(b)) || (CATEGORY_TIE_PRIORITY[a] || 9) - (CATEGORY_TIE_PRIORITY[b] || 9));
-    let pickedCat = eligiblePositive[0] ?? null;
-    if (pickedCat == null) {
-      // Nothing weighted has anything to spend on right now -- fall back to a 0-weighted
-      // category purely to advance total installs past whatever's gating the real targets.
-      pickedCat = [...touchedCategories].find((c) => (weights[c] || 0) <= 0 && categoryHasEligibleNode(c, exclude)) ?? null;
-    }
+    const rank = (list) => list.sort((a, b) => (ratioOf(a) - ratioOf(b))
+      || (CATEGORY_TIE_PRIORITY[a] || 9) - (CATEGORY_TIE_PRIORITY[b] || 9));
+
+    let pickedCat = rank(positiveCats.filter((c) => categoryHasEligibleNode(c, exclude)))[0] ?? null;
+    if (pickedCat != null) return bestNodeIn(pickedCat, exclude);
+
+    // Weight beats anti-repeat. `exclude` is only a cosmetic preference -- it spreads picks out
+    // in time -- so it must never be the reason a weighted category is passed over. When the
+    // single eligible node in a weighted category IS the previous pick, asking with `exclude`
+    // makes that category look empty, and control used to fall straight through to the
+    // zero-weight fallback below. On Cradle that handed 8 of 40 points to modPoints while its
+    // weight was explicitly 0 and a cells node sat at 22/250 with no gate: the plan alternated
+    // 1,3,1,3 forever. Retry the weighted categories allowing the repeat BEFORE considering
+    // anything the user asked to exclude.
+    pickedCat = rank(positiveCats.filter((c) => categoryHasEligibleNode(c, null)))[0] ?? null;
+    if (pickedCat != null) return bestNodeIn(pickedCat, null);
+
+    // Only now: nothing weighted can take a point at all. Spend on a 0-weighted category purely
+    // to advance total installs past whatever gate is blocking the real targets.
+    pickedCat = [...touchedCategories].find((c) => (weights[c] || 0) <= 0 && categoryHasEligibleNode(c, exclude))
+      ?? [...touchedCategories].find((c) => (weights[c] || 0) <= 0 && categoryHasEligibleNode(c, null))
+      ?? null;
     if (pickedCat == null) return null;
-    return bestNodeIn(pickedCat, exclude);
+    return bestNodeIn(pickedCat, categoryHasEligibleNode(pickedCat, exclude) ? exclude : null);
   };
   let lastPickedSlot = null;
   while (spent < budget) {
@@ -1925,7 +1959,7 @@ document.getElementById('optimizeShipGenerateBtn').onclick = () => {
   const budget = Number(document.getElementById('optimizeShipPoints').value) || 0;
   const gear = getShipGear();
   const optSettings = getOptimizerSettings();
-  const prepForLongRun = shipId === 5 && optSettings.prepForLongRun;
+  const prepForLongRun = shipId === AOTC_SHIP_ID && optSettings.prepForLongRun;
   const { levels, clicks } = optimizeShipInstalls(shipId, budget, gear.focusWeights, prepForLongRun, optSettings.runLength);
   const activeLoadout = getActiveLoadout();
   activeLoadout.perShip[shipId] = { budget, levels, clicks };
@@ -1966,7 +2000,7 @@ document.getElementById('generateLoadoutBtn').onclick = () => {
     if (optSettings.shipEnabled[shipId] === false) return; // unchecked -- leave untouched, not part of this batch
     if (optSettings.zaglag && shipId === 3 && !zaglagReady) return; // still delaying Zagreus
     const budget = Number(el.value) || 0;
-    const { levels, clicks } = optimizeShipInstalls(shipId, budget, gear.focusWeights, shipId === 5 && optSettings.prepForLongRun, optSettings.runLength);
+    const { levels, clicks } = optimizeShipInstalls(shipId, budget, gear.focusWeights, shipId === AOTC_SHIP_ID && optSettings.prepForLongRun, optSettings.runLength);
     perShip[shipId] = { budget, levels, clicks };
   });
   activeLoadout.perShip = perShip;
@@ -2013,7 +2047,7 @@ function openLoadoutDetail(shipId, levels, mode, clicks) {
     // stable reference point even though your real per-node distribution likely doesn't match it.
     const gear = getShipGear();
     const optSettings = getOptimizerSettings();
-    const prepForLongRun = shipId === 5 && optSettings.prepForLongRun;
+    const prepForLongRun = shipId === AOTC_SHIP_ID && optSettings.prepForLongRun;
     const realTotal = Object.values(getShipInput(shipId).installs).reduce((a, b) => a + b, 0);
     const full = optimizeShipInstalls(shipId, realTotal + 30, gear.focusWeights, prepForLongRun, optSettings.runLength);
     const atRealTotal = optimizeShipInstalls(shipId, realTotal, gear.focusWeights, prepForLongRun, optSettings.runLength);
@@ -2328,6 +2362,21 @@ window.renderBadgesPage = renderBadgesPage;
 // `optimizerSettings.runLength` existed only after an accessor happened to run. A fresh store
 // therefore did not describe itself, and validateStore() could not check fields it did not know
 // about. defaultLoadoutTabs() was defined in both files outright.
+// The Fleet domain's DATA tables, exposed for the same reason as the store shapes: so the
+// benchmark can exercise the real ones rather than a Node copy that drifts. Top-level `const`
+// declarations are not global properties, so without this the ship optimizer could be called
+// from a test but nothing about its inputs could be inspected or asserted.
+window.ShipData = {
+  SHIP_NODE_CATALOG,
+  GEN_TIERS,
+  RESOURCE_TO_WEIGHT_BUCKET,
+  CATEGORY_TIE_PRIORITY,
+  // Demeter's "Ahead of the Curve" is special-cased in the allocator (its payoff lands next
+  // loop, so the marginal-value engine cannot score it). Named here so the rule is greppable
+  // rather than appearing as a bare `shipId === 5 && slot === '1'`.
+  AOTC: { shipId: AOTC_SHIP_ID, slot: AOTC_SLOT, autoMaxAtBudget: AOTC_AUTO_MAX_BUDGET },
+};
+
 window.FleetStoreDefaults = {
   unlockedGens: defaultUnlockedGens,
   shipGear: defaultShipGear,
