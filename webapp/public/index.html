@@ -347,10 +347,14 @@
       <button id="importSaveBridgePullBtn" class="hidden px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-sm whitespace-nowrap">Pull from Device</button>
     </div>
     <div id="importSaveBridgeSetup" class="rounded-lg border border-gray-700 bg-gray-900/50 p-3 mb-3 text-xs text-gray-400 space-y-2">
-      <p><strong class="text-gray-200">Don't have the CIFI Bridge running?</strong> It's a small local helper that reads your save file over ADB (emulator or USB) so you don't have to find/copy it by hand. Requires Node.js to be installed.</p>
-      <a href="https://nodejs.org/en/download" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-green-700 hover:bg-green-600 text-white text-xs font-medium w-fit">⬇ Download Node.js</a>
+      <p><strong class="text-gray-200">Don't have the bridge running?</strong> <a href="https://github.com/TmRxJD/adb-bridge" target="_blank" rel="noopener" class="text-blue-400 hover:text-blue-300 underline">ADB Bridge</a> is a small local helper that reads your save file over ADB (emulator or USB) so you don't have to find/copy it by hand. It handles CIFI and other games from one install. The installer includes Node.js; the terminal command needs it already installed.</p>
+      <div class="flex flex-wrap items-center gap-2">
+        <a href="https://github.com/TmRxJD/adb-bridge/releases/latest/download/AdbBridgeSetup.exe" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-700 hover:bg-blue-600 text-white text-xs font-medium w-fit">⬇ Windows installer</a>
+        <a href="https://github.com/TmRxJD/adb-bridge/releases/latest" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-gray-700 hover:bg-gray-600 text-white text-xs font-medium w-fit">macOS / Linux</a>
+        <a href="https://nodejs.org/en/download" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-green-700 hover:bg-green-600 text-white text-xs font-medium w-fit">⬇ Download Node.js</a>
+      </div>
       <div class="flex items-center gap-2">
-        <code id="bridgeInstallCmd" class="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-gray-200 font-mono">npx cifi-bridge</code>
+        <code id="bridgeInstallCmd" class="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-gray-200 font-mono">npx adb-bridge cifi</code>
         <button id="copyBridgeCmdBtn" class="px-2 py-1.5 rounded-md bg-gray-700 hover:bg-gray-600 text-white flex-shrink-0" title="Copy command"></button>
       </div>
       <p>Run that in a terminal, leave it running, then click <strong class="text-gray-200">Pull from Device</strong> above.</p>
@@ -402,7 +406,7 @@
             <strong class="text-gray-300">Move the account to a device you can read.</strong> CIFI has
             cloud save — sign in on the cloud emulator, sync, then sign in on a phone or a local
             emulator and pull the save there with
-            <code class="text-gray-300">npx cifi-bridge</code> or its file manager.
+            <code class="text-gray-300">npx adb-bridge cifi</code> or its file manager.
           </li>
         </ol>
         <p class="text-xs text-gray-500">
