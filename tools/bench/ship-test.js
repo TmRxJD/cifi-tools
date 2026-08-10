@@ -24,8 +24,51 @@
 const H = require('./harness.js');
 
 const sb = H.browserSandbox();
-const { SHIP_NODE_CATALOG: CATALOG, RESOURCE_TO_WEIGHT_BUCKET, AOTC } = sb.ShipData;
+const { SHIP_NODE_CATALOG: CATALOG, RESOURCE_TO_WEIGHT_BUCKET, AOTC, GEN_TIERS } = sb.ShipData;
 const SHIP_IDS = Object.keys(CATALOG).map(Number).sort((a, b) => a - b);
+
+/**
+ * Seed a REALISTIC account before testing. This is not cosmetic.
+ *
+ * nodeLinearIncrement() is `percent x crew x multipliers`, so on a default store -- crew 0 --
+ * EVERY node's increment and value is exactly 0. An earlier version of this suite ran that way
+ * and reported all invariants passing, but with every value tied at zero the allocator's ranking
+ * (bestNodeIn compares nodeSpent/value) degenerates into plain count round-robin resolved by tie
+ * priority. The structural invariants were real; the value model was never exercised at all.
+ *
+ * Seeding crew and unlocking generator tiers puts real numbers through the value path, which is
+ * the part nobody has ever verified.
+ */
+function seedAccount({ crew = 12, rank = 20, unlockTiers = 8, meltdown = 0 } = {}) {
+  const store = sb.StoreSchema.freshStore();
+  sb.window.store = store;
+  SHIP_IDS.forEach((id) => {
+    store.shipInputs[id] = { ...sb.defaultShipInput(id), rank, crew };
+  });
+  GEN_TIERS.forEach((n) => { store.unlockedGens[n] = n <= unlockTiers; });
+
+  // Crew alone is not enough. Most nodes ALSO scale on a gear counter ("per Loop Modification
+  // owned", "per Mission Completed", ...) via gearMultiplierFor, which returns 0 when that
+  // counter is 0. Zagreus in particular is entirely gated on loopModsOwned, so seeding crew but
+  // not gear left every one of its nodes valued 0 -- correct behaviour, useless fixture.
+  Object.assign(store.shipGear, {
+    manualMK2Gens: 40, manualMK3Gens: 30, totalManualGens: 120,
+    techUpgrades: 25, hardwareUpgrades: 15, softwareUpgrades: 15,
+    loopModsOwned: 35, loopFillsThisRun: 8, loopResetsDone: 12,
+    automationsUnlocked: 6, ticksThisLoop: 500,
+    operationsCompleted: 60, studiesThisLR: 20,
+    researchLevels: 40, totalCompletedResearch: 25,
+    missionsCompleted: 75, meltdown,
+  });
+  return store;
+}
+seedAccount();
+
+/** True when at least one node on this ship has a non-zero value -- i.e. the model is live. */
+function valueModelIsLive(shipId) {
+  const pools = sb.computeShipRealPoolTotals(shipId);
+  return Object.keys(CATALOG[shipId]).some((slot) => sb.poolAdjustedNodeValue(shipId, slot, pools, 'long') > 0);
+}
 
 let failures = 0;
 function check(name, fn) {
@@ -59,6 +102,15 @@ function* cases() {
     }
   }
 }
+
+check('the value model is actually live under test (guards against testing all-zeros)', () => {
+  const dead = SHIP_IDS.filter((id) => !valueModelIsLive(id));
+  if (dead.length) {
+    return `ships ${dead.join(',')} have every node valued 0 even with crew seeded -- the ranking `
+      + 'path is not being exercised, so any "pass" below says nothing about it';
+  }
+  return null;
+});
 
 check('plans are deterministic (identical output for identical input)', () => {
   for (const { shipId, budget, weights, wName } of cases()) {
@@ -250,6 +302,112 @@ check('a zero-weighted category is only funded as a last resort', () => {
       if (cellsNodesLeft) {
         return `ship ${shipId}: slot ${slot} (categories ${cats.join('/')}, all weight 0) funded to ${n} while weighted cells nodes still had room`;
       }
+    }
+  }
+  return null;
+});
+
+/** Points landing in each weight category, for a given prefix of the click order. */
+function spendByCategory(shipId, clicks) {
+  const spend = {};
+  clicks.forEach((slot) => {
+    const cats = [...new Set(sb.effectResources(CATALOG[shipId][slot].effect)
+      .map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))];
+    cats.forEach((c) => { spend[c] = (spend[c] || 0) + 1; });
+  });
+  return spend;
+}
+
+/**
+ * Is this category at or near the ceiling of what its nodes can absorb?
+ *
+ * Deliberately NOT "does any node have a single point of room left". Zeus's missionMaterials has
+ * a total capacity of 16 across its two nodes and receives 15; with one point of headroom it can
+ * never track a 1:3 weight ratio against cells' capacity of hundreds, yet a
+ * has-any-room-remaining test calls it unsaturated and blames the allocator. Capacity, not
+ * leftovers, is what decides whether proportionality was even reachable.
+ */
+function categorySaturated(shipId, cat, levels, threshold = 0.9) {
+  let capacity = 0;
+  let spent = 0;
+  for (const slot of Object.keys(CATALOG[shipId])) {
+    const cats = [...new Set(sb.effectResources(CATALOG[shipId][slot].effect)
+      .map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))];
+    if (!cats.includes(cat)) continue;
+    capacity += sb.nodeMaxLevel(shipId, slot);
+    spent += levels[slot] || 0;
+  }
+  if (!capacity) return true;
+  return spent / capacity >= threshold;
+}
+
+// THE property that actually matters, and the one the anti-repeat rule exists to serve. Repeated
+// installs are perfectly fine -- dumping several points into one node in a row is correct when
+// the weights say so. What must hold is that spend across categories tracks the weights as the
+// plan grows, rather than one category being emptied before another is touched.
+//
+// Only pairs where BOTH categories still had room are judged: a saturated category cannot keep
+// up with its weight, and a gated one has not started yet, so neither is evidence of a problem.
+check('spend across categories tracks the weights once both are live', () => {
+  const weights = { cells: 3, shards: 1, researchPoints: 1, modPoints: 1, missionMaterials: 1, academyPoints: 1 };
+  const TOLERANCE = 0.5; // integer points on short windows are lumpy; this catches order-of-magnitude skew
+
+  for (const shipId of SHIP_IDS) {
+    const { clicks, levels } = plan(shipId, 120, weights);
+    if (clicks.length < 20) continue;
+
+    // Categories do not all open at once -- Cradle's shards node gates at 100 total installs, so
+    // measuring from click 0 shows 28:1 against a 3:1 weighting purely because shards spent the
+    // first 100 points locked out. That is the gate, not a scheduling fault. Judge each pair only
+    // over the window where BOTH were actually available, which is exactly what the allocator's
+    // categoryBaseline is supposed to make fair.
+    const firstClick = {};
+    clicks.forEach((slot, i) => {
+      const cats = [...new Set(sb.effectResources(CATALOG[shipId][slot].effect)
+        .map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))];
+      cats.forEach((c) => { if (firstClick[c] === undefined) firstClick[c] = i; });
+    });
+
+    // Compare only categories that were open from roughly the start. A late unlock cannot reach
+    // its share within the remaining budget (Cradle's shards opens at install 100 of 120), and
+    // the fair-queue correctly lets it CATCH UP afterwards -- on Demeter, researchPoints takes 10
+    // of the last 20 clicks against shards' 3 precisely because shards had already banked 28
+    // points from an ungated node. Measuring a tail window punishes the allocator for doing the
+    // right thing; measuring globally over early-available categories is the honest test.
+    const earlyCutoff = Math.max(5, Math.floor(clicks.length * 0.1));
+    const spendAll = spendByCategory(shipId, clicks);
+    const live = Object.keys(firstClick).filter((c) => (weights[c] || 0) > 0
+      && firstClick[c] <= earlyCutoff
+      && !categorySaturated(shipId, c, levels));
+
+    for (let i = 0; i < live.length; i++) {
+      for (let j = i + 1; j < live.length; j++) {
+        const [a, b] = [live[i], live[j]];
+        if (!spendAll[a] || !spendAll[b]) continue;
+        const expected = weights[a] / weights[b];
+        const actual = spendAll[a] / spendAll[b];
+        const off = Math.abs(actual - expected) / expected;
+        if (off > TOLERANCE) {
+          return `ship ${shipId}: ${a}:${b} total spend ${spendAll[a]}:${spendAll[b]} = ${actual.toFixed(2)}x `
+            + `but weights say ${expected.toFixed(2)}x (off by ${(off * 100).toFixed(0)}%); `
+            + 'both open from the start, neither saturated';
+        }
+      }
+    }
+  }
+  return null;
+});
+
+check('an unweighted category never outspends a weighted one', () => {
+  // A weaker, sharper statement of the same idea, and the one the Zagreus bug violated outright.
+  const weights = { cells: 1, shards: 0, researchPoints: 0, modPoints: 0, missionMaterials: 0, academyPoints: 0 };
+  for (const shipId of SHIP_IDS) {
+    const { clicks } = plan(shipId, 120, weights);
+    const spend = spendByCategory(shipId, clicks);
+    const weighted = spend.cells || 0;
+    for (const [cat, n] of Object.entries(spend)) {
+      if ((weights[cat] || 0) > 0) continue;
+      if (n > weighted) return `ship ${shipId}: unweighted ${cat} got ${n} points vs ${weighted} for weighted cells`;
     }
   }
   return null;
