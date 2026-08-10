@@ -81,9 +81,7 @@
   }
 
   /** An abort is the user's own doing, so it is not an error to report to them. */
-  function isAbort(err) {
-    return err && err.name === window.HUNTER_STAT_PATH_ABORT_ERROR;
-  }
+  const isAbort = (err) => window.HunterSim.isAbort(err);
 
   // Same visual language as the existing talent/attribute Optimize progress dialog
   // (#optimizeProgressModal in index.html: purple progress bar, gray-900/50 stat tiles) so
@@ -292,7 +290,7 @@
         const cfg = statPathCfgFor(currentHunter, baseline);
         [result, rates] = await Promise.all([
           greedyPurchasePath(currentHunter, cfg, TARGET_STEPS, false, mode, (resource, done, total) => updateProgress(overlay, resource, done, total), signal),
-          baseline.real ? IncomeModel.currentRates(currentHunter, store, baseline, 1000) : null,
+          baseline.real ? IncomeModel.currentRates(currentHunter, store, baseline, 1000, signal) : null,
         ]);
       } catch (err) {
         if (isAbort(err)) return;
@@ -330,7 +328,7 @@
         const cfg = statPathCfgFor(currentHunter, baseline);
         [result, rates] = await Promise.all([
           greedyPurchasePath(currentHunter, cfg, TARGET_STEPS, true, mode, (resource, done, total) => updateProgress(overlay, resource, done, total), signal),
-          baseline.real ? IncomeModel.currentRates(currentHunter, store, baseline, 1000) : null,
+          baseline.real ? IncomeModel.currentRates(currentHunter, store, baseline, 1000, signal) : null,
         ]);
       } catch (err) {
         if (isAbort(err)) return;

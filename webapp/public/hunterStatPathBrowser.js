@@ -104,17 +104,13 @@
   // visible run gets slower every time you do it. (This is not hypothetical: a stack of abandoned
   // runs is what made a 7.5s path look like it took ten minutes during testing.)
   //
-  // AbortError is thrown rather than returning a partial result, because a partial purchase path
-  // is not a lesser answer -- it is a wrong one. The caller distinguishes it by `name` and stays
-  // silent, since an abort is the user's own action rather than a failure to report.
-  const ABORT_ERROR = 'HunterStatPathAborted';
-  function throwIfAborted(signal) {
-    if (signal && signal.aborted) {
-      const err = new Error('Effective Path computation was cancelled');
-      err.name = ABORT_ERROR;
-      throw err;
-    }
-  }
+  // Throws rather than returning a partial result, because a partial purchase path is not a
+  // lesser answer -- it is a wrong one. The caller distinguishes it by `name` and stays silent,
+  // since an abort is the user's own action rather than a failure to report.
+  //
+  // The primitive itself lives in HunterSim (see the note there): one definition, so "was this
+  // cancelled?" cannot come to mean two different things across the two cancellable computations.
+  const throwIfAborted = (signal) => window.HunterSim.throwIfAborted(signal);
 
   // One resource's independent greedy walk -- candidates here only vary THIS resource's own
   // stats/inscriptions; everything outside this group stays pinned at the player's current
@@ -256,7 +252,4 @@
 
   global.resourcesFor = resourcesFor;
   global.greedyPurchasePath = greedyPurchasePath;
-  // Exported so callers can tell "the user closed the modal" from "the computation failed"
-  // without string-matching a message.
-  global.HUNTER_STAT_PATH_ABORT_ERROR = ABORT_ERROR;
 })(window);

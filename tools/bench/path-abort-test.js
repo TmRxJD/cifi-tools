@@ -20,7 +20,7 @@ const H = require('./harness.js');
 const PUBLIC = path.join(__dirname, '../../webapp/public');
 const sb = H.browserSandbox();
 sb.HunterOptimizer = H.Optimizer;
-for (const f of ['hunterStatPath.js', 'hunterStatPathBrowser.js']) {
+for (const f of ['incomeModel.js', 'hunterStatPath.js', 'hunterStatPathBrowser.js']) {
   vm.runInContext(fs.readFileSync(path.join(PUBLIC, f), 'utf8'), sb, { filename: f });
 }
 
@@ -87,7 +87,7 @@ function countingEvaluator() {
       await sb.greedyPurchasePath(HUNTER, cfg, STEPS, true, 'loot', null, ac.signal);
       return 'resolved instead of throwing';
     } catch (err) {
-      if (err.name !== sb.HUNTER_STAT_PATH_ABORT_ERROR) return `wrong error: ${err.name} ${err.message}`;
+      if (err.name !== sb.HunterSim.ABORTED) return `wrong error: ${err.name} ${err.message}`;
       // One baseline evaluation per column is unavoidable -- it happens before the first check.
       if (c.calls > full / 4) return `did ${c.calls} evaluations after a pre-abort (full run is ${full})`;
       return null;
@@ -119,7 +119,7 @@ function countingEvaluator() {
       await sb.greedyPurchasePath(HUNTER, cfg, STEPS, true, 'loot', null, ac.signal);
       return 'resolved instead of throwing';
     } catch (err) {
-      if (err.name !== sb.HUNTER_STAT_PATH_ABORT_ERROR) return `wrong error: ${err.name} ${err.message}`;
+      if (err.name !== sb.HunterSim.ABORTED) return `wrong error: ${err.name} ${err.message}`;
       if (!aborted) return 'the run finished before the abort could fire -- test is not exercising anything';
       // Allow a couple for scheduling slack; anything near a sweep's worth means the check has
       // been moved back out to step granularity.
@@ -129,6 +129,39 @@ function countingEvaluator() {
       }
       return null;
     } finally { sb.HunterSim.compileEvaluator = orig; }
+  });
+
+  await check('IncomeModel.currentRates honours the same signal', async () => {
+    // It runs alongside the walk in the same Promise.all. A single evaluate() is one atomic wasm
+    // call so this cannot be interrupted partway -- but it must refuse to START work nobody is
+    // waiting for, and must not hand back a result for a superseded run. Otherwise the caller
+    // needs a special-case guard at every site, which is how the guard eventually gets forgotten.
+    const store = {
+      borge: { hunterStats: {} },
+      globalUpgrades: {},
+      gems: {},
+    };
+    const baseline = { level: cfg.level, talents: cfg.talents, attributes: cfg.attributes };
+    const ac = new AbortController();
+    ac.abort();
+    let calls = 0;
+    const orig = sb.HunterSim.evaluate;
+    sb.HunterSim.evaluate = function counted(...args) { calls += 1; return orig.apply(this, args); };
+    try {
+      await sb.IncomeModel.currentRates(HUNTER, store, baseline, 100, ac.signal);
+      return 'resolved despite an aborted signal';
+    } catch (err) {
+      if (err.name !== sb.HunterSim.ABORTED) return `wrong error: ${err.name} ${err.message}`;
+      if (calls !== 0) return `evaluated ${calls} time(s) despite being aborted before it started`;
+      return null;
+    } finally { sb.HunterSim.evaluate = orig; }
+  });
+
+  await check('currentRates without a signal still works', async () => {
+    const store = { borge: { hunterStats: {} }, globalUpgrades: {}, gems: {} };
+    const baseline = { level: cfg.level, talents: cfg.talents, attributes: cfg.attributes };
+    const r = await sb.IncomeModel.currentRates(HUNTER, store, baseline, 100);
+    return r && r.perHour && Number.isFinite(r.runsPerDay) ? null : 'a signal-less call stopped working';
   });
 
   await check('no signal means no behaviour change', async () => {

@@ -329,5 +329,28 @@
   // re-fetches/re-compiles from scratch (mirrors what the live site's own cache-clear does).
   function clearCache() { wasmModulePromise = null; paramsPromise = null; }
 
-  global.HunterSim = { evaluate, evaluateDetailed, buildArgs, resolveParam, compileEvaluator, loadParams, loadWasm, clearCache };
+  // THE cancellation primitive for long-running sim work. It lives here because this module
+  // loads before every consumer (incomeModel, the purchase path) and because everything worth
+  // cancelling in this app is a chain of evaluations -- one definition, so "was this cancelled?"
+  // cannot come to mean two different things.
+  //
+  // A single evaluate() call is ATOMIC: it is one synchronous wasm invocation and nothing can
+  // interrupt it partway. So cancellation granularity is "between evaluations", and the useful
+  // thing a caller can do is refuse to START one and refuse to return a result nobody wants.
+  // Callers that run many evaluations should check between each -- checking only between larger
+  // units means paying for the rest of the unit after the user has already walked away.
+  const ABORTED = 'HunterSimAborted';
+  function throwIfAborted(signal) {
+    if (signal && signal.aborted) {
+      const err = new Error('Computation was cancelled');
+      err.name = ABORTED;
+      throw err;
+    }
+  }
+  function isAbort(err) { return !!err && err.name === ABORTED; }
+
+  global.HunterSim = {
+    evaluate, evaluateDetailed, buildArgs, resolveParam, compileEvaluator, loadParams, loadWasm,
+    clearCache, throwIfAborted, isAbort, ABORTED,
+  };
 })(typeof window !== 'undefined' ? window : self);

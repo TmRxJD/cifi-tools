@@ -7,13 +7,20 @@
   // talents/attributes/level -- this tool has no single "current real build" concept, so the
   // caller picks which build represents the player's actual loadout) to get the farm-loop
   // numbers a stat-purchase plan should be budgeted against.
-  async function currentRates(hunter, storeState, baseline, iterations) {
+  // `signal` is optional. A single evaluate() is one atomic wasm call, so this cannot be
+  // interrupted partway -- what it can do is refuse to start work nobody is waiting for, and
+  // refuse to hand back a result for a superseded run. That is the whole of what "abortable"
+  // can mean here, and it is worth doing: the caller then has one uniform way to cancel instead
+  // of a special case that has to be guarded at every call site.
+  async function currentRates(hunter, storeState, baseline, iterations, signal) {
+    HunterSim.throwIfAborted(signal);
     const h = storeState[hunter];
     const r = await HunterSim.evaluate(hunter, {
       level: baseline.level, hunterStats: h.hunterStats, talents: baseline.talents, attributes: baseline.attributes,
       overrides: {}, upgrades: window.buildNestedUpgrades(storeState.globalUpgrades),
       gemPlannerStore: { gemStates: storeState.gems }, iterations: iterations || 1000,
     });
+    HunterSim.throwIfAborted(signal);
     const runsPerDay = r.avgTime ? 1440 / r.avgTime : 0;
     const perDay = { mat1: r.mat1 * runsPerDay, mat2: r.mat2 * runsPerDay, mat3: r.mat3 * runsPerDay };
     const perHour = { mat1: perDay.mat1 / 24, mat2: perDay.mat2 / 24, mat3: perDay.mat3 / 24 };
