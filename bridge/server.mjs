@@ -1,4 +1,5 @@
 import http from 'node:http'
+import { readFileSync } from 'node:fs'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { WebSocketServer } from 'ws'
@@ -22,7 +23,14 @@ const execFileAsync = promisify(execFile)
 // Different port than tracker-bridge's 43781 so both bridges can run side by side.
 export const DEFAULT_PORT = 43791
 export const DEFAULT_HOST = '127.0.0.1'
-export const BRIDGE_VERSION = '1.0.0'
+/**
+ * Read from package.json rather than restated here. These had already drifted:
+ * package.json said 1.0.1 while this said 1.0.0, so the published build
+ * reported the wrong version to the site and to update-check.
+ */
+export const BRIDGE_VERSION = JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
+).version
 
 function resolvePort() {
   const raw = process.env.LOCAL_ADB_BRIDGE_PORT

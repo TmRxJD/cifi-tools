@@ -32,6 +32,12 @@ if %errorlevel%==0 (
   call npx -y cifi-bridge@latest %BRIDGE_ARGS%
 )
 
+rem Only pause in the interactive case. When the installer or uninstaller calls
+rem this with arguments (--boot, --remove-boot) it runs hidden with no console
+rem to read a keypress from, so pausing strands an invisible cmd forever -- that
+rem hung a silent uninstall until the process was killed by hand.
+if not "%~1"=="" exit /b %errorlevel%
+
 echo.
 echo CIFI Bridge has stopped. You can close this window.
 pause

@@ -104,12 +104,22 @@ function hunterDefs() {
 /**
  * Build the optimizer cfg for an imported build, mirroring app.js's cfgFor().
  *
- * Budgets deliberately come from what the IMPORT ACTUALLY SPENT, not from
- * talentBudgetForLevel/attributeBudgetForLevel. A community build that left points unspent
- * would otherwise hand the optimizer extra budget and turn the comparison into a free win;
- * matching the import's own spend is the honest apples-to-apples test of allocation quality.
+ * TWO BUDGET MODES, and the difference is not cosmetic.
+ *
+ * 'spend' (default) sets the budget to what the import ACTUALLY SPENT. That is the honest
+ * apples-to-apples test of allocation quality: a build that left points unspent would otherwise
+ * hand the optimizer extra budget and turn the comparison into a free win.
+ *
+ * 'level' sets it from talentBudgetForLevel/attributeBudgetForLevel -- what the REAL APP does.
+ *
+ * Running only 'spend' is what let an under-spend bug reach a user while the gate reported
+ * 182/182 "as good or better". No share code encodes `lvl`, so parseBuildCode infers
+ * level = sum(talent levels); with budget then set to that same spend, budget and spend are
+ * IDENTICAL in every fixture and an under-spent incumbent is unconstructible. The gate was
+ * structurally blind to the entire failure mode -- measured, not guessed: 0 of 182 fixtures
+ * could produce one. 'level' mode is what exercises the path the app actually takes.
  */
-function cfgForImport(hunter, build) {
+function cfgForImport(hunter, build, { budgetMode = 'spend' } = {}) {
   const d = hunterDefs()[hunter];
   const overrides = { ...build.overrides, ...build.upgradeOverrides };
 
@@ -128,6 +138,9 @@ function cfgForImport(hunter, build) {
 
   const talentSpent = talents.reduce((s, t) => s + (build.talents[t.id] || 0), 0);
   const attrSpent = Space.costOf(attributes, build.attributes);
+  const sb2 = browserSandbox();
+  const talentBudget = budgetMode === 'level' ? sb2.talentBudgetForLevel(build.level) : talentSpent;
+  const attrBudget = budgetMode === 'level' ? sb2.attributeBudgetForLevel(build.level) : attrSpent;
 
   return {
     hunter,
@@ -140,8 +153,8 @@ function cfgForImport(hunter, build) {
     ATTRIBUTES: attributes,
     ATTRIBUTE_DEPENDENCIES: d.attributeDependencies,
     ATTRIBUTE_MIN_VALUE: d.attributeMinValue,
-    TALENT_BUDGET: talentSpent,
-    ATTRIBUTE_BUDGET: attrSpent,
+    TALENT_BUDGET: talentBudget,
+    ATTRIBUTE_BUDGET: attrBudget,
     currentTalents: build.talents,
     currentAttrs: build.attributes,
   };

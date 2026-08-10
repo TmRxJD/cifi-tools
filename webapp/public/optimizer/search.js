@@ -363,19 +363,34 @@
         }
       }
 
-      // The budget must actually be SPENT, not merely not-exceeded. Unspent points are free
-      // value left on the table, and an optimizer that hands them back has not done its job --
-      // this is asserted rather than hoped for because a user reported exactly that symptom
-      // (46 of 58 talent points after an optimize). Only the winner is checked: lower-ranked
-      // entries never reach the build.
+      // Unspent points must be UNSPENDABLE, not merely unspent.
+      //
+      // "The winner spends its whole budget" is the wrong assertion: a build can legitimately
+      // finish with points left when every remaining node is maxed or still gated behind a
+      // threshold it cannot reach, and throwing there would break Optimize on a valid build.
+      // The defensible rule is that no eligible node could have taken another point -- if one
+      // could, value was left on the table and that IS a defect. Measured on the reported case:
+      // the 12 unspent talent points were worth 13.26%, and a single point into Lucky Loot alone
+      // was worth 2.24%.
+      //
+      // This is a backstop, not the real guarantee. The real one is local optimality -- that no
+      // single move improves the winner at full fidelity -- which cannot be checked here without
+      // spending another few hundred evaluations per run, so it lives in
+      // tools/bench/local-optimality.js instead.
       const winner = ranked[0];
-      const talentIdle = talentBudget - Space.costOf(TALENTS, winner.talentAlloc);
-      const attrIdle = attrBudget - Space.costOf(ATTRIBUTES, winner.attrAlloc);
-      if (talentIdle > Space.MAX_IDLE_POINTS) {
-        throw new Error(`Optimizer left ${talentIdle} of ${talentBudget} talent points unspent: ${JSON.stringify(winner.talentAlloc)}`);
+      const spendable = (defs, deps, minVal, budget, alloc) => {
+        const idle = budget - Space.costOf(defs, alloc);
+        if (idle <= 0) return null;
+        const node = defs.find((d) => (d.cost || 1) <= idle && Space.isEligible(d, defs, deps, minVal, alloc));
+        return node ? { idle, node: node.id } : null;
+      };
+      const talentLeft = spendable(TALENTS, noDeps, noMin, talentBudget, winner.talentAlloc);
+      if (talentLeft) {
+        throw new Error(`Optimizer left ${talentLeft.idle} talent point(s) unspent while "${talentLeft.node}" could still take one: ${JSON.stringify(winner.talentAlloc)}`);
       }
-      if (attrIdle > Space.MAX_IDLE_POINTS) {
-        throw new Error(`Optimizer left ${attrIdle} of ${attrBudget} attribute points unspent: ${JSON.stringify(winner.attrAlloc)}`);
+      const attrLeft = spendable(ATTRIBUTES, deps, minVal, attrBudget, winner.attrAlloc);
+      if (attrLeft) {
+        throw new Error(`Optimizer left ${attrLeft.idle} attribute point(s) unspent while "${attrLeft.node}" could still take one: ${JSON.stringify(winner.attrAlloc)}`);
       }
 
       report('done', 1, 1);
