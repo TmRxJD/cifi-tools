@@ -153,6 +153,47 @@ check('spends the whole budget unless the ship physically cannot absorb it', () 
   return null;
 });
 
+// What the importer writes must be internally consistent with the gates. A node the account
+// OWNS points in cannot also be gated shut -- the game would not have sold them.
+//
+// This is worth pinning because a stale or mis-mapped fleet import shows up exactly here and
+// nowhere else: the totals still look plausible, but installs land in nodes that could not have
+// been bought yet, and the fleet card then draws real, owned nodes as "Locked". Reported on a
+// Zeus grid showing points in all four 100-install corner nodes at 79 total installs.
+check('a save import never lands installs in a node its own gate would forbid', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const savePath = path.join(__dirname, '../gamefiles/save/decoded-20260809.json');
+  if (!fs.existsSync(savePath)) return null;   // no pulled save in this checkout
+  const save = JSON.parse(fs.readFileSync(savePath, 'utf8'));
+  const rus = sb.mapCifiSaveToResearchUnits
+    ? sb.mapCifiSaveToResearchUnits(save)
+    : sb.mapSaveToResearchUnits(save);
+  const problems = [];
+  for (const shipId of SHIP_IDS) {
+    const category = sb.ShipData.SHIP_CATEGORY && sb.ShipData.SHIP_CATEGORY[shipId];
+    if (!category) continue;
+    const catalog = CATALOG[shipId];
+    const levels = {};
+    for (const slot of Object.keys(catalog)) {
+      const ruId = catalog[slot].ruId;
+      const v = ruId != null && rus[ruId] && rus[ruId].categoryLevels
+        ? rus[ruId].categoryLevels[category] : undefined;
+      levels[slot] = v == null ? 0 : v;
+    }
+    const total = Object.values(levels).reduce((a, b) => a + b, 0);
+    for (const slot of Object.keys(catalog)) {
+      const gate = catalog[slot].gateAtTotalInstalls;
+      const lvl = levels[slot];
+      if (lvl > 0 && gate && (total - lvl) < gate) {
+        problems.push(`ship ${shipId} slot ${slot} (${catalog[slot].name}): owns ${lvl} but its gate `
+          + `needs ${gate} installs elsewhere and only ${total - lvl} exist`);
+      }
+    }
+  }
+  return problems.length ? problems.join('\n        ') : null;
+});
+
 check('clicks and levels describe the same plan', () => {
   for (const { shipId, budget, weights, wName } of cases()) {
     const { levels, clicks } = plan(shipId, budget, weights);
