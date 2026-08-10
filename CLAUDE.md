@@ -190,14 +190,23 @@ think one is wrong, disprove it with a test.
   and reports what it excluded; the Overrides cards show the requirement but do NOT hard-disable
   the input, because our picture of gem levels comes from the Gem Planner the user may not have
   filled in.
-- **The APK cannot currently be decompiled, and that is a tooling limit, not a choice.** CIFI
-  0.7.3.54 is Unity **6000.3.8f1** with IL2CPP metadata **v39**; Il2CppDumper supports up to v31
-  (checked against master, not just the 2024 release) and no other public dumper goes further.
-  Typetrees are stripped from the shipped assets, so UnityPy reads MonoBehaviour headers but not
-  script fields, and the only TextAssets are profanity filters. So VALUES cannot be read out of
-  the APK today. What the APK *did* verify is STRUCTURE, from the metadata string table and
-  MonoScript class list (`OuroRelics`, `GemNodes`, `HuntersAttributes`, `HunterBorge/Ozzy/Knox`,
-  and the `<Tree>GemNode<N>Level` field names). Revisit when a v39-capable dumper exists.
+- **The APK IS dumped.** CIFI 0.7.3.54 is Unity **6000.3.8f1** with IL2CPP metadata **v39**;
+  Perfare's Il2CppDumper caps at v31, but AndnixSH's fork supports v39 and `tools/il2cpp-cli/`
+  wraps it in a headless CLI (see its README). Output lives in
+  `tools/gamefiles/apk-0.7.3.54/il2cpp-dump/`: `dump.cs` (813k lines — every type, field with
+  offsets, method signature and enum) plus `DummyDll/` including `Assembly-CSharp.dll`.
+  **Method BODIES are not recovered** — Il2CppDumper gives structure and addresses, not code — so
+  constants computed in code still need Ghidra against `libil2cpp.so`. Serialized ScriptableObject
+  data needs typetrees, which the build strips; `DummyDll/` is what AssetRipper would need to
+  reconstruct them. Not done yet, and it is the remaining route to balance values.
+- **Loop mods ("modules") are SERVER-side — confirmed, not assumed.** `Stelzi` appears nowhere in
+  the client (0 hits in dump.cs and in the metadata string table); only the handful of mod effects
+  that touch hunter simulation exist as properties (`TrampleBorge`, `ScavengersAdvantage`). The
+  save carries only aggregates (`AllTimeHighestLoopModLevels`, `LoopModLevelsThisTraversal`), no
+  per-mod levels. **The backend is Nakama** (`NakamaConfig : ScriptableObject`), which matters
+  because Nakama's protocol is documented and open-source rather than bespoke — a proxy capture
+  is the tractable route to the mod table, and needs no injection, so Frida tamper detection is
+  not involved.
 - **The SAVE FILE is the value-level oracle instead, and it works.** `tools/save/inspect.js`
   decodes it (4,466 fields). Field naming, corroborated against the game's own metadata:
   `AOR<N>Level` = tier-1 relic levels ("Academy Of Relics"), `<Tree>QualityLevel` = the gem level

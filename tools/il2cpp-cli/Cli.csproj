@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <AssemblyName>Il2CppDumpCli</AssemblyName>
+    <RootNamespace>Il2CppDumper</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NoWarn>$(NoWarn);CS0169;CS0649;CS8632;SYSLIB0011</NoWarn>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mono.Cecil" Version="0.11.6" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
+  </ItemGroup>
+
+  <!-- Reuse the GUI fork's parsing/output code verbatim; only the entry point is ours. -->
+  <ItemGroup>
+    <Compile Include="../dumpersrc/Il2CppDumper/Il2Cpp/**/*.cs" />
+    <Compile Include="../dumpersrc/Il2CppDumper/ExecutableFormats/**/*.cs" />
+    <Compile Include="../dumpersrc/Il2CppDumper/IO/**/*.cs" />
+    <Compile Include="../dumpersrc/Il2CppDumper/Utils/**/*.cs" />
+    <Compile Include="../dumpersrc/Il2CppDumper/Attributes/**/*.cs" />
+    <Compile Include="../dumpersrc/Il2CppDumper/Extensions/**/*.cs" />
+    <Compile Include="../dumpersrc/Il2CppDumper/Config.cs" />
+    <Compile Include="../dumpersrc/Il2CppDumper/Outputs/Il2CppDecompiler.cs" />
+    <Compile Include="../dumpersrc/Il2CppDumper/Outputs/DummyAssemblyExporter.cs" />
+    <Compile Include="../dumpersrc/Il2CppDumper/Outputs/Il2CppConstants.cs" />
+    <Compile Include="../dumpersrc/Il2CppDumper/Outputs/ScriptJson.cs" />
+    <Compile Include="Shims.cs" />
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+
+  <!-- Their parsing files reference Brushes without importing it (the WPF project had it via
+       implicit usings); a global using keeps those files compilable unmodified. -->
+  <ItemGroup>
+    <Using Include="System.Windows.Media" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../dumpersrc/Il2CppDumper/Libraries/Il2CppDummyDll.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="../dumpersrc/Il2CppDumper/Libraries/Il2CppDummyDll.dll" LogicalName="Il2CppDumper.Il2CppDummyDll.dll" />
+  </ItemGroup>
+</Project>
