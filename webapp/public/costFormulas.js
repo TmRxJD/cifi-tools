@@ -197,8 +197,12 @@
     r2: { maxLevel: 100, start: 0.6, add: 0.2, exp: 1.09, corr: [[1.006, 10], [1.007, 20], [1.022, 30]], floorFrom: 20 },
     r3: { maxLevel: 100, start: 0.7, add: 0.5, exp: 1.12, corr: [[1.02, 10], [1.04, 20], [1.07, 30]], floorFrom: 10 },
     r4: { maxLevel: 100, start: 0.8, add: 0.4, exp: 1.12, corr: [[1.02, 10], [1.015, 20]], floorFrom: 10 },
-    r5: { maxLevel: 8, static: [1, 120, 4400, 6200, 15200, 18500, 24000, 30000, 44000, 56000, 72000] },
-    r6: { maxLevel: 8, static: [3, 450, 1070, 2500, 6700, 7000, 7600, 8500, 12000, 16000, 32000] },
+    // GATED CAP. r5 and r6 cap at 8, and rise to 11 only once Power Gem Node 1 is enabled --
+    // which is why their static cost tables carry 11 entries rather than 8. Same shape as
+    // Borge's Call Me Lucky Loot (10 -> 12 via Attraction gem node 2). Reading the table length
+    // as the cap would silently hand a planner three levels the account cannot actually buy.
+    r5: { maxLevel: 8, unlockedMaxLevel: 11, unlockedBy: 'powerGemNode1', static: [1, 120, 4400, 6200, 15200, 18500, 24000, 30000, 44000, 56000, 72000] },
+    r6: { maxLevel: 8, unlockedMaxLevel: 11, unlockedBy: 'powerGemNode1', static: [3, 450, 1070, 2500, 6700, 7000, 7600, 8500, 12000, 16000, 32000] },
     r7: { maxLevel: 100, start: 2, add: 1.8, exp: 1.14, corr: [[1.01, 10], [1.02, 20]] },
     r8: { maxLevel: 100, start: 5, add: 4, exp: 1.2, corr: [[1.1, 10]] },
     r9: { maxLevel: 100, start: 8, add: 1.8, exp: 1.18, corr: [[1.03, 10], [1.08, 20]] },
@@ -320,14 +324,27 @@
    * not guessed here -- hunterDefs.js is the canonical home for those, and this throws rather
    * than invent a number that would silently bound a planner.
    */
-  function relicMaxLevel(relicId) {
+  function relicMaxLevel(relicId, unlocks) {
     const id = canonicalRelicId(relicId);
     const spec = RELIC_SPECS[id];
     if (!spec) {
       throw new Error('No max level known for relic "' + relicId + '" (normalized "' + id + '")'
         + (TIER2_RELIC_COSTS[id] ? ' -- tier-2 caps live in hunterDefs.js, not here' : ''));
     }
-    return spec.static ? spec.static.length : spec.maxLevel;
+    // A gated cap stays at its BASE value unless the unlock is explicitly present. Defaulting to
+    // the unlocked cap would offer levels the account cannot buy; defaulting to unlocked is the
+    // silent-optimism version of the silent-zero bug.
+    if (spec.unlockedBy && unlocks && unlocks[spec.unlockedBy]) return spec.unlockedMaxLevel;
+    return spec.maxLevel;
+  }
+
+  /** Relic ids whose cap depends on an unlock, mapped to the unlock that raises it. */
+  function gatedRelicCaps() {
+    const out = {};
+    for (const [id, spec] of Object.entries(RELIC_SPECS)) {
+      if (spec.unlockedBy) out[id] = { base: spec.maxLevel, unlocked: spec.unlockedMaxLevel, unlockedBy: spec.unlockedBy };
+    }
+    return out;
   }
 
   /** Every relic id this module can price. */
@@ -526,7 +543,7 @@
     HUNTER_RESOURCES, resourceLabel, resourceAbbr, baseStatResource, relicResource, inscryptionResource,
     fragmentsOnHand, fragmentDaysUntilAffordable,
     baseStatCostAtLevel, baseStatCostRange,
-    relicCostAtLevel, relicCostRange, relicMaxLevel, knownRelicIds,
+    relicCostAtLevel, relicCostRange, relicMaxLevel, gatedRelicCaps, knownRelicIds,
     inscryptionCostAtLevel, inscryptionCostRange,
     gadgetCostRange, gemAliasCostRange, projCostRange, collectionTimeMinutes, fmtBig,
   };

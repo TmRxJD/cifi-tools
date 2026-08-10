@@ -192,6 +192,31 @@ check('a level range sums the individual level costs', () => {
   return sum === expected ? null : `range gave ${sum}, sum of levels is ${expected}`;
 });
 
+// Relics #5 and #6 cap at 8 and rise to 11 only with Power Gem Node 1 -- which is why their
+// static cost tables carry 11 entries. Reading the table length as the cap (which is what this
+// module did when the table first landed) silently offers three levels the account cannot buy.
+// Same shape as Borge's Call Me Lucky Loot, and the same class of bug: optimistic default.
+check('a gated relic cap stays locked unless the unlock is present', () => {
+  const gated = CF.gatedRelicCaps();
+  if (!gated.r5 || !gated.r6) return `expected r5 and r6 to be gated, got ${Object.keys(gated).join(', ') || 'none'}`;
+  for (const id of ['r5', 'r6']) {
+    if (CF.relicMaxLevel(id) !== 8) return `${id} defaults to ${CF.relicMaxLevel(id)}, should be 8 while locked`;
+    if (CF.relicMaxLevel(id, {}) !== 8) return `${id} unlocked itself from an empty unlock set`;
+    if (CF.relicMaxLevel(id, { powerGemNode1: false }) !== 8) return `${id} unlocked from an explicitly false flag`;
+    if (CF.relicMaxLevel(id, { powerGemNode1: true }) !== 11) return `${id} did not reach 11 with the gem node on`;
+    if (gated[id].unlockedBy !== 'powerGemNode1') return `${id} names the wrong unlock: ${gated[id].unlockedBy}`;
+  }
+  // Ungated relics must not sprout a gate.
+  for (const id of ['r4', 'r16', 'r19']) {
+    if (gated[id]) return `${id} is unexpectedly gated`;
+  }
+  // The locked cap must still be inside the cost table, and the unlocked cap must be too.
+  for (const id of ['r5', 'r6']) {
+    if (!Number.isFinite(CF.relicCostAtLevel(id, 11))) return `${id} has no cost for its unlocked cap`;
+  }
+  return null;
+});
+
 // ---- Fragments -----------------------------------------------------------------------------
 // Relics are bought with fragments, which the evaluator does not produce, so the rate is a user
 // input. The failure mode to guard against is a MISSING rate quietly reading as "instant" or

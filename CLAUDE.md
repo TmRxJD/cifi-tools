@@ -83,6 +83,7 @@ There is exactly one place for each of these. **Do not add a second.**
 | Optimizer acceptance gate | `tools/bench/run.js` |
 | Store schema tests | `tools/bench/schema-test.js` |
 | Clone-vs-live comparison | `compare-mcp/batch-test.mjs` |
+| Gap check vs the original's override tables | `tools/bench/live-override-diff.js` |
 
 **Three config builders exist and that is correct** — they feed three different APIs:
 `evalStateFor` → `HunterSim.evaluate` (`overrides`/`upgrades`); `cfgFor` →
@@ -243,6 +244,8 @@ node tools/bench/relic-cost-test.js    # relic cost table + fragment arithmetic 
 node tools/bench/relic-arg-probe.js    # every declared relic reaches the wasm (fast)
 node tools/bench/path-relic-test.js    # effective path never recommends an inert relic
 node tools/bench/relic-sweep.js        # which relics actually move the sim (slow)
+node tools/bench/gem-coverage-test.js  # every gem param is reachable from the Gem Planner
+node tools/bench/live-override-diff.js <live-bundle.js>   # gap check vs the original tool
 node tools/bench/run.js                # optimizer gate: every known build, stops at first failure
 node tools/bench/run.js --all          # full picture
 node tools/bench/run.js borge 0 10     # a slice while iterating
