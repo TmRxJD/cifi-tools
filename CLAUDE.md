@@ -74,7 +74,8 @@ There is exactly one place for each of these. **Do not add a second.**
 | Evaluation state for a build | `app.js` → `evalStateFor(build, iterations)` |
 | Optimizer config for a build | `app.js` → `cfgFor(hunter, build)` |
 | Purchase-path config | `app.js` → `statPathCfgFor(hunter, baseline)` |
-| Purchase-path walk (stats/inscriptions) | `hunterStatPathBrowser.js` → `greedyPurchasePath()` |
+| Purchase-path walk (stats/inscriptions/relics) | `hunterStatPathBrowser.js` → `greedyPurchasePath()` |
+| Relic + fragment costs | `webapp/public/costFormulas.js` (`RELIC_SPECS`, `fragmentsOnHand`) |
 | Coarse evaluation fidelity | `HunterOptimizer.SCREEN_ITERATIONS` (one value, shared) |
 | Full evaluation fidelity | `HunterOptimizer.FINAL_ITERATIONS` |
 | Build share-code encode/decode | `webapp/public/buildCode.js` |
@@ -125,6 +126,36 @@ think one is wrong, disprove it with a test.
   different states", not as evidence about which side is wrong.
 - **`upgrades.gems_nodes.attraction_lootKnox` reaches the wasm but changes the returned loot
   score by exactly nothing** (arg 0 vs 150 → bit-identical). Don't chase it as a cause.
+- **Three relics reach the wasm and change nothing: Borge r7 and r19, Ozzy r7, Knox t2r5.**
+  Same shape as `attraction_lootKnox`, and proven to be a real evaluator fact rather than a
+  wiring gap on our side: `tools/bench/relic-arg-probe.js` shows each one moves exactly one
+  argument, at the index `params.json` assigns it, and `tools/bench/relic-sweep.js` then finds
+  every output bit-identical across real high-level fixtures. **Nothing may ever recommend
+  spending fragments on them** — they cost real currency and buy nothing measurable. The relics
+  that DO move the sim: Borge r4/r16/t2r7, Ozzy r4/r17/t2r7, Knox t2r7. Run the sweep against
+  REAL fixtures, never a synthetic build — a build with no hunter stats scores ~20 loot/min and
+  dies around stage 5, where nearly everything reads as "no effect".
+- **Fragments are ACCOUNT-WIDE and the evaluator does not produce them.** There is one Relic #7;
+  you buy it once. So the rate lives at `store.fragments`, never `store[hunter]`, and it is a
+  user input rather than something the sim can infer (mat1/mat2/mat3 come out of a run;
+  fragments come from campaign/boss content that isn't modelled). Stored per DAY, matching the
+  live tool's own gadget planner (`tessarectsPerDay`, with the same timestamped accrual) and
+  matching `collectionTimeMinutes`' existing `perDayRate` argument. **An unset rate must render
+  as unknown, never as zero or instant** — the same silent-zero trap as the relic cost below.
+- **An unknown relic id THROWS; it must never price at 0.** A silent zero makes an unmodeled
+  relic look free, so it wins every cost-ranked comparison it enters. The table covers all 20
+  tier-1 relics plus the tier-2 set, recovered from Ryther's Relic Optimizer and cross-checked
+  three ways in `tools/bench/relic-cost-test.js`: against a verbatim copy of the previous
+  implementation (identical at every level), against the caps `hunterDefs.js` declares, and for
+  strict monotonicity. Tier-2 caps are NOT in that dataset — `relicMaxLevel` throws for them
+  rather than guess; `hunterDefs.js` owns those.
+- **The live tool genuinely does not price Knox relics or inscriptions, and neither do we.**
+  Verified in the live bundle: Knox's resource table `LD` has no FRAGS entry at all, and its
+  cost map `ND` contains only base stats plus the Anchor gadget — no relic or inscription rows,
+  unlike Borge's `oD`/`sD` and Ozzy's `xD`/`_D`, which both carry FRAGS. Knox nonetheless HAS
+  two relic sim params (t2r5, t2r7) and one inscription (i105). So `relicResource: null` for
+  Knox faithfully mirrors the original rather than being our omission — but it does mean a Knox
+  relic cannot be costed. Do not invent a currency for it; say "not modelled".
 - **Share codes never encode level; it is INFERRED, from two lower bounds.** A code carries no
   `lvl` field, so `parseBuildCode` derives level from spend. The talent sum alone is not enough:
   it assumes the player spent every talent point, and real accounts sit on unspent ones. A real
@@ -208,6 +239,10 @@ guaranteed by construction and asserted at the end, not repaired.
 
 ```bash
 node tools/bench/schema-test.js        # store schema invariants (fast, run always)
+node tools/bench/relic-cost-test.js    # relic cost table + fragment arithmetic (fast)
+node tools/bench/relic-arg-probe.js    # every declared relic reaches the wasm (fast)
+node tools/bench/path-relic-test.js    # effective path never recommends an inert relic
+node tools/bench/relic-sweep.js        # which relics actually move the sim (slow)
 node tools/bench/run.js                # optimizer gate: every known build, stops at first failure
 node tools/bench/run.js --all          # full picture
 node tools/bench/run.js borge 0 10     # a slice while iterating

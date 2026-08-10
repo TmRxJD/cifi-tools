@@ -92,6 +92,25 @@
     optimizerSettings: { deep: true, make: () => fleetDefault('optimizerSettings') },
     importPrefs: { deep: true, make: defaultImportPrefs },
     loadoutTabs: { make: defaultLoadoutTabs },
+    // Fragments are the currency relics are bought with, and they are ACCOUNT-WIDE, not
+    // per-hunter and not per-build: there is one Relic #7, you buy it once, and every hunter
+    // that reads it benefits. So this lives at the top level of the store alongside the other
+    // account-scoped state, NOT under store[hunter].
+    //
+    // The sim cannot supply the rate. mat1/mat2/mat3 come out of the evaluator per run, but
+    // fragments come from campaign/boss content the evaluator does not model -- which is
+    // exactly why the user has to tell us. Shape mirrors what the live tool already does for
+    // Tesseracts in its gadget planner (tessarectsPerDay + a timestamped current value that
+    // accrues while you are away), so the two behave the same way for the same reason.
+    fragments: {
+      deep: true,
+      make: () => ({
+        perDay: 0,            // 0 means "not told" -- never guess a rate
+        current: 0,           // fragments on hand when `currentAt` was stamped
+        currentAt: 0,         // epoch ms; 0 means never set
+        autoAccrue: true,     // add perDay * elapsed to `current` when reading it
+      }),
+    },
     // advancedTalents[hunter]: has the user opted into showing this hunter's advanced talent
     // (e.g. The Legacy of Ultima). Was previously conjured at four separate call sites with
     // `store.settings = store.settings || {}` and never declared anywhere -- so it existed on

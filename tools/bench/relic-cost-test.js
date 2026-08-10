@@ -192,5 +192,69 @@ check('a level range sums the individual level costs', () => {
   return sum === expected ? null : `range gave ${sum}, sum of levels is ${expected}`;
 });
 
+// ---- Fragments -----------------------------------------------------------------------------
+// Relics are bought with fragments, which the evaluator does not produce, so the rate is a user
+// input. The failure mode to guard against is a MISSING rate quietly reading as "instant" or
+// "free" -- the same shape as the silent-zero relic cost this file exists to prevent.
+
+const DAY = 86400000;
+
+check('with no rate entered, affordability is unknown -- not instant', () => {
+  const state = { perDay: 0, current: 0, currentAt: 0, autoAccrue: true };
+  const d = CF.fragmentDaysUntilAffordable(5000, state);
+  return d === null ? null : `returned ${d} instead of null for "no rate known"`;
+});
+
+check('something already affordable takes zero days even with no rate', () => {
+  const state = { perDay: 0, current: 10000, currentAt: 0, autoAccrue: true };
+  return CF.fragmentDaysUntilAffordable(5000, state) === 0 ? null : 'did not report it as already affordable';
+});
+
+check('days-until-affordable divides the shortfall by the rate', () => {
+  const state = { perDay: 100, current: 500, currentAt: 0, autoAccrue: false };
+  const d = CF.fragmentDaysUntilAffordable(1500, state);
+  return d === 10 ? null : `expected 10 days for a 1000 shortfall at 100/day, got ${d}`;
+});
+
+check('a stamped balance accrues while you are away', () => {
+  const now = 1_700_000_000_000;
+  const state = { perDay: 24, current: 100, currentAt: now - 2 * DAY, autoAccrue: true };
+  const have = CF.fragmentsOnHand(state, now);
+  return have === 148 ? null : `expected 100 + 2 days at 24/day = 148, got ${have}`;
+});
+
+check('accrual can be turned off', () => {
+  const now = 1_700_000_000_000;
+  const state = { perDay: 24, current: 100, currentAt: now - 5 * DAY, autoAccrue: false };
+  return CF.fragmentsOnHand(state, now) === 100 ? null : 'accrued despite autoAccrue being false';
+});
+
+check('a balance that was never stamped does not accrue out of nowhere', () => {
+  const state = { perDay: 999, current: 7, currentAt: 0, autoAccrue: true };
+  return CF.fragmentsOnHand(state, 1_700_000_000_000) === 7 ? null : 'accrued from an unset timestamp';
+});
+
+check('fragment state is required, not defaulted', () => {
+  try {
+    CF.fragmentsOnHand(null, Date.now());
+    return 'accepted a missing fragment state';
+  } catch { return null; }
+});
+
+// The store field this reads is account-level on purpose: one Relic #7 exists, bought once.
+check('the store declares fragments at account level, not per hunter', () => {
+  const S = H.browserSandbox().StoreSchema;
+  const fresh = S.freshStore();
+  if (!fresh.fragments) return 'store.fragments is missing';
+  for (const k of ['perDay', 'current', 'currentAt', 'autoAccrue']) {
+    if (!(k in fresh.fragments)) return `store.fragments.${k} is missing`;
+  }
+  if (fresh.fragments.perDay !== 0) return 'a fragment rate was guessed instead of left unset';
+  for (const hunter of S.HUNTERS) {
+    if (fresh[hunter] && fresh[hunter].fragments) return `${hunter} also carries a fragments field -- two homes for one number`;
+  }
+  return null;
+});
+
 console.log(`\n${failures ? `${failures} FAILED` : 'all relic cost invariants hold'}`);
 process.exit(failures ? 1 : 0);

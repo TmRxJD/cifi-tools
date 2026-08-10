@@ -467,6 +467,11 @@ function renderSimPage(root) {
             <input id="baseIterations" type="number" value="1000" min="100" step="100" class="w-16 bg-transparent text-white focus:outline-none" />
             <span>iterations</span>
           </label>
+          <label class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors cursor-pointer" title="Fragments are account-wide and aren't produced by the simulation — they come from campaign/boss content. Enter your rate to get relic costs in time as well as fragments.">
+            ${iconSvg('sparkles', 14, 'text-purple-400')}
+            <input id="fragsPerDay" type="number" min="0" step="1" class="w-20 bg-transparent text-white focus:outline-none" placeholder="0" />
+            <span>frags/day</span>
+          </label>
           <button id="manageCategoriesBtn" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors">${iconSvg('folder', 14, 'text-blue-400')}<span>Manage Categories</span></button>
           <button id="viewVerticalBtn" class="flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors" title="Vertical View">${iconSvg('layout-distribute-vertical', 14)}<span>Vertical</span></button>
           <button id="viewHorizontalBtn" class="flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors" title="Horizontal View">${iconSvg('layout-distribute-horizontal', 14)}<span>Horizontal</span></button>
@@ -486,6 +491,15 @@ function renderSimPage(root) {
   document.getElementById('manageCategoriesBtn').onclick = openCategoriesModal;
   document.getElementById('temporaryUpgradesBtn').onclick = openTemporaryModal;
   document.getElementById('baseIterations').addEventListener('change', renderBuildList);
+  // Fragments per day is ACCOUNT-wide (relics are bought once for the account, not per hunter),
+  // so it is read from and written to the top-level store, never store[hunter].
+  const fragsInput = document.getElementById('fragsPerDay');
+  fragsInput.value = store.fragments.perDay || '';
+  fragsInput.addEventListener('change', () => {
+    store.fragments.perDay = Math.max(0, Number(fragsInput.value) || 0);
+    saveStore();
+    renderBuildList();
+  });
   document.getElementById('viewVerticalBtn').onclick = () => setViewMode('vertical');
   document.getElementById('viewHorizontalBtn').onclick = () => setViewMode('horizontal');
   updateViewModeButtons();
@@ -948,9 +962,13 @@ async function openOverrideCostsModal(build) {
 
   // Collection Time is inferred (not a stored value) from THIS build's own simulated
   // per-resource loot rate (mat1/mat2/mat3 per run * runs/day) -- the same numbers already
-  // shown on the build card's Main Statistics. Fragments/Hellish-Biomatter aren't part of
-  // the sim's loot output (they come from bosses/events we don't model), so Collection Time
-  // is only computable for the 3 per-hunter stat resources, not relics/inscriptions.
+  // shown on the build card's Main Statistics.
+  //
+  // Fragments are the exception and always will be: they come from campaign/boss content the
+  // evaluator does not model, so no amount of simulating produces a rate. The user supplies it
+  // (Settings -> Fragments per day). When they have, relic rows get a real Collection Time like
+  // everything else; when they haven't, perDayRate.frags stays 0 and the row renders unknown --
+  // which is the honest answer, not a zero.
   let perDayRate = {};
   try {
     const iterations = Number(document.getElementById('baseIterations')?.value) || 1000;
@@ -958,6 +976,7 @@ async function openOverrideCostsModal(build) {
     const runsPerDay = r.avgTime ? 1440 / r.avgTime : 0;
     perDayRate = { mat1: r.mat1 * runsPerDay, mat2: r.mat2 * runsPerDay, mat3: r.mat3 * runsPerDay };
   } catch { /* Collection Time just won't be shown if evaluation fails */ }
+  perDayRate.frags = Number(store.fragments.perDay) || 0;
 
   // Verbatim behavior port of the live "Override Costs" modal's own computation (its `C()`
   // function, extracted directly from the bundle): it iterates ONLY the keys actually present
@@ -1114,7 +1133,11 @@ async function openOverrideCostsModal(build) {
     </div>` : '';
 
   const unmodeledHtml = unmodeledKeys.length ? `<p class="text-xs text-gray-500 mt-3">Cost formula not yet extracted for: ${unmodeledKeys.map(escapeHtml).join(', ')}.</p>` : '';
-  const timeNoteHtml = '<p class="text-xs text-gray-500 mt-2">Collection Time is inferred from this build\'s own simulated loot rate; it\'s only computable for the 3 hunter-specific stat resources (not Fragments/Hellish-Biomatter, which come from bosses/events the sim doesn\'t model).</p>';
+  const timeNoteHtml = `<p class="text-xs text-gray-500 mt-2">Collection Time is inferred from this build's own simulated loot rate for the 3 hunter-specific stat resources. Fragments come from campaign/boss content the sim doesn't model, so they use your ${
+    perDayRate.frags
+      ? `entered rate of ${CF.fmtBig(perDayRate.frags)} fragments/day`
+      : 'entered fragments/day rate &mdash; <span class="text-amber-400">not set yet</span>, so relic times show as unknown'
+  }. Hellish-Biomatter isn't modelled either way.</p>`;
 
   const body = Object.keys(overrides).length
     ? `<p class="text-sm text-gray-300 mb-4">This overview shows the cost differences between your global values and the override values used in this build.</p>${groupHtml}${footerHtml}${unmodeledHtml}${timeNoteHtml}`

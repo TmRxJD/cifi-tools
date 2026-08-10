@@ -272,16 +272,21 @@
     const talentIds = new Set(cfg.TALENTS.map((d) => d.id));
     const attrIds = new Set(cfg.ATTRIBUTES.map((d) => d.id));
     const statKeys = new Set(cfg.STAT_KEYS || []);
-    // Full wasm param names (e.g. "upgrades.inscryptions.i13") for the build-card Effective
-    // Path allocator (hunterStatPathBrowser.js's greedyPurchasePath), which also ranks
-    // inscription-level candidates alongside base stats. Inscriptions are account-wide
-    // (state.upgrades.inscryptions), same as base stats, so they're keyed by the same
-    // dynamic-slot mechanism, just addressed by full param name instead of a bare stat key.
-    const inscryptionParams = new Set(cfg.INSCRYPTION_PARAMS || []);
-    const currentInscryptionLevels = {};
-    (cfg.INSCRYPTION_PARAMS || []).forEach((p) => {
-      const id = p.split('.')[2];
-      currentInscryptionLevels[p] = cfg.globalUpgrades?.inscryptions?.[id] || 0;
+    // Full wasm param names (e.g. "upgrades.inscryptions.i13", "upgrades.relics.r16") that the
+    // Effective Path allocator varies alongside base stats. These are ACCOUNT-WIDE upgrades
+    // (state.upgrades.<category>.<id>), same as base stats, so they use the same dynamic-slot
+    // mechanism, just addressed by full param name instead of a bare stat key.
+    //
+    // This was INSCRYPTION_PARAMS and hardcoded the "inscryptions" category when reading the
+    // player's current level. Relics are the same kind of thing bought with a different
+    // currency, so the category is now parsed from the param name and one mechanism serves
+    // both -- rather than a second, near-identical slot kind that could drift.
+    const upgradeParams = new Set(cfg.UPGRADE_PARAMS || []);
+    const currentUpgradeLevels = {};
+    (cfg.UPGRADE_PARAMS || []).forEach((p) => {
+      const [, category, id] = p.split('.');
+      if (!category || !id) throw new Error(`UPGRADE_PARAMS entry "${p}" is not of the form upgrades.<category>.<id>`);
+      currentUpgradeLevels[p] = cfg.globalUpgrades?.[category]?.[id] || 0;
     });
 
     const baseArgs = new Array(names.length);
@@ -292,7 +297,7 @@
       else if (!overridden && talentIds.has(name)) dynamic.push({ index: i, kind: 'talent', id: name });
       else if (!overridden && attrIds.has(name)) dynamic.push({ index: i, kind: 'attribute', id: name });
       else if (!overridden && statKeys.has(name)) dynamic.push({ index: i, kind: 'stat', id: name });
-      else if (!overridden && inscryptionParams.has(name)) dynamic.push({ index: i, kind: 'inscryption', id: name });
+      else if (!overridden && upgradeParams.has(name)) dynamic.push({ index: i, kind: 'upgrade', id: name });
       else baseArgs[i] = resolveParam(name, staticState);
     });
 
@@ -303,13 +308,13 @@
     // otherwise the optimizer would be comparing candidates scored from different points
     // in a drifting internal RNG state, which is both non-reproducible and an unfair
     // comparison between candidates.
-    return async function evalFast(talentAlloc, attrAlloc, iterations, statAlloc, inscryptionAlloc) {
+    return async function evalFast(talentAlloc, attrAlloc, iterations, statAlloc, upgradeAlloc) {
       for (const d of dynamic) {
         if (d.kind === 'iterations') args[d.index] = iterations ?? 1000;
         else if (d.kind === 'talent') args[d.index] = talentAlloc[d.id] || 0;
         else if (d.kind === 'attribute') args[d.index] = attrAlloc[d.id] || 0;
         else if (d.kind === 'stat') args[d.index] = (statAlloc && statAlloc[d.id] !== undefined) ? statAlloc[d.id] : (cfg.hunterStats?.[d.id] || 0);
-        else args[d.index] = (inscryptionAlloc && inscryptionAlloc[d.id] !== undefined) ? inscryptionAlloc[d.id] : currentInscryptionLevels[d.id];
+        else args[d.index] = (upgradeAlloc && upgradeAlloc[d.id] !== undefined) ? upgradeAlloc[d.id] : currentUpgradeLevels[d.id];
       }
       const instance = await WebAssembly.instantiate(mod, IMPORT_OBJECT);
       const ex = instance.exports;

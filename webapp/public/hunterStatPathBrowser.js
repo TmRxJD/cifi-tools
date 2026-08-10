@@ -27,6 +27,25 @@
     }));
   }
 
+  // Relics are ACCOUNT-WIDE and bought with Fragments, a currency none of the stat/inscription
+  // columns compete for -- so they form their own independent column, same as every other
+  // resource here.
+  //
+  // No relic is filtered out by hand, including the ones measured to do nothing (Borge r7/r19,
+  // Ozzy r7, Knox t2r5 -- see CLAUDE.md). The walk ranks by REAL measured marginal effect, so
+  // an inert relic scores a delta of exactly 0 and loses to anything that moves the number. It
+  // falls out of the ranking rather than needing a maintained blocklist -- and if the game ever
+  // makes one of them matter, this picks that up with no code change.
+  function buildRelicCandidates(hunter, def, CF) {
+    const resource = CF.relicResource(hunter);
+    // Knox has no modeled relic currency -- the live tool doesn't price Knox relics either
+    // (its resource table carries no Fragments entry). Not guessed here; see CLAUDE.md.
+    if (!resource) return [];
+    return (def.globalUpgrades.relics?.items || []).map((item) => ({
+      kind: 'relic', key: item.id, label: item.label, maxLevel: item.maxLevel, resource,
+    }));
+  }
+
   function groupByResource(candidates) {
     const groups = {};
     candidates.forEach((c) => { (groups[c.resource] || (groups[c.resource] = [])).push(c); });
@@ -34,10 +53,18 @@
   }
 
   function purchaseCostOf(hunter, CF, cand, nextLevel) {
-    return cand.kind === 'stat' ? CF.baseStatCostAtLevel(cand.key, nextLevel, hunter) : CF.inscryptionCostAtLevel(cand.key, nextLevel);
+    if (cand.kind === 'stat') return CF.baseStatCostAtLevel(cand.key, nextLevel, hunter);
+    if (cand.kind === 'relic') return CF.relicCostAtLevel(cand.key, nextLevel);
+    return CF.inscryptionCostAtLevel(cand.key, nextLevel);
   }
   function capOf(def, cand) {
     return cand.kind === 'stat' ? def.statCaps?.[cand.key] : cand.maxLevel;
+  }
+  // Full wasm param name for a non-stat candidate. Stats are addressed by bare key instead.
+  function upgradeParamOf(cand) {
+    if (cand.kind === 'inscryption') return `upgrades.inscryptions.${cand.key}`;
+    if (cand.kind === 'relic') return `upgrades.relics.${cand.key}`;
+    throw new Error(`upgradeParamOf: "${cand.kind}" is not an upgrade-param candidate`);
   }
 
   // Yields between steps so a long run of sequential wasm calls doesn't block the UI thread for
@@ -63,10 +90,10 @@
   // positive -- the point of this view is "here's the next N in ranked order for this
   // resource," not "here's how many are worth buying." It only stops early if literally
   // nothing is purchasable anymore (every candidate capped out or missing a cost formula).
-  async function greedyResourceColumn(hunter, cfg, evalFast, def, CF, candidates, currentStats, currentInsc, targetSteps, iterations, onProgress) {
+  async function greedyResourceColumn(hunter, cfg, evalFast, def, CF, candidates, currentStats, currentUpgrades, targetSteps, iterations, onProgress) {
     const stats = { ...currentStats };
-    const insc = { ...currentInsc };
-    let baselineSim = await evalFast(cfg.talents, cfg.attributes, iterations, stats, insc);
+    const upgrades = { ...currentUpgrades };
+    let baselineSim = await evalFast(cfg.talents, cfg.attributes, iterations, stats, upgrades);
 
     const steps = [];
     for (let i = 0; i < targetSteps; i++) {
@@ -74,25 +101,26 @@
       if (onProgress) onProgress(i, targetSteps);
       let best = null;
       for (const cand of candidates) {
-        const curLevel = cand.kind === 'stat' ? (stats[cand.key] || 0) : (insc[`upgrades.inscryptions.${cand.key}`] || 0);
+        const param = cand.kind === 'stat' ? null : upgradeParamOf(cand);
+        const curLevel = param ? (upgrades[param] || 0) : (stats[cand.key] || 0);
         const nextLevel = curLevel + 1;
         const cap = capOf(def, cand);
         if (isFinite(cap) && nextLevel > cap) continue;
         const cost = purchaseCostOf(hunter, CF, cand, nextLevel);
         if (!cost || cost <= 0) continue;
 
-        const candStats = cand.kind === 'stat' ? { ...stats, [cand.key]: nextLevel } : stats;
-        const candInsc = cand.kind === 'inscryption' ? { ...insc, [`upgrades.inscryptions.${cand.key}`]: nextLevel } : insc;
-        const candidateSim = await evalFast(cfg.talents, cfg.attributes, iterations, candStats, candInsc);
+        const candStats = param ? stats : { ...stats, [cand.key]: nextLevel };
+        const candUpgrades = param ? { ...upgrades, [param]: nextLevel } : upgrades;
+        const candidateSim = await evalFast(cfg.talents, cfg.attributes, iterations, candStats, candUpgrades);
         const { delta } = window.HunterStatPath.marginalValue(baselineSim, candidateSim);
         const valuePerCost = delta / cost;
 
-        if (!best || valuePerCost > best.valuePerCost) best = { cand, nextLevel, cost, candStats, candInsc, candidateSim, valuePerCost };
+        if (!best || valuePerCost > best.valuePerCost) best = { cand, nextLevel, cost, candStats, candUpgrades, candidateSim, valuePerCost };
       }
       if (!best) break; // every candidate capped out / no cost formula left -- nothing left to rank
 
       Object.assign(stats, best.candStats);
-      Object.assign(insc, best.candInsc);
+      Object.assign(upgrades, best.candUpgrades);
       baselineSim = best.candidateSim;
       steps.push({
         kind: best.cand.kind, key: best.cand.key, label: best.cand.label, level: best.nextLevel,
@@ -106,21 +134,29 @@
   // Every resource here has an independent candidate pool, so the resource list -- and
   // therefore what a progress UI needs to render BEFORE any computation starts -- is knowable
   // synchronously up front.
-  function resourcesFor(hunter, includeInscriptions) {
+  function resourcesFor(hunter, includeAccountUpgrades) {
     const def = window.HUNTER_DEFS[hunter];
     const CF = window.CostFormulas;
-    const candidates = buildStatCandidates(hunter, def, CF).concat(includeInscriptions ? buildInscryptionCandidates(hunter, def, CF) : []);
+    const candidates = buildStatCandidates(hunter, def, CF).concat(accountUpgradeCandidates(hunter, def, CF, includeAccountUpgrades));
     return [...new Set(candidates.map((c) => c.resource))];
+  }
+
+  // Inscriptions and relics are both account-wide purchases in their own currencies, and both
+  // belong to the build-card path but not the bare stats page. One list so the two entry points
+  // cannot disagree about what the path considers.
+  function accountUpgradeCandidates(hunter, def, CF, include) {
+    if (!include) return [];
+    return buildInscryptionCandidates(hunter, def, CF).concat(buildRelicCandidates(hunter, def, CF));
   }
 
   /**
    * THE purchase-path walk. One implementation, two candidate pools.
    *
-   * `includeInscriptions` false -> base stats only (the Hunter Stats page's "Effective Path").
-   * `includeInscriptions` true  -> stats plus this hunter's inscription levels (the build
-   * card's "Effective Path"). Talents/attributes are deliberately excluded from both: they are
-   * point-budget-gated by level rather than currency-gated, and belong to the Optimize flow.
-   * Relics are excluded too -- different currency, not modeled.
+   * `includeAccountUpgrades` false -> base stats only (the Hunter Stats page's "Effective
+   * Path"). true -> stats plus this hunter's account-wide purchases: inscription levels AND
+   * relic levels, each in its own currency column. Talents/attributes are deliberately excluded
+   * from both: they are point-budget-gated by level rather than currency-gated, and belong to
+   * the Optimize flow.
    *
    * These were two near-identical functions that had already drifted apart on fidelity. Same
    * walk, same ranking, one place to change.
@@ -129,27 +165,30 @@
    *        gemPlannerStore, TALENTS, ATTRIBUTES }
    * onProgress(resource, done, total) fires as each resource's column advances.
    */
-  async function greedyPurchasePath(hunter, cfg, targetSteps, includeInscriptions, onProgress) {
+  async function greedyPurchasePath(hunter, cfg, targetSteps, includeAccountUpgrades, onProgress) {
     const def = window.HUNTER_DEFS[hunter];
     const CF = window.CostFormulas;
     const statCandidates = buildStatCandidates(hunter, def, CF);
-    const inscCandidates = includeInscriptions ? buildInscryptionCandidates(hunter, def, CF) : [];
-    const inscryptionParams = inscCandidates.map((c) => `upgrades.inscryptions.${c.key}`);
+    const upgradeCandidates = accountUpgradeCandidates(hunter, def, CF, includeAccountUpgrades);
+    const upgradeParams = upgradeCandidates.map(upgradeParamOf);
 
     const evalFast = await HunterSim.compileEvaluator(hunter, {
       ...cfg,
       STAT_KEYS: statCandidates.map((c) => c.key),
-      INSCRYPTION_PARAMS: inscryptionParams,
+      UPGRADE_PARAMS: upgradeParams,
     });
 
-    const currentInsc = {};
-    inscryptionParams.forEach((p) => { currentInsc[p] = cfg.globalUpgrades?.inscryptions?.[p.split('.')[2]] || 0; });
+    const currentUpgrades = {};
+    upgradeParams.forEach((p) => {
+      const [, category, id] = p.split('.');
+      currentUpgrades[p] = cfg.globalUpgrades?.[category]?.[id] || 0;
+    });
 
     // Resources are independent currencies, so their columns are computed in parallel -- this
     // also roughly halves/thirds wall-clock time vs. running them one after another.
-    const entries = Object.entries(groupByResource([...statCandidates, ...inscCandidates]));
+    const entries = Object.entries(groupByResource([...statCandidates, ...upgradeCandidates]));
     const results = await Promise.all(entries.map(([resource, group]) => greedyResourceColumn(
-      hunter, cfg, evalFast, def, CF, group, cfg.hunterStats, currentInsc, targetSteps, SEARCH_ITERATIONS,
+      hunter, cfg, evalFast, def, CF, group, cfg.hunterStats, currentUpgrades, targetSteps, SEARCH_ITERATIONS,
       onProgress && ((done, total) => onProgress(resource, done, total)),
     )));
     const columns = {};

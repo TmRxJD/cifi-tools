@@ -488,8 +488,43 @@
     return (cost / perDayRate) * 1440;
   }
 
+  // ---- Fragments -------------------------------------------------------------------------
+  //
+  // Fragments are account-wide and the evaluator does not produce them, so the rate is a user
+  // input rather than something we can infer (unlike mat1/mat2/mat3, which come straight out of
+  // a run). Everything that needs "how long until I can afford this relic" goes through here so
+  // there is one definition of the arithmetic.
+  //
+  // A note on units: the game surfaces fragments both per hour and per day, and the community
+  // spreadsheet works in per hour. We store per DAY, matching the live tool's own gadget planner
+  // (tessarectsPerDay) and matching collectionTimeMinutes' existing perDayRate argument, and
+  // convert at the display edge only. One canonical unit, converted once.
+
+  /** Fragments on hand now, accruing perDay since the balance was last stamped. */
+  function fragmentsOnHand(fragState, nowMs) {
+    if (!fragState) throw new Error('fragmentsOnHand: no fragment state supplied');
+    const base = Math.max(0, Number(fragState.current) || 0);
+    if (!fragState.autoAccrue || !fragState.currentAt || !fragState.perDay) return base;
+    const elapsedDays = Math.max(0, (nowMs - fragState.currentAt) / 86400000);
+    return base + elapsedDays * Number(fragState.perDay);
+  }
+
+  /**
+   * Days until `cost` fragments are affordable, given what is on hand and the earn rate.
+   * Returns 0 if already affordable, and null if we have no rate to divide by -- null means
+   * "unknown", and callers must render it as unknown rather than as zero or as instant.
+   */
+  function fragmentDaysUntilAffordable(cost, fragState, nowMs) {
+    const perDay = Number(fragState && fragState.perDay) || 0;
+    const have = fragmentsOnHand(fragState, nowMs);
+    if (cost <= have) return 0;
+    if (perDay <= 0) return null;
+    return (cost - have) / perDay;
+  }
+
   global.CostFormulas = {
     HUNTER_RESOURCES, resourceLabel, resourceAbbr, baseStatResource, relicResource, inscryptionResource,
+    fragmentsOnHand, fragmentDaysUntilAffordable,
     baseStatCostAtLevel, baseStatCostRange,
     relicCostAtLevel, relicCostRange, relicMaxLevel, knownRelicIds,
     inscryptionCostAtLevel, inscryptionCostRange,
