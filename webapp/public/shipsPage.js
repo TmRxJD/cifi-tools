@@ -1148,7 +1148,12 @@ function renderHexGrid(container, catalog, levels, options = {}) {
       if (iconPath) {
         const img = document.createElement('img');
         img.src = iconPath;
-        img.className = locked ? 'opacity-30' : 'opacity-95';
+        // Locked nodes are dimmed, not hidden. 30% was low enough that the glyph stopped being
+        // readable, which matters most on the ships you have progressed LEAST -- exactly where
+        // you are trying to work out what a node is before committing installs to it. The hex
+        // frame, the greyed counter and the missing accent dot already say "locked"; the icon
+        // only has to stay recognisable.
+        img.className = locked ? 'opacity-60' : 'opacity-95';
         img.style.cssText = `position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${Math.round(hexSize * 1.035)}px;height:${Math.round(hexHeight * 1.035)}px;object-fit:contain;pointer-events:none;`;
         img.onerror = () => img.remove();
         tile.appendChild(img);
