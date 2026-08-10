@@ -197,18 +197,20 @@
     r2: { maxLevel: 100, start: 0.6, add: 0.2, exp: 1.09, corr: [[1.006, 10], [1.007, 20], [1.022, 30]], floorFrom: 20 },
     r3: { maxLevel: 100, start: 0.7, add: 0.5, exp: 1.12, corr: [[1.02, 10], [1.04, 20], [1.07, 30]], floorFrom: 10 },
     r4: { maxLevel: 100, start: 0.8, add: 0.4, exp: 1.12, corr: [[1.02, 10], [1.015, 20]], floorFrom: 10 },
-    // UNRESOLVED CAP CHAIN. Two independent sources disagree about where these start:
-    //   - Ryther's relic optimizer: maxLevel 8, rising to 11 with Power Gem Node 1.
-    //   - cifi-tools' own fragment planner: r6 declares max 11, rising to 16 with Exodus node 2
-    //     (and r9 likewise 100 -> 105 with Exodus node 2).
-    // The most likely reading is a CHAIN -- 8, then 11 with the power node, then 16 with the
-    // exodus node, with the fragment planner assuming the power node already taken -- but that
-    // ordering is inference, not something either source states. These relics are not hunter sim
-    // params (no hunter reads them; they drive fragment income, which this tool does not model),
-    // so nothing here consumes the number. Rather than pick one and be confidently wrong,
-    // relicMaxLevel refuses for them. Costs are still exact and still tested.
-    r5: { capUnresolved: 'Ryther says 8 (11 with Power Gem Node 1); the live fragment planner implies a further Exodus-node stage', static: [1, 120, 4400, 6200, 15200, 18500, 24000, 30000, 44000, 56000, 72000] },
-    r6: { capUnresolved: 'Ryther says 8 (11 with Power Gem Node 1); the live fragment planner declares 11 rising to 16 with Exodus node 2', static: [3, 450, 1070, 2500, 6700, 7000, 7600, 8500, 12000, 16000, 32000] },
+    // r5 and r6 come from the GAME's own scene data (tools/reference/scene-defs.json), not from
+    // a community table -- and that matters, because the two disagree.
+    //
+    // Ryther's optimizer lists them as STATIC cost tables. The game defines them as formulas like
+    // every other relic. For r5 the game's formula reproduces his table exactly (1, then
+    // (1+5)*20 = 120, then (1+10)*400 = 4400), which is a strong check on both. For r6 it does
+    // not: the game says StartCost 30 where his table starts at 3, and they diverge again by
+    // level 3. The game wins.
+    //
+    // Their CAPS are still unresolved (see the note in relicMaxLevel) -- the game's scene data
+    // carries no MaxLevel for either. Costs and caps are separate questions and only one of them
+    // is settled here.
+    r5: { capUnresolved: 'the game scene declares no MaxLevel; Ryther says 8, raised to 11 by Power Gem Node 1', start: 1, add: 5, exp: 20, corr: [] },
+    r6: { capUnresolved: 'the game scene declares no MaxLevel; Ryther says 8 (11 with Power Gem Node 1), and the live fragment planner implies 11 rising to 16 with Exodus node 2', start: 30, add: 20, exp: 9, corr: [] },
     r7: { maxLevel: 100, start: 2, add: 1.8, exp: 1.14, corr: [[1.01, 10], [1.02, 20]] },
     r8: { maxLevel: 100, start: 5, add: 4, exp: 1.2, corr: [[1.1, 10]] },
     // r9's cap is likewise Exodus-node-gated in the live fragment planner (100 -> 105 with

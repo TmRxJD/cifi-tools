@@ -78,6 +78,8 @@ There is exactly one place for each of these. **Do not add a second.**
 | Relic + fragment costs | `webapp/public/costFormulas.js` (`RELIC_SPECS`, `fragmentsOnHand`) |
 | Upgrade unlock gates | `webapp/public/hunterDefs.js` (`UPGRADE_GATES`, `isUpgradeUnlocked`) |
 | Full gem/gate reference (all 97) | `tools/reference/gem-gates.json`, `tools/reference/gem-trees.json` |
+| Game's own definition data (17 families) | `tools/reference/scene-defs.json` |
+| Loop-mod definitions + name mapping | `tools/reference/loop-mods.json`, `loopmod-names.json` |
 | Pulled APK / save / IL2CPP / captures | `tools/gamefiles/` (gitignored; see its README) |
 | Headless IL2CPP dumper (metadata v39) | `tools/il2cpp-cli/` |
 | Server-table capture | `tools/capture/` |
@@ -192,6 +194,21 @@ think one is wrong, disprove it with a test.
   and reports what it excluded; the Overrides cards show the requirement but do NOT hard-disable
   the input, because our picture of gem levels comes from the Gem Planner the user may not have
   filled in.
+- **The GAME's own definition data is extracted, and our numbers agree with it.**
+  `tools/reference/scene-defs.json` holds 17 numbered families pulled from the scene —
+  `Relic` (20), `RU` (111), `SU` (30), `TU` (24), `Badge` (16), `POM`/`POI`/`POK` (attribute
+  costs + caps), `BorgeSkill`/`OzzySkill`/`KnoxSkill` (talent caps), `MK`, `Project`, `ATU`,
+  `UDU`, `TUQ`. `scene-defs-test.js` checks our data against it and **all 20 tier-1 relic start
+  costs, and every talent and attribute cap, now match the game itself** — a stronger source than
+  the cifi-tools bundle everything was originally transcribed from.
+  Two things that came out of that check:
+  - **r5/r6 now use the GAME's cost formulas, not Ryther's static tables.** For r5 the game's
+    formula reproduces his table exactly (1, 120, 4400), which validates both; for r6 it does not
+    — the game says StartCost 30 where his table starts at 3. Their CAPS remain unresolved: the
+    scene declares no MaxLevel for either. Costs and caps are separate questions.
+  - **Knox has a 9th talent in the game (cap 50, the Ultima signature) that we correctly do NOT
+    model** — `params.json` exposes no `ultima` argument for Knox, so the evaluator has nowhere to
+    put it. Adding it would be an input that reaches nothing. Do not "fix" this.
 - **The APK IS dumped.** CIFI 0.7.3.54 is Unity **6000.3.8f1** with IL2CPP metadata **v39**;
   Perfare's Il2CppDumper caps at v31, but AndnixSH's fork supports v39 and `tools/il2cpp-cli/`
   wraps it in a headless CLI (see its README). Output lives in
@@ -382,6 +399,7 @@ node tools/bench/save-gate-test.js     # caps/gates vs a REAL save (skips if non
 node tools/save/inspect.js <DATA.text> [regex]            # decode + inspect a real save
 node tools/bench/save-coverage.js      # which tool inputs the save could auto-fill (report)
 node tools/bench/loopmod-test.js       # loop-mod table vs a real save (report)
+node tools/bench/scene-defs-test.js    # our caps/costs vs the GAME's own scene data
 node tools/bench/gate-coverage.js <live-bundle.js>        # our gates vs the bundle's
 node tools/bench/live-override-diff.js <live-bundle.js>   # gap check vs the original tool
 node tools/bench/run.js --sample=12    # THE EVERYDAY GATE: stratified handful, ~minutes
