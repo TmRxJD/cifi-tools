@@ -2990,6 +2990,16 @@ async function processImportedSaveText(rawText, silent) {
     });
   }
 
+  // Fragments: the save knows the BALANCE, never the earn rate. Fill the balance and stamp it so
+  // the accrual clock restarts from a real number; leave perDay alone, because overwriting a rate
+  // the user told us with one we invented would be worse than not filling it.
+  if (mapped.fragments) {
+    diffApply('fragments', () => store.fragments, () => {
+      store.fragments.current = mapped.fragments.current;
+      store.fragments.currentAt = mapped.fragments.currentAt;
+    });
+  }
+
   if (cats.hunterBuilds) {
     // Maintains one dedicated "<Hunter> Build (Scanned)" card per hunter that always reflects
     // the most recently scanned save -- rather than silently overwriting whatever build

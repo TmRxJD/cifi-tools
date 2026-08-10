@@ -219,6 +219,27 @@ think one is wrong, disprove it with a test.
     `DummyDll/` the dumper produced. Display names are UI `Text` populated at runtime.
   - **Save diffing therefore DOES work** for mapping index -> mod: change one mod in-game,
     re-pull, diff, see which `LM<N>` moved. Slow, but it was never impossible.
+- **Every hand-typed input the save can supply should be auto-filled, and
+  `tools/bench/save-coverage.js` is the ledger.** It walks the tool's own input surface, runs the
+  real importer over a real save, and prints filled vs missing with candidate save field families
+  for the gaps. It is a REPORT, not a gate — a gap is a to-do. Current state: **39/63** global
+  upgrade inputs auto-filled, plus gems, per-hunter level/talents/attributes, and fragment
+  balance. Known remaining gaps and WHY each is blocked:
+  - `gadgets`, `loopmods`, `cms` — the save has the data (`Gadget<N>Level`, `LM<N>Level` ×295,
+    `CM<N>`) but the index→entity mapping is not statically recoverable: display names are UI
+    `Text` populated at runtime, not strings in the binary. **This is what save diffing is for**
+    — change one in-game, re-pull, diff, see which index moved.
+  - `trinkets`, `diamondspecials`, `iap` — no matching save field family found yet.
+  - hunter base stats — the save stores upgrade LEVELS, not the displayed stat; the level→stat
+    formula is not reverse-engineered.
+  - ships/fleet — the families exist and are unmapped (`SU<N>Level` 60, `RU<N>*` 438,
+    `ATU<N>Level` 28, `DU<N>Level` 24, `TU<N>*` 84, `Mech<N>*` 102, `Badge<N>Acquired` 16).
+    Largest remaining win.
+- **Fragment BALANCE comes from the save; the RATE never can.** `RelicFragments` is a BigDouble
+  ({mantissa, exponent}) holding the current balance — the importer fills `fragments.current` and
+  stamps `currentAt` so accrual restarts from a real number. It deliberately does NOT touch
+  `perDay`: the game does not persist an earn rate, and overwriting a rate the user supplied with
+  an invented one would be worse than leaving it.
 - **The FULL gate/prereq map is extracted, not guessed** — 97 gated entries, every one resolved
   to a tree and level, in `tools/reference/gem-gates.json` (+ `gem-trees.json` for the tree
   structure itself). Regenerate with `tools/bench/extract-gates.js` / `extract-gem-trees.js`
@@ -332,6 +353,7 @@ node tools/bench/gem-coverage-test.js  # every gem param is reachable from the G
 node tools/bench/gem-tree-test.js      # tree shape + every unlock gate is satisfiable
 node tools/bench/save-gate-test.js     # caps/gates vs a REAL save (skips if none pulled)
 node tools/save/inspect.js <DATA.text> [regex]            # decode + inspect a real save
+node tools/bench/save-coverage.js      # which tool inputs the save could auto-fill (report)
 node tools/bench/gate-coverage.js <live-bundle.js>        # our gates vs the bundle's
 node tools/bench/live-override-diff.js <live-bundle.js>   # gap check vs the original tool
 node tools/bench/run.js --sample=12    # THE EVERYDAY GATE: stratified handful, ~minutes

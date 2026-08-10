@@ -280,7 +280,21 @@ function mapSaveToStore(save) {
     };
   });
 
-  return { globalUpgrades, gems, perHunter, unmapped };
+  // Fragments. The save stores the CURRENT BALANCE as a BigDouble ({mantissa, exponent}); it has
+  // no earn-rate field, because rate is not a thing the game persists -- it falls out of campaign
+  // and boss content. So this fills `current` and stamps `currentAt`, and leaves `perDay` for the
+  // user. That is the honest split: the balance is known, the rate is not.
+  let fragments;
+  const rawFrags = save.RelicFragments;
+  if (rawFrags && typeof rawFrags === 'object' && 'mantissa' in rawFrags) {
+    const value = Number(rawFrags.mantissa) * Math.pow(10, Number(rawFrags.exponent) || 0);
+    if (Number.isFinite(value) && value >= 0) fragments = { current: value, currentAt: Date.now() };
+  } else if (typeof rawFrags === 'number' && rawFrags >= 0) {
+    fragments = { current: rawFrags, currentAt: Date.now() };
+  }
+  if (!fragments) unmapped.push('fragments');
+
+  return { globalUpgrades, gems, perHunter, fragments, unmapped };
 }
 window.mapCifiSaveToStore = mapSaveToStore;
 
