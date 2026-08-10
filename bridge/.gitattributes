@@ -1,0 +1,13 @@
+* text=auto
+
+# cmd.exe and PowerShell require CRLF; LF-only breaks parsing outright.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+*.iss text eol=crlf
+
+# Shell scripts must stay LF even on Windows checkouts, or the shebang picks up
+# a stray CR and the script dies with "bad interpreter: /bin/bash^M".
+*.sh text eol=lf
+*.command text eol=lf
+installer/macos/scripts/postinstall text eol=lf

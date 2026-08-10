@@ -17,3 +17,7 @@ package-lock.json
 
 # Extracted game assets / APK working files -- large, and not ours to redistribute.
 tools/save/upgrade-names.json
+
+# Built bridge installers -- release artifacts, rebuilt from source by CI.
+bridge/dist/
+bridge/installer/*/.build/

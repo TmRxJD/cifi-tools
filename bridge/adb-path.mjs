@@ -72,7 +72,7 @@ if ($userPath.Split(';') -notcontains $dir) {
 
   await execFileAsync(
     'powershell',
-    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
+    ['-NoProfile', '-Command', script],
     { timeout: 30_000, windowsHide: true },
   )
   return { changed: true, scope: 'user' }

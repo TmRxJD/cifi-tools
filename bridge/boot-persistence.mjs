@@ -7,7 +7,23 @@ import { promisify } from 'node:util'
 const execFileAsync = promisify(execFile)
 
 const BOOT_LABEL = 'TrackerBridge'
-const WINDOWS_RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run'
+/**
+ * Windows autostart is a Scheduled Task, not the per-user Run registry key.
+ *
+ * Two reasons. First, reliability: the Run key is processed by Explorer early in
+ * logon, before a login shell has populated PATH, which is why a bare `npx`
+ * command registered here could report success and then never start. Task
+ * Scheduler runs the command in a proper session.
+ *
+ * Second, reputation: a script writing an autorun registry key and launching the
+ * result windowless is one of the behaviours Microsoft Defender's ML model
+ * scores as a dropper. The sibling Tracker Bridge was being flagged as
+ * Trojan:Script/Wacatac.C!ml for exactly this shape.
+ *
+ * schtasks.exe is called directly, so no PowerShell -- and no
+ * -ExecutionPolicy Bypass -- is involved in autostart.
+ */
+const WINDOWS_TASK_NAME = 'CifiBridge'
 
 /** Command used for OS startup entries — runs detached in the background. */
 export function buildBootLaunchCommand() {
@@ -22,12 +38,8 @@ function linuxAutostartPath() {
   return path.join(os.homedir(), '.config', 'autostart', 'cifi-bridge.desktop')
 }
 
-async function runPowerShell(script, timeoutMs = 15_000) {
-  await execFileAsync(
-    'powershell',
-    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
-    { timeout: timeoutMs, windowsHide: true },
-  )
+async function runSchtasks(args, timeoutMs = 15_000) {
+  return await execFileAsync('schtasks', args, { timeout: timeoutMs, windowsHide: true })
 }
 
 // `npx` on Windows resolves to npx.cmd (a batch file), which CreateProcess cannot launch
@@ -52,21 +64,15 @@ async function resolveWindowsNpxPath() {
   }
 }
 
-// Returns the raw registered Run-key command string (Windows only), or null if not installed.
+// Returns the registered task's command line (Windows only), or null when the
+// task does not exist. /FO LIST /V includes the "Task To Run" field.
 async function readWindowsBootEntryValue() {
   try {
-    const { stdout } = await execFileAsync(
-      'powershell',
-      [
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-Command',
-        `$v = Get-ItemProperty -Path 'Registry::${WINDOWS_RUN_KEY}' -Name '${BOOT_LABEL}' -ErrorAction SilentlyContinue; if ($v.'${BOOT_LABEL}') { Write-Output $v.'${BOOT_LABEL}' }`,
-      ],
-      { timeout: 15_000, windowsHide: true },
-    )
-    const value = String(stdout || '').trim()
+    const { stdout } = await runSchtasks(['/Query', '/TN', WINDOWS_TASK_NAME, '/FO', 'LIST', '/V'])
+    const line = String(stdout || '')
+      .split(/\r?\n/)
+      .find((row) => /^\s*Task To Run:/i.test(row))
+    const value = line ? line.split(':').slice(1).join(':').trim() : ''
     return value || null
   } catch {
     return null
@@ -108,19 +114,24 @@ export async function installBootEntry(log = console.log) {
     const resolvedCommand = npxPath
       ? `"${npxPath}" cifi-bridge --daemon --skip-intro --no-boot`
       : launchCommand
-    // Wrapped through cmd.exe /c so the npx.cmd shim always runs via a real shell, regardless
-    // of how the Run key invokes it -- and using the resolved absolute path (when found) means
-    // boot-time PATH state can't be the reason it silently fails to start.
+    // Still wrapped through cmd.exe so the npx.cmd shim runs via a shell, and
+    // still using the absolute path when one was found -- Task Scheduler removes
+    // the early-logon PATH problem, but neither of those hurts.
     const fullCommand = `cmd.exe /c "${resolvedCommand.replace(/"/g, '\\"')}"`
-    const escaped = fullCommand.replace(/'/g, "''")
-    await runPowerShell(`
-$cmd = '${escaped}'
-Set-ItemProperty -Path 'Registry::${WINDOWS_RUN_KEY}' -Name '${BOOT_LABEL}' -Value $cmd
-Write-Output "Registered startup command"
-`)
+
+    // /SC ONLOGON runs at sign-in for this user; /F replaces an existing task so
+    // enabling twice is idempotent. Task Scheduler starts it without a console
+    // window, so no VBS or hidden-window wrapper is needed.
+    await runSchtasks([
+      '/Create',
+      '/TN', WINDOWS_TASK_NAME,
+      '/TR', fullCommand,
+      '/SC', 'ONLOGON',
+      '/F',
+    ])
     log(npxPath
       ? 'Registered CIFI Bridge to start when you sign in to Windows.'
-      : 'Registered CIFI Bridge to start when you sign in to Windows (could not resolve an absolute path to npx -- if it still doesn\'t start at boot, make sure Node.js is on your SYSTEM PATH, not just your user PATH).')
+      : 'Registered CIFI Bridge to start when you sign in to Windows (could not resolve an absolute path to npx -- if it still does not start at boot, make sure Node.js is on your SYSTEM PATH, not just your user PATH).')
     return
   }
 
@@ -177,10 +188,11 @@ X-GNOME-Autostart-enabled=true
 
 export async function removeBootEntry(log = console.log) {
   if (process.platform === 'win32') {
-    await runPowerShell(`
-Remove-ItemProperty -Path 'Registry::${WINDOWS_RUN_KEY}' -Name '${BOOT_LABEL}' -ErrorAction SilentlyContinue
-Write-Output "Removed startup command"
-`)
+    try {
+      await runSchtasks(['/Delete', '/TN', WINDOWS_TASK_NAME, '/F'])
+    } catch {
+      // Already absent -- removing a startup entry that isn't there is fine.
+    }
     log('Removed CIFI Bridge from Windows startup.')
     return
   }

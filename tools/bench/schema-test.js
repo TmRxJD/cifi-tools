@@ -208,6 +208,44 @@ check('a fresh store already contains the real fleet shapes, not empty objects',
   return null;
 });
 
+// An under-spent build is a normal thing for a user to have, and it must never survive an
+// optimize: unspent points are free value. Reported symptom was a level-58 Borge build coming
+// back with 46 of 58 talent points still unspent.
+check('spendRemaining fills idle budget, opening new nodes when it must', () => {
+  const d = sb.HUNTER_DEFS.borge;
+  const talents = d.talents.filter((t) => !t.advanced);
+  // 46 of 58 spent, and the only remaining capacity is in nodes currently at ZERO (omen, ll) --
+  // the case fillLeftover cannot handle, because it refuses to widen the support.
+  const under = { revival: 2, loth: 5, ua: 5, impeccable: 10, omen: 0, ll: 0, pog: 15, tfow: 9 };
+  const before = sb.AllocSpace.costOf(talents, under);
+  const after = sb.AllocSpace.spendRemaining(talents, {}, {}, 58, { ...under });
+  const spent = sb.AllocSpace.costOf(talents, after);
+  if (before !== 46) return `fixture drifted: expected 46 spent, got ${before}`;
+  if (58 - spent > sb.AllocSpace.MAX_IDLE_POINTS) {
+    return `still ${58 - spent} points idle after spendRemaining: ${JSON.stringify(after)}`;
+  }
+  for (const t of talents) {
+    if ((after[t.id] || 0) > t.maxLevel) return `${t.id} overfilled to ${after[t.id]} (max ${t.maxLevel})`;
+  }
+  return null;
+});
+
+check('spendRemaining respects dependency and threshold gates', () => {
+  const d = sb.HUNTER_DEFS.borge;
+  // Nothing invested at all: only ungated attributes may be opened, and gated ones must stay 0
+  // until their prerequisites are funded.
+  const alloc = {};
+  d.attributes.forEach((a) => { alloc[a.id] = 0; });
+  sb.AllocSpace.spendRemaining(d.attributes, d.attributeDependencies, d.attributeMinValue, 40, alloc);
+  const problems = d.attributes
+    .filter((a) => !sb.AllocSpace.isHeld(a, d.attributes, d.attributeDependencies, d.attributeMinValue, alloc))
+    .map((a) => `${a.id}=${alloc[a.id]}`);
+  if (problems.length) return `illegal after fill: ${problems.join(', ')}`;
+  const spent = sb.AllocSpace.costOf(d.attributes, alloc);
+  if (40 - spent > sb.AllocSpace.MAX_IDLE_POINTS) return `only spent ${spent} of 40`;
+  return null;
+});
+
 check('duplicate build ids are rejected', () => {
   const store = S.freshStore();
   store.borge.builds.push({ id: 'dup', name: 'a', level: 1, talents: {}, attributes: {} },

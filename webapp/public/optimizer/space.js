@@ -211,6 +211,36 @@
     return alloc;
   }
 
+  // Spend every point of idle budget, OPENING new nodes when necessary.
+  //
+  // fillLeftover deliberately refuses to widen the support (it skips nodes at 0), which is right
+  // inside a transfer -- that move is about redistributing within a chosen shape. It is wrong for
+  // an allocation that simply has points left over: if the only remaining capacity sits in nodes
+  // currently at 0, fillLeftover cannot touch it and the points stay unspent forever.
+  //
+  // That is how an under-spent build could survive all the way to the final answer: the user's
+  // own build enters the finalist pool as-is, and an incumbent sitting at 46 of 58 talent points
+  // has nowhere for the other 12 to go unless new nodes may be opened. Deterministic: nodes are
+  // considered in declaration order, one point at a time, so the same input always fills the
+  // same way.
+  function spendRemaining(defs, deps, minVal, budget, alloc) {
+    let spent = costOf(defs, alloc);
+    let progressed = true;
+    while (progressed && budget - spent > MAX_IDLE_POINTS) {
+      progressed = false;
+      for (const d of defs) {
+        const cost = d.cost || 1;
+        if (spent + cost > budget) continue;
+        if (!isEligible(d, defs, deps, minVal, alloc)) continue;
+        alloc[d.id] = (alloc[d.id] || 0) + 1;
+        spent += cost;
+        progressed = true;
+        if (budget - spent <= MAX_IDLE_POINTS) break;
+      }
+    }
+    return alloc;
+  }
+
   // Reduce an allocation until it fits `budget`, then repair anything the reduction stranded.
   //
   // This is what a level-down does: the game refunds points that no longer fit. Removing from
@@ -280,7 +310,7 @@
   const Space = {
     MAX_IDLE_POINTS,
     costOf, pointsBelowThreshold, isEligible, isHeld, isLegal, clearInvalidDescendants,
-    enumerateSupports, canonicalFill, fillLeftover, trimToBudget, transfer, sameAlloc, signature,
+    enumerateSupports, canonicalFill, fillLeftover, spendRemaining, trimToBudget, transfer, sameAlloc, signature,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Space;

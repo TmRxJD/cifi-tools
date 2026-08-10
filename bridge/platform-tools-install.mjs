@@ -150,8 +150,6 @@ async function extractZip(zipPath, destination) {
       'powershell',
       [
         '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
         '-Command',
         `Expand-Archive -LiteralPath '${escapedZip}' -DestinationPath '${escapedDest}' -Force`,
       ],

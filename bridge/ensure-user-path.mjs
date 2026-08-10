@@ -72,7 +72,7 @@ Write-Output "Added to user PATH: $dir"
 `
   await execFileAsync(
     'powershell',
-    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
+    ['-NoProfile', '-Command', script],
     { timeout: 30_000, windowsHide: true },
   )
   log(`Added platform-tools to user PATH: ${normalized}`)

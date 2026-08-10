@@ -133,6 +133,26 @@ check('never overspends the budget', () => {
   return null;
 });
 
+check('spends the whole budget unless the ship physically cannot absorb it', () => {
+  // "Never overspends" is not enough -- leaving points unspent hands back free value. The only
+  // legitimate reason to stop early is that every node is maxed or still gated.
+  for (const { shipId, budget, weights, wName } of cases()) {
+    const { levels } = plan(shipId, budget, weights);
+    const spent = Object.values(levels).reduce((s, n) => s + n, 0);
+    if (spent >= budget) continue;
+    const capacity = Object.keys(CATALOG[shipId])
+      .reduce((s, slot) => s + sb.nodeMaxLevel(shipId, slot), 0);
+    const roomLeft = Object.keys(CATALOG[shipId])
+      .some((slot) => (levels[slot] || 0) < sb.nodeMaxLevel(shipId, slot)
+        && !(CATALOG[shipId][slot].gateAtTotalInstalls > spent - (levels[slot] || 0)));
+    if (roomLeft) {
+      return `ship ${shipId} budget ${budget} weights ${wName}: stopped at ${spent} with capacity `
+        + `${capacity} and an ungated node still open`;
+    }
+  }
+  return null;
+});
+
 check('clicks and levels describe the same plan', () => {
   for (const { shipId, budget, weights, wName } of cases()) {
     const { levels, clicks } = plan(shipId, budget, weights);

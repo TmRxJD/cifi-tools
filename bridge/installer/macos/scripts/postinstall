@@ -1,0 +1,30 @@
+#!/bin/bash
+# Runs inside the CIFI Bridge .pkg after the payload is laid down.
+# Installs Node.js when missing, then the bridge itself.
+set -u
+
+log() { echo "[cifi-bridge] $*"; }
+
+# Homebrew lives outside the installer's minimal PATH.
+for p in /opt/homebrew/bin /usr/local/bin; do
+  [ -d "$p" ] && export PATH="$p:$PATH"
+done
+
+if ! command -v node >/dev/null 2>&1; then
+  log "Node.js not found; attempting install"
+  if command -v brew >/dev/null 2>&1; then
+    brew install node || log "Homebrew install failed"
+  else
+    log "Homebrew unavailable - the launcher will prompt the user to install Node.js"
+  fi
+fi
+
+if command -v npm >/dev/null 2>&1; then
+  # Best effort: the launcher falls back to npx when this does not succeed.
+  npm install -g cifi-bridge@latest --no-audit --no-fund --loglevel=error \
+    || log "Global install failed; the launcher will use npx instead"
+else
+  log "npm unavailable; the launcher will use npx instead"
+fi
+
+exit 0

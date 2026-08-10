@@ -319,6 +319,15 @@
         const incumbentAttrs = { ...cfg.currentAttrs };
         Space.clearInvalidDescendants(ATTRIBUTES, deps, minVal, incumbentAttrs);
         const incumbentTalents = { ...cfg.currentTalents };
+
+        // TOP THE INCUMBENT UP BEFORE IT COMPETES. It is the user's saved build, which may well
+        // be under-spent -- a level-58 Borge build sitting at 46 of 58 talent points is a normal
+        // thing to have. Entered as-is it can win Stage 3 on merit and hand back a build with 12
+        // points still unspent, which is never the right answer: those points are free value.
+        // Nothing else in the pipeline could rescue it either, because a transfer moves points
+        // rather than adding them, and fillLeftover refuses to open new nodes.
+        Space.spendRemaining(TALENTS, noDeps, noMin, talentBudget, incumbentTalents);
+        Space.spendRemaining(ATTRIBUTES, deps, minVal, attrBudget, incumbentAttrs);
         const [startScore] = await ctx.score([{ talentAlloc: incumbentTalents, attrAlloc: incumbentAttrs }], SCREEN_ITERATIONS);
         finalists.push(await optimizeJointly(ctx, budgets, incumbentTalents, incumbentAttrs, startScore, STEP_SIZES, 6));
         // Also carry the incumbent through UNREFINED, so the result is provably never worse
@@ -352,6 +361,21 @@
         if (!Space.isLegal(TALENTS, noDeps, noMin, r.talentAlloc, talentBudget)) {
           throw new Error(`Optimizer produced an illegal talent allocation: ${JSON.stringify(r.talentAlloc)}`);
         }
+      }
+
+      // The budget must actually be SPENT, not merely not-exceeded. Unspent points are free
+      // value left on the table, and an optimizer that hands them back has not done its job --
+      // this is asserted rather than hoped for because a user reported exactly that symptom
+      // (46 of 58 talent points after an optimize). Only the winner is checked: lower-ranked
+      // entries never reach the build.
+      const winner = ranked[0];
+      const talentIdle = talentBudget - Space.costOf(TALENTS, winner.talentAlloc);
+      const attrIdle = attrBudget - Space.costOf(ATTRIBUTES, winner.attrAlloc);
+      if (talentIdle > Space.MAX_IDLE_POINTS) {
+        throw new Error(`Optimizer left ${talentIdle} of ${talentBudget} talent points unspent: ${JSON.stringify(winner.talentAlloc)}`);
+      }
+      if (attrIdle > Space.MAX_IDLE_POINTS) {
+        throw new Error(`Optimizer left ${attrIdle} of ${attrBudget} attribute points unspent: ${JSON.stringify(winner.attrAlloc)}`);
       }
 
       report('done', 1, 1);
