@@ -227,6 +227,15 @@ nothing in boss capability, with no special-casing of that talent.
 `pinnedAttrs` is how `bossTimeless` differs from `boss`: the search holds those attributes at
 maximum and optimizes the rest around them.
 
+**The Effective Path scores through the same table.** `hunterStatPath.js`'s `marginalValue`
+takes a mode and defers to `OptimizerObjective.scoreFor`, so "what should I buy to kill the
+boss" and "what should Optimize allocate to kill the boss" cannot mean different things. In
+`loot` it is still exactly a `lootPerMin` difference, so nothing about the existing path
+changed. The path offers only `Objective.pathModes()` -- modes with `pinnedAttrs` are excluded
+because the path never reallocates attributes, so `bossTimeless` there would be a choice that
+silently does nothing; passing it throws. Measured divergence on a real level-79 Borge build:
+loot buys `hp>atk>atk>hp`, boss buys `hp>hp>hp>atk` and takes evade over effect.
+
 ### Things the optimizer deliberately does NOT do any more
 Removed because each was compensating for the previous one: random-mutation beam search, greedy
 marginal seeding, epsilon exploration, stagnation restarts, multi-restart passes, a bespoke

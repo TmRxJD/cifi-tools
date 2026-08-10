@@ -92,6 +92,10 @@
     optimizerSettings: { deep: true, make: () => fleetDefault('optimizerSettings') },
     importPrefs: { deep: true, make: defaultImportPrefs },
     loadoutTabs: { make: defaultLoadoutTabs },
+    // Which objective the Effective Path ranks by. Declared here rather than conjured at the
+    // call site, and validated against the optimizer's own path-applicable mode table so a
+    // stale/renamed mode cannot persist into a screen that then throws.
+    effectivePathMode: { make: () => 'loot' },
     // Fragments are the currency relics are bought with, and they are ACCOUNT-WIDE, not
     // per-hunter and not per-build: there is one Relic #7, you buy it once, and every hunter
     // that reads it benefits. So this lives at the top level of the store alongside the other
@@ -188,6 +192,24 @@
 
     for (const key of Object.keys(SCHEMA)) {
       if (!(key in store)) note(`missing top-level key "${key}"`);
+    }
+
+    // A persisted optimize mode must still exist in the optimizer's table. Renaming or removing
+    // a mode would otherwise leave an account pointing at one that no longer resolves, and the
+    // failure would surface later, on a screen that looks unrelated.
+    if ('effectivePathMode' in store) {
+      const pathModes = global.OptimizerObjective.pathModes();
+      if (!pathModes[store.effectivePathMode]) {
+        note(`effectivePathMode "${store.effectivePathMode}" is not a purchase-path mode (have: ${Object.keys(pathModes).join(', ')})`);
+      }
+    }
+
+    // Fragments: the rate is a user input, but it must be a sane one -- a negative rate would
+    // make time-to-afford run backwards.
+    if (isPlainObject(store.fragments)) {
+      const f = store.fragments;
+      if (!(Number(f.perDay) >= 0)) note(`fragments.perDay is ${f.perDay}, must be a number >= 0`);
+      if (!(Number(f.current) >= 0)) note(`fragments.current is ${f.current}, must be a number >= 0`);
     }
 
     for (const h of HUNTERS) {

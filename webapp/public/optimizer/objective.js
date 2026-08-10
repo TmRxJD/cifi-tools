@@ -119,7 +119,22 @@
     return modeOrThrow(mode).pinnedAttrs || [];
   }
 
-  const Objective = { MODES, scoreFor, pinnedAttrsFor, modeOrThrow };
+  /**
+   * Modes the PURCHASE PATH can meaningfully offer.
+   *
+   * The path buys stats, inscriptions and relics with currency; it never reallocates talent or
+   * attribute points (those are level-gated and belong to Optimize). A mode whose only
+   * difference from another is `pinnedAttrs` therefore cannot behave differently here --
+   * offering `bossTimeless` in a path picker would show the user a choice that changes nothing.
+   *
+   * Derived from the one MODES table rather than listed separately, so a new pinned mode is
+   * excluded automatically and a new real mode appears automatically.
+   */
+  function pathModes() {
+    return Object.fromEntries(Object.entries(MODES).filter(([, spec]) => !spec.pinnedAttrs));
+  }
+
+  const Objective = { MODES, scoreFor, pinnedAttrsFor, pathModes, modeOrThrow };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Objective;
   else global.OptimizerObjective = Objective;

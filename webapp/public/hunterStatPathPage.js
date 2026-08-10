@@ -153,11 +153,60 @@
     });
   }
 
-  function renderColumnsModal(overlay, columns, rates, rowLabel, hunter, subtitle) {
+  // The Effective Path answers "what should I buy next", and that depends entirely on what the
+  // player is trying to do. The modes come from the optimizer's own MODES table (via
+  // pathModes()), so a path recommendation and an Optimize result can never be chasing
+  // different definitions of the same goal -- which is the whole reason boss mode exists here.
+  const PATH_MODE_STORE_KEY = 'effectivePathMode';
+
+  function currentPathMode() {
+    const modes = window.OptimizerObjective.pathModes();
+    const saved = store[PATH_MODE_STORE_KEY];
+    return modes[saved] ? saved : 'loot';
+  }
+
+  // The subtitle has to say which objective produced the ranking. A boss-mode list that still
+  // reads "ranked by effect on loot/min" would be actively misleading -- the whole point of boss
+  // mode is that it deliberately ignores loot until the kill is secured.
+  const PATH_MODE_SUBTITLE = {
+    loot: 'ranked by effect on simulated loot/min',
+    push: 'ranked by effect on average stage reached',
+    boss: 'ranked by what most improves the boss kill — loot is ignored until the kill is secured',
+  };
+
+  function pathSubtitle(mode) {
+    const how = PATH_MODE_SUBTITLE[mode];
+    if (!how) throw new Error(`pathSubtitle: no description for mode "${mode}"`);
+    return `Next ${TARGET_STEPS} recommended purchases per currency, ${how}.`;
+  }
+
+  function modePickerHtml(selected) {
+    const modes = window.OptimizerObjective.pathModes();
+    return `
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-xs text-gray-400">Optimise for:</span>
+        <select id="pathModeSelect" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white">
+          ${Object.entries(modes).map(([key, spec]) => `<option value="${key}"${key === selected ? ' selected' : ''}>${escapeHtml(spec.label)}</option>`).join('')}
+        </select>
+      </div>`;
+  }
+
+  function bindModePicker(overlay, rerun) {
+    const sel = overlay.querySelector('#pathModeSelect');
+    if (!sel) return;
+    sel.onchange = () => {
+      store[PATH_MODE_STORE_KEY] = sel.value;
+      saveStore();
+      rerun(sel.value);
+    };
+  }
+
+  function renderColumnsModal(overlay, columns, rates, rowLabel, hunter, subtitle, modeSelected) {
     widenModal(overlay);
     const body = overlay.querySelector('.p-5');
     const resources = Object.keys(columns);
     body.innerHTML = `
+      ${modeSelected ? modePickerHtml(modeSelected) : ''}
       ${subtitle ? `<div class="text-xs text-gray-500 mb-3">${subtitle}</div>` : ''}
       <div class="grid grid-cols-1 md:grid-cols-${Math.min(resources.length, 4)} gap-3">
         ${resources.map((r) => `<div data-col="${r}" class="bg-gray-900/40 rounded-lg p-2 max-h-[60vh] overflow-y-auto"></div>`).join('')}
@@ -177,21 +226,27 @@
     widenModal(overlay);
     bindProgressLabels(overlay, currentHunter, resources);
 
-    let result, rates;
-    const baseline = getBaselineBuild(currentHunter);
-    try {
-      const cfg = statPathCfgFor(currentHunter, baseline);
-      [result, rates] = await Promise.all([
-        greedyPurchasePath(currentHunter, cfg, TARGET_STEPS, false, (resource, done, total) => updateProgress(overlay, resource, done, total)),
-        baseline.real ? IncomeModel.currentRates(currentHunter, store, baseline, 1000) : null,
-      ]);
-    } catch (err) {
-      overlay.querySelector('.p-5').innerHTML = `<div class="text-red-400 py-8 text-center">Failed to compute Effective Path: ${escapeHtml(err.message || String(err))}</div>`;
-      return;
-    }
-    const timingNote = baseline.real ? '' : ' Create a build to unlock timing estimates.';
-    renderColumnsModal(overlay, result.columns, rates, (r) => STAT_LABELS[r.key] || r.key, currentHunter,
-      `Next ${TARGET_STEPS} recommended purchases per material, ranked by effect on your simulated loot/min.${timingNote}`);
+    const run = async (mode) => {
+      overlay.querySelector('.p-5').innerHTML = renderProgressPanel(resources);
+      bindProgressLabels(overlay, currentHunter, resources);
+      let result; let rates;
+      const baseline = getBaselineBuild(currentHunter);
+      try {
+        const cfg = statPathCfgFor(currentHunter, baseline);
+        [result, rates] = await Promise.all([
+          greedyPurchasePath(currentHunter, cfg, TARGET_STEPS, false, mode, (resource, done, total) => updateProgress(overlay, resource, done, total)),
+          baseline.real ? IncomeModel.currentRates(currentHunter, store, baseline, 1000) : null,
+        ]);
+      } catch (err) {
+        overlay.querySelector('.p-5').innerHTML = `<div class="text-red-400 py-8 text-center">Failed to compute Effective Path: ${escapeHtml(err.message || String(err))}</div>`;
+        return;
+      }
+      const timingNote = baseline.real ? '' : ' Create a build to unlock timing estimates.';
+      renderColumnsModal(overlay, result.columns, rates, (r) => STAT_LABELS[r.key] || r.key, currentHunter,
+        `${pathSubtitle(mode)}${timingNote}`, mode);
+      bindModePicker(overlay, run);
+    };
+    run(currentPathMode());
   }
 
   async function openBuildEffectivePathModal(build) {
@@ -200,24 +255,31 @@
     widenModal(overlay);
     bindProgressLabels(overlay, currentHunter, resources);
 
-    let result, rates;
     const talents = build.talents || {};
     const attributes = build.attributes || {};
     const baseline = { level: build.level || 1, talents, attributes, real: hasMeaningfulAllocation(talents, attributes) };
-    try {
-      const cfg = statPathCfgFor(currentHunter, baseline);
-      [result, rates] = await Promise.all([
-        greedyPurchasePath(currentHunter, cfg, TARGET_STEPS, true, (resource, done, total) => updateProgress(overlay, resource, done, total)),
-        baseline.real ? IncomeModel.currentRates(currentHunter, store, baseline, 1000) : null,
-      ]);
-    } catch (err) {
-      overlay.querySelector('.p-5').innerHTML = `<div class="text-red-400 py-8 text-center">Failed to compute Effective Path: ${escapeHtml(err.message || String(err))}</div>`;
-      return;
-    }
-    const timingNote = baseline.real ? '' : ' Allocate talent/attribute points on this build to unlock timing estimates.';
-    renderColumnsModal(overlay, result.columns, rates,
-      (r) => (r.kind === 'inscryption' ? (r.label || r.key) : (STAT_LABELS[r.key] || r.key)), currentHunter,
-      `Next ${TARGET_STEPS} recommended purchases per material, ranked by effect on this build's simulated loot/min.${timingNote}`);
+
+    const run = async (mode) => {
+      overlay.querySelector('.p-5').innerHTML = renderProgressPanel(resources);
+      bindProgressLabels(overlay, currentHunter, resources);
+      let result; let rates;
+      try {
+        const cfg = statPathCfgFor(currentHunter, baseline);
+        [result, rates] = await Promise.all([
+          greedyPurchasePath(currentHunter, cfg, TARGET_STEPS, true, mode, (resource, done, total) => updateProgress(overlay, resource, done, total)),
+          baseline.real ? IncomeModel.currentRates(currentHunter, store, baseline, 1000) : null,
+        ]);
+      } catch (err) {
+        overlay.querySelector('.p-5').innerHTML = `<div class="text-red-400 py-8 text-center">Failed to compute Effective Path: ${escapeHtml(err.message || String(err))}</div>`;
+        return;
+      }
+      const timingNote = baseline.real ? '' : ' Allocate talent/attribute points on this build to unlock timing estimates.';
+      renderColumnsModal(overlay, result.columns, rates,
+        (r) => (r.kind === 'stat' ? (STAT_LABELS[r.key] || r.key) : (r.label || r.key)), currentHunter,
+        `${pathSubtitle(mode)}${timingNote}`, mode);
+      bindModePicker(overlay, run);
+    };
+    run(currentPathMode());
   }
 
   document.addEventListener('click', (e) => {

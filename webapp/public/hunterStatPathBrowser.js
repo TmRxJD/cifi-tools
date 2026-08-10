@@ -90,7 +90,7 @@
   // positive -- the point of this view is "here's the next N in ranked order for this
   // resource," not "here's how many are worth buying." It only stops early if literally
   // nothing is purchasable anymore (every candidate capped out or missing a cost formula).
-  async function greedyResourceColumn(hunter, cfg, evalFast, def, CF, candidates, currentStats, currentUpgrades, targetSteps, iterations, onProgress) {
+  async function greedyResourceColumn(hunter, cfg, evalFast, def, CF, candidates, currentStats, currentUpgrades, targetSteps, iterations, mode, onProgress) {
     const stats = { ...currentStats };
     const upgrades = { ...currentUpgrades };
     let baselineSim = await evalFast(cfg.talents, cfg.attributes, iterations, stats, upgrades);
@@ -112,7 +112,7 @@
         const candStats = param ? stats : { ...stats, [cand.key]: nextLevel };
         const candUpgrades = param ? { ...upgrades, [param]: nextLevel } : upgrades;
         const candidateSim = await evalFast(cfg.talents, cfg.attributes, iterations, candStats, candUpgrades);
-        const { delta } = window.HunterStatPath.marginalValue(baselineSim, candidateSim);
+        const { delta } = window.HunterStatPath.marginalValue(baselineSim, candidateSim, mode);
         const valuePerCost = delta / cost;
 
         if (!best || valuePerCost > best.valuePerCost) best = { cand, nextLevel, cost, candStats, candUpgrades, candidateSim, valuePerCost };
@@ -165,7 +165,14 @@
    *        gemPlannerStore, TALENTS, ATTRIBUTES }
    * onProgress(resource, done, total) fires as each resource's column advances.
    */
-  async function greedyPurchasePath(hunter, cfg, targetSteps, includeAccountUpgrades, onProgress) {
+  async function greedyPurchasePath(hunter, cfg, targetSteps, includeAccountUpgrades, mode = 'loot', onProgress) {
+    // Fail loudly on an unknown or path-inapplicable mode. A mode with pinnedAttrs (bossTimeless)
+    // cannot behave differently here -- the path never reallocates attributes -- so accepting it
+    // would show the user a choice that silently does nothing.
+    if (!window.OptimizerObjective.pathModes()[mode]) {
+      throw new Error(`greedyPurchasePath: "${mode}" is not a purchase-path mode (expected one of `
+        + `${Object.keys(window.OptimizerObjective.pathModes()).join(', ')})`);
+    }
     const def = window.HUNTER_DEFS[hunter];
     const CF = window.CostFormulas;
     const statCandidates = buildStatCandidates(hunter, def, CF);
@@ -188,7 +195,7 @@
     // also roughly halves/thirds wall-clock time vs. running them one after another.
     const entries = Object.entries(groupByResource([...statCandidates, ...upgradeCandidates]));
     const results = await Promise.all(entries.map(([resource, group]) => greedyResourceColumn(
-      hunter, cfg, evalFast, def, CF, group, cfg.hunterStats, currentUpgrades, targetSteps, SEARCH_ITERATIONS,
+      hunter, cfg, evalFast, def, CF, group, cfg.hunterStats, currentUpgrades, targetSteps, SEARCH_ITERATIONS, mode,
       onProgress && ((done, total) => onProgress(resource, done, total)),
     )));
     const columns = {};
