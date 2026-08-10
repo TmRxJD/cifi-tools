@@ -261,7 +261,7 @@ function mapSaveToStore(save) {
   // value-diff-confirmed against a nonzero real number.
   if (save.DiamondUltimaLevel !== undefined) globalUpgrades['ultima.ulti'] = realNum(save.DiamondUltimaLevel);
 
-  unmapped.push('cms', 'loopmods', 'diamondspecials', 'iap', 'gadgets', 'trinkets');
+  unmapped.push('cms', 'loopmods', 'diamondspecials', 'iap', 'trinkets');
 
   // Gems: tree level + 6 boolean nodes per tree. Every tree except Exodus stores its nodes
   // as individual `${prefix}GemNode{n}Level` fields; Exodus alone stores them as a single
@@ -315,6 +315,18 @@ function mapSaveToStore(save) {
       attributes,
       hunterStats,
     };
+  });
+
+  // Gadgets. The save's Gadget<N>Level numbering matches costFormulas' own g<N> aliases, which is
+  // what makes this a lookup rather than a guess -- CONFIRMED against the account directly: the
+  // player reported wrench 50 / zaptron 40 in game, and the save reads Gadget5Level 50 /
+  // Gadget6Level 40. (Gadget7Level is also 90, which coincidentally matched a `wrench: 90` in an
+  // unrelated build code; that near-miss is why this waited for confirmation instead of guessing.)
+  // Corroborating: our g1/g2/g3 share one cost formula and the save's Gadget1/2/3 are identical.
+  const GADGET_SAVE_INDEX = { wrench: 5, zaptron: 6, anchor: 15 };
+  Object.entries(GADGET_SAVE_INDEX).forEach(([id, n]) => {
+    const v = save[`Gadget${n}Level`];
+    if (v !== undefined) globalUpgrades[`gadgets.${id}`] = realNum(v);
   });
 
   // NOTE: fleet data (generator tiers, gear levels, ship ranks, badges, fleet research) is NOT

@@ -276,20 +276,24 @@ think one is wrong, disprove it with a test.
     what is wanted and no formula is needed. Three non-obvious names: Ozzy's Multistrike
     Chance/Power are stored under the CRIT names; Knox's `reload` is `AtkSpeed`; Knox's `proj` is
     `SalvoSize`.
-  - `gadgets` — **the save has `Gadget<N>Level`, but the numbering correspondence is UNVERIFIED
-    and it is deliberately not mapped.** Two competing hypotheses: our own `costFormulas` aliases
-    say wrench=`g5`, zaptron=`g6`, anchor=`g15`, which would make wrench `Gadget5Level` (50 on the
-    reference account); but `Gadget7Level` is exactly 90, matching the `wrench: 90` in the
-    separately-supplied build code. Corroborating the first: our g1/g2/g3 share one cost formula
-    and the save's Gadget1/2/3 sit at an identical 160/160/160. Not enough. Wrench is a real sim
-    param, so a wrong index silently skews results — **one cheap check settles it: buy a single
-    wrench level in-game and re-pull, or just read the in-game wrench level off the account.**
+  - **`gadgets` now import**, and the index question is settled by direct confirmation: the player
+    reported wrench 50 / zaptron 40 in game, and the save reads `Gadget5Level` 50 /
+    `Gadget6Level` 40 — matching `costFormulas`' own `g5`/`g6`/`g15` aliases. Worth remembering
+    why this waited: `Gadget7Level` is also exactly 90, which coincidentally matched a
+    `wrench: 90` in an unrelated build code. A plausible coincidence nearly became a confident
+    wrong mapping on a real sim param.
   - `loopmods`, `cms` — the save has the data (`LM<N>Level` ×295, `CM<N>` 1–26) but index→entity
     is not statically recoverable; names are runtime UI `Text`. Note our `cms` ids are cm46–cm57
     while the save only carries CM1–CM26, so the two numberings are not the same scheme.
-  - `trinkets`, `diamondspecials`, `iap` — **no matching save field exists at all** (searched for
-    trinket levels, travpack/IAP, hunterloot, reviveboost). These may simply not be persisted, in
-    which case they can never be imported and must stay manual.
+  - `trinkets`, `diamondspecials`, `iap` — **absent from THIS save, which is not the same as
+    never persisted.** Searched exhaustively by both our ids and the game's own labels ("Traversal
+    Pack", "Hunter Loot Booster", "Revive Boost"), plus an inverted search: `tools/save/unclaimed.js`
+    lists every field no importer reads, so nothing can hide behind an unexpected name. Zero hits.
+    But the game clearly DOES persist purchases — 175 `*Purchased` booleans exist, and
+    `DiamondUltimaLevel` is present and mapped — so the likeliest reading is that **the reference
+    account simply does not own them**, exactly as CM46+ and Research81 are absent for content it
+    has not reached. A save from an account that owns one would reveal the field name instantly.
+    Do not conclude "server-side" from this account alone.
   - ships/fleet — **already fully mapped, in `shipSchema.js`, not here.** Ship ranks, research
     units, generator tiers (`MK<n>UnlockedBool`), gear piece LEVELS (`{Color}Item<N>Level`),
     fleet badges (`Badge2Acquired` → innovation, `DarkBadge1Acquired` → dark innovation) and
