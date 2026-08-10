@@ -216,6 +216,13 @@ interface HunterSimApi {
   loadParams(): Promise<Record<HunterId, string[]>>;
   loadWasm(): Promise<Record<string, Function>>;
   clearCache(): void;
+  /**
+   * THE cancellation primitive for long-running sim work (purchase paths, income rates).
+   * Throws an Error whose `name` is `ABORTED` when the signal is already aborted.
+   */
+  throwIfAborted(signal?: AbortSignal | null): void;
+  isAbort(err: unknown): boolean;
+  readonly ABORTED: string;
 }
 
 declare const HunterSim: HunterSimApi;

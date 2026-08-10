@@ -406,9 +406,27 @@ function nextCopyName(name) {
 
 // ==================== ROUTER ====================
 
+// Every route this app actually renders. Anything else resolves to the sim page.
+//
+// This list is not decoration: render() falls back to renderSimPage() for an unrecognised
+// route, but renderSimPage calls switchHunter(), whose "am I already on the sim page?" guard
+// is `currentRoute() === 'sim'`. With an unknown route that guard was false while the sim page
+// was nonetheless being rendered, so switchHunter called render() again -- render -> sim page
+// -> switchHunter -> render, until "Maximum call stack size exceeded". Any stale bookmark or
+// mistyped hash (`#/hunterstats` was the one that surfaced it) hard-locked the page.
+//
+// Normalising HERE rather than adding a guard inside switchHunter is deliberate: the bug was
+// two places disagreeing about which route is current, so the fix is to leave exactly one
+// answer to that question.
+const KNOWN_ROUTES = new Set([
+  'sim', 'gems', 'fleet', 'shipsetup', 'gearsets', 'research', 'badges', 'settings',
+]);
+
 function currentRoute() {
   const hash = location.hash.replace(/^#\/?/, '');
-  return hash || 'sim';
+  if (!hash) return 'sim';
+  if (KNOWN_ROUTES.has(hash) || hash.startsWith('upgrades/')) return hash;
+  return 'sim';
 }
 
 function navigate(route) { location.hash = `#/${route}`; }

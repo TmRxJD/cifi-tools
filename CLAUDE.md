@@ -431,6 +431,18 @@ think one is wrong, disprove it with a test.
   whole candidate sweep, and step-only checking still burns 16 evaluations after the abort
   where per-candidate does 0. `path-abort-test.js` asserts on work done AFTER the abort for
   exactly that reason; it was verified to FAIL when the per-candidate check is removed.
+- **An unknown hash route must normalise to `sim`, and `currentRoute()` is the only place that
+  decides.** `render()` falls back to `renderSimPage()` for a route it does not recognise, but
+  `renderSimPage` calls `switchHunter()`, whose "am I already on the sim page?" guard is
+  `currentRoute() === 'sim'`. For an unknown route that guard was false while the sim page was
+  being drawn anyway, so `switchHunter` called `render()` again -- **render -> sim page ->
+  switchHunter -> render until the stack blew**. Any stale bookmark or mistyped hash hard-locked
+  the app; `#/hunterstats` is what surfaced it. Pre-dated the boss-mode work (reproduced on an
+  older commit before fixing). The fix normalises in `currentRoute()` so there is exactly one
+  answer to "which route is this" -- do NOT instead add a second guard inside `switchHunter`,
+  which is the same two-sources-of-truth bug wearing a different hat. `route-test.js` pins both
+  directions: unknown routes normalise, AND every route `render()` dispatches on survives (a
+  whitelist that is too aggressive would silently send real pages to the sim page).
 - **Legality is a state predicate, not a path predicate.** A node at level > 0 is legal iff it's
   within `maxLevel`, every dependency parent is > 0, and any `minValue` tier threshold is met by
   points spent in strictly-lower-threshold nodes. Order of purchase never matters. This is what
@@ -523,6 +535,7 @@ node tools/bench/relic-cost-test.js    # relic cost table + fragment arithmetic 
 node tools/bench/relic-arg-probe.js    # every declared relic reaches the wasm (fast)
 node tools/bench/path-relic-test.js    # effective path never recommends an inert relic
 node tools/bench/path-abort-test.js    # closing the Effective Path actually stops the work
+node tools/bench/route-test.js         # unknown hash routes normalise instead of hard-locking
 node tools/bench/relic-sweep.js        # which relics actually move the sim (slow)
 node tools/bench/gem-coverage-test.js  # every gem param is reachable from the Gem Planner
 node tools/bench/gem-tree-test.js      # tree shape + every unlock gate is satisfiable
