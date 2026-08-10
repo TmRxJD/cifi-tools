@@ -100,15 +100,33 @@ console.log(`\nhunter base stats: ${statsFilled ? 'some filled' : 'NOT filled by
 
 // Other store areas the user fills by hand.
 console.log('\nother input areas:');
+// THE SHIP IMPORT IS A SECOND PATH, and missing it made an earlier version of this report lie.
+// saveImport.js's mapSaveToStore covers hunter-side data; fleet data goes through shipSchema.js
+// (mapSaveToShips / mapSaveToUnlockedGens / mapSaveToGearLevels / mapSaveToFleetBadges / ...)
+// applied by applyImportedShipData(). Reporting only the first path made ship ranks, gear levels,
+// badges and fleet research look unmapped when all four were already done -- and led to a
+// duplicate mapping being written for two of them. Probe BOTH paths.
+const ship = {
+  ships: sb.mapCifiSaveToShips ? Object.keys(sb.mapCifiSaveToShips(save) || {}).length : 0,
+  gens: sb.mapCifiSaveToUnlockedGens ? Object.keys(sb.mapCifiSaveToUnlockedGens(save) || {}).length : 0,
+  gear: sb.mapCifiSaveToGearLevels ? Object.keys(sb.mapCifiSaveToGearLevels(save) || {}).length : 0,
+  badges: sb.mapCifiSaveToFleetBadges ? Object.values(sb.mapCifiSaveToFleetBadges(save) || {}).length : 0,
+  research: ['RU68Level', 'RU78Level'].filter((k) => save[k] !== undefined).length,
+  gearCounters: sb.mapCifiSaveToShipGear ? Object.keys(sb.mapCifiSaveToShipGear(save) || {}).length : 0,
+  researchUnits: sb.mapCifiSaveToResearchUnits ? Object.keys(sb.mapCifiSaveToResearchUnits(save) || {}).length : 0,
+};
+
 const areas = [
   ['gems', mapped.gems && Object.keys(mapped.gems).length],
   ['perHunter (level/talents/attributes)', mapped.perHunter && Object.keys(mapped.perHunter).length],
-  ['generator tiers', mapped.unlockedGens && Object.keys(mapped.unlockedGens).length],
-  ['gear owned', mapped.gearOwned ? `${mapped.gearOwned.filter(Boolean).length}/${mapped.gearOwned.length}` : 0],
   ['fragment balance', mapped.fragments ? 'yes' : 0],
-  ['ship ranks / crew', 0],
-  ['gear piece levels', 0],
-  ['fleet badges / research', 0],
+  ['ship ranks (shipSchema)', ship.ships],
+  ['research units (shipSchema)', ship.researchUnits],
+  ['generator tiers (shipSchema)', ship.gens],
+  ['gear piece levels (shipSchema)', ship.gear],
+  ['fleet badges (shipSchema)', ship.badges],
+  ['fleet research #68/#78 (shipSchema)', ship.research],
+  ['ship gear counters (shipSchema)', ship.gearCounters],
 ];
 for (const [name, v] of areas) console.log(`  ${v ? 'ok  ' : 'NONE'} ${name}${v && v !== 'yes' ? ` (${v})` : ''}`);
 

@@ -256,6 +256,13 @@ think one is wrong, disprove it with a test.
     Display names are UI `Text` populated at runtime and are not in the table.
   - **Save diffing therefore DOES work** for mapping index -> mod: change one mod in-game,
     re-pull, diff, see which `LM<N>` moved. Slow, but it was never impossible.
+- **THERE ARE TWO IMPORT PATHS, and any audit must probe both.** Hunter-side data goes through
+  `saveImport.js`'s `mapSaveToStore`; fleet data goes through `shipSchema.js`
+  (`mapSaveToShips`, `mapSaveToUnlockedGens`, `mapSaveToGearLevels`, `mapSaveToFleetBadges`, …)
+  applied by `applyImportedShipData()`. An earlier version of `save-coverage.js` inspected only
+  the first and reported ship ranks, gear levels, badges and fleet research as unmapped when all
+  four were already done — which led to a duplicate gear/generator mapping being written and then
+  deleted. The report now probes both paths.
 - **Every hand-typed input the save can supply should be auto-filled, and
   `tools/bench/save-coverage.js` is the ledger.** It walks the tool's own input surface, runs the
   real importer over a real save, and prints filled vs missing with candidate save field families
@@ -269,16 +276,11 @@ think one is wrong, disprove it with a test.
   - `trinkets`, `diamondspecials`, `iap` — no matching save field family found yet.
   - hunter base stats — the save stores upgrade LEVELS, not the displayed stat; the level→stat
     formula is not reverse-engineered.
-  - ships/fleet — **generator tiers and gear ownership now import**; the rest is still open.
-    `MK<n>UnlockedBool` maps to `unlockedGens` by exact name. `GearUnlockedList` is a positional
-    boolean array, and because the reference account owns all 22 pieces its ORDER cannot be
-    verified from it — so the import **cross-checks** owned-per-colour against the save's own
-    `Gear<Colour>SetProgress` and declines rather than guessing if they disagree. Still unmapped:
-    ship ranks/crew, gear piece LEVELS (no save field), fleet badges and fleet research
-    (`Badge<N>Acquired` and `RU<N>Level` exist but index→entity is unknown), and `shipGear`
-    counters. Meltdown is deliberately skipped: the save offers `HighestMeltdown` (0.373),
-    `MeltdownStep` (216) and `AchievementPeakMeltdownLevel` (11) and nothing says which scale the
-    ship model wants.
+  - ships/fleet — **already fully mapped, in `shipSchema.js`, not here.** Ship ranks, research
+    units, generator tiers (`MK<n>UnlockedBool`), gear piece LEVELS (`{Color}Item<N>Level`),
+    fleet badges (`Badge2Acquired` → innovation, `DarkBadge1Acquired` → dark innovation) and
+    fleet research (`RU68Level`/`RU78Level` → Fleet Analysis 1/2) all have verified mappings,
+    applied through `applyImportedShipData()`.
 - **Fragment BALANCE comes from the save; the RATE never can.** `RelicFragments` is a BigDouble
   ({mantissa, exponent}) holding the current balance — the importer fills `fragments.current` and
   stamps `currentAt` so accrual restarts from a real number. It deliberately does NOT touch

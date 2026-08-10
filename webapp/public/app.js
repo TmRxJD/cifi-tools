@@ -2990,24 +2990,6 @@ async function processImportedSaveText(rawText, silent) {
     });
   }
 
-  // Fleet: generator tiers and gear ownership. Both are gated on the same checklist categories
-  // the rest of the ship import already uses, so a user who unticks "ship data" is not
-  // surprised by these arriving anyway.
-  if (cats.unlockedGens && mapped.unlockedGens && Object.keys(mapped.unlockedGens).length) {
-    diffApply('generator tiers', () => store.unlockedGens, () => {
-      Object.entries(mapped.unlockedGens).forEach(([tier, on]) => { store.unlockedGens[tier] = on; });
-    });
-  }
-  if (cats.gearSets && mapped.gearOwned) {
-    diffApply('gear owned', () => store.gearSets, () => {
-      // Only ownership comes from the save -- piece LEVELS have no save field, so whatever the
-      // user has entered for them is left untouched.
-      mapped.gearOwned.forEach((owned, i) => {
-        if (store.gearSets.pieces[i]) store.gearSets.pieces[i].owned = owned;
-      });
-    });
-  }
-
   // Fragments: the save knows the BALANCE, never the earn rate. Fill the balance and stamp it so
   // the accrual clock restarts from a real number; leave perDay alone, because overwriting a rate
   // the user told us with one we invented would be worse than not filling it.
