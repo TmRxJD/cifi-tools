@@ -2377,6 +2377,11 @@ window.ShipData = {
   AOTC: { shipId: AOTC_SHIP_ID, slot: AOTC_SLOT, autoMaxAtBudget: AOTC_AUTO_MAX_BUDGET },
 };
 
+// saveImport.js needs the canonical piece list (name + colour, in order) to map the save's
+// positional GearUnlockedList and to cross-check it against the per-colour set progress. It
+// loads before shipsPage.js, so it reads this at call time rather than at load time.
+window.REAL_GEAR_PIECES_FOR_IMPORT = REAL_GEAR_PIECES.map((p) => ({ name: p.name, color: p.color }));
+
 window.FleetStoreDefaults = {
   unlockedGens: defaultUnlockedGens,
   shipGear: defaultShipGear,

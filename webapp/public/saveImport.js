@@ -280,6 +280,46 @@ function mapSaveToStore(save) {
     };
   });
 
+  // ---- Fleet -------------------------------------------------------------------------------
+  // Generator tiers. `MK<n>UnlockedBool` is an exact, unambiguous name match for what the Fleet
+  // page asks the user to tick, so this one needs no inference at all. The save carries 12; the
+  // tool models 10 (GEN_TIERS) -- the extra two are unreleased, so they are simply ignored.
+  const unlockedGens = {};
+  for (let tier = 1; tier <= 10; tier++) {
+    const v = save[`MK${tier}UnlockedBool`];
+    if (typeof v === 'boolean') unlockedGens[tier] = v;
+  }
+
+  // Gear ownership. `GearUnlockedList` is a positional boolean array, one entry per piece, and
+  // the account this was built against owns all 22 -- which means the ORDER cannot be verified
+  // from it, only the count. So the mapping is cross-checked instead of trusted: count the
+  // owned pieces per colour and require that to equal the save's own per-colour
+  // `Gear<Colour>SetProgress`. If a future account with partial gear has a different piece
+  // order, those two disagree and the import declines rather than silently mis-assigning gear.
+  let gearOwned;
+  const gearList = save.GearUnlockedList;
+  if (Array.isArray(gearList) && Array.isArray(window.REAL_GEAR_PIECES_FOR_IMPORT)) {
+    const pieces = window.REAL_GEAR_PIECES_FOR_IMPORT;
+    if (gearList.length === pieces.length) {
+      const perColour = {};
+      pieces.forEach((piece, i) => {
+        if (!gearList[i]) return;
+        perColour[piece.color] = (perColour[piece.color] || 0) + 1;
+      });
+      const mismatch = Object.entries(perColour).find(([colour, count]) => {
+        const declared = save[`Gear${colour}SetProgress`];
+        return typeof declared === 'number' && declared !== count;
+      });
+      if (mismatch) {
+        unmapped.push(`gear (piece order disagrees with Gear${mismatch[0]}SetProgress)`);
+      } else {
+        gearOwned = gearList.map(Boolean);
+      }
+    } else {
+      unmapped.push(`gear (save lists ${gearList.length} pieces, tool models ${pieces.length})`);
+    }
+  }
+
   // Fragments. The save stores the CURRENT BALANCE as a BigDouble ({mantissa, exponent}); it has
   // no earn-rate field, because rate is not a thing the game persists -- it falls out of campaign
   // and boss content. So this fills `current` and stamps `currentAt`, and leaves `perDay` for the
@@ -294,7 +334,7 @@ function mapSaveToStore(save) {
   }
   if (!fragments) unmapped.push('fragments');
 
-  return { globalUpgrades, gems, perHunter, fragments, unmapped };
+  return { globalUpgrades, gems, perHunter, fragments, unlockedGens, gearOwned, unmapped };
 }
 window.mapCifiSaveToStore = mapSaveToStore;
 

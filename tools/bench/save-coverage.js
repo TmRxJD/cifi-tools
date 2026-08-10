@@ -103,8 +103,12 @@ console.log('\nother input areas:');
 const areas = [
   ['gems', mapped.gems && Object.keys(mapped.gems).length],
   ['perHunter (level/talents/attributes)', mapped.perHunter && Object.keys(mapped.perHunter).length],
-  ['ships / fleet', mapped.ships || mapped.fleet ? 'yes' : 0],
-  ['fragments (balance/rate)', mapped.fragments ? 'yes' : 0],
+  ['generator tiers', mapped.unlockedGens && Object.keys(mapped.unlockedGens).length],
+  ['gear owned', mapped.gearOwned ? `${mapped.gearOwned.filter(Boolean).length}/${mapped.gearOwned.length}` : 0],
+  ['fragment balance', mapped.fragments ? 'yes' : 0],
+  ['ship ranks / crew', 0],
+  ['gear piece levels', 0],
+  ['fleet badges / research', 0],
 ];
 for (const [name, v] of areas) console.log(`  ${v ? 'ok  ' : 'NONE'} ${name}${v && v !== 'yes' ? ` (${v})` : ''}`);
 

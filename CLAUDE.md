@@ -232,9 +232,16 @@ think one is wrong, disprove it with a test.
   - `trinkets`, `diamondspecials`, `iap` — no matching save field family found yet.
   - hunter base stats — the save stores upgrade LEVELS, not the displayed stat; the level→stat
     formula is not reverse-engineered.
-  - ships/fleet — the families exist and are unmapped (`SU<N>Level` 60, `RU<N>*` 438,
-    `ATU<N>Level` 28, `DU<N>Level` 24, `TU<N>*` 84, `Mech<N>*` 102, `Badge<N>Acquired` 16).
-    Largest remaining win.
+  - ships/fleet — **generator tiers and gear ownership now import**; the rest is still open.
+    `MK<n>UnlockedBool` maps to `unlockedGens` by exact name. `GearUnlockedList` is a positional
+    boolean array, and because the reference account owns all 22 pieces its ORDER cannot be
+    verified from it — so the import **cross-checks** owned-per-colour against the save's own
+    `Gear<Colour>SetProgress` and declines rather than guessing if they disagree. Still unmapped:
+    ship ranks/crew, gear piece LEVELS (no save field), fleet badges and fleet research
+    (`Badge<N>Acquired` and `RU<N>Level` exist but index→entity is unknown), and `shipGear`
+    counters. Meltdown is deliberately skipped: the save offers `HighestMeltdown` (0.373),
+    `MeltdownStep` (216) and `AchievementPeakMeltdownLevel` (11) and nothing says which scale the
+    ship model wants.
 - **Fragment BALANCE comes from the save; the RATE never can.** `RelicFragments` is a BigDouble
   ({mantissa, exponent}) holding the current balance — the importer fills `fragments.current` and
   stamps `currentAt` so accrual restarts from a real number. It deliberately does NOT touch
