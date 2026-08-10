@@ -401,6 +401,88 @@ check('an invalid level is rejected', () => {
   return S.validateStore(store).some((p) => /level is 0/.test(p)) ? null : 'not caught';
 });
 
+// ---- Per-hunter iterations + loot filter ------------------------------------------------
+// Both are per hunter because the original tool keys them per hunter, and because the tradeoffs
+// genuinely differ per hunter (a level-79 Borge evaluation costs far more than a level-12 Knox).
+
+check('a fresh store gives every hunter a usable iteration count and a full loot filter', () => {
+  const store = S.freshStore();
+  for (const h of S.HUNTERS) {
+    if (store[h].iterations !== S.ITERATIONS.default) return `${h}.iterations is ${store[h].iterations}`;
+    for (const k of S.LOOT_KEYS) {
+      if (store[h].lootFilter[k] !== true) return `${h}.lootFilter.${k} should default to visible`;
+    }
+  }
+  return S.validateStore(store).length ? `fresh store does not validate: ${S.validateStore(store)[0]}` : null;
+});
+
+check('an existing account without the new per-hunter fields is migrated, not broken', () => {
+  // The per-hunter schema entry is `deep`, which is what makes this work; without it the fields
+  // would only appear for brand-new profiles.
+  const store = S.freshStore();
+  delete store.borge.iterations;
+  delete store.borge.lootFilter;
+  store.borge.builds.push({ id: 'keep', name: 'mine', level: 5, talents: {}, attributes: {} });
+  S.migrateStore(store);
+  if (store.borge.iterations !== S.ITERATIONS.default) return 'iterations not backfilled';
+  if (!store.borge.lootFilter || store.borge.lootFilter.mat1 !== true) return 'lootFilter not backfilled';
+  if (store.borge.builds.length !== 1) return 'migration destroyed existing builds';
+  return null;
+});
+
+check('iterations outside the allowed range is reported', () => {
+  const store = S.freshStore();
+  store.borge.iterations = 0;
+  if (!S.validateStore(store).some((p) => /borge\.iterations is 0/.test(p))) return 'zero not caught';
+  store.borge.iterations = S.ITERATIONS.max + S.ITERATIONS.step;
+  if (!S.validateStore(store).some((p) => /above the current ceiling/.test(p))) return 'over-ceiling not caught';
+  return null;
+});
+
+check('High Iterations Mode raises the ceiling rather than changing the value', () => {
+  const store = S.freshStore();
+  const high = S.ITERATIONS.max + S.ITERATIONS.step;
+  if (S.clampIterations(high, store) !== S.ITERATIONS.max) return 'not clamped to the normal ceiling';
+  store.settings.ui.highIterations = true;
+  if (S.iterationCeiling(store) !== S.ITERATIONS.maxHigh) return 'ceiling did not rise';
+  if (S.clampIterations(high, store) !== high) return 'value was altered even though it is now in range';
+  store.borge.iterations = high;
+  if (S.validateStore(store).some((p) => /iterations/.test(p))) return 'a now-legal value is still reported';
+  return null;
+});
+
+check('clamping never yields something the evaluator cannot use', () => {
+  const store = S.freshStore();
+  for (const bad of [undefined, null, NaN, 'abc', -5, 0, Infinity, -Infinity]) {
+    const v = S.clampIterations(bad, store);
+    if (!Number.isInteger(v) || v < S.ITERATIONS.min || v > S.iterationCeiling(store)) {
+      return `clampIterations(${String(bad)}) returned ${v}`;
+    }
+  }
+  return null;
+});
+
+check('a loot filter with an unknown key or a non-boolean is reported', () => {
+  const store = S.freshStore();
+  store.borge.lootFilter.mat9 = true;
+  if (!S.validateStore(store).some((p) => /unknown key "mat9"/.test(p))) return 'unknown key not caught';
+  delete store.borge.lootFilter.mat9;
+  store.borge.lootFilter.mat1 = 'yes';
+  if (!S.validateStore(store).some((p) => /lootFilter\.mat1 is string/.test(p))) return 'non-boolean not caught';
+  return null;
+});
+
+check('the interface preferences are declared, not conjured at a call site', () => {
+  const store = S.freshStore();
+  if (store.settings.ui.upgradesSidebar !== true) return 'upgradesSidebar should default on';
+  if (store.settings.ui.highIterations !== false) return 'highIterations should default off';
+  // An account that predates the `ui` block must gain it on migration.
+  delete store.settings.ui;
+  S.migrateStore(store);
+  if (!store.settings.ui || store.settings.ui.upgradesSidebar !== true) return 'ui block not backfilled';
+  return null;
+});
+
 runChecks().then(() => {
   console.log(`\n${failures ? `${failures} FAILED` : 'all schema invariants hold'}`);
   process.exit(failures ? 1 : 0);

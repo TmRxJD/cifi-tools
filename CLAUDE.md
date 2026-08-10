@@ -105,6 +105,8 @@ There is exactly one place for each of these. **Do not add a second.**
 | Pulled APK / save / IL2CPP / captures | `tools/gamefiles/` (gitignored; see its README) |
 | Headless IL2CPP dumper (metadata v39) | `tools/il2cpp-cli/` |
 | Server-table capture | `tools/capture/` |
+| Per-hunter evaluation fidelity (UI) | `store[hunter].iterations` + `StoreSchema.ITERATIONS` / `clampIterations` |
+| Cancellation of long sim work | `HunterSim.throwIfAborted` / `isAbort` / `ABORTED` |
 | Coarse evaluation fidelity | `HunterOptimizer.SCREEN_ITERATIONS` (one value, shared) |
 | Full evaluation fidelity | `HunterOptimizer.FINAL_ITERATIONS` |
 | Build share-code encode/decode | `webapp/public/buildCode.js` |

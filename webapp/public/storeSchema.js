@@ -119,11 +119,65 @@
     // (e.g. The Legacy of Ultima). Was previously conjured at four separate call sites with
     // `store.settings = store.settings || {}` and never declared anywhere -- so it existed on
     // some accounts and not others depending on which screen you had happened to visit.
-    settings: { deep: true, make: () => ({ advancedTalents: {} }) },
+    // `ui` mirrors the original tool's Settings → Interface / Enthusiast Mode sections.
+    // `highIterations` only RAISES the iteration ceiling; it is not itself an iteration count,
+    // so turning it off must not silently rewrite a value the user already chose (see
+    // iterationCeiling / clampIterations below, which is why the ceiling is a function rather
+    // than a stored number).
+    settings: {
+      deep: true,
+      make: () => ({
+        advancedTalents: {},
+        ui: { upgradesSidebar: true, highIterations: false },
+      }),
+    },
   };
 
+  // Simulation iteration bounds, matching the original tool's own slider (min 250, max 4000,
+  // step 250, default 1000) and its "Enable High Iterations Mode" setting, which raises the
+  // ceiling to 100,000 for precision at the cost of runtime.
+  const ITERATIONS = { min: 250, max: 4000, maxHigh: 100000, step: 250, default: 1000 };
+
+  /** The ceiling that applies right now, given whether the user enabled high-iterations mode. */
+  function iterationCeiling(store) {
+    return store?.settings?.ui?.highIterations ? ITERATIONS.maxHigh : ITERATIONS.max;
+  }
+
+  /**
+   * Coerce an iteration count into something the evaluator can actually be asked for.
+   *
+   * Deliberately clamps rather than throwing: this reads user input on every keystroke, and a
+   * half-typed "2" is not a bug worth exploding on. It does NOT round to `step` -- an imported
+   * or previously-saved value outside the step grid is still a valid number of iterations, and
+   * silently changing it would be a surprise.
+   */
+  function clampIterations(value, store) {
+    const n = Math.round(Number(value));
+    if (!Number.isFinite(n)) return ITERATIONS.default;
+    return Math.min(iterationCeiling(store), Math.max(ITERATIONS.min, n));
+  }
+
+  // Which loot rows a build card shows. Per hunter, matching the original (its own filter is
+  // stored per hunter as `lootFilters_<hunterId>`). All on by default -- a filter that starts
+  // hiding things would look like missing data.
+  const LOOT_KEYS = ['mat1', 'mat2', 'mat3', 'xp'];
+  const defaultLootFilter = () => Object.fromEntries(LOOT_KEYS.map((k) => [k, true]));
+
   HUNTERS.forEach((h) => {
-    SCHEMA[h] = { make: () => ({ hunterStats: seedHunterStats(h), builds: [] }) };
+    // `deep` so that per-hunter fields added later reach accounts that already exist, instead
+    // of only appearing for users who happen to start fresh.
+    SCHEMA[h] = {
+      deep: true,
+      make: () => ({
+        hunterStats: seedHunterStats(h),
+        builds: [],
+        // Per hunter, not global: the original tool keys iterations by hunter too, and it is
+        // the right shape -- a level-79 Borge costs far more per evaluation than a level-12
+        // Knox, so the accuracy/speed tradeoff is genuinely a different one per hunter.
+        iterations: ITERATIONS.default,
+        lootFilter: defaultLootFilter(),
+      }),
+    };
   });
 
   // Keys that older versions wrote and nothing reads any more. Listed explicitly so removal is
@@ -218,6 +272,28 @@
       if (!Array.isArray(hunter.builds)) { note(`${h}.builds is not an array`); continue; }
       if (!isPlainObject(hunter.hunterStats)) note(`${h}.hunterStats is not an object`);
 
+      // Iterations reaches the evaluator directly. A zero, a negative or a NaN would produce a
+      // meaningless score rather than an error, so it is worth catching here where the message
+      // can name the field.
+      const it = hunter.iterations;
+      if (!Number.isFinite(Number(it)) || Number(it) < ITERATIONS.min) {
+        note(`${h}.iterations is ${it}, must be a number >= ${ITERATIONS.min}`);
+      } else if (Number(it) > iterationCeiling(store)) {
+        note(`${h}.iterations is ${it}, above the current ceiling of ${iterationCeiling(store)}`
+          + `${store?.settings?.ui?.highIterations ? '' : ' (enable High Iterations Mode to raise it)'}`);
+      }
+
+      // A loot filter with an unknown key would silently do nothing; one with a non-boolean
+      // would hide a row by accident. Both are cheap to catch.
+      if (!isPlainObject(hunter.lootFilter)) {
+        note(`${h}.lootFilter is not an object`);
+      } else {
+        for (const [k, v] of Object.entries(hunter.lootFilter)) {
+          if (!LOOT_KEYS.includes(k)) note(`${h}.lootFilter has unknown key "${k}" (have: ${LOOT_KEYS.join(', ')})`);
+          else if (typeof v !== 'boolean') note(`${h}.lootFilter.${k} is ${typeof v}, must be a boolean`);
+        }
+      }
+
       const ids = new Set();
       hunter.builds.forEach((b, i) => {
         const where = `${h}.builds[${i}]`;
@@ -301,6 +377,11 @@
     migrateStore,
     validateStore,
     validateAllocation,
+    ITERATIONS,
+    iterationCeiling,
+    clampIterations,
+    LOOT_KEYS,
+    defaultLootFilter,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = StoreSchema;

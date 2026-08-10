@@ -158,6 +158,39 @@ function saveStore() {
   updateNavGating();
 }
 
+/**
+ * Reset every hunter, build, upgrade and setting back to a fresh profile.
+ *
+ * Overwrites BOTH copies. localStorage and IndexedDB mirror each other precisely because
+ * browsers bundle localStorage into "clear cache" -- so wiping only one would leave the other
+ * to be reloaded on next boot, and the reset would silently undo itself. Writes the fresh store
+ * rather than deleting the keys, for the same reason: an absent key is indistinguishable from a
+ * storage failure at load time.
+ *
+ * The confirmation and the backup-first prompt live at the call site; this is the mechanism.
+ */
+function resetAllData() {
+  const fresh = StoreSchema.freshStore();
+  Object.keys(store).forEach((k) => delete store[k]);
+  Object.assign(store, fresh);
+  saveStore();
+  render();
+}
+
+/**
+ * Apply Settings → Interface preferences to the shell. Called on boot and whenever the
+ * preference changes, so the two cannot drift apart.
+ */
+function applyInterfacePrefs() {
+  const aside = document.querySelector('aside');
+  if (!aside) return;
+  // The sidebar is `hidden md:flex` by default; hiding it means suppressing the md: breakpoint
+  // rule too, so toggle a plain `hidden` alongside removing the flex class.
+  const show = store.settings.ui.upgradesSidebar !== false;
+  aside.classList.toggle('md:flex', show);
+  aside.classList.toggle('md:hidden', !show);
+}
+
 // Confirmed exact from the live bundle's isUnlocked() (AppNavbar.vue): a gem tree level
 // gate, plus an optional specific node (1-based) that must also be toggled on.
 function isGemUnlocked(gemKey, lvl, node) {
@@ -257,6 +290,14 @@ function budgetsForLevel(level) { return { talentBudget: window.talentBudgetForL
 // card scored them in the real one, and the two disagreed for reasons nothing in the UI could
 // explain. One builder means a field can only be missing everywhere at once, which is a bug you
 // notice immediately rather than a silent per-surface divergence.
+// THE iteration count for the hunter currently on screen. Per hunter, persisted, and clamped
+// to whatever ceiling Settings currently allows -- read from the store rather than the input so
+// that a value set before High Iterations Mode was switched off cannot silently reach the
+// evaluator, and so non-UI callers do not depend on a DOM node existing.
+function currentIterations() {
+  return StoreSchema.clampIterations(store[currentHunter].iterations, store);
+}
+
 function evalStateFor(build, iterations) {
   return {
     level: build.level,
@@ -382,6 +423,7 @@ const DEDICATED_NAV_ROUTES = { sim: 'sim', fleet: 'fleet', settings: 'settings' 
 function render() {
   const route = currentRoute();
   updateNavGating();
+  applyInterfacePrefs();
   const milestoneLabel = document.getElementById('milestoneSidebarLabel');
   if (milestoneLabel) milestoneLabel.textContent = `Milestone #0 (${store.globalUpgrades['shardmilestones.m0'] || 0})`;
   document.querySelectorAll('.sidebar-link').forEach((el) => {
@@ -462,11 +504,13 @@ function renderSimPage(root) {
       <div class="bg-gray-800 py-3 px-4 flex flex-wrap items-center justify-between gap-2">
         <div class="flex flex-wrap items-center gap-2">
           <span class="text-sm text-gray-400">Settings:</span>
-          <label class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors cursor-pointer">
+          <label class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors cursor-pointer"
+                 title="Higher iterations give more accurate results but take longer to compute. Set per hunter; raise the ceiling in Settings → Enthusiast Mode.">
             ${iconSvg('repeat', 14, 'text-blue-400')}
-            <input id="baseIterations" type="number" value="1000" min="100" step="100" class="w-16 bg-transparent text-white focus:outline-none" />
+            <input id="baseIterations" type="number" class="w-20 bg-transparent text-white focus:outline-none" />
             <span>iterations</span>
           </label>
+          <button id="lootFilterBtn" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors" title="Choose which loot should be displayed in the build cards">${iconSvg('filter', 14, 'text-emerald-400')}<span>Filter</span></button>
           <label class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors cursor-pointer" title="Fragments are account-wide and aren't produced by the simulation — they come from campaign/boss content. Enter your rate to get relic costs in time as well as fragments.">
             ${iconSvg('sparkles', 14, 'text-purple-400')}
             <input id="fragsPerDay" type="number" min="0" step="1" class="w-20 bg-transparent text-white focus:outline-none" placeholder="0" />
@@ -490,7 +534,23 @@ function renderSimPage(root) {
   document.getElementById('hunterStatsBtnLabel').textContent = `${HUNTER_TITLES[currentHunter].replace(' Simulator', '')} Stats`;
   document.getElementById('manageCategoriesBtn').onclick = openCategoriesModal;
   document.getElementById('temporaryUpgradesBtn').onclick = openTemporaryModal;
-  document.getElementById('baseIterations').addEventListener('change', renderBuildList);
+  // Iterations are PER HUNTER (see storeSchema): a level-79 Borge costs far more per
+  // evaluation than a level-12 Knox, so the accuracy/speed tradeoff is genuinely different for
+  // each. The input is re-seeded on every hunter switch for that reason.
+  const iterInput = document.getElementById('baseIterations');
+  const IT = StoreSchema.ITERATIONS;
+  iterInput.min = IT.min;
+  iterInput.step = IT.step;
+  iterInput.max = StoreSchema.iterationCeiling(store);
+  iterInput.value = currentIterations();
+  iterInput.addEventListener('change', () => {
+    const clamped = StoreSchema.clampIterations(iterInput.value, store);
+    iterInput.value = clamped;               // show the user what actually took effect
+    store[currentHunter].iterations = clamped;
+    saveStore();
+    renderBuildList();
+  });
+  document.getElementById('lootFilterBtn').onclick = openLootFilterModal;
   // Fragments per day is ACCOUNT-wide (relics are bought once for the account, not per hunter),
   // so it is read from and written to the top-level store, never store[hunter].
   const fragsInput = document.getElementById('fragsPerDay');
@@ -984,7 +1044,7 @@ async function openOverrideCostsModal(build) {
   // which is the honest answer, not a zero.
   let perDayRate = {};
   try {
-    const iterations = Number(document.getElementById('baseIterations')?.value) || 1000;
+    const iterations = currentIterations();
     const r = await HunterSim.evaluate(currentHunter, evalStateFor(build, iterations));
     const runsPerDay = r.avgTime ? 1440 / r.avgTime : 0;
     perDayRate = { mat1: r.mat1 * runsPerDay, mat2: r.mat2 * runsPerDay, mat3: r.mat3 * runsPerDay };
@@ -1166,7 +1226,7 @@ async function openOverrideCostsModal(build) {
 async function openCompareEfficiencyModal(build) {
   const overlay = titledModal('scale', `Upgrade Efficiency: ${escapeHtml(build.name || 'Unnamed')}`,
     '<p class="text-sm text-gray-400">Evaluating...</p>', 'compareEfficiencyModal');
-  const iterations = Number(document.getElementById('baseIterations').value) || 1000;
+  const iterations = currentIterations();
   const baseState = evalStateFor(build, iterations);
   const base = await HunterSim.evaluate(currentHunter, baseState);
   const d = defs();
@@ -1226,7 +1286,7 @@ async function openCompareEfficiencyModal(build) {
 async function openBuildStatsModal(build) {
   const overlay = titledModal('chart-bar', `Build Statistics: ${escapeHtml(build.name || 'Unnamed')}`,
     '<p class="text-sm text-gray-400">Evaluating...</p>', 'buildStatsModal');
-  const iterations = Number(document.getElementById('baseIterations').value) || 1000;
+  const iterations = currentIterations();
   const r = await HunterSim.evaluateDetailed(currentHunter, evalStateFor(build, iterations));
 
   const dist = r.stageDistribution || [];
@@ -1472,7 +1532,7 @@ async function renderBuildList() {
     wrapper.appendChild(card);
     list.appendChild(wrapper);
 
-    const iterations = Number(document.getElementById('baseIterations').value) || 1000;
+    const iterations = currentIterations();
     const evalPromise = HunterSim.evaluate(currentHunter, evalStateFor(build, iterations));
     if (buildIdx === 0) {
       comparisonBaseline = await evalPromise;
@@ -1498,7 +1558,11 @@ async function renderBuildList() {
 
       const values = [r.mat1, r.mat2, r.mat3, r.xp];
       const baseValues = base ? [base.mat1, base.mat2, base.mat3, base.xp] : null;
-      const lootCards = [0, 1, 2, 3].map((i) => `
+      // Which loot rows this hunter's Filter leaves visible. Purely presentational -- the
+      // evaluator still returns all four and nothing downstream reads this, so hiding a row
+      // never changes a score.
+      const lootFilter = store[currentHunter].lootFilter;
+      const lootCards = [0, 1, 2, 3].filter((i) => lootFilter[StoreSchema.LOOT_KEYS[i]] !== false).map((i) => `
         <div class="resource-card ${MAT_BORDER_COLORS[i]}">
           <div class="resource-icon">${i < 3 ? `<img src="${MAT_ASSETS[i]}" alt="Material ${i + 1}" class="resource-image" />` : `<span class="text-lg">✦</span>`}</div>
           <div class="resource-content"><div class="resource-values">
@@ -1557,6 +1621,11 @@ function switchHunter(h, skipNav) {
   if (portrait) { portrait.src = `assets/hunter_${h}.png`; portrait.alt = HUNTER_TITLES[h].replace(' Simulator', ''); }
   const statsLabel = document.getElementById('hunterStatsBtnLabel');
   if (statsLabel) statsLabel.textContent = `${HUNTER_TITLES[h].replace(' Simulator', '')} Stats`;
+  // Iterations is per hunter, so the input has to follow the hunter. Without this it keeps
+  // showing the previous hunter's number while the evaluator uses this one's -- a displayed
+  // value that quietly disagrees with the value in effect.
+  const iterInput = document.getElementById('baseIterations');
+  if (iterInput) iterInput.value = currentIterations();
   if (currentRoute() === 'sim') { renderCategoryTabs(); renderBuildList(); }
   else render();
   updateNavGating();
@@ -1755,6 +1824,33 @@ function categoryTreeRow(cat, count, isSystem, color) {
   }
   return row;
 }
+// "Choose which loot should be displayed in the build cards" -- the original tool's Filter
+// control, per hunter as it is there. Labels come from CostFormulas so a hunter whose third
+// resource is Hellish-Biomatter says so, rather than a generic "Material 3".
+function openLootFilterModal() {
+  const CF = window.CostFormulas;
+  const filter = store[currentHunter].lootFilter;
+  const label = (key) => (key === 'xp' ? 'XP' : CF.resourceLabel(currentHunter, key));
+  const rows = StoreSchema.LOOT_KEYS.map((key) => `
+    <label class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-700/50 cursor-pointer">
+      <input type="checkbox" data-loot-filter="${key}" ${filter[key] !== false ? 'checked' : ''}
+             class="w-4 h-4 accent-emerald-500" />
+      <span class="text-gray-200">${escapeHtml(label(key))}</span>
+    </label>`).join('');
+
+  const overlay = titledModal('filter', 'Loot Filter', `
+    <div class="text-sm text-gray-400 mb-3">Choose which loot should be displayed in the build cards.</div>
+    <div class="space-y-1">${rows}</div>`, 'lootFilterModal');
+
+  overlay.querySelectorAll('[data-loot-filter]').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      store[currentHunter].lootFilter[cb.dataset.lootFilter] = cb.checked;
+      saveStore();
+      renderBuildList();
+    });
+  });
+}
+
 function openCategoriesModal() {
   const title = document.getElementById('categoriesModalTitle');
   if (!title.querySelector('svg')) title.insertAdjacentHTML('afterbegin', iconSvg('folder', 16, 'mr-2 text-blue-400'));
@@ -2112,6 +2208,7 @@ function renderSettingsPage(root) {
       ${settingsSection('refresh', 'text-orange-400', 'Storage Issues', `
         <h3 class="text-sm font-semibold text-gray-200 mb-1">Quick Fix Storage</h3>
         <p class="text-xs text-gray-400 mb-2">If you experience data loss on page refresh or storage warnings, use this quick fix. It re-saves your current data to browser storage.</p>
+        <p class="text-xs text-gray-400 mb-2">Current usage: <span id="storageUsage" class="text-gray-300">measuring…</span></p>
         <button id="quickFixBtn" class="px-3 py-2 bg-orange-700 hover:bg-orange-600 rounded-md text-white text-sm">Quick Fix Storage Issues</button>
         <span id="quickFixResult" class="text-xs text-green-400 ml-2"></span>
       `)}
@@ -2123,6 +2220,28 @@ function renderSettingsPage(root) {
       ${settingsSection('settings', 'text-purple-400', 'Advanced Talents Settings', `
         <p class="text-xs text-gray-400 mb-3">Advanced talents like "The Legacy of Ultima" are only available at higher Hunter Levels. These settings control when those talents are shown, to provide a beginner-friendly experience.</p>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3" id="advancedTalentsGrid"></div>
+      `)}
+      ${settingsSection('adjustments', 'text-sky-400', 'Interface', `
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h3 class="text-sm font-semibold text-gray-200 mb-1">Upgrades Sidebar in Hunter View</h3>
+            <p class="text-xs text-gray-400">Show the upgrades navigation sidebar on the Hunter View page. Disable if the sidebar takes up too much space on your screen.</p>
+          </div>
+          <button id="sidebarToggleBtn" class="flex-shrink-0 px-3 py-1.5 rounded-md text-sm"></button>
+        </div>
+      `)}
+      ${settingsSection('sparkles', 'text-fuchsia-400', 'Enthusiast Mode', `
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h3 class="text-sm font-semibold text-gray-200 mb-1">Enable High Iterations Mode</h3>
+            <p class="text-xs text-gray-400">Allows setting iterations up to ${StoreSchema.ITERATIONS.maxHigh.toLocaleString()} in build evaluation for higher precision results. Note: Higher iterations require significantly more processing time.</p>
+          </div>
+          <button id="highIterationsBtn" class="flex-shrink-0 px-3 py-1.5 rounded-md text-sm"></button>
+        </div>
+      `)}
+      ${settingsSection('trash', 'text-red-400', 'Reset Data', `
+        <p class="text-xs text-gray-400 mb-2">This will reset all your data including all hunters, builds, and upgrades. <span class="text-red-400">This action cannot be undone.</span></p>
+        <button id="resetAllDataBtn" class="px-3 py-2 bg-red-800 hover:bg-red-700 rounded-md text-white text-sm">Reset All Data</button>
       `)}
     </div>`;
 
@@ -2158,6 +2277,67 @@ function renderSettingsPage(root) {
   document.getElementById('clearCacheBtn').onclick = () => {
     HunterSim.clearCache();
     document.getElementById('clearCacheResult').textContent = 'Cache cleared.';
+  };
+
+  // Storage usage, so "am I near the limit?" is answerable before data loss rather than after.
+  // navigator.storage.estimate() is the only real measurement available; where it is missing we
+  // say so instead of showing a made-up quota next to a real usage number.
+  (async () => {
+    const el = document.getElementById('storageUsage');
+    if (!el) return;
+    const bytes = (localStorage.getItem(STORAGE_KEY) || '').length;
+    const mb = (n) => `${(n / (1024 * 1024)).toFixed(2)} MB`;
+    if (navigator.storage && navigator.storage.estimate) {
+      try {
+        const { usage, quota } = await navigator.storage.estimate();
+        el.textContent = `${mb(usage)} / ${mb(quota)} (this profile: ${mb(bytes)})`;
+        return;
+      } catch { /* fall through to the profile-only figure */ }
+    }
+    el.textContent = `${mb(bytes)} for this profile (browser quota unavailable)`;
+  })();
+
+  const toggleBtn = (id, on, onLabel, offLabel, onClick) => {
+    const b = document.getElementById(id);
+    b.textContent = on ? onLabel : offLabel;
+    b.className = `flex-shrink-0 px-3 py-1.5 rounded-md text-sm ${on ? 'bg-sky-700 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`;
+    b.onclick = onClick;
+  };
+
+  toggleBtn('sidebarToggleBtn', store.settings.ui.upgradesSidebar, 'Enabled', 'Disabled', () => {
+    store.settings.ui.upgradesSidebar = !store.settings.ui.upgradesSidebar;
+    saveStore();
+    applyInterfacePrefs();
+    renderSettingsPage(root);
+  });
+
+  toggleBtn('highIterationsBtn', store.settings.ui.highIterations, 'Enabled', 'Disabled', () => {
+    const turningOff = store.settings.ui.highIterations;
+    store.settings.ui.highIterations = !turningOff;
+    // Turning the ceiling DOWN must bring any hunter that was above it back into range, or the
+    // store would validate as broken and the evaluator would be asked for a count the UI no
+    // longer offers. Clamping here (rather than at read time only) keeps the persisted value
+    // and the displayed value the same thing.
+    if (turningOff) {
+      StoreSchema.HUNTERS.forEach((h) => {
+        store[h].iterations = StoreSchema.clampIterations(store[h].iterations, store);
+      });
+    }
+    saveStore();
+    renderSettingsPage(root);
+  });
+
+  document.getElementById('resetAllDataBtn').onclick = () => {
+    // Two-step, and the second step hands back a backup first. There is no server and no undo:
+    // localStorage plus IndexedDB is the only copy of this data, so a single mis-click here is
+    // unrecoverable. The original tool offers the same action; it is the irreversibility that
+    // earns the extra prompt, not a difference of opinion about the feature.
+    if (!confirm('Reset ALL data: every hunter, build, upgrade and setting.\n\nThis cannot be undone. Continue?')) return;
+    const backup = btoa(unescape(encodeURIComponent(JSON.stringify(store))));
+    const box = document.getElementById('backupCodeOut');
+    if (box) { box.classList.remove('hidden'); box.querySelector('textarea').value = backup; }
+    if (!confirm('A backup code has been written into the "Create a Backup" box above.\n\nCopy it somewhere safe now if you might want this data back — it is the only copy.\n\nReset now?')) return;
+    resetAllData();
   };
 
   const grid = document.getElementById('advancedTalentsGrid');
@@ -2680,7 +2860,7 @@ const HUNTER_DISCORD_EMOJI = { borge: ':CIFI_EXPHuntBorge:', ozzy: ':CIFI_EXPHun
 async function exportBuildCode(build) {
   try {
     const code = await window.generateBuildCode(currentHunter, build, store[currentHunter].hunterStats, store.globalUpgrades, store.gems);
-    const iterations = Number(document.getElementById('baseIterations')?.value) || 1000;
+    const iterations = currentIterations();
     let lootScore = 0;
     try {
       const r = await HunterSim.evaluate(currentHunter, evalStateFor(build, iterations));
