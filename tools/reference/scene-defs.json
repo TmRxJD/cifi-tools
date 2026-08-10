@@ -3780,6 +3780,14 @@
     "Bonus": 500,
     "MaxLevel": 15
    }
+  },
+  "DU": {
+   "0": {
+    "StartCost": 100,
+    "Bonus1": 0.01,
+    "Bonus2": 5,
+    "MaxLevel": 20
+   }
   }
  }
 }

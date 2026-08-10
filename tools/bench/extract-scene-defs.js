@@ -27,7 +27,7 @@ const OUT = path.join(__dirname, '../reference/scene-defs.json');
 // (Button17Icon and friends) and hoovering up everything would bury the real data.
 const PREFIXES = [
   'Relic', 'RU', 'SU', 'TU', 'TUQ', 'ATU', 'UDU', 'MK', 'Project', 'Badge',
-  'BorgeSkill', 'OzzySkill', 'KnoxSkill', 'VexinSkill', 'POM', 'POI', 'POK',
+  'BorgeSkill', 'OzzySkill', 'KnoxSkill', 'VexinSkill', 'POM', 'POI', 'POK', 'DU', 'IS',
 ];
 // Only fields that describe the upgrade itself. Everything else on these objects is UI wiring
 // (object references), which carries no information about game balance.

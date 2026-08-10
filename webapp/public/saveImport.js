@@ -261,7 +261,7 @@ function mapSaveToStore(save) {
   // value-diff-confirmed against a nonzero real number.
   if (save.DiamondUltimaLevel !== undefined) globalUpgrades['ultima.ulti'] = realNum(save.DiamondUltimaLevel);
 
-  unmapped.push('cms', 'loopmods', 'diamondspecials', 'iap', 'trinkets');
+  unmapped.push('loopmods', 'diamondspecials', 'iap', 'trinkets');
 
   // Gems: tree level + 6 boolean nodes per tree. Every tree except Exodus stores its nodes
   // as individual `${prefix}GemNode{n}Level` fields; Exodus alone stores them as a single
@@ -316,6 +316,27 @@ function mapSaveToStore(save) {
       hunterStats,
     };
   });
+
+  // Construction Milestones. `Milestone<N>Acquired`, N = the milestone's own number, which is the
+  // SAME numbering our cms ids use (cm46 -> Milestone46Acquired).
+  //
+  // Identified by shape rather than by name: the account owns milestones up to ~20 and the save
+  // reads Milestone1..19 true and 20..57 false -- a clean "owned up to N" prefix. The save ALSO
+  // has a `CM<N>` boolean family (1-26), but every one of those is false on an account that owns
+  // 20 milestones, so `CM<N>` is something else entirely (a claim or notification flag) and is
+  // deliberately not used. Shard milestones are a third, separate family
+  // (AllTimeHighestShardMilestoneLevels et al) and are not these either.
+  const CM_IDS = ['cm46', 'cm47', 'cm48', 'cm51', 'cm53', 'cm54', 'cm57'];
+  for (const id of CM_IDS) {
+    const n = Number(id.replace('cm', ''));
+    const v = save[`Milestone${n}Acquired`];
+    if (v !== undefined) globalUpgrades[`cms.${id}`] = v ? 1 : 0;
+  }
+  // milestoneCount is a real sim parameter (upgrades.cms.milestoneCount) -- how many are owned,
+  // not which. Derived by counting, since the save stores no total.
+  const milestoneAcquired = Object.keys(save)
+    .filter((k) => /^Milestone\d+Acquired$/.test(k) && save[k]).length;
+  if (milestoneAcquired > 0) globalUpgrades['cms.milestoneCount'] = milestoneAcquired;
 
   // Gadgets. The save's Gadget<N>Level numbering matches costFormulas' own g<N> aliases, which is
   // what makes this a lookup rather than a guess -- CONFIRMED against the account directly: the

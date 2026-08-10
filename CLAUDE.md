@@ -282,11 +282,23 @@ think one is wrong, disprove it with a test.
     why this waited: `Gadget7Level` is also exactly 90, which coincidentally matched a
     `wrench: 90` in an unrelated build code. A plausible coincidence nearly became a confident
     wrong mapping on a real sim param.
-  - `loopmods`, `cms` — the save has the data (`LM<N>Level` ×295, `CM<N>` 1–26) but index→entity
-    is not statically recoverable; names are runtime UI `Text`. Note our `cms` ids are cm46–cm57
-    while the save only carries CM1–CM26, so the two numberings are not the same scheme.
-  - `trinkets`, `diamondspecials`, `iap` — **absent from THIS save, which is not the same as
-    never persisted.** Searched exhaustively by both our ids and the game's own labels ("Traversal
+  - **`cms` now import** via `Milestone<N>Acquired`, whose numbering matches our ids directly
+    (cm46 → Milestone46Acquired), plus `cms.milestoneCount` derived by counting acquired ones (19
+    on the reference account). Identified by SHAPE, not name: the account owns milestones up to
+    ~20 and the save reads Milestone1–19 true then all false — a clean "owned up to N" prefix.
+    **The save's `CM<N>` boolean family is NOT this** — all 26 are false on an account that owns
+    20 milestones, so it is a claim/notification flag and is deliberately unused. Shard milestones
+    are a third, separate family again.
+  - `loopmods` — the save has `LM<N>Level` ×295 but index→entity is only partly recoverable; see
+    the cost-fingerprint mapping above, which pins 8 of the 39 published names.
+  - `diamondspecials` — **located but not disambiguated.** They live in the DiamondShop's
+    `DU<N>Level` family (the IL2CPP dump confirms `DiamondShop` owns `DU<N>StartCost/Additive/
+    Bonus1/Bonus2/MaxLevel`). The player confirmed Hunter Loot Booster and Revive Boost are BOTH
+    maxed at 10, and exactly five DU entries read 10: DU1, DU13, DU21, DU22, DU23. Which two is
+    unresolved — the dump's field names are positional (`DU0Object`, `DU1MK1StartCost`) with no
+    semantic labels, and the scene carries only one DU record. `DiamondUltimaLevel = 0` matches
+    the player not having unlocked it, which independently confirms that neighbouring mapping.
+  - `trinkets`, `iap` — **absent from THIS save, which is not the same as never persisted.** Searched exhaustively by both our ids and the game's own labels ("Traversal
     Pack", "Hunter Loot Booster", "Revive Boost"), plus an inverted search: `tools/save/unclaimed.js`
     lists every field no importer reads, so nothing can hide behind an unexpected name. Zero hits.
     But the game clearly DOES persist purchases — 175 `*Purchased` booleans exist, and
