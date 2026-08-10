@@ -173,73 +173,168 @@
     return sum;
   }
 
-  // cV(relicId, level): single-level relic upgrade cost (only relics that appear in our
-  // Overrides panel are transcribed: r4, r7, r16, r19; others included since they were
-  // captured alongside in the same bundle function).
+  // Tier-1 relic costs (the live bundle's cV). Every relic in the game is here, as DATA rather
+  // than a switch, so an unmodeled relic is impossible by construction.
+  //
+  // PROVENANCE. Our original transcription covered only the relics our Overrides panel shows
+  // (r4, r7, r9, r16, r17, r19) and returned a silent 0 for the rest -- which makes an unmodeled
+  // relic read as FREE to any consumer that ranks upgrades by cost. The full table below was
+  // recovered from Ryther's Relic Optimizer (ryther-cifi.gitlab.io/cifi-relic-calculator), which
+  // stores each relic's cost as an explicit formula string. It is an INDEPENDENT source, and it
+  // agrees with our six previously-transcribed relics exactly -- same base, same additive, same
+  // exponent, and the same late-game correction terms (r4's 1.02^max(0,L-10) * 1.015^max(0,L-20),
+  // r16's 1.028^max(0,L-10), and so on). That agreement is asserted level-by-level in
+  // tools/bench/relic-cost-test.js against the previous implementation, so this table cannot
+  // silently drift from what had already been verified against the live site.
+  //
+  // Shape of the common formula:
+  //   (start + add * (L-1)) * exp^(L-1) * PRODUCT(rate ^ max(0, L - threshold))
+  // floored -- except that a few relics leave the value UNFLOORED below a cutoff, which is what
+  // 'floorFrom' records (r3/r4 floor from level 10, r2 from level 20). Two relics do not fit the
+  // shape at all and carry an explicit 'adjust' instead.
+  const RELIC_SPECS = {
+    r1: { maxLevel: 1000, start: 1, add: 0.9, exp: 1.17, corr: [[1.03, 10], [1.04, 20]] },
+    r2: { maxLevel: 100, start: 0.6, add: 0.2, exp: 1.09, corr: [[1.006, 10], [1.007, 20], [1.022, 30]], floorFrom: 20 },
+    r3: { maxLevel: 100, start: 0.7, add: 0.5, exp: 1.12, corr: [[1.02, 10], [1.04, 20], [1.07, 30]], floorFrom: 10 },
+    r4: { maxLevel: 100, start: 0.8, add: 0.4, exp: 1.12, corr: [[1.02, 10], [1.015, 20]], floorFrom: 10 },
+    r5: { maxLevel: 8, static: [1, 120, 4400, 6200, 15200, 18500, 24000, 30000, 44000, 56000, 72000] },
+    r6: { maxLevel: 8, static: [3, 450, 1070, 2500, 6700, 7000, 7600, 8500, 12000, 16000, 32000] },
+    r7: { maxLevel: 100, start: 2, add: 1.8, exp: 1.14, corr: [[1.01, 10], [1.02, 20]] },
+    r8: { maxLevel: 100, start: 5, add: 4, exp: 1.2, corr: [[1.1, 10]] },
+    r9: { maxLevel: 100, start: 8, add: 1.8, exp: 1.18, corr: [[1.03, 10], [1.08, 20]] },
+    // r10 subtracts a flat rebate per level band instead of applying correction multipliers.
+    r10: {
+      maxLevel: 8,
+      start: 2,
+      add: 3,
+      exp: 3,
+      adjust: (n, level) => n
+        - (level > 3 ? 40 : 0) - (level > 4 ? 500 : 0) - (level > 5 ? 1900 : 0)
+        - (level > 6 ? 9000 : 0) - (level > 7 ? 20000 : 0),
+    },
+    r11: { maxLevel: 8, static: [3, 65, 305, 2055, 4805, 8555, 15000, 27500] },
+    // r12's second correction only switches on past level 50, and then applies from level 30.
+    r12: {
+      maxLevel: 100,
+      start: 50,
+      add: 30,
+      exp: 1.09,
+      corr: [[1.01, 10]],
+      adjust: (n, level) => (level > 50 ? n * Math.pow(1.02, Math.max(0, level - 30)) : n),
+    },
+    r13: { maxLevel: 100, start: 10, add: 1, exp: 1.023, corr: [[1.001, 10], [1.002, 20], [1.003, 50]] },
+    r14: { maxLevel: 8, start: 20, add: 30, exp: 2, corr: [] },
+    r15: { maxLevel: 8, start: 30, add: 40, exp: 2, corr: [] },
+    r16: { maxLevel: 100, start: 40, add: 5, exp: 1.08, corr: [[1.028, 10]] },
+    r17: { maxLevel: 100, start: 50, add: 6, exp: 1.1, corr: [[1.037, 10]] },
+    r18: { maxLevel: 100, start: 60, add: 6, exp: 1.03, corr: [[1.01, 10], [1.02, 20]] },
+    r19: { maxLevel: 8, start: 666, add: 111, exp: 1.66, corr: [] },
+    r20: { maxLevel: 100, start: 1000, add: 50, exp: 1.2, corr: [] },
+  };
+
+  // Tier-2 relics, transcribed from the live bundle's cV alongside the tier-1 set. These do not
+  // share the tier-1 shape (they use banded compounding), so they stay as explicit functions.
+  const TIER2_RELIC_COSTS = {
+    t2r4: (level) => {
+      const t = level - 1;
+      let n = (3e6 + 5e4 * t) * Math.pow(1.2, t);
+      let r = 0;
+      for (let i = 0; 4 * i <= t; i++) r += t - (4 * i - 1);
+      n *= Math.pow(1.08, r);
+      return Math.floor(n);
+    },
+    t2r5: (level) => {
+      const t = level - 1;
+      let n = (13e5 + 3e5 * t) * Math.pow(1.35, t);
+      let r = 0;
+      for (let i = 0; 5 * i <= t; i++) r += t - (5 * i - 1);
+      n *= Math.pow(1.04, r);
+      return Math.floor(n);
+    },
+    t2r7: (level) => {
+      const t = level - 1;
+      let n = (3e5 + 85e4 * t) * Math.pow(1.71, t);
+      if (t >= 8) n *= Math.pow(1.09, t - 8 + 1);
+      return Math.floor(n);
+    },
+    t2r8: (level) => {
+      const t = level - 1;
+      let n = (21e5 + 84e4 * t) * Math.pow(1.42, t);
+      let r = 0;
+      for (let i = 0; 4 * i <= t; i++) r += t - (4 * i - 1);
+      n *= Math.pow(1.21, r);
+      return Math.floor(n);
+    },
+    t2r10: (level) => {
+      const t = level - 1;
+      let n = (6e6 + 8e4 * t) * Math.pow(15, t);
+      if (t >= 1) n *= Math.pow(21, t - 1 + 1);
+      return Math.floor(n);
+    },
+  };
+
+  // 'relic04'-style ids appear in some payloads; normalize to the canonical 'r4'.
+  function canonicalRelicId(relicId) {
+    const m = /^relic0*(\d+)$/.exec(String(relicId));
+    return m ? 'r' + Number(m[1]) : String(relicId);
+  }
+
+  /**
+   * Fragment cost of taking one relic from (level - 1) up to (level).
+   *
+   * THROWS on an unknown relic id. This used to return 0, which is the worst possible answer for
+   * a consumer that ranks upgrades by cost: an unmodeled relic reads as FREE and wins every
+   * comparison it enters. Fail loudly -- a missing relic is a data gap to fix, not a zero.
+   */
   function relicCostAtLevel(relicId, level) {
     if (level <= 0) return 0;
-    switch (relicId) {
-      case 'relic04': case 'r4': {
-        const t = (0.8 + 0.4 * (level - 1)) * Math.pow(1.12, level - 1) * Math.pow(1.02, Math.max(0, level - 10)) * Math.pow(1.015, Math.max(0, level - 20));
-        return level < 10 ? t : Math.floor(t);
-      }
-      case 'relic07': case 'r7': {
-        const t = (2 + 1.8 * (level - 1)) * Math.pow(1.14, level - 1) * Math.pow(1.01, Math.max(0, level - 10)) * Math.pow(1.02, Math.max(0, level - 20));
-        return Math.floor(t);
-      }
-      case 'relic09': case 'r9': {
-        const t = (8 + 1.8 * (level - 1)) * Math.pow(1.18, level - 1) * Math.pow(1.03, Math.max(0, level - 10)) * Math.pow(1.08, Math.max(0, level - 20));
-        return Math.floor(t);
-      }
-      case 'relic16': case 'r16': {
-        const t = (40 + 5 * (level - 1)) * Math.pow(1.08, level - 1) * Math.pow(1.028, Math.max(0, level - 10));
-        return Math.floor(t);
-      }
-      case 'relic17': case 'r17': {
-        const t = (50 + 6 * (level - 1)) * Math.pow(1.1, level - 1) * Math.pow(1.037, Math.max(0, level - 10));
-        return Math.floor(t);
-      }
-      case 'relic19': case 'r19': {
-        const t = (666 + 111 * (level - 1)) * Math.pow(1.66, level - 1);
-        return Math.floor(t);
-      }
-      case 't2r5': {
-        const t = level - 1;
-        let n = (13e5 + 3e5 * t) * Math.pow(1.35, t), r = 0;
-        for (let i = 0; 5 * i <= t; i++) r += t - (5 * i - 1);
-        n *= Math.pow(1.04, r);
-        return Math.floor(n);
-      }
-      case 't2r7': {
-        const t = level - 1;
-        let n = (3e5 + 85e4 * t) * Math.pow(1.71, t);
-        if (t >= 8) n *= Math.pow(1.09, t - 8 + 1);
-        return Math.floor(n);
-      }
-      case 't2r4': {
-        const t = level - 1;
-        let n = (3e6 + 5e4 * t) * Math.pow(1.2, t), r = 0;
-        for (let i = 0; 4 * i <= t; i++) r += t - (4 * i - 1);
-        n *= Math.pow(1.08, r);
-        return Math.floor(n);
-      }
-      case 't2r8': {
-        const t = level - 1;
-        let n = (21e5 + 84e4 * t) * Math.pow(1.42, t), r = 0;
-        for (let i = 0; 4 * i <= t; i++) r += t - (4 * i - 1);
-        n *= Math.pow(1.21, r);
-        return Math.floor(n);
-      }
-      case 't2r10': {
-        const t = level - 1;
-        let n = (6e6 + 8e4 * t) * Math.pow(15, t);
-        if (t >= 1) n *= Math.pow(21, t - 1 + 1);
-        return Math.floor(n);
-      }
-      default:
-        return 0;
+    const id = canonicalRelicId(relicId);
+    if (TIER2_RELIC_COSTS[id]) return TIER2_RELIC_COSTS[id](level);
+
+    const spec = RELIC_SPECS[id];
+    if (!spec) {
+      throw new Error('No cost formula for relic "' + relicId + '" (normalized "' + id + '"). Known: '
+        + Object.keys(RELIC_SPECS).concat(Object.keys(TIER2_RELIC_COSTS)).join(', '));
     }
+    if (spec.static) {
+      const cost = spec.static[level - 1];
+      if (cost === undefined) {
+        throw new Error('Relic "' + id + '" has a static cost table of ' + spec.static.length
+          + ' levels; asked for level ' + level);
+      }
+      return cost;
+    }
+    let n = (spec.start + spec.add * (level - 1)) * Math.pow(spec.exp, level - 1);
+    for (const [rate, threshold] of spec.corr || []) n *= Math.pow(rate, Math.max(0, level - threshold));
+    if (spec.adjust) n = spec.adjust(n, level);
+    // A few relics report the raw value below a cutoff and the floored value at or above it.
+    return level < (spec.floorFrom || 0) ? n : Math.floor(n);
   }
+
+  /**
+   * Highest level a TIER-1 relic can reach.
+   *
+   * Tier-1 caps come from the same extracted dataset as the cost formulas, and they agree with
+   * the caps hunterDefs.js already declares for the relics it exposes (asserted in
+   * tools/bench/relic-cost-test.js). Tier-2 caps are NOT in that dataset and are deliberately
+   * not guessed here -- hunterDefs.js is the canonical home for those, and this throws rather
+   * than invent a number that would silently bound a planner.
+   */
+  function relicMaxLevel(relicId) {
+    const id = canonicalRelicId(relicId);
+    const spec = RELIC_SPECS[id];
+    if (!spec) {
+      throw new Error('No max level known for relic "' + relicId + '" (normalized "' + id + '")'
+        + (TIER2_RELIC_COSTS[id] ? ' -- tier-2 caps live in hunterDefs.js, not here' : ''));
+    }
+    return spec.static ? spec.static.length : spec.maxLevel;
+  }
+
+  /** Every relic id this module can price. */
+  function knownRelicIds() {
+    return Object.keys(RELIC_SPECS).concat(Object.keys(TIER2_RELIC_COSTS));
+  }
+
   function relicCostRange(relicId, fromLevel, toLevel) {
     if (toLevel <= fromLevel) return 0;
     let sum = 0;
@@ -395,7 +490,9 @@
 
   global.CostFormulas = {
     HUNTER_RESOURCES, resourceLabel, resourceAbbr, baseStatResource, relicResource, inscryptionResource,
-    baseStatCostAtLevel, baseStatCostRange, relicCostRange, inscryptionCostAtLevel, inscryptionCostRange,
+    baseStatCostAtLevel, baseStatCostRange,
+    relicCostAtLevel, relicCostRange, relicMaxLevel, knownRelicIds,
+    inscryptionCostAtLevel, inscryptionCostRange,
     gadgetCostRange, gemAliasCostRange, projCostRange, collectionTimeMinutes, fmtBig,
   };
 })(window);

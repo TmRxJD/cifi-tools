@@ -78,6 +78,7 @@ There is exactly one place for each of these. **Do not add a second.**
 | Coarse evaluation fidelity | `HunterOptimizer.SCREEN_ITERATIONS` (one value, shared) |
 | Full evaluation fidelity | `HunterOptimizer.FINAL_ITERATIONS` |
 | Build share-code encode/decode | `webapp/public/buildCode.js` |
+| What each optimize mode maximizes | `webapp/public/optimizer/objective.js` (`OptimizerObjective.MODES`) |
 | Optimizer acceptance gate | `tools/bench/run.js` |
 | Store schema tests | `tools/bench/schema-test.js` |
 | Clone-vs-live comparison | `compare-mcp/batch-test.mjs` |
@@ -124,6 +125,25 @@ think one is wrong, disprove it with a test.
   different states", not as evidence about which side is wrong.
 - **`upgrades.gems_nodes.attraction_lootKnox` reaches the wasm but changes the returned loot
   score by exactly nothing** (arg 0 vs 150 → bit-identical). Don't chase it as a cause.
+- **Share codes never encode level; it is INFERRED, from two lower bounds.** A code carries no
+  `lvl` field, so `parseBuildCode` derives level from spend. The talent sum alone is not enough:
+  it assumes the player spent every talent point, and real accounts sit on unspent ones. A real
+  level-58 Borge code with 46 talents and 174 attributes decoded as level 46, whose 138-point
+  attribute budget then made `trimAllocationToBudget` **refund 36 attribute points on import** --
+  silently wrecking the build and handing the optimizer a budget 12 talent points short. Level is
+  now `max(inverse(talentBudgetForLevel, talentSpend), inverse(attributeBudgetForLevel,
+  attrSpend))`, both inverted by search so the formulas can stop being linear. Invariant, asserted
+  over every fixture in `schema-test.js`: **an inferred level must be able to fund the allocation
+  it was inferred from.** This was the actual cause of the reported "Optimize left 12 talent
+  points unspent" -- not a weak search.
+- **Timeless Mastery does not help kill a boss; it multiplies what the kill pays.** Measured: kill
+  rate and remaining boss HP are bit-identical at Timeless 0 and 5, while loot moves 13.06M ->
+  22.20M (linear, +1.83M/level). Call Me Lucky Loot is the same shape -- 0 -> 12 leaves kill rate
+  and boss HP untouched, loot 2.22e7 -> 3.20e7. This is why the boss objectives are lexicographic
+  and why `bossTimeless` pins Timeless rather than weighting it.
+- **Boss kill rate is a real gradient, not a flag.** It falls 95.7 -> 85.7 -> 64.5 -> 43.8 -> 36.4
+  -> 0 as Soul Of Ares is stripped, and hits 0 outright without Impeccable or Power Of Gaia. Below
+  a kill, `bossHpPercent` is what still discriminates.
 - **Legality is a state predicate, not a path predicate.** A node at level > 0 is legal iff it's
   within `maxLevel`, every dependency parent is > 0, and any `minValue` tier threshold is met by
   points spent in strictly-lower-threshold nodes. Order of purchase never matters. This is what
@@ -150,6 +170,30 @@ cannot return a downgrade. Allocations leaving more than one point idle are neve
 **What "evaluate every combination" honestly means:** the full space cannot be enumerated (two
 attributes per hunter are uncapped). The *structural* choice is exhaustive; the *depth* choice is
 a coordinate-exchange fixpoint. Say it that way — don't claim more.
+
+### Objectives (`optimizer/objective.js`)
+
+Four modes, all defined in one table that the search, the browser workers, the benchmark **and
+the UI dropdown** read. Adding a mode is a one-file change; the dropdown cannot offer a mode the
+optimizer does not implement, and a mode cannot ship without a label and help text (asserted).
+
+| Mode | Maximizes |
+|---|---|
+| `loot` | loot per minute |
+| `push` | average stage |
+| `boss` | boss kill rate, then loot as a tiebreak |
+| `bossTimeless` | same, with Timeless Mastery pinned to max |
+
+The boss objectives are **lexicographic, not a weighted blend**, in three tiers: not killing yet
+→ score on how little boss HP remains (loot deliberately contributes nothing, or the search would
+trade kill progress for farm); killing → `1e6 + killRate * 1000`; equal kill rates → a
+`log10(loot) * 5` tiebreak. Kill rate has 0.1 resolution, so one step is 100 units while the
+whole loot term caps around 60 — **loot can never buy back even a tenth of a percent of kill
+rate.** That ordering is what puts overflow points into Call Me Lucky Loot *only* once they cost
+nothing in boss capability, with no special-casing of that talent.
+
+`pinnedAttrs` is how `bossTimeless` differs from `boss`: the search holds those attributes at
+maximum and optimizes the rest around them.
 
 ### Things the optimizer deliberately does NOT do any more
 Removed because each was compensating for the previous one: random-mutation beam search, greedy

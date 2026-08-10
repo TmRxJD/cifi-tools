@@ -10,10 +10,10 @@ self.window = self;
 // hunterSimBrowser.js would resolve params.json/release.wasm against optimizer/ and 404.
 // Pin the asset base to the root before importing it.
 self.HUNTERSIM_ASSET_BASE = new URL('..', location.href).href;
-importScripts('../hunterDefs.js', '../hunterSimBrowser.js');
+importScripts('../hunterDefs.js', '../hunterSimBrowser.js', 'objective.js');
 
 let evalFast = null;
-let scoreKey = 'lootPerMin';
+let scoreMode = 'loot';
 
 // Evaluations between macrotask yields -- see the note in the scoring loop below.
 const YIELD_EVERY = 32;
@@ -67,7 +67,8 @@ self.onmessage = async (e) => {
     // only consulted after the pool is up.
     try {
       evalFast = await HunterSim.compileEvaluator(msg.cfg.hunter, msg.cfg);
-      scoreKey = msg.mode === 'push' ? 'avgStage' : 'lootPerMin';
+      scoreMode = msg.mode;
+      OptimizerObjective.modeOrThrow(scoreMode); // fail loudly on an unknown mode, not silently as loot
       self.postMessage({ type: 'ready' });
     } catch (err) {
       self.postMessage({ type: 'ready', error: String((err && err.message) || err) });
@@ -82,7 +83,7 @@ self.onmessage = async (e) => {
       let sinceYield = 0;
       for (const item of batch) {
         const r = await evaluateWithGcRetry(item, iterations);
-        scores.push(r[scoreKey]);
+        scores.push(OptimizerObjective.scoreFor(scoreMode, r));
         // Determinism requires a FRESH WASM instance per evaluation (the evaluator's RNG state
         // lives in mutable wasm globals -- verified: restoring linear memory alone leaves the
         // instance in a state that aborts on the next call, so there is no cheaper reset).

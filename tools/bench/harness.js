@@ -79,7 +79,7 @@ function browserSandbox() {
   sb.self = sb;
   sb.globalThis = sb;
   vm.createContext(sb);
-  for (const f of ['hunterDefs.js', 'shipSchema.js', 'shipsPage.js', 'buildCode.js', 'hunterSimBrowser.js', 'optimizer/space.js', 'storeSchema.js']) {
+  for (const f of ['hunterDefs.js', 'shipSchema.js', 'shipsPage.js', 'buildCode.js', 'costFormulas.js', 'hunterSimBrowser.js', 'optimizer/space.js', 'optimizer/objective.js', 'storeSchema.js']) {
     vm.runInContext(fs.readFileSync(path.join(PUBLIC, f), 'utf8'), sb, { filename: f });
   }
   sandbox = sb;
@@ -90,6 +90,7 @@ function browserSandbox() {
 // same files the browser loads via <script>.
 const Space = require('../../webapp/public/optimizer/space.js');
 const Optimizer = require('../../webapp/public/optimizer/search.js');
+const Objective = require('../../webapp/public/optimizer/objective.js');
 
 /** Decode a real cifi-tools.com share code into a build. */
 async function parseBuildCode(code) {
@@ -168,7 +169,8 @@ async function makeScorer(cfg, mode) {
     const out = [];
     for (const p of pairs) {
       const r = await evalFast(p.talentAlloc, p.attrAlloc, iterations);
-      out.push(mode === 'push' ? r.avgStage : r.lootPerMin);
+      // Same canonical objective the browser workers use -- not a second copy of the mode rules.
+      out.push(Objective.scoreFor(mode, r));
     }
     return out;
   };
@@ -236,5 +238,5 @@ function loadKnownBuilds() {
 
 module.exports = {
   browserSandbox, parseBuildCode, hunterDefs, cfgForImport, makeScorer, scoreAllocation,
-  loadKnownBuilds, evaluateAllocation, Space, Optimizer,
+  loadKnownBuilds, evaluateAllocation, Space, Optimizer, Objective,
 };

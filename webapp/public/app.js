@@ -3075,6 +3075,24 @@ function readImportSaveFile(file) {
 
 // ==================== OPTIMIZE FLOW ====================
 
+// The mode list is generated from the optimizer's own MODES table rather than hardcoded in the
+// markup, so adding a mode is a one-file change and the dropdown can never offer something the
+// optimizer does not implement (or omit something it does).
+function renderOptimizeModes() {
+  const select = document.getElementById('optimizeMode');
+  const help = document.getElementById('optimizeModeHelp');
+  const MODES = window.OptimizerObjective.MODES;
+  select.innerHTML = Object.entries(MODES)
+    .map(([key, spec]) => `<option value="${key}">${escapeHtml(spec.label)}</option>`)
+    .join('');
+  // Label AND explanation both come from the mode table, so a new mode cannot ship with a
+  // dropdown entry and no description (or a description left behind by a renamed mode).
+  const showHelp = () => { help.textContent = MODES[select.value].help; };
+  select.onchange = showHelp;
+  showHelp();
+}
+renderOptimizeModes();
+
 document.getElementById('optimizeBtn').onclick = () => document.getElementById('optimizeSetupModal').classList.remove('hidden');
 document.getElementById('cancelOptimizeSetup').onclick = () => document.getElementById('optimizeSetupModal').classList.add('hidden');
 

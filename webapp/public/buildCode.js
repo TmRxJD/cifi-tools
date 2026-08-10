@@ -208,9 +208,27 @@
     // wasm argument on its own (their computed stats already carry level's effect), but
     // Knox's does noticeably (confirmed empirically: a real Knox build's Loot Score was ~2-4%
     // off with level stuck at 1 vs. its real level).
+    //
+    // The talent sum ALONE is a lower bound, not the level: it is only exact when the player
+    // spent every talent point, and real accounts sit on unspent ones. Attribute spend is a
+    // second, independent lower bound (attributeBudgetForLevel points per level), and the true
+    // level is at least the larger of the two. A real level-58 Borge share code with 46 talents
+    // and 174 attributes decoded as level 46, whose 138-point attribute budget then TRIMMED 36
+    // points off the imported build -- silently destroying it on import, and handing the
+    // optimizer a budget 12 talent points short of the account's real one.
     if (!sawLvlParam) {
-      const talentPointsSpent = Object.values(build.talents).reduce((sum, v) => sum + (v || 0), 0);
-      if (talentPointsSpent > 0) build.level = talentPointsSpent;
+      const fromTalents = Object.values(build.talents).reduce((sum, v) => sum + (v || 0), 0);
+      const attrCost = def.attributes.reduce(
+        (sum, a) => sum + (build.attributes[a.id] || 0) * (a.cost || 1), 0,
+      );
+      // Invert the budget curves by search rather than assuming their shape, so this stays
+      // correct if either formula ever stops being linear.
+      let fromAttrs = 0;
+      while (global.attributeBudgetForLevel(fromAttrs) < attrCost) fromAttrs++;
+      let level = 0;
+      while (global.talentBudgetForLevel(level) < fromTalents) level++;
+      level = Math.max(level, fromAttrs);
+      if (level > 0) build.level = level;
     }
     return build;
   }

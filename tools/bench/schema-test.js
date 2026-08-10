@@ -11,15 +11,21 @@ const H = require('./harness.js');
 const sb = H.browserSandbox();
 const S = sb.StoreSchema;
 
+// Checks register here and run in declaration order at the end, so a check may be async
+// (parseBuildCode returns a promise) without reordering the output or racing.
 let failures = 0;
-function check(name, fn) {
-  try {
-    const problem = fn();
-    if (problem) { console.log(`FAIL  ${name}\n        ${problem}`); failures++; }
-    else console.log(`pass  ${name}`);
-  } catch (err) {
-    console.log(`FAIL  ${name}\n        threw: ${err.message}`);
-    failures++;
+const queued = [];
+function check(name, fn) { queued.push({ name, fn }); }
+async function runChecks() {
+  for (const { name, fn } of queued) {
+    try {
+      const problem = await fn();
+      if (problem) { console.log(`FAIL  ${name}\n        ${problem}`); failures++; }
+      else console.log(`pass  ${name}`);
+    } catch (err) {
+      console.log(`FAIL  ${name}\n        threw: ${err.message}`);
+      failures++;
+    }
   }
 }
 
@@ -246,6 +252,136 @@ check('spendRemaining respects dependency and threshold gates', () => {
   return null;
 });
 
+// Optimize modes live in ONE table (optimizer/objective.js) that the search, the browser
+// workers and this harness all score through. These lock the contract of the boss objectives,
+// which are lexicographic rather than a weighted blend.
+check('every optimize mode scores and is self-consistent', () => {
+  const Obj = sb.OptimizerObjective;
+  const modes = Object.keys(Obj.MODES);
+  if (!modes.includes('loot') || !modes.includes('push')) return 'the original modes went missing';
+  if (!modes.includes('boss') || !modes.includes('bossTimeless')) return 'boss modes not registered';
+  const sample = { lootPerMin: 1e6, avgStage: 200, bossKillRate: 50, bossHpPercent: 1 };
+  for (const m of modes) {
+    const v = Obj.scoreFor(m, sample);
+    if (!Number.isFinite(v)) return `mode "${m}" scored ${v}`;
+    if (!Obj.MODES[m].label) return `mode "${m}" has no label for the UI`;
+    if (!Obj.MODES[m].help) return `mode "${m}" has no help text for the UI`;
+  }
+  try { Obj.scoreFor('nonsense', sample); return 'an unknown mode scored instead of throwing'; }
+  catch { /* expected */ }
+  return null;
+});
+
+check('any boss kill outranks any amount of progress toward one', () => {
+  const Obj = sb.OptimizerObjective;
+  // A build that cannot kill the boss but farms enormously must never beat one that kills it.
+  const cannotKill = { bossKillRate: 0, avgStage: 999, bossHpPercent: 0.0001, lootPerMin: 1e12 };
+  const barelyKills = { bossKillRate: 0.1, avgStage: 200, bossHpPercent: 99, lootPerMin: 1 };
+  if (Obj.scoreFor('boss', barelyKills) <= Obj.scoreFor('boss', cannotKill)) {
+    return 'a non-killing build outranked a killing one';
+  }
+  return null;
+});
+
+check('loot only breaks ties between equal kill rates, never buys kill rate', () => {
+  const Obj = sb.OptimizerObjective;
+  const lower = { bossKillRate: 90, bossHpPercent: 0.5, lootPerMin: 1e12 };
+  const higher = { bossKillRate: 90.1, bossHpPercent: 0.5, lootPerMin: 1 };
+  if (Obj.scoreFor('boss', higher) <= Obj.scoreFor('boss', lower)) {
+    return 'a huge loot gain outweighed a 0.1 kill-rate gain -- the tiers are bleeding together';
+  }
+  const richer = { bossKillRate: 90, bossHpPercent: 0.5, lootPerMin: 2e7 };
+  const poorer = { bossKillRate: 90, bossHpPercent: 0.5, lootPerMin: 1e7 };
+  if (Obj.scoreFor('boss', richer) <= Obj.scoreFor('boss', poorer)) {
+    return 'equal kill rates did not prefer more loot -- overflow points have nowhere useful to go';
+  }
+  return null;
+});
+
+check('loot is ignored while the boss cannot be killed at all', () => {
+  const Obj = sb.OptimizerObjective;
+  // Both fail to kill; the one CLOSER to a kill must win regardless of loot.
+  const closer = { bossKillRate: 0, avgStage: 200, bossHpPercent: 5, lootPerMin: 1 };
+  const richer = { bossKillRate: 0, avgStage: 200, bossHpPercent: 40, lootPerMin: 1e12 };
+  if (Obj.scoreFor('boss', closer) <= Obj.scoreFor('boss', richer)) {
+    return 'loot outweighed being closer to a first kill';
+  }
+  return null;
+});
+
+// bossHpPercent reads 0 BOTH for a build that never reaches the wall and one already past it
+// (measured -- see objective.js). Ranking non-kills on HP alone therefore scored an empty build
+// identically to the strongest non-killing build. avgStage is the monotone signal.
+check('below a kill, a stronger build outranks a weaker one even at bossHp% 0', () => {
+  const Obj = sb.OptimizerObjective;
+  // Real measured pairs from scaling one build down: both report bossHpPercent 0.
+  const strong = { bossKillRate: 0, avgStage: 237.1, bossHpPercent: 0, lootPerMin: 2.9e7 };
+  const empty = { bossKillRate: 0, avgStage: 135.8, bossHpPercent: 0, lootPerMin: 0 };
+  if (Obj.scoreFor('boss', strong) <= Obj.scoreFor('boss', empty)) {
+    return 'an empty build tied or beat the strongest non-killing build';
+  }
+  // And the wall case still discriminates on HP when stage ties exactly.
+  const atWallCloser = { bossKillRate: 0, avgStage: 200, bossHpPercent: 47, lootPerMin: 0 };
+  const atWallFarther = { bossKillRate: 0, avgStage: 200, bossHpPercent: 74, lootPerMin: 0 };
+  if (Obj.scoreFor('boss', atWallCloser) <= Obj.scoreFor('boss', atWallFarther)) {
+    return 'stalled at the same wall, less remaining boss HP did not win';
+  }
+  // Stage must dominate the HP tiebreak, never the other way round.
+  const further = { bossKillRate: 0, avgStage: 201, bossHpPercent: 99, lootPerMin: 0 };
+  if (Obj.scoreFor('boss', further) <= Obj.scoreFor('boss', atWallCloser)) {
+    return 'the HP tiebreak outweighed a whole stage of progress';
+  }
+  return null;
+});
+
+check('only bossTimeless pins Timeless Mastery', () => {
+  const Obj = sb.OptimizerObjective;
+  if (Obj.pinnedAttrsFor('bossTimeless').join() !== 'timeless') return 'bossTimeless does not pin timeless';
+  for (const m of ['loot', 'push', 'boss']) {
+    if (Obj.pinnedAttrsFor(m).length) return `mode "${m}" unexpectedly pins ${Obj.pinnedAttrsFor(m).join()}`;
+  }
+  return null;
+});
+
+// Share codes never encode level, so parseBuildCode infers it. Inferring from the TALENT sum
+// alone assumes the player spent every available talent point. A real level-58 Borge code with
+// 46 talents and 174 attributes decoded as level 46, and the resulting 138-point attribute
+// budget then TRIMMED 36 points off the build on import -- silently wrecking it, and handing
+// the optimizer a budget 12 talent points short of the account's real one. Attribute spend is
+// an independent second lower bound on level.
+check('level inference uses attribute spend, not just the talent sum', async () => {
+  const code = 'TZyeYAa1AQoozqzASMADS7GNHGuQHXFgPtqgLABM4wexvGSR8ECpPLwyDaLvasTQRkwrfMRdXunbtCsHJpoLGo';
+  const b = await sb.parseBuildCode(code);
+  const d = sb.HUNTER_DEFS.borge;
+  const talentSum = d.talents.reduce((acc, t) => acc + (b.talents[t.id] || 0), 0);
+  const attrCost = sb.AllocSpace.costOf(d.attributes, b.attributes);
+  if (talentSum !== 46 || attrCost !== 174) return `fixture drifted: ${talentSum} talents / ${attrCost} attributes`;
+  if (b.level !== 58) return `inferred level ${b.level}, expected 58 (174 attributes at 3 per level)`;
+  return null;
+});
+
+// The property that actually matters, across every fixture: whatever level is inferred, it must
+// be able to PAY for the build it was inferred from. Anything less gets trimmed on import.
+check('every fixture infers a level that can fund its own allocation', async () => {
+  const known = require('./harness.js').loadKnownBuilds();
+  for (const hunter of Object.keys(known)) {
+    const d = sb.HUNTER_DEFS[hunter];
+    for (const fx of known[hunter]) {
+      const b = await sb.parseBuildCode(fx.code);
+      if (!b) continue;
+      const talentSum = d.talents.reduce((acc, t) => acc + (b.talents[t.id] || 0), 0);
+      const attrCost = sb.AllocSpace.costOf(d.attributes, b.attributes);
+      if (sb.talentBudgetForLevel(b.level) < talentSum) {
+        return `${hunter}/${fx.set}#${fx.index}: level ${b.level} funds ${sb.talentBudgetForLevel(b.level)} talents, build spends ${talentSum}`;
+      }
+      if (sb.attributeBudgetForLevel(b.level) < attrCost) {
+        return `${hunter}/${fx.set}#${fx.index}: level ${b.level} funds ${sb.attributeBudgetForLevel(b.level)} attributes, build spends ${attrCost}`;
+      }
+    }
+  }
+  return null;
+});
+
 check('duplicate build ids are rejected', () => {
   const store = S.freshStore();
   store.borge.builds.push({ id: 'dup', name: 'a', level: 1, talents: {}, attributes: {} },
@@ -265,5 +401,7 @@ check('an invalid level is rejected', () => {
   return S.validateStore(store).some((p) => /level is 0/.test(p)) ? null : 'not caught';
 });
 
-console.log(`\n${failures ? `${failures} FAILED` : 'all schema invariants hold'}`);
-process.exit(failures ? 1 : 0);
+runChecks().then(() => {
+  console.log(`\n${failures ? `${failures} FAILED` : 'all schema invariants hold'}`);
+  process.exit(failures ? 1 : 0);
+});

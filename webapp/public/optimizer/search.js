@@ -34,6 +34,64 @@
   const Space = (typeof module !== 'undefined' && module.exports)
     ? require('./space.js')
     : global.AllocSpace;
+  const Objective = (typeof module !== 'undefined' && module.exports)
+    ? require('./objective.js')
+    : global.OptimizerObjective;
+
+  /**
+   * Force pinned attributes to their maximum and keep them there.
+   *
+   * Used by the `bossTimeless` mode: Timeless Mastery does not help kill a boss at all -- kill
+   * rate is identical at Timeless 0 and 5 (measured) -- it multiplies what the kill pays out.
+   * A boss objective therefore has no reason to fund it, and would spend those points on offence
+   * instead. Pinning reserves them up front so the search optimizes everything else AROUND a
+   * maxed Timeless, which is exactly the "wait until the kill is worth the most" strategy.
+   *
+   * Applied to every allocation the search produces, so a pin cannot be quietly traded away by
+   * a later transfer.
+   */
+  function applyPins(defs, deps, minVal, budget, alloc, pinnedIds) {
+    if (!pinnedIds.length) return alloc;
+    const out = { ...alloc };
+    for (const id of pinnedIds) {
+      const def = defs.find((d) => d.id === id);
+      if (!def) throw new Error(`Cannot pin unknown attribute "${id}"`);
+      // Open whatever this node depends on first, or it cannot legally hold points at all.
+      let guard = 0;
+      while ((out[id] || 0) < def.maxLevel && guard++ < 500) {
+        if (Space.isEligible(def, defs, deps, minVal, out)) {
+          out[id] = (out[id] || 0) + 1;
+          continue;
+        }
+        // Blocked: fund one point into whatever is missing, if the budget allows.
+        const opened = defs.find((d) => (out[d.id] || 0) === 0 && Space.isEligible(d, defs, deps, minVal, out));
+        if (!opened) break;
+        out[opened.id] = 1;
+      }
+    }
+    // Paying for the pin can push the allocation over budget; trim elsewhere, never the pin.
+    let guard = 0;
+    while (Space.costOf(defs, out) > budget && guard++ < 5000) {
+      let victim = null;
+      for (const d of defs) {
+        if (pinnedIds.includes(d.id)) continue;
+        if ((out[d.id] || 0) <= 0) continue;
+        if (!victim || out[d.id] > out[victim.id]) victim = d;
+      }
+      if (!victim) break;
+      out[victim.id] -= 1;
+      Space.clearInvalidDescendants(defs, deps, minVal, out);
+    }
+    return out;
+  }
+
+  /** Are every pinned attribute still at maximum? */
+  function pinsHeld(defs, alloc, pinnedIds) {
+    return pinnedIds.every((id) => {
+      const def = defs.find((d) => d.id === id);
+      return def ? (alloc[id] || 0) >= def.maxLevel : true;
+    });
+  }
 
   // Coarse fidelity for ranking, full fidelity for deciding. Measured on 40 allocations: the
   // 100-iteration score sits ~0.9% off the 1000-iteration score and inverts ~1.2% of pairwise
@@ -70,7 +128,7 @@
   // fixpoint. Deterministic throughout -- candidate moves are generated in declaration order
   // and ties are broken toward the earlier candidate, never by chance.
   // ---------------------------------------------------------------------------------------
-  async function optimizeBlock(ctx, defs, deps, minVal, budget, alloc, buildPair, baseScore, stepSizes) {
+  async function optimizeBlock(ctx, defs, deps, minVal, budget, alloc, buildPair, baseScore, stepSizes, pinnedIds = []) {
     let current = { ...alloc };
     let currentScore = baseScore;
     let rounds = 0;
@@ -86,9 +144,14 @@
         const seen = new Set();
         for (const from of defs) {
           if ((current[from.id] || 0) < step) continue;
+          // Never move points OUT of a pinned node -- that is what the pin means.
+          if (pinnedIds.includes(from.id)) continue;
           for (const to of defs) {
             const next = Space.transfer(defs, deps, minVal, budget, current, from.id, to.id, step);
             if (!next) continue;
+            // A transfer cascades: removing a point can strand a dependency and clear a pinned
+            // node indirectly. Re-check rather than assume the `from` guard above is sufficient.
+            if (!pinsHeld(defs, next, pinnedIds)) continue;
             const sig = Space.signature(defs, next);
             if (seen.has(sig)) continue;
             seen.add(sig);
@@ -115,7 +178,7 @@
   // Alternate attribute and talent blocks until neither improves. Both blocks see the other's
   // current state, so this converges on a joint fixpoint rather than optimizing each in
   // isolation against a stale partner.
-  async function optimizeJointly(ctx, cfg, talentAlloc, attrAlloc, startScore, stepSizes, maxSweeps) {
+  async function optimizeJointly(ctx, cfg, talentAlloc, attrAlloc, startScore, stepSizes, maxSweeps, pinnedAttrs = []) {
     const { TALENTS, ATTRIBUTES, TALENT_BUDGET, ATTRIBUTE_BUDGET } = cfg;
     const noDeps = {};
     const noMin = {};
@@ -128,7 +191,7 @@
 
       const attrResult = await optimizeBlock(
         ctx, ATTRIBUTES, cfg.ATTRIBUTE_DEPENDENCIES, cfg.ATTRIBUTE_MIN_VALUE, ATTRIBUTE_BUDGET,
-        attrs, (a) => ({ talentAlloc: talents, attrAlloc: a }), score, stepSizes,
+        attrs, (a) => ({ talentAlloc: talents, attrAlloc: a }), score, stepSizes, pinnedAttrs,
       );
       attrs = attrResult.alloc;
       score = attrResult.score;
@@ -154,6 +217,12 @@
   // ---------------------------------------------------------------------------------------
   async function optimize(cfg, { mode = 'loot', scorer, onProgress = () => {}, shouldCancel = () => false } = {}) {
     if (typeof scorer !== 'function') throw new Error('optimize() requires a scorer function');
+
+    // Mode is validated HERE as well as in the worker, so an unknown mode fails before a search
+    // runs rather than silently scoring as loot. Pins come from the mode definition, never from
+    // a caller-supplied list -- there is one place that decides what a mode means.
+    Objective.modeOrThrow(mode);
+    const pinnedAttrs = Objective.pinnedAttrsFor(mode);
 
     // Validate the config up front rather than defaulting missing pieces away. A missing
     // dependency table would silently make every gated attribute look freely available and
@@ -260,7 +329,13 @@
       const BATCH = 64;
       const realizable = [];
       for (const s of supports) {
-        const fill = Space.canonicalFill(ATTRIBUTES, deps, minVal, attrBudget, s.ids);
+        let fill = Space.canonicalFill(ATTRIBUTES, deps, minVal, attrBudget, s.ids);
+        // A pinned attribute must be funded in EVERY candidate, including the screening fills,
+        // or the survey ranks supports by a shape the refinement stage will never keep.
+        if (fill && pinnedAttrs.length) {
+          fill = applyPins(ATTRIBUTES, deps, minVal, attrBudget, fill, pinnedAttrs);
+          if (!pinsHeld(ATTRIBUTES, fill, pinnedAttrs)) fill = null; // support cannot host the pin
+        }
         // A support can be dependency-legal and affordable yet still unrealizable: a tier
         // threshold it needs may be unreachable with this budget. Those are dropped here, and
         // the count is reported rather than hidden.
@@ -291,7 +366,7 @@
         report('survey', i, toSurvey.length);
         const c = toSurvey[i];
         surveyed.push({
-          ...(await optimizeJointly(ctx, budgets, seedTalents, c.attrAlloc, c.score, SURVEY_STEP_SIZES, 2)),
+          ...(await optimizeJointly(ctx, budgets, seedTalents, c.attrAlloc, c.score, SURVEY_STEP_SIZES, 2, pinnedAttrs)),
           mask: c.support.mask,
         });
       }
@@ -304,7 +379,7 @@
         if (shouldCancel()) throw new Cancelled();
         report('refine', i, toRefine.length + 1);
         const c = toRefine[i];
-        finalists.push(await optimizeJointly(ctx, budgets, c.talentAlloc, c.attrAlloc, c.score, STEP_SIZES, 6));
+        finalists.push(await optimizeJointly(ctx, budgets, c.talentAlloc, c.attrAlloc, c.score, STEP_SIZES, 6, pinnedAttrs));
       }
       // Survey results that didn't make the refinement cut still compete -- they are complete,
       // legal allocations, just less thoroughly tuned. Keeping them costs nothing at Stage 3
@@ -328,8 +403,11 @@
         // rather than adding them, and fillLeftover refuses to open new nodes.
         Space.spendRemaining(TALENTS, noDeps, noMin, talentBudget, incumbentTalents);
         Space.spendRemaining(ATTRIBUTES, deps, minVal, attrBudget, incumbentAttrs);
+        if (pinnedAttrs.length) {
+          Object.assign(incumbentAttrs, applyPins(ATTRIBUTES, deps, minVal, attrBudget, incumbentAttrs, pinnedAttrs));
+        }
         const [startScore] = await ctx.score([{ talentAlloc: incumbentTalents, attrAlloc: incumbentAttrs }], SCREEN_ITERATIONS);
-        finalists.push(await optimizeJointly(ctx, budgets, incumbentTalents, incumbentAttrs, startScore, STEP_SIZES, 6));
+        finalists.push(await optimizeJointly(ctx, budgets, incumbentTalents, incumbentAttrs, startScore, STEP_SIZES, 6, pinnedAttrs));
         // Also carry the incumbent through UNREFINED, so the result is provably never worse
         // than what the user already had, even if every refinement path leads somewhere weaker.
         finalists.push({ talentAlloc: incumbentTalents, attrAlloc: incumbentAttrs, score: startScore });
