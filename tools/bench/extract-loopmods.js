@@ -29,26 +29,65 @@ const write = process.argv.includes('--write');
 const OUT = path.join(__dirname, '../reference/loop-mods.json');
 
 // Serialized fields appear as "  LM<n><Field>: <value>" at a fixed indent inside the
-// LoopModifiers MonoBehaviour block. Values may be ints, floats or scientific notation.
-const FIELD = /^\s{2}LM(Ouro)?(\d+)([A-Za-z]+):\s*(-?[\d.]+(?:[eE][-+]?\d+)?)\s*$/;
+// LoopModifiers MonoBehaviour block.
+//
+// TWO SHAPES, and missing the second one is what made the high-tier mods look cost-less on the
+// first pass. Small numbers are plain scalars. Costs beyond double range -- and they go to 10^6200
+// -- are a BigDouble serialized as a nested block:
+//     LM264StartCost:
+//       mantissa: 1
+//       exponent: 2400
+// Those exponents are exactly the "MP Cost (e)" column of cifi-tools' Loop Mod Overview, which is
+// what makes the name mapping possible at all. Capture both.
+const FIELD = /^\s{2}LM(Ouro)?(\d+)([A-Za-z0-9]+):\s*(-?[\d.]+(?:[eE][-+]?\d+)?)\s*$/;
+const FIELD_OPEN = /^\s{2}LM(Ouro)?(\d+)([A-Za-z0-9]+):\s*$/;
+const SUBFIELD = /^\s{4}(mantissa|exponent):\s*(-?[\d.]+(?:[eE][-+]?\d+)?)\s*$/;
 
 const mods = new Map();
 const ouro = new Map();
 
 const rl = readline.createInterface({ input: fs.createReadStream(scenePath), crlfDelay: Infinity });
 
+let pending = null; // a BigDouble block we are inside of
+
 rl.on('line', (line) => {
+  if (pending) {
+    const sub = SUBFIELD.exec(line);
+    if (sub) {
+      pending.parts[sub[1]] = Number(sub[2]);
+      if ('mantissa' in pending.parts && 'exponent' in pending.parts) {
+        const { map, idx, field, parts } = pending;
+        if (!map.has(idx)) map.set(idx, {});
+        // Keep the exponent as its own key: it is the value the community overview publishes,
+        // and 10^6200 is not representable as a JS number.
+        map.get(idx)[field] = { mantissa: parts.mantissa, exponent: parts.exponent };
+        map.get(idx)[`${field}E`] = parts.exponent;
+        pending = null;
+      }
+      return;
+    }
+    pending = null; // block ended without both parts
+  }
+
   const m = FIELD.exec(line);
-  if (!m) return;
-  const [, isOuro, idxRaw, field, valueRaw] = m;
-  // UI wiring (Button, Icon, Text, Overlay...) is serialized alongside the data; those are
-  // object references, not numbers, so they do not match the numeric value pattern above.
-  const value = Number(valueRaw);
-  if (!Number.isFinite(value)) return;
-  const target = isOuro ? ouro : mods;
-  const idx = Number(idxRaw);
-  if (!target.has(idx)) target.set(idx, {});
-  target.get(idx)[field] = value;
+  if (m) {
+    const [, isOuro, idxRaw, field, valueRaw] = m;
+    // UI wiring (Button, Icon, Text, Overlay...) is serialized alongside the data; those are
+    // object references, not numbers, so they do not match the numeric value pattern.
+    const value = Number(valueRaw);
+    if (!Number.isFinite(value)) return;
+    const target = isOuro ? ouro : mods;
+    const idx = Number(idxRaw);
+    if (!target.has(idx)) target.set(idx, {});
+    target.get(idx)[field] = value;
+    return;
+  }
+
+  const open = FIELD_OPEN.exec(line);
+  if (open) {
+    const [, isOuro, idxRaw, field] = open;
+    pending = { map: isOuro ? ouro : mods, idx: Number(idxRaw), field, parts: {} };
+  }
 });
 
 rl.on('close', () => {

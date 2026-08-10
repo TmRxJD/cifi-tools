@@ -221,7 +221,16 @@ think one is wrong, disprove it with a test.
     naming is what makes AssetRipper recognise a Unity build) → `/Export/UnityProject`, **not**
     `/Export/PrimaryContent` (level0 is a SCENE, and scene contents never appear in primary
     content — that single distinction is why three earlier attempts exported zero).
-  - **But the scene↔save INDEX MAPPING is unresolved, so do NOT join them yet.** 31 of 223 owned
+  - **Names are mapped WITHOUT save diffing, via cost fingerprints.** cifi-tools' Loop Mod
+    Overview publishes each mod's MP cost per level as a base-10 EXPONENT, and the scene stores
+    the same costs as BigDoubles (`LM<N>StartCost: {mantissa, exponent}`) — so the exponents are
+    directly comparable. `tools/bench/match-loopmods.js` joins them on (start-cost exponent,
+    per-level step, max level) and currently pins **8 of the 39 published mods**, including
+    `stelzi` = **LM279** (e3400, max 8 — which independently agrees with hunterDefs' own "Mutual
+    Mining Agreement" label). Matches require EXACT cap agreement: being lenient there let a
+    wrong match through wearing a confident label. Diffing is now a last resort for the
+    remainder, not the primary method.
+  - **The broader scene↔save INDEX MAPPING is still unresolved, so do NOT bulk-join them.** 31 of 223 owned
     mods sit above the MaxLevel their index claims (LM0 owned 26 vs cap 5, LM9 25 vs 4 …). Ruled
     out: field-merging across objects (each LM field occurs exactly once in the scene) and
     Ouro-raised caps (only 2 mods carry `MaxLevelPreOuro`/`PostOuro`). A ±1/+2 shift does not fix
