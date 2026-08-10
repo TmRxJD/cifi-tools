@@ -25,6 +25,7 @@ function parseCliArgs(argv) {
     skipIntro: flags.has('--skip-intro'),
     noBoot: flags.has('--no-boot'),
     boot: flags.has('--boot'),
+    bootOnly: flags.has('--boot-only'),
     removeBoot: flags.has('--remove-boot'),
     installPath: flags.has('--install-path'),
     noUpdate: flags.has('--no-update'),
@@ -183,6 +184,15 @@ export async function runCliMain(argv = process.argv.slice(2)) {
 
   if (options.help) {
     printHelp()
+    return
+  }
+
+  // Register the sign-in entry and exit. `--boot` registers and then goes on
+  // to serve, which is what a user running it wants but hangs an installer
+  // waiting for the process to finish.
+  if (options.bootOnly) {
+    const { installBootEntry } = await import('./boot-persistence.mjs')
+    await installBootEntry(console.log)
     return
   }
 

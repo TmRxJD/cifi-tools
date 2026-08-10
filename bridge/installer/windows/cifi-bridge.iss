@@ -79,7 +79,7 @@ Filename: "{cmd}"; Parameters: "/c ""{app}\bootstrap.cmd"" silent"; \
 ; Register the sign-in task only when the user asked for it. This calls the
 ; bridge's own --boot handler, which creates a Scheduled Task; nothing here
 ; writes to the registry.
-Filename: "{cmd}"; Parameters: "/c ""{app}\{#MyLauncher}"" --boot --skip-intro"; \
+Filename: "{cmd}"; Parameters: "/c ""{app}\{#MyLauncher}"" --boot-only --skip-intro"; \
   StatusMsg: "Registering start at sign-in..."; Flags: runhidden waituntilterminated; Tasks: startup
 
 ; Offer to start it now.

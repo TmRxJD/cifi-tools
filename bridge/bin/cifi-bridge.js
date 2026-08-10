@@ -5,7 +5,7 @@ try {
   await runCliMain()
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error)
-  console.error(`Tracker Bridge failed to start: ${message}`)
+  console.error(`CIFI Bridge failed to start: ${message}`)
   process.exit(1)
 }
 

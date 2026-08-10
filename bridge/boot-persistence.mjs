@@ -92,6 +92,9 @@ export async function isBootEntryStale() {
 
 export async function isBootEntryInstalled() {
   if (process.platform === 'win32') {
+    // Either mechanism counts: a Scheduled Task when elevation allowed one,
+    // otherwise the Startup-folder script.
+    if (fs.existsSync(windowsStartupEntryPath())) return true
     return Boolean(await readWindowsBootEntryValue())
   }
 
@@ -106,6 +109,16 @@ export async function isBootEntryInstalled() {
   return false
 }
 
+// Windows Startup folder entry, used when a Scheduled Task cannot be created
+// (ONLOGON tasks require elevation, which this per-user install does not have).
+function windowsStartupEntryPath() {
+  return path.join(
+    os.homedir(),
+    'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup',
+    'CIFI Bridge.cmd',
+  )
+}
+
 export async function installBootEntry(log = console.log) {
   const launchCommand = buildBootLaunchCommand()
 
@@ -114,24 +127,36 @@ export async function installBootEntry(log = console.log) {
     const resolvedCommand = npxPath
       ? `"${npxPath}" cifi-bridge --daemon --skip-intro --no-boot`
       : launchCommand
-    // Still wrapped through cmd.exe so the npx.cmd shim runs via a shell, and
-    // still using the absolute path when one was found -- Task Scheduler removes
-    // the early-logon PATH problem, but neither of those hurts.
-    const fullCommand = `cmd.exe /c "${resolvedCommand.replace(/"/g, '\\"')}"`
+    // Wrapped through cmd.exe so the npx.cmd shim runs via a shell, using the
+    // absolute path when one was found so boot-time PATH is never a factor.
+    const fullCommand = `cmd.exe /c "${resolvedCommand.replace(/"/g, '\\\\"')}"`
 
-    // /SC ONLOGON runs at sign-in for this user; /F replaces an existing task so
-    // enabling twice is idempotent. Task Scheduler starts it without a console
-    // window, so no VBS or hidden-window wrapper is needed.
-    await runSchtasks([
-      '/Create',
-      '/TN', WINDOWS_TASK_NAME,
-      '/TR', fullCommand,
-      '/SC', 'ONLOGON',
-      '/F',
-    ])
-    log(npxPath
-      ? 'Registered CIFI Bridge to start when you sign in to Windows.'
-      : 'Registered CIFI Bridge to start when you sign in to Windows (could not resolve an absolute path to npx -- if it still does not start at boot, make sure Node.js is on your SYSTEM PATH, not just your user PATH).')
+    // Prefer a Scheduled Task: it runs in a proper session (the Run key fires
+    // before PATH is populated, which is why autostart used to register and
+    // then never start) and it is visible and removable in Task Scheduler.
+    //
+    // But /SC ONLOGON requires elevation, and this installs per-user with no
+    // UAC prompt by design, so for most users it fails with "Access is denied".
+    // Fall back to a Startup-folder script: no elevation needed, and it is a
+    // plain file the user can see and delete -- unlike a registry Run key,
+    // which is hidden and part of the behaviour Defender scores as a dropper.
+    try {
+      await runSchtasks(['/Create', '/TN', WINDOWS_TASK_NAME, '/TR', fullCommand, '/SC', 'ONLOGON', '/F'])
+      log('Registered CIFI Bridge to start when you sign in to Windows (Scheduled Task).')
+      return
+    } catch {
+      // Elevation unavailable -- use the Startup folder instead.
+    }
+
+    const startupPath = windowsStartupEntryPath()
+    fs.mkdirSync(path.dirname(startupPath), { recursive: true })
+    // Write resolvedCommand, not fullCommand: the backslash-escaped quotes in
+    // fullCommand are for passing a single argument to schtasks. A .cmd file
+    // needs plain quoting, and needs no cmd.exe wrapper -- it is already a
+    // batch file. CRLF because cmd.exe parses LF-only batch files unreliably.
+    const eol = String.fromCharCode(13, 10)
+    fs.writeFileSync(startupPath, '@echo off' + eol + resolvedCommand + eol, 'utf8')
+    log('Registered CIFI Bridge to start when you sign in to Windows (Startup folder).')
     return
   }
 
@@ -188,10 +213,17 @@ X-GNOME-Autostart-enabled=true
 
 export async function removeBootEntry(log = console.log) {
   if (process.platform === 'win32') {
+    // Clear both mechanisms: which one was used depends on whether the task
+    // could be created, so removal must not assume either.
     try {
       await runSchtasks(['/Delete', '/TN', WINDOWS_TASK_NAME, '/F'])
     } catch {
-      // Already absent -- removing a startup entry that isn't there is fine.
+      // No Scheduled Task registered.
+    }
+    try {
+      fs.rmSync(windowsStartupEntryPath(), { force: true })
+    } catch {
+      // No Startup-folder entry either.
     }
     log('Removed CIFI Bridge from Windows startup.')
     return

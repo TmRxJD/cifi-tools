@@ -1,6 +1,6 @@
 {
   "name": "cifi-bridge",
-  "version": "1.0.1",
+  "version": "1.0.5",
   "description": "CIFI Bridge \u2014 local ADB save finder for the HunterSim import feature (emulator or USB)",
   "license": "MIT",
   "type": "module",
