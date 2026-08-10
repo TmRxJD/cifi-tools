@@ -214,9 +214,20 @@ think one is wrong, disprove it with a test.
     `hunterDefs.js` labels that same mod "Mutual Mining Agreement". Absence of a nickname the game
     never used proved nothing. **Do not conclude "not in the client" from a tool-side id.** Search
     for save field families (`LM<N>Level`) and dump.cs field names, not for cifi-tools slugs.
-  - Still genuinely blocked: reading the *values* of those definition fields. They are serialized
-    MonoBehaviour data and this build strips typetrees, so it needs AssetRipper with the
-    `DummyDll/` the dumper produced. Display names are UI `Text` populated at runtime.
+  - **The values ARE now extracted** into `tools/reference/loop-mods.json` — 295 loop mods and 39
+    Ouroboros mods with `StartCost`, `AdditiveCostIncrease`, `CostExponent`, `CostGrowthExponent`,
+    `BonusExponent`, `MaxLevel`. Regenerate with `tools/bench/extract-loopmods.js`. The pipeline
+    that finally worked: dump with `tools/il2cpp-cli` → stage a **`*_Data`-named** folder (that
+    naming is what makes AssetRipper recognise a Unity build) → `/Export/UnityProject`, **not**
+    `/Export/PrimaryContent` (level0 is a SCENE, and scene contents never appear in primary
+    content — that single distinction is why three earlier attempts exported zero).
+  - **But the scene↔save INDEX MAPPING is unresolved, so do NOT join them yet.** 31 of 223 owned
+    mods sit above the MaxLevel their index claims (LM0 owned 26 vs cap 5, LM9 25 vs 4 …). Ruled
+    out: field-merging across objects (each LM field occurs exactly once in the scene) and
+    Ouro-raised caps (only 2 mods carry `MaxLevelPreOuro`/`PostOuro`). A ±1/+2 shift does not fix
+    it either, so the two numbering schemes are probably different orderings, not an offset.
+    `loopmod-test.js` reports this rather than failing. Save diffing is what pins it down.
+    Display names are UI `Text` populated at runtime and are not in the table.
   - **Save diffing therefore DOES work** for mapping index -> mod: change one mod in-game,
     re-pull, diff, see which `LM<N>` moved. Slow, but it was never impossible.
 - **Every hand-typed input the save can supply should be auto-filled, and
@@ -361,6 +372,7 @@ node tools/bench/gem-tree-test.js      # tree shape + every unlock gate is satis
 node tools/bench/save-gate-test.js     # caps/gates vs a REAL save (skips if none pulled)
 node tools/save/inspect.js <DATA.text> [regex]            # decode + inspect a real save
 node tools/bench/save-coverage.js      # which tool inputs the save could auto-fill (report)
+node tools/bench/loopmod-test.js       # loop-mod table vs a real save (report)
 node tools/bench/gate-coverage.js <live-bundle.js>        # our gates vs the bundle's
 node tools/bench/live-override-diff.js <live-bundle.js>   # gap check vs the original tool
 node tools/bench/run.js --sample=12    # THE EVERYDAY GATE: stratified handful, ~minutes
