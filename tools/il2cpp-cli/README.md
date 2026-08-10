@@ -45,4 +45,33 @@ using the generated script, or typetrees (below) for serialized data.
 
 **Typetrees:** the shipped assets have them stripped, so UnityPy reads MonoBehaviour headers but
 not script fields. The `DummyDll/` output is what AssetRipper or AssetStudio need to reconstruct
-them — that is the route to reading ScriptableObject balance data, and it is not done yet.
+them — that is the route to reading ScriptableObject balance data. **Attempted, not yet working:**
+
+## AssetRipper attempt (1.3.14) — what worked and what did not
+
+AssetRipper's free build is GUI-only, but `--headless --port N` hosts a local web API with an
+OpenAPI spec at `/openapi.json`. It is fully scriptable that way, which is the reusable part:
+
+```bash
+AssetRipper.GUI.Free.exe --headless --port 47788 &
+curl -X POST --data-urlencode "Path=<folder>"     http://127.0.0.1:47788/LoadFolder
+curl -X POST --data-urlencode "Path=<outDir>"     http://127.0.0.1:47788/Export/PrimaryContent
+```
+
+(The `/LoadFile` and `/LoadFolder` forms in the UI open a native dialog and have no path field,
+but the endpoints accept `Path` directly, which is what makes headless use possible at all.)
+
+**It ran and exported cleanly — but produced ZERO MonoBehaviour assets in three configurations:**
+`base.apk` alone; the folder holding both APKs plus `il2cpp-dump/DummyDll/` (it did pick those up
+— "found 113 assemblies"); and a staged folder of the reassembled `level0` +
+`sharedassets0.assets` + `globalgamemanagers` with the 113 dummy DLLs under `Managed/`.
+
+Each run exported ~4,800 objects — shaders, settings, fonts — never the ~412,000 in `level0`. So
+it is not ingesting the big asset files at all, rather than failing to type them. The likely
+cause is that CIFI ships those files **split** inside the APK (`level0.split0`, `.split1`, …) and
+the reassembly/layout is not what AssetRipper expects from a real Android build.
+
+Next things to try, in rough order of promise: give it the on-device `/data/app` extraction
+layout instead of a hand-built folder; try AssetStudio, which takes a plainer file list; or skip
+both and parse the MonoBehaviour bytes directly using the field order and offsets `dump.cs`
+already gives for `LoopModifiers`.
