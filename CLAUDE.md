@@ -76,6 +76,7 @@ There is exactly one place for each of these. **Do not add a second.**
 | Purchase-path config | `app.js` → `statPathCfgFor(hunter, baseline)` |
 | Purchase-path walk (stats/inscriptions/relics) | `hunterStatPathBrowser.js` → `greedyPurchasePath()` |
 | Relic + fragment costs | `webapp/public/costFormulas.js` (`RELIC_SPECS`, `fragmentsOnHand`) |
+| Upgrade unlock gates | `webapp/public/hunterDefs.js` (`UPGRADE_GATES`, `isUpgradeUnlocked`) |
 | Coarse evaluation fidelity | `HunterOptimizer.SCREEN_ITERATIONS` (one value, shared) |
 | Full evaluation fidelity | `HunterOptimizer.FINAL_ITERATIONS` |
 | Build share-code encode/decode | `webapp/public/buildCode.js` |
@@ -176,6 +177,25 @@ think one is wrong, disprove it with a test.
 - **Boss kill rate is a real gradient, not a flag.** It falls 95.7 -> 85.7 -> 64.5 -> 43.8 -> 36.4
   -> 0 as Soul Of Ares is stripped, and hits 0 outright without Impeccable or Power Of Gaia. Below
   a kill, `bossHpPercent` is what still discriminates.
+- **Most non-base-stat upgrades are GATED behind a gem tree level, and all 20 that apply to our
+  Overrides panel are now mapped** in `UPGRADE_GATES` (hunterDefs.js), transcribed from the live
+  bundle's own `unlock_gem`/`unlock_lvl` fields and asserted against it by
+  `tools/bench/gate-coverage.js`. Gadgets need Exodus 4; tier-2 relics Power 3; CMs Power 2;
+  researches Innovation 2-3; milestone #0 Attraction 3; `cms.milestoneCount` Exodus 1; trinkets
+  Creation 4. **Missing gem state means LOCKED, never unlocked** — the optimistic default is how
+  a planner ends up recommending something the account cannot buy. The Effective Path hard-filters
+  locked candidates (not a ranking penalty: a locked upgrade is not a worse buy, it is not a buy)
+  and reports what it excluded; the Overrides cards show the requirement but do NOT hard-disable
+  the input, because our picture of gem levels comes from the Gem Planner the user may not have
+  filled in.
+- **`getMaxValue` appears exactly ONCE in the live bundle** — Borge's Call Me Lucky Loot. Verified
+  by counting, not assumed: the other four mentions are call sites. There is no second dynamic
+  talent/attribute cap to find.
+- **r5/r6/r9 have an unresolved cap chain and `relicMaxLevel` refuses for them.** Ryther's data
+  says r5/r6 cap at 8 rising to 11 with Power Gem Node 1; the live bundle's fragment planner says
+  r6 caps at 11 rising to 16 with Exodus node 2 (and r9 100 → 105). Probably a chain, but that
+  ordering is inference. None are hunter sim params, so nothing consumes the number — refusing
+  beats picking a side. Costs are still exact; use `relicPriceableLevels()` to walk them.
 - **Legality is a state predicate, not a path predicate.** A node at level > 0 is legal iff it's
   within `maxLevel`, every dependency parent is > 0, and any `minValue` tier threshold is met by
   points spent in strictly-lower-threshold nodes. Order of purchase never matters. This is what

@@ -335,6 +335,72 @@ window.HUNTER_DEFS = {
 // uses structured clone, and structured clone cannot clone a function: keeping it threw
 // "could not be cloned" and broke the optimizer outright for the one hunter that has a dynamic
 // cap. The rule belongs to the definition; the resolved node is just its result.
+// UNLOCK GATES. Most non-base-stat upgrades are not available until a gem tree reaches a
+// level, and until then the account simply cannot own them at any level.
+//
+// This was entirely unmodelled: 20 of the keys our Overrides panel exposes carry a gate in the
+// live bundle and we enforced none of them, so the Effective Path would happily recommend
+// spending on a relic or gadget the account has no way to buy -- a confidently wrong answer,
+// which is worse than no answer.
+//
+// Transcribed straight from the live bundle's own `unlock_gem`/`unlock_lvl` (and the equivalent
+// `unlock`/`unlock_level`) fields rather than typed by hand, and asserted against it by
+// tools/bench/gate-coverage.js so a bundle update that moves a gate shows up as a test failure.
+//
+// The gem levels these compare against are the ones the Gem Planner already stores
+// (store.gems[tree].level).
+window.UPGRADE_GATES = {
+  'upgrades.gadgets.wrench': { gem: 'exodus', level: 4 }, // The Wrench of Gore
+  'upgrades.gadgets.zaptron': { gem: 'exodus', level: 4 }, // Zaptron-533 Bio-Repair Tool
+  'upgrades.gadgets.anchor': { gem: 'exodus', level: 4 }, // The Anchor of Ages
+  'upgrades.relics.t2r5': { gem: 'power', level: 3 }, // #5 The Gorgon Eye
+  'upgrades.relics.t2r7': { gem: 'power', level: 3 }, // #7 Arthur's Sword
+  'upgrades.shardmilestones.m0': { gem: 'attraction', level: 3 }, // #0 The Eternal Milestone
+  'upgrades.researches.res81': { gem: 'innovation', level: 2 }, // Research #81
+  'upgrades.researches.res95': { gem: 'innovation', level: 3 }, // Research #95
+  'upgrades.researches.res105': { gem: 'innovation', level: 3 }, // Research #105
+  'upgrades.cms.cm46': { gem: 'power', level: 2 }, // CM #46
+  'upgrades.cms.cm47': { gem: 'power', level: 2 }, // CM #47
+  'upgrades.cms.cm48': { gem: 'power', level: 2 }, // CM #48
+  'upgrades.cms.cm51': { gem: 'power', level: 2 }, // CM #51
+  'upgrades.cms.cm53': { gem: 'power', level: 2 }, // CM #53
+  'upgrades.cms.cm54': { gem: 'power', level: 2 }, // CM #54
+  'upgrades.cms.cm57': { gem: 'power', level: 2 }, // CM #57
+  'upgrades.cms.milestoneCount': { gem: 'exodus', level: 1 }, // Milestones Count
+  'upgrades.trinkets.last_handbook': { gem: 'creation', level: 4 }, // The Lost Last Manufacturer
+  'upgrades.trinkets.transmission_amplifier': { gem: 'creation', level: 4 }, // The Pocket Directive Transmission Amplifier
+  'upgrades.trinkets.ouro_codex': { gem: 'creation', level: 4 }, // The Ouroboros Recursive Codex
+};
+
+/** The gate on an upgrade key, or null if it has none. */
+window.gateFor = function gateFor(key) {
+  return window.UPGRADE_GATES[key] || null;
+};
+
+/**
+ * Is this upgrade available to an account with these gem states?
+ *
+ * Ungated upgrades are always available. A gated one needs its tree at or above the level.
+ *
+ * DELIBERATELY STRICT ABOUT MISSING STATE: no gem state means level 0 means locked. The
+ * opposite default (assume unlocked when we don't know) is how a planner ends up recommending
+ * something the player cannot buy, which is the failure this table exists to prevent.
+ */
+window.isUpgradeUnlocked = function isUpgradeUnlocked(key, gemStates) {
+  const gate = window.UPGRADE_GATES[key];
+  if (!gate) return true;
+  const level = (gemStates && gemStates[gate.gem] && gemStates[gate.gem].level) || 0;
+  return level >= gate.level;
+};
+
+/** Human-readable requirement, for UI. Returns null when there is no gate. */
+window.gateLabel = function gateLabel(key) {
+  const gate = window.UPGRADE_GATES[key];
+  if (!gate) return null;
+  const tree = gate.gem.charAt(0).toUpperCase() + gate.gem.slice(1);
+  return `Requires ${tree} Gem level ${gate.level}`;
+};
+
 window.resolveMaxLevels = function resolveMaxLevels(defs, ctx) {
   return defs.map((d) => {
     if (!d.dynamicMaxLevel) return d;

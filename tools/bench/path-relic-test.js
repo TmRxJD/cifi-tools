@@ -105,6 +105,80 @@ check('relic steps carry a real fragment cost, never zero', async () => {
   return null;
 });
 
+// ---- unlock gates ------------------------------------------------------------------------
+// Most non-base-stat upgrades are gated behind a gem tree level. Recommending one the account
+// cannot unlock is a confidently wrong answer, and the sim will happily report a gain for it
+// because the wasm has no concept of the gate.
+
+check('a gated upgrade is locked without the gem level and unlocked with it', () => {
+  const cases = [
+    ['upgrades.relics.t2r7', 'power', 3],
+    ['upgrades.gadgets.wrench', 'exodus', 4],
+    ['upgrades.cms.cm46', 'power', 2],
+    ['upgrades.researches.res95', 'innovation', 3],
+    ['upgrades.shardmilestones.m0', 'attraction', 3],
+    ['upgrades.trinkets.ouro_codex', 'creation', 4],
+  ];
+  for (const [key, gem, level] of cases) {
+    if (sb.isUpgradeUnlocked(key, {})) return `${key} unlocked with no gem state at all`;
+    if (sb.isUpgradeUnlocked(key, { [gem]: { level: level - 1 } })) return `${key} unlocked one level early`;
+    if (!sb.isUpgradeUnlocked(key, { [gem]: { level } })) return `${key} still locked at the required level`;
+    if (!sb.isUpgradeUnlocked(key, { [gem]: { level: level + 5 } })) return `${key} locked above the required level`;
+    if (!/Requires .* Gem level /.test(sb.gateLabel(key) || '')) return `${key} has no readable requirement`;
+  }
+  // Ungated things must stay available.
+  for (const key of ['upgrades.relics.r4', 'upgrades.inscryptions.i31']) {
+    if (!sb.isUpgradeUnlocked(key, {})) return `${key} is gated but should not be`;
+    if (sb.gateLabel(key) !== null) return `${key} reports a requirement it does not have`;
+  }
+  return null;
+});
+
+check('the path refuses to recommend a locked upgrade, and says what is locked', async () => {
+  const known = H.loadKnownBuilds().borge;
+  const b = await H.parseBuildCode(known[known.length - 1].code);
+  const defs = sb.HUNTER_DEFS.borge;
+  const base = {
+    level: b.level, talents: b.talents, attributes: b.attributes, hunterStats: {},
+    baseOverrides: {}, globalUpgrades: {},
+    TALENTS: defs.talents, ATTRIBUTES: defs.attributes,
+  };
+
+  // No gems at all: t2r7 (power 3) must not be offered, and must be reported as locked.
+  const locked = await sb.greedyPurchasePath('borge', { ...base, gemPlannerStore: { gemStates: {} } }, 4, true);
+  const lockedKeys = (locked.columns.frags ? locked.columns.frags.steps : []).map((s) => s.key);
+  if (lockedKeys.includes('t2r7')) return 'recommended t2r7 with no Power gem at all';
+  if (!locked.locked.some((l) => l.key === 't2r7')) return 't2r7 was dropped but never reported as locked';
+
+  // Power gem 3: it becomes a legal candidate again.
+  const open = await sb.greedyPurchasePath('borge', {
+    ...base, gemPlannerStore: { gemStates: { power: { level: 3 } } },
+  }, 4, true);
+  if (open.locked.some((l) => l.key === 't2r7')) return 't2r7 still reported locked at Power gem 3';
+  return null;
+});
+
+check('the resource list never promises a column the walk cannot fill', async () => {
+  // Knox's only relics are both gated behind Power 3, and it has no relic currency anyway --
+  // but the general property is what matters: every resource named up front must appear.
+  const known = H.loadKnownBuilds().borge;
+  const b = await H.parseBuildCode(known[known.length - 1].code);
+  const defs = sb.HUNTER_DEFS.borge;
+  for (const gemStates of [{}, { power: { level: 3 } }]) {
+    const named = sb.resourcesFor('borge', true, gemStates);
+    const res = await sb.greedyPurchasePath('borge', {
+      level: b.level, talents: b.talents, attributes: b.attributes, hunterStats: {},
+      baseOverrides: {}, globalUpgrades: {}, gemPlannerStore: { gemStates },
+      TALENTS: defs.talents, ATTRIBUTES: defs.attributes,
+    }, 2, true);
+    const produced = Object.keys(res.columns).sort();
+    if (named.sort().join(',') !== produced.join(',')) {
+      return `promised [${named.join(',')}] but produced [${produced.join(',')}]`;
+    }
+  }
+  return null;
+});
+
 // ---- objective modes -------------------------------------------------------------------------
 // The path now ranks under the SAME objective table the optimizer uses. What must hold:
 //   - 'loot' behaves exactly as it always did (a lootPerMin difference), so nothing regressed.

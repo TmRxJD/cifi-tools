@@ -96,7 +96,15 @@ const PREVIOUSLY_MODELED = ['r4', 'r7', 'r9', 'r16', 'r17', 'r19', 't2r4', 't2r5
 
 // Tier-2 caps are not in the extracted dataset, so relicMaxLevel throws for them by design.
 // 100 levels is far past anything reachable and is plenty to compare two implementations over.
-const levelsToCompare = (id) => (id.startsWith('t2') ? 100 : CF.relicMaxLevel(id));
+const UNRESOLVED = CF.unresolvedRelicCaps();
+const levelsToCompare = (id) => {
+  // A relic with an unresolved cap, or a tier-2 one whose cap lives in hunterDefs, still has to
+  // be walked -- bound it by what can actually be PRICED (a static table runs out; a formula
+  // does not), then by a sane ceiling.
+  const priceable = CF.relicPriceableLevels(id);
+  if (id.startsWith('t2') || UNRESOLVED[id]) return Math.min(priceable, 100);
+  return Math.min(priceable, CF.relicMaxLevel(id));
+};
 
 check('the widened table reproduces every previously-modeled relic exactly', () => {
   for (const id of PREVIOUSLY_MODELED) {
@@ -161,7 +169,7 @@ check('all 20 tier-1 relics plus the tier-2 set are priceable', () => {
     if (!known.includes(`r${n}`)) return `r${n} missing from the table`;
   }
   for (const id of known) {
-    if (!id.startsWith('t2')) {
+    if (!id.startsWith('t2') && !UNRESOLVED[id]) {
       const max = CF.relicMaxLevel(id);
       if (!(max >= 1)) return `${id} has a nonsensical max level ${max}`;
     }
@@ -196,23 +204,26 @@ check('a level range sums the individual level costs', () => {
 // static cost tables carry 11 entries. Reading the table length as the cap (which is what this
 // module did when the table first landed) silently offers three levels the account cannot buy.
 // Same shape as Borge's Call Me Lucky Loot, and the same class of bug: optimistic default.
-check('a gated relic cap stays locked unless the unlock is present', () => {
-  const gated = CF.gatedRelicCaps();
-  if (!gated.r5 || !gated.r6) return `expected r5 and r6 to be gated, got ${Object.keys(gated).join(', ') || 'none'}`;
-  for (const id of ['r5', 'r6']) {
-    if (CF.relicMaxLevel(id) !== 8) return `${id} defaults to ${CF.relicMaxLevel(id)}, should be 8 while locked`;
-    if (CF.relicMaxLevel(id, {}) !== 8) return `${id} unlocked itself from an empty unlock set`;
-    if (CF.relicMaxLevel(id, { powerGemNode1: false }) !== 8) return `${id} unlocked from an explicitly false flag`;
-    if (CF.relicMaxLevel(id, { powerGemNode1: true }) !== 11) return `${id} did not reach 11 with the gem node on`;
-    if (gated[id].unlockedBy !== 'powerGemNode1') return `${id} names the wrong unlock: ${gated[id].unlockedBy}`;
+// Two independent sources disagree about where r5/r6/r9's caps start and which gem node raises
+// them (see costFormulas.js). None are hunter sim params, so nothing consumes the number --
+// refusing to state one is strictly better than picking a side and being confidently wrong.
+check('a relic with an unresolved cap chain refuses to state a max level', () => {
+  const unresolved = CF.unresolvedRelicCaps();
+  for (const id of ['r5', 'r6', 'r9']) {
+    if (!unresolved[id]) return `${id} should be marked cap-unresolved`;
+    try {
+      const v = CF.relicMaxLevel(id);
+      return `${id} returned max level ${v} despite an unresolved cap chain`;
+    } catch (err) {
+      if (!/unresolved cap chain/.test(err.message)) return `${id} threw the wrong error: ${err.message}`;
+    }
+    // Costs are still exact and must still be available.
+    if (!(CF.relicCostAtLevel(id, 5) > 0)) return `${id} lost its cost formula`;
   }
-  // Ungated relics must not sprout a gate.
+  // Relics with a KNOWN cap must still answer.
   for (const id of ['r4', 'r16', 'r19']) {
-    if (gated[id]) return `${id} is unexpectedly gated`;
-  }
-  // The locked cap must still be inside the cost table, and the unlocked cap must be too.
-  for (const id of ['r5', 'r6']) {
-    if (!Number.isFinite(CF.relicCostAtLevel(id, 11))) return `${id} has no cost for its unlocked cap`;
+    if (unresolved[id]) return `${id} is wrongly marked unresolved`;
+    if (!(CF.relicMaxLevel(id) > 0)) return `${id} has no usable max level`;
   }
   return null;
 });

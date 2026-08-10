@@ -24,6 +24,7 @@
     if (!resource) return []; // Knox has no modeled inscription resource
     return (def.globalUpgrades.inscryptions?.items || []).map((item) => ({
       kind: 'inscryption', key: item.id, label: item.label, maxLevel: item.maxLevel, resource,
+      paramKey: `upgrades.inscryptions.${item.id}`,
     }));
   }
 
@@ -36,6 +37,21 @@
   // an inert relic scores a delta of exactly 0 and loses to anything that moves the number. It
   // falls out of the ranking rather than needing a maintained blocklist -- and if the game ever
   // makes one of them matter, this picks that up with no code change.
+  // A candidate the account cannot unlock yet must never be recommended. The gate lives in
+  // hunterDefs.js (UPGRADE_GATES, transcribed from the live bundle); the account's gem levels
+  // come from the Gem Planner state the caller already passes in cfg.gemPlannerStore.
+  //
+  // This is a HARD filter rather than a ranking penalty on purpose: a locked upgrade is not a
+  // worse buy, it is not a buy at all, and the sim would happily report a gain for one because
+  // the wasm has no concept of the gate.
+  function unlockedOnly(candidates, cfg) {
+    const gemStates = (cfg.gemPlannerStore && cfg.gemPlannerStore.gemStates) || {};
+    return candidates.filter((c) => {
+      if (!c.paramKey) return true; // base stats are never gated
+      return window.isUpgradeUnlocked(c.paramKey, gemStates);
+    });
+  }
+
   function buildRelicCandidates(hunter, def, CF) {
     const resource = CF.relicResource(hunter);
     // Knox has no modeled relic currency -- the live tool doesn't price Knox relics either
@@ -43,6 +59,7 @@
     if (!resource) return [];
     return (def.globalUpgrades.relics?.items || []).map((item) => ({
       kind: 'relic', key: item.id, label: item.label, maxLevel: item.maxLevel, resource,
+      paramKey: `upgrades.relics.${item.id}`,
     }));
   }
 
@@ -134,10 +151,15 @@
   // Every resource here has an independent candidate pool, so the resource list -- and
   // therefore what a progress UI needs to render BEFORE any computation starts -- is knowable
   // synchronously up front.
-  function resourcesFor(hunter, includeAccountUpgrades) {
+  // `gemStates` is required whenever includeAccountUpgrades is true: without it this would
+  // promise the progress UI a currency column that greedyPurchasePath then never produces,
+  // because every candidate in it turned out to be locked.
+  function resourcesFor(hunter, includeAccountUpgrades, gemStates) {
     const def = window.HUNTER_DEFS[hunter];
     const CF = window.CostFormulas;
-    const candidates = buildStatCandidates(hunter, def, CF).concat(accountUpgradeCandidates(hunter, def, CF, includeAccountUpgrades));
+    const upgrades = accountUpgradeCandidates(hunter, def, CF, includeAccountUpgrades)
+      .filter((c) => window.isUpgradeUnlocked(c.paramKey, gemStates || {}));
+    const candidates = buildStatCandidates(hunter, def, CF).concat(upgrades);
     return [...new Set(candidates.map((c) => c.resource))];
   }
 
@@ -176,7 +198,9 @@
     const def = window.HUNTER_DEFS[hunter];
     const CF = window.CostFormulas;
     const statCandidates = buildStatCandidates(hunter, def, CF);
-    const upgradeCandidates = accountUpgradeCandidates(hunter, def, CF, includeAccountUpgrades);
+    const allUpgradeCandidates = accountUpgradeCandidates(hunter, def, CF, includeAccountUpgrades);
+    const upgradeCandidates = unlockedOnly(allUpgradeCandidates, cfg);
+    const lockedOut = allUpgradeCandidates.length - upgradeCandidates.length;
     const upgradeParams = upgradeCandidates.map(upgradeParamOf);
 
     const evalFast = await HunterSim.compileEvaluator(hunter, {
@@ -200,7 +224,12 @@
     )));
     const columns = {};
     entries.forEach(([resource], i) => { columns[resource] = results[i]; });
-    return { columns };
+    // Reported, not silently dropped -- "nothing to buy with fragments" and "everything you
+    // could buy with fragments is still locked" are very different answers.
+    const locked = allUpgradeCandidates
+      .filter((c) => !upgradeCandidates.includes(c))
+      .map((c) => ({ key: c.key, label: c.label, requires: window.gateLabel(c.paramKey) }));
+    return { columns, locked, lockedCount: lockedOut };
   }
 
   global.resourcesFor = resourcesFor;

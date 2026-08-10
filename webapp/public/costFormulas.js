@@ -197,15 +197,23 @@
     r2: { maxLevel: 100, start: 0.6, add: 0.2, exp: 1.09, corr: [[1.006, 10], [1.007, 20], [1.022, 30]], floorFrom: 20 },
     r3: { maxLevel: 100, start: 0.7, add: 0.5, exp: 1.12, corr: [[1.02, 10], [1.04, 20], [1.07, 30]], floorFrom: 10 },
     r4: { maxLevel: 100, start: 0.8, add: 0.4, exp: 1.12, corr: [[1.02, 10], [1.015, 20]], floorFrom: 10 },
-    // GATED CAP. r5 and r6 cap at 8, and rise to 11 only once Power Gem Node 1 is enabled --
-    // which is why their static cost tables carry 11 entries rather than 8. Same shape as
-    // Borge's Call Me Lucky Loot (10 -> 12 via Attraction gem node 2). Reading the table length
-    // as the cap would silently hand a planner three levels the account cannot actually buy.
-    r5: { maxLevel: 8, unlockedMaxLevel: 11, unlockedBy: 'powerGemNode1', static: [1, 120, 4400, 6200, 15200, 18500, 24000, 30000, 44000, 56000, 72000] },
-    r6: { maxLevel: 8, unlockedMaxLevel: 11, unlockedBy: 'powerGemNode1', static: [3, 450, 1070, 2500, 6700, 7000, 7600, 8500, 12000, 16000, 32000] },
+    // UNRESOLVED CAP CHAIN. Two independent sources disagree about where these start:
+    //   - Ryther's relic optimizer: maxLevel 8, rising to 11 with Power Gem Node 1.
+    //   - cifi-tools' own fragment planner: r6 declares max 11, rising to 16 with Exodus node 2
+    //     (and r9 likewise 100 -> 105 with Exodus node 2).
+    // The most likely reading is a CHAIN -- 8, then 11 with the power node, then 16 with the
+    // exodus node, with the fragment planner assuming the power node already taken -- but that
+    // ordering is inference, not something either source states. These relics are not hunter sim
+    // params (no hunter reads them; they drive fragment income, which this tool does not model),
+    // so nothing here consumes the number. Rather than pick one and be confidently wrong,
+    // relicMaxLevel refuses for them. Costs are still exact and still tested.
+    r5: { capUnresolved: 'Ryther says 8 (11 with Power Gem Node 1); the live fragment planner implies a further Exodus-node stage', static: [1, 120, 4400, 6200, 15200, 18500, 24000, 30000, 44000, 56000, 72000] },
+    r6: { capUnresolved: 'Ryther says 8 (11 with Power Gem Node 1); the live fragment planner declares 11 rising to 16 with Exodus node 2', static: [3, 450, 1070, 2500, 6700, 7000, 7600, 8500, 12000, 16000, 32000] },
     r7: { maxLevel: 100, start: 2, add: 1.8, exp: 1.14, corr: [[1.01, 10], [1.02, 20]] },
     r8: { maxLevel: 100, start: 5, add: 4, exp: 1.2, corr: [[1.1, 10]] },
-    r9: { maxLevel: 100, start: 8, add: 1.8, exp: 1.18, corr: [[1.03, 10], [1.08, 20]] },
+    // r9's cap is likewise Exodus-node-gated in the live fragment planner (100 -> 105 with
+    // Exodus node 2). It is not a hunter sim param either, so same treatment as r5/r6.
+    r9: { capUnresolved: 'the live fragment planner declares 100 rising to 105 with Exodus node 2', start: 8, add: 1.8, exp: 1.18, corr: [[1.03, 10], [1.08, 20]] },
     // r10 subtracts a flat rebate per level band instead of applying correction multipliers.
     r10: {
       maxLevel: 8,
@@ -331,11 +339,36 @@
       throw new Error('No max level known for relic "' + relicId + '" (normalized "' + id + '")'
         + (TIER2_RELIC_COSTS[id] ? ' -- tier-2 caps live in hunterDefs.js, not here' : ''));
     }
+    if (spec.capUnresolved) {
+      throw new Error('Relic "' + id + '" has an unresolved cap chain, so no single max level can '
+        + 'be stated: ' + spec.capUnresolved);
+    }
     // A gated cap stays at its BASE value unless the unlock is explicitly present. Defaulting to
     // the unlocked cap would offer levels the account cannot buy; defaulting to unlocked is the
     // silent-optimism version of the silent-zero bug.
     if (spec.unlockedBy && unlocks && unlocks[spec.unlockedBy]) return spec.unlockedMaxLevel;
     return spec.maxLevel;
+  }
+
+  /**
+   * How many levels of this relic we can PRICE. Deliberately a different question from
+   * relicMaxLevel, which is "how far can this account actually take it" -- a static cost table
+   * runs out at a fixed length regardless of what an unlock would allow, and a formula-priced
+   * relic can be priced arbitrarily far. Callers that walk levels need this one.
+   */
+  function relicPriceableLevels(relicId) {
+    const id = canonicalRelicId(relicId);
+    if (TIER2_RELIC_COSTS[id]) return Infinity;
+    const spec = RELIC_SPECS[id];
+    if (!spec) throw new Error('Unknown relic "' + relicId + '"');
+    return spec.static ? spec.static.length : Infinity;
+  }
+
+  /** Relics whose maximum level we deliberately refuse to state, and why. */
+  function unresolvedRelicCaps() {
+    const out = {};
+    for (const [id, spec] of Object.entries(RELIC_SPECS)) if (spec.capUnresolved) out[id] = spec.capUnresolved;
+    return out;
   }
 
   /** Relic ids whose cap depends on an unlock, mapped to the unlock that raises it. */
@@ -543,7 +576,7 @@
     HUNTER_RESOURCES, resourceLabel, resourceAbbr, baseStatResource, relicResource, inscryptionResource,
     fragmentsOnHand, fragmentDaysUntilAffordable,
     baseStatCostAtLevel, baseStatCostRange,
-    relicCostAtLevel, relicCostRange, relicMaxLevel, gatedRelicCaps, knownRelicIds,
+    relicCostAtLevel, relicCostRange, relicMaxLevel, relicPriceableLevels, gatedRelicCaps, unresolvedRelicCaps, knownRelicIds,
     inscryptionCostAtLevel, inscryptionCostRange,
     gadgetCostRange, gemAliasCostRange, projCostRange, collectionTimeMinutes, fmtBig,
   };
