@@ -357,9 +357,12 @@ const SHIP_RANKUP_METRIC = { 1: 'Generators Purchased', 3: 'Loops Filled', 4: 'C
 // Community shorthand prefix for install codes (e.g. "CRA1", "DEM8") -- matches
 // cifi.fandom.com's per-ship pages and the Gear Sets table.
 const SHIP_CODE_PREFIX = { 1: 'CRA', 2: 'AUX', 3: 'ZAG', 4: 'HEP', 5: 'DEM', 6: 'KOI', 7: 'ZEUS' };
-// Real node icon assets, downloaded from cifi.fandom.com's per-ship pages (webapp/public/
-// assets/nodes/{CODE}.png, e.g. CRA1.png, DEM8.png). Koios/Zeus/Ouroboros have no wiki
-// assets -- those paths 404 and the <img onerror> falls back to a plain tile.
+// Real node icon assets (webapp/public/assets/nodes/{CODE}.png, e.g. CRA1.png, DEM8.png).
+// Cradle/Auxesia/Zagreus/Hephaestus/Demeter came from cifi.fandom.com's per-ship pages. The wiki
+// has no Koios or Zeus pages, so those two were cut from in-game screenshots instead
+// (tools/assets/extract-node-icons.py) -- Zeus at the same ~128px as the wiki set, Koios still at
+// the older 55x65 and worth redoing the same way. Ouroboros has no SHIP_CODE_PREFIX entry at all,
+// so it returns null here and the <img onerror> falls back to a plain tile.
 function nodeIconPath(shipId, code) {
   const prefix = SHIP_CODE_PREFIX[shipId];
   return prefix ? `assets/nodes/${prefix}${code}.png` : null;
