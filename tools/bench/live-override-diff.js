@@ -73,16 +73,13 @@ function extractMaxLevels() {
 
 // Deliberate, documented divergences. An entry here needs a REASON, and the reason has to be
 // something better than "the diff was noisy" -- otherwise this becomes the place gaps go to hide.
-const KNOWN_DIVERGENCES = {
-  'upgrades.relics.t2r7:cap': {
-    reason: 'The live bundle contradicts ITSELF: its relic definition table says maxLevel 100 '
-      + '(alongside unlock_gem "power" / unlock_lvl 3), while its Overrides panel clamps to 40. '
-      + 'No recorded build in our 182 fixtures carries t2r7 at all, so there is no empirical '
-      + 'tiebreaker. We keep 100 -- the relic\'s own declared cap -- because clamping to 40 '
-      + 'would make a real high-level account unable to enter its actual level, and being unable '
-      + 'to describe your account is a worse failure than allowing a level you cannot reach.',
-  },
-};
+// Deliberate, documented divergences. An entry here needs a REASON, and the reason has to be
+// something better than "the diff was noisy" -- otherwise this becomes the place gaps go to hide.
+//
+// Currently EMPTY, and that is the goal state. The one entry it used to hold (t2r7's cap) was
+// resolved by finding the live bundle's tier-2 parameter table: two of its three declarations
+// say 40 and only the generic relic-definition table says 100, so we match 40 like the original.
+const KNOWN_DIVERGENCES = {};
 
 const live = extractOverrideTables();
 const liveCaps = extractMaxLevels();

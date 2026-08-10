@@ -94,15 +94,25 @@ function legacyRelicCostAtLevel(relicId, level) {
 
 const PREVIOUSLY_MODELED = ['r4', 'r7', 'r9', 'r16', 'r17', 'r19', 't2r4', 't2r5', 't2r7', 't2r8', 't2r10'];
 
+// Tier-2 caps now come from the live bundle's own parameter table rather than being refused.
+check('tier-2 relics have the caps the live bundle declares', () => {
+  const expected = { t2r4: 25, t2r5: 100, t2r6: 40, t2r7: 40, t2r8: 21, t2r9: 100, t2r10: 5 };
+  for (const [id, max] of Object.entries(expected)) {
+    if (!CF.knownRelicIds().includes(id)) return `${id} is missing from the table entirely`;
+    const ours = CF.relicMaxLevel(id);
+    if (ours !== max) return `${id}: ours ${ours}, live bundle ${max}`;
+  }
+  return null;
+});
+
 // Tier-2 caps are not in the extracted dataset, so relicMaxLevel throws for them by design.
 // 100 levels is far past anything reachable and is plenty to compare two implementations over.
 const UNRESOLVED = CF.unresolvedRelicCaps();
 const levelsToCompare = (id) => {
-  // A relic with an unresolved cap, or a tier-2 one whose cap lives in hunterDefs, still has to
-  // be walked -- bound it by what can actually be PRICED (a static table runs out; a formula
-  // does not), then by a sane ceiling.
+  // Bound by what can actually be PRICED (a static table runs out; a formula does not), then by
+  // the cap. Relics with an unresolved cap chain get a sane ceiling instead.
   const priceable = CF.relicPriceableLevels(id);
-  if (id.startsWith('t2') || UNRESOLVED[id]) return Math.min(priceable, 100);
+  if (UNRESOLVED[id]) return Math.min(priceable, 100);
   return Math.min(priceable, CF.relicMaxLevel(id));
 };
 
@@ -145,7 +155,6 @@ check('tier-1 caps agree with the caps hunterDefs already declares', () => {
     const cats = defs[hunter].globalUpgrades || {};
     const items = (cats.relics && cats.relics.items) || [];
     for (const item of items) {
-      if (String(item.id).startsWith('t2')) continue; // caps intentionally not modeled here
       const ours = CF.relicMaxLevel(item.id);
       if (ours !== item.maxLevel) return `${hunter} ${item.id}: costFormulas says ${ours}, hunterDefs says ${item.maxLevel}`;
       compared++;
@@ -169,7 +178,7 @@ check('all 20 tier-1 relics plus the tier-2 set are priceable', () => {
     if (!known.includes(`r${n}`)) return `r${n} missing from the table`;
   }
   for (const id of known) {
-    if (!id.startsWith('t2') && !UNRESOLVED[id]) {
+    if (!UNRESOLVED[id]) {
       const max = CF.relicMaxLevel(id);
       if (!(max >= 1)) return `${id} has a nonsensical max level ${max}`;
     }

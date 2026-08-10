@@ -77,6 +77,8 @@ There is exactly one place for each of these. **Do not add a second.**
 | Purchase-path walk (stats/inscriptions/relics) | `hunterStatPathBrowser.js` → `greedyPurchasePath()` |
 | Relic + fragment costs | `webapp/public/costFormulas.js` (`RELIC_SPECS`, `fragmentsOnHand`) |
 | Upgrade unlock gates | `webapp/public/hunterDefs.js` (`UPGRADE_GATES`, `isUpgradeUnlocked`) |
+| Full gem/gate reference (all 97) | `tools/reference/gem-gates.json`, `tools/reference/gem-trees.json` |
+| Pulled APK / save / IL2CPP | `tools/gamefiles/` (gitignored; see its README) |
 | Coarse evaluation fidelity | `HunterOptimizer.SCREEN_ITERATIONS` (one value, shared) |
 | Full evaluation fidelity | `HunterOptimizer.FINAL_ITERATIONS` |
 | Build share-code encode/decode | `webapp/public/buildCode.js` |
@@ -188,6 +190,15 @@ think one is wrong, disprove it with a test.
   and reports what it excluded; the Overrides cards show the requirement but do NOT hard-disable
   the input, because our picture of gem levels comes from the Gem Planner the user may not have
   filled in.
+- **The FULL gate/prereq map is extracted, not guessed** — 97 gated entries, every one resolved
+  to a tree and level, in `tools/reference/gem-gates.json` (+ `gem-trees.json` for the tree
+  structure itself). Regenerate with `tools/bench/extract-gates.js` / `extract-gem-trees.js`
+  against a live bundle. Structure, confirmed against the GAME's own IL2CPP metadata (7 trees ×
+  6 nodes, matching `<Tree>GemNode<N>Level` fields): tree max levels are exodus 5, attraction 4,
+  creation 4, power 3, innovation 3, temporal 3, evolution 1; **nodes 4–6 of every tree require
+  Exodus 5** (the cross-tree prereq); a `null` level cost means declared-but-unreleased and
+  always sits strictly above that tree's maxLevel. `gem-tree-test.js` asserts every gate is
+  SATISFIABLE — a gate above its tree's cap would make an upgrade permanently unreachable.
 - **`getMaxValue` appears exactly ONCE in the live bundle** — Borge's Call Me Lucky Loot. Verified
   by counting, not assumed: the other four mentions are call sites. There is no second dynamic
   talent/attribute cap to find.
@@ -289,6 +300,8 @@ node tools/bench/relic-arg-probe.js    # every declared relic reaches the wasm (
 node tools/bench/path-relic-test.js    # effective path never recommends an inert relic
 node tools/bench/relic-sweep.js        # which relics actually move the sim (slow)
 node tools/bench/gem-coverage-test.js  # every gem param is reachable from the Gem Planner
+node tools/bench/gem-tree-test.js      # tree shape + every unlock gate is satisfiable
+node tools/bench/gate-coverage.js <live-bundle.js>        # our gates vs the bundle's
 node tools/bench/live-override-diff.js <live-bundle.js>   # gap check vs the original tool
 node tools/bench/run.js --sample=12    # THE EVERYDAY GATE: stratified handful, ~minutes
 node tools/bench/run.js --sample=12 --seed=1234   # replay one exactly

@@ -244,46 +244,39 @@
     r20: { maxLevel: 100, start: 1000, add: 50, exp: 1.2, corr: [] },
   };
 
-  // Tier-2 relics, transcribed from the live bundle's cV alongside the tier-1 set. These do not
-  // share the tier-1 shape (they use banded compounding), so they stay as explicit functions.
-  const TIER2_RELIC_COSTS = {
-    t2r4: (level) => {
-      const t = level - 1;
-      let n = (3e6 + 5e4 * t) * Math.pow(1.2, t);
-      let r = 0;
-      for (let i = 0; 4 * i <= t; i++) r += t - (4 * i - 1);
-      n *= Math.pow(1.08, r);
-      return Math.floor(n);
-    },
-    t2r5: (level) => {
-      const t = level - 1;
-      let n = (13e5 + 3e5 * t) * Math.pow(1.35, t);
-      let r = 0;
-      for (let i = 0; 5 * i <= t; i++) r += t - (5 * i - 1);
-      n *= Math.pow(1.04, r);
-      return Math.floor(n);
-    },
-    t2r7: (level) => {
-      const t = level - 1;
-      let n = (3e5 + 85e4 * t) * Math.pow(1.71, t);
-      if (t >= 8) n *= Math.pow(1.09, t - 8 + 1);
-      return Math.floor(n);
-    },
-    t2r8: (level) => {
-      const t = level - 1;
-      let n = (21e5 + 84e4 * t) * Math.pow(1.42, t);
-      let r = 0;
-      for (let i = 0; 4 * i <= t; i++) r += t - (4 * i - 1);
-      n *= Math.pow(1.21, r);
-      return Math.floor(n);
-    },
-    t2r10: (level) => {
-      const t = level - 1;
-      let n = (6e6 + 8e4 * t) * Math.pow(15, t);
-      if (t >= 1) n *= Math.pow(21, t - 1 + 1);
-      return Math.floor(n);
-    },
+  // Tier-2 relics. Recovered as a PARAMETER TABLE from the live bundle (its `jP`), which is
+  // better than the per-relic functions we had transcribed by hand: same numbers, but the caps
+  // come with them, so relicMaxLevel no longer has to refuse for tier 2.
+  //
+  // Shape: (baseCost + additive * t) * exp0^t, t = level - 1, then an iterative compounding
+  // term applied either every `iterativeN` levels or once past `iterativeThreshold`.
+  //
+  // Cross-check: this table reproduces the five tier-2 relics we had already transcribed by
+  // hand (t2r4/5/7/8/10) exactly, asserted level-by-level in tools/bench/relic-cost-test.js
+  // against the previous implementation. t2r6 and t2r9 are new -- we simply never had them.
+  const TIER2_SPECS = {
+    t2r4: { baseCost: 3e6, additive: 5e4, exp0: 1.2, iterativeExp: 1.08, iterativeN: 4, maxLevel: 25 },
+    t2r5: { baseCost: 13e5, additive: 3e5, exp0: 1.35, iterativeExp: 1.04, iterativeN: 5, maxLevel: 100 },
+    t2r6: { baseCost: 1e6, additive: 2e6, exp0: 1.11, iterativeExp: 1.06, iterativeN: 4, maxLevel: 40 },
+    t2r7: { baseCost: 3e5, additive: 85e4, exp0: 1.71, iterativeExp: 1.09, iterativeThreshold: 8, maxLevel: 40 },
+    t2r8: { baseCost: 21e5, additive: 84e4, exp0: 1.42, iterativeExp: 1.21, iterativeN: 4, maxLevel: 21 },
+    t2r9: { baseCost: 8e5, additive: 8e4, exp0: 1.45, maxLevel: 100 },
+    t2r10: { baseCost: 6e6, additive: 8e4, exp0: 15, iterativeExp: 21, iterativeThreshold: 1, maxLevel: 5 },
   };
+
+  function tier2CostAtLevel(spec, level) {
+    const t = level - 1;
+    let n = (spec.baseCost + spec.additive * t) * Math.pow(spec.exp0, t);
+    if (spec.iterativeN) {
+      // Compounds once per completed band of `iterativeN` levels, cumulatively.
+      let r = 0;
+      for (let i = 0; i * spec.iterativeN <= t; i++) r += t - (spec.iterativeN * i - 1);
+      n *= Math.pow(spec.iterativeExp, r);
+    } else if (spec.iterativeThreshold !== undefined && t >= spec.iterativeThreshold) {
+      n *= Math.pow(spec.iterativeExp, t - spec.iterativeThreshold + 1);
+    }
+    return Math.floor(n);
+  }
 
   // 'relic04'-style ids appear in some payloads; normalize to the canonical 'r4'.
   function canonicalRelicId(relicId) {
@@ -301,12 +294,12 @@
   function relicCostAtLevel(relicId, level) {
     if (level <= 0) return 0;
     const id = canonicalRelicId(relicId);
-    if (TIER2_RELIC_COSTS[id]) return TIER2_RELIC_COSTS[id](level);
+    if (TIER2_SPECS[id]) return tier2CostAtLevel(TIER2_SPECS[id], level);
 
     const spec = RELIC_SPECS[id];
     if (!spec) {
       throw new Error('No cost formula for relic "' + relicId + '" (normalized "' + id + '"). Known: '
-        + Object.keys(RELIC_SPECS).concat(Object.keys(TIER2_RELIC_COSTS)).join(', '));
+        + Object.keys(RELIC_SPECS).concat(Object.keys(TIER2_SPECS)).join(', '));
     }
     if (spec.static) {
       const cost = spec.static[level - 1];
@@ -335,10 +328,8 @@
   function relicMaxLevel(relicId, unlocks) {
     const id = canonicalRelicId(relicId);
     const spec = RELIC_SPECS[id];
-    if (!spec) {
-      throw new Error('No max level known for relic "' + relicId + '" (normalized "' + id + '")'
-        + (TIER2_RELIC_COSTS[id] ? ' -- tier-2 caps live in hunterDefs.js, not here' : ''));
-    }
+    if (TIER2_SPECS[id]) return TIER2_SPECS[id].maxLevel;
+    if (!spec) throw new Error('No max level known for relic "' + relicId + '" (normalized "' + id + '")');
     if (spec.capUnresolved) {
       throw new Error('Relic "' + id + '" has an unresolved cap chain, so no single max level can '
         + 'be stated: ' + spec.capUnresolved);
@@ -358,7 +349,7 @@
    */
   function relicPriceableLevels(relicId) {
     const id = canonicalRelicId(relicId);
-    if (TIER2_RELIC_COSTS[id]) return Infinity;
+    if (TIER2_SPECS[id]) return TIER2_SPECS[id].maxLevel;
     const spec = RELIC_SPECS[id];
     if (!spec) throw new Error('Unknown relic "' + relicId + '"');
     return spec.static ? spec.static.length : Infinity;
@@ -382,7 +373,7 @@
 
   /** Every relic id this module can price. */
   function knownRelicIds() {
-    return Object.keys(RELIC_SPECS).concat(Object.keys(TIER2_RELIC_COSTS));
+    return Object.keys(RELIC_SPECS).concat(Object.keys(TIER2_SPECS));
   }
 
   function relicCostRange(relicId, fromLevel, toLevel) {

@@ -18,6 +18,10 @@ package-lock.json
 
 # Extracted game assets / APK working files -- large, and not ours to redistribute.
 tools/save/upgrade-names.json
+# Pulled game files (APKs ~235MB, IL2CPP metadata, real save data). See tools/gamefiles/README.md,
+# which IS committed -- it documents what lives here and how to re-pull it.
+tools/gamefiles/*
+!tools/gamefiles/README.md
 
 # Built bridge installers -- release artifacts, rebuilt from source by CI.
 bridge/dist/

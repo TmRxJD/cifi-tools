@@ -86,7 +86,7 @@ window.HUNTER_DEFS = {
           { id: 'r7', label: '#7 Manifestation Core: Titan', maxLevel: 100 },
           { id: 'r16', label: '#16 The Long-Range Artillery Crawler', maxLevel: 100 },
           { id: 'r19', label: '#19 The Book of Mephisto', maxLevel: 8 },
-          { id: 't2r7', label: "#7 Arthur's Sword", maxLevel: 100, requires: { gem: 'power', gemLevel: 3 } },
+          { id: 't2r7', label: "#7 Arthur's Sword", maxLevel: 40, requires: { gem: 'power', gemLevel: 3 } },
         ],
       },
       inscryptions: {
@@ -204,7 +204,7 @@ window.HUNTER_DEFS = {
     },
     baseStatKeys: ['hp', 'atk', 'regen', 'dr', 'evade', 'effect', 'multichance', 'multipower', 'atkspeed', 'stage'],
     globalUpgrades: {
-      relics: { label: 'Relics', items: [{ id: 'r4', label: '#4 The Disk of Dawn', maxLevel: 100 }, { id: 'r7', label: '#7 Manifestation Core: Titan', maxLevel: 100 }, { id: 'r17', label: "#17 The Bee-gone Companion Drone", maxLevel: 100 }, { id: 't2r7', label: "#7 Arthur's Sword", maxLevel: 100, requires: { gem: 'power', gemLevel: 3 } }] },
+      relics: { label: 'Relics', items: [{ id: 'r4', label: '#4 The Disk of Dawn', maxLevel: 100 }, { id: 'r7', label: '#7 Manifestation Core: Titan', maxLevel: 100 }, { id: 'r17', label: "#17 The Bee-gone Companion Drone", maxLevel: 100 }, { id: 't2r7', label: "#7 Arthur's Sword", maxLevel: 40, requires: { gem: 'power', gemLevel: 3 } }] },
       inscryptions: {
         label: 'Inscryptions', items: [
           { id: 'i31', label: 'Inscryption #31', maxLevel: 10 },
@@ -296,7 +296,7 @@ window.HUNTER_DEFS = {
     baseStatKeys: ['hp', 'atk', 'regen', 'dr', 'block', 'effect', 'charge', 'chargeGain', 'reload', 'proj', 'stage'],
     globalUpgrades: {
       // All confirmed exact against main.js's vA table (not assumptions).
-      relics: { label: 'Relics', items: [{ id: 't2r5', label: '#5 The Gorgon Eye', maxLevel: 100, requires: { gem: 'power', gemLevel: 3 } }, { id: 't2r7', label: "#7 Arthur's Sword", maxLevel: 100, requires: { gem: 'power', gemLevel: 3 } }] },
+      relics: { label: 'Relics', items: [{ id: 't2r5', label: '#5 The Gorgon Eye', maxLevel: 100, requires: { gem: 'power', gemLevel: 3 } }, { id: 't2r7', label: "#7 Arthur's Sword", maxLevel: 40, requires: { gem: 'power', gemLevel: 3 } }] },
       inscryptions: { label: 'Inscryptions', items: [{ id: 'i105', label: 'Inscryption #105', maxLevel: 8 }] },
       gadgets: { label: 'Gadgets', items: [{ id: 'anchor', label: 'The Anchor of Ages', maxLevel: Infinity }] },
       loopmods: { label: 'Loop Mods', items: [{ id: 'stelzi', label: 'Mutual Mining Agreement', maxLevel: 8, temporary: true }] },
