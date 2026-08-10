@@ -269,13 +269,27 @@ think one is wrong, disprove it with a test.
   for the gaps. It is a REPORT, not a gate — a gap is a to-do. Current state: **39/63** global
   upgrade inputs auto-filled, plus gems, per-hunter level/talents/attributes, and fragment
   balance. Known remaining gaps and WHY each is blocked:
-  - `gadgets`, `loopmods`, `cms` — the save has the data (`Gadget<N>Level`, `LM<N>Level` ×295,
-    `CM<N>`) but the index→entity mapping is not statically recoverable: display names are UI
-    `Text` populated at runtime, not strings in the binary. **This is what save diffing is for**
-    — change one in-game, re-pull, diff, see which index moved.
-  - `trinkets`, `diamondspecials`, `iap` — no matching save field family found yet.
-  - hunter base stats — the save stores upgrade LEVELS, not the displayed stat; the level→stat
-    formula is not reverse-engineered.
+  - **hunter base stats now import.** `<Hunter>Upgrade<Stat>Level` — all 9 per hunter, 28 values
+    in total. An earlier note here claimed these were unmappable "because the save stores upgrade
+    LEVELS, not the displayed stat, and the level→stat formula isn't reverse-engineered". That was
+    backwards: **the wasm takes the LEVEL and derives the stat itself**, so the level is exactly
+    what is wanted and no formula is needed. Three non-obvious names: Ozzy's Multistrike
+    Chance/Power are stored under the CRIT names; Knox's `reload` is `AtkSpeed`; Knox's `proj` is
+    `SalvoSize`.
+  - `gadgets` — **the save has `Gadget<N>Level`, but the numbering correspondence is UNVERIFIED
+    and it is deliberately not mapped.** Two competing hypotheses: our own `costFormulas` aliases
+    say wrench=`g5`, zaptron=`g6`, anchor=`g15`, which would make wrench `Gadget5Level` (50 on the
+    reference account); but `Gadget7Level` is exactly 90, matching the `wrench: 90` in the
+    separately-supplied build code. Corroborating the first: our g1/g2/g3 share one cost formula
+    and the save's Gadget1/2/3 sit at an identical 160/160/160. Not enough. Wrench is a real sim
+    param, so a wrong index silently skews results — **one cheap check settles it: buy a single
+    wrench level in-game and re-pull, or just read the in-game wrench level off the account.**
+  - `loopmods`, `cms` — the save has the data (`LM<N>Level` ×295, `CM<N>` 1–26) but index→entity
+    is not statically recoverable; names are runtime UI `Text`. Note our `cms` ids are cm46–cm57
+    while the save only carries CM1–CM26, so the two numberings are not the same scheme.
+  - `trinkets`, `diamondspecials`, `iap` — **no matching save field exists at all** (searched for
+    trinket levels, travpack/IAP, hunterloot, reviveboost). These may simply not be persisted, in
+    which case they can never be imported and must stay manual.
   - ships/fleet — **already fully mapped, in `shipSchema.js`, not here.** Ship ranks, research
     units, generator tiers (`MK<n>UnlockedBool`), gear piece LEVELS (`{Color}Item<N>Level`),
     fleet badges (`Badge2Acquired` → innovation, `DarkBadge1Acquired` → dark innovation) and

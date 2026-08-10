@@ -3000,6 +3000,24 @@ async function processImportedSaveText(rawText, silent) {
     });
   }
 
+  // Hunter base stats. These are UPGRADE LEVELS, which is exactly what the sim wants -- the wasm
+  // derives the actual stat from the level itself. Gated on the same checklist entry as the rest
+  // of the hunter import.
+  if (cats.hunterBuilds) {
+    diffApply('hunter base stats', () => ['borge', 'ozzy', 'knox'].map((h) => store[h].hunterStats), () => {
+      for (const [hunter, data] of Object.entries(mapped.perHunter || {})) {
+        if (!data || !data.hunterStats || !store[hunter]) continue;
+        for (const [key, level] of Object.entries(data.hunterStats)) {
+          // Only stats this hunter actually has. 'stage' is never in here -- it is the account's
+          // highest stage, applied separately, not a purchasable upgrade.
+          if (key in store[hunter].hunterStats || window.HUNTER_DEFS[hunter].baseStatKeys.includes(key)) {
+            store[hunter].hunterStats[key] = level;
+          }
+        }
+      }
+    });
+  }
+
   if (cats.hunterBuilds) {
     // Maintains one dedicated "<Hunter> Build (Scanned)" card per hunter that always reflects
     // the most recently scanned save -- rather than silently overwriting whatever build

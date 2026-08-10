@@ -174,6 +174,34 @@ const HUNTER_ATTR_ORDER = {
 };
 const HUNTER_SAVE_PREFIX = { borge: 'Borge', ozzy: 'Ozzy', knox: 'Knox' };
 
+// Base stat UPGRADE LEVELS -- `<Hunter>Upgrade<Stat>Level`.
+//
+// A previous note here said base stats were unmappable because "the save only stores upgrade-LEVEL
+// ints, not the final displayed stat number, and the level->stat formula isn't reverse-engineered".
+// That reasoning was backwards: the wasm takes the LEVEL and derives the stat itself, so the level
+// is exactly what the tool wants. No formula needed.
+//
+// The naming is the game's, not ours, and three of the mappings are non-obvious:
+//   - Ozzy's Multistrike Chance/Power are stored under the CRIT names, matching how HUNTER_DEFS
+//     already keys them (multichance/multipower -> CritChance/CritPower).
+//   - Knox's "Reload" is the attack-speed analogue -> AtkSpeed.
+//   - Knox's "Projectiles Per Salvo" -> SalvoSize.
+const BASE_STAT_SAVE_FIELD = {
+  borge: {
+    hp: 'MaxHP', atk: 'AtkPower', regen: 'HPRegen', dr: 'DmgReduction', evade: 'EvadeChance',
+    effect: 'EffectChance', critchance: 'CritChance', critpower: 'CritPower', atkspeed: 'AtkSpeed',
+  },
+  ozzy: {
+    hp: 'MaxHP', atk: 'AtkPower', regen: 'HPRegen', dr: 'DmgReduction', evade: 'EvadeChance',
+    effect: 'EffectChance', multichance: 'CritChance', multipower: 'CritPower', atkspeed: 'AtkSpeed',
+  },
+  knox: {
+    hp: 'MaxHP', atk: 'AtkPower', regen: 'HPRegen', dr: 'DmgReduction', block: 'BlockChance',
+    effect: 'EffectChance', charge: 'ChargeChance', chargeGain: 'ChargeGained',
+    reload: 'AtkSpeed', proj: 'SalvoSize',
+  },
+};
+
 // Returns { globalUpgrades: {...}, gems: {...}, perHunter: { borge: {level, talents, highestStage}, ... },
 //           unmapped: [category names not imported] }
 function mapSaveToStore(save) {
@@ -272,11 +300,20 @@ function mapSaveToStore(save) {
       const v = save[`${attrPrefix}${i}Level`];
       if (v !== undefined) attributes[attrId] = realNum(v);
     });
+    // Base stat levels. 'stage' is deliberately not in the table -- it is the account's highest
+    // stage, already carried separately as highestStage, not an upgrade the player buys.
+    const hunterStats = {};
+    for (const [statKey, saveField] of Object.entries(BASE_STAT_SAVE_FIELD[hunterKey] || {})) {
+      const v = save[`${prefix}Upgrade${saveField}Level`];
+      if (v !== undefined) hunterStats[statKey] = realNum(v);
+    }
+
     perHunter[hunterKey] = {
       level: level !== undefined ? realNum(level) : undefined,
       highestStage: highestStage !== undefined ? realNum(highestStage) : undefined,
       talents,
       attributes,
+      hunterStats,
     };
   });
 
