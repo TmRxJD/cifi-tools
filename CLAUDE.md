@@ -201,23 +201,24 @@ think one is wrong, disprove it with a test.
   constants computed in code still need Ghidra against `libil2cpp.so`. Serialized ScriptableObject
   data needs typetrees, which the build strips; `DummyDll/` is what AssetRipper would need to
   reconstruct them. Not done yet, and it is the remaining route to balance values.
-- **Loop mods ("modules") are SERVER-side — confirmed, not assumed.** `Stelzi` appears nowhere in
-  the client (0 hits in dump.cs and in the metadata string table); only the handful of mod effects
-  that touch hunter simulation exist as properties (`TrampleBorge`, `ScavengersAdvantage`). The
-  save carries only aggregates (`AllTimeHighestLoopModLevels`, `LoopModLevelsThisTraversal`), no
-  per-mod levels. **The backend is Nakama** (`NakamaConfig : ScriptableObject`), which matters
-  because Nakama's protocol is documented and open-source rather than bespoke — a proxy capture
-  is the tractable route to the mod table, and needs no injection, so Frida tamper detection is
-  not involved.
-- **The SAVE FILE is the value-level oracle instead, and it works.** `tools/save/inspect.js`
-  decodes it (4,466 fields). Field naming, corroborated against the game's own metadata:
-  `AOR<N>Level` = tier-1 relic levels ("Academy Of Relics"), `<Tree>QualityLevel` = the gem level
-  gates compare against, `<Tree>GemNode<N>Level` (Exodus uses an `ExodusGemNodeLevels[]` array
-  instead), `<Tree>GU<N>Level` = gem upgrade levels, `Gadget<N>Level`, `CM<N>`.
-  `save-gate-test.js` checks our caps and gates against it. **Note what one account can and
-  cannot prove**: the game writes no save field for content the account has never reached, so an
-  absent field is *consistent with* a gate but does not confirm it. That test reports actively
-  confirmed and not-testable separately rather than showing a green tick that overstates it.
+- **Loop mods ("modules") are CLIENT-side, both levels and definitions.** An earlier claim in
+  this file said the opposite; it was wrong and the reasoning was bad, so here is the correction
+  and the trap that caused it.
+  - **Levels are in the save**: `LM<N>Level` (295 entries, 223 non-zero on the reference account)
+    and `LMOuro<N>Level` (39). The earlier search looked for `LoopMod` and found only aggregates
+    -- the save abbreviates to **LM**.
+  - **Definitions are in the client**: `LoopModifiers` (dump.cs) carries per-mod `StartCost`,
+    `CostExponent`, `AdditiveCostIncrease`, `Bonus`, `BonusExponent` and `MaxLevel` for ~295 mods.
+  - **The trap**: the "server-side" conclusion rested on `Stelzi` appearing zero times in the
+    client. But `stelzi` is *cifi-tools' own internal id*, not a game string -- our own
+    `hunterDefs.js` labels that same mod "Mutual Mining Agreement". Absence of a nickname the game
+    never used proved nothing. **Do not conclude "not in the client" from a tool-side id.** Search
+    for save field families (`LM<N>Level`) and dump.cs field names, not for cifi-tools slugs.
+  - Still genuinely blocked: reading the *values* of those definition fields. They are serialized
+    MonoBehaviour data and this build strips typetrees, so it needs AssetRipper with the
+    `DummyDll/` the dumper produced. Display names are UI `Text` populated at runtime.
+  - **Save diffing therefore DOES work** for mapping index -> mod: change one mod in-game,
+    re-pull, diff, see which `LM<N>` moved. Slow, but it was never impossible.
 - **The FULL gate/prereq map is extracted, not guessed** — 97 gated entries, every one resolved
   to a tree and level, in `tools/reference/gem-gates.json` (+ `gem-trees.json` for the tree
   structure itself). Regenerate with `tools/bench/extract-gates.js` / `extract-gem-trees.js`

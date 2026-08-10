@@ -1,24 +1,28 @@
 # Capturing CIFI's server-side tables
 
-## Why a capture is needed at all
+## CORRECTION: loop mods do NOT need this capture
 
-Loop mods ("modules") are **not in the APK and not in the save**, and that is established rather
-than assumed:
+An earlier version of this file said loop mods were server-side and that save diffing could not
+recover them. **Both claims were wrong.**
 
-- `Stelzi` appears **zero** times in the 813k-line IL2CPP dump and zero times in the metadata
-  string table. Only the handful of mod effects that touch hunter simulation exist client-side,
-  as plain properties (`TrampleBorge`, `ScavengersAdvantage`) — the *definitions* do not.
-- The save carries only aggregates (`AllTimeHighestLoopModLevels`, `LoopModLevelsThisTraversal`),
-  with no per-mod entries. **So diffing saves cannot recover them either** — there is nothing
-  per-mod in a save to diff.
+- **Levels are in the save**: `LM<N>Level` (295 entries) and `LMOuro<N>Level` (39). The original
+  search looked for `LoopMod`; the save abbreviates to **LM**.
+- **Definitions are in the client**: `LoopModifiers` in the IL2CPP dump carries per-mod
+  `StartCost`, `CostExponent`, `AdditiveCostIncrease`, `Bonus`, `BonusExponent`, `MaxLevel`.
+- The bad inference: `Stelzi` appears zero times in the client, so the table "must" be remote.
+  But `stelzi` is cifi-tools' own internal id, not a game string — our `hunterDefs.js` calls that
+  mod "Mutual Mining Agreement". Absence of a nickname the game never used proved nothing.
 
-The backend is **Nakama** (`NakamaConfig : ScriptableObject` in the dump) — open-source, with a
-documented protocol (storage objects over HTTP/JSON plus a realtime WebSocket). That is what
-makes the capture interpretable instead of a second reverse-engineering project.
+What is still blocked is reading the *values* of those definition fields: they are serialized
+MonoBehaviour data and this build strips typetrees, so the route is AssetRipper with the
+`DummyDll/` the dumper produced — **not** a network capture.
 
-The collection/key paths live in a runtime `Dictionary<CloudSaveMode, CollectionKeyPath>` built in
-a constructor, so they are not statically readable from the dump — watching one fetch is the
-shortest path to them.
+## What this harness is still good for
+
+Anything genuinely server-side: leaderboards (`NakamaConfig` names nine of them), cloud-save
+collection paths (built in a runtime dictionary and so not statically readable), ban/time/score
+RPC ids, and whatever else the client fetches rather than ships. If a future tool needs those,
+this is ready. It is **not** the path to loop mods.
 
 ## Why a proxy and not Frida
 
