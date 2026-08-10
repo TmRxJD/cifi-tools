@@ -3194,7 +3194,12 @@ async function reloadIfShellIsStale() {
     }
     sessionStorage.setItem(key, '1');
     console.warn(`[shell] cached page is ${APP_VERSION}, live is ${live[1]} -- reloading`);
-    location.reload();
+
+    // NOT location.reload(): a reload is allowed to re-serve the same cached index.html, which is
+    // exactly the thing that is stale, and mobile browsers frequently do. Navigating to a URL the
+    // browser has never seen cannot hit that cache. Routing is hash-based, so a query string is
+    // inert here; the hash is preserved so the reload lands on the same page.
+    location.replace(`${location.pathname}?v=${encodeURIComponent(live[1])}${location.hash}`);
   } catch { /* offline or blocked: keep running the page we have */ }
 }
 

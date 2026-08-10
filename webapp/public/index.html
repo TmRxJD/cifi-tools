@@ -7,7 +7,7 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>tailwind.config = { darkMode: 'class', theme: { extend: { borderWidth: { 3: '3px' } } } };</script>
-<link rel="stylesheet" href="site.css?v=20260809f" />
+<link rel="stylesheet" href="site.css?v=20260809g" />
 <style>
   body { background:#111827; color:#e5e7eb; }
   .stepper-btn { @apply w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed text-white; }
@@ -377,10 +377,37 @@
       <summary class="cursor-pointer text-xs font-semibold text-gray-300">Paste the save text instead (cloud emulators, no file access)</summary>
       <div class="mt-2 space-y-2">
         <p class="text-xs text-gray-400">
-          Using a cloud emulator (LDCloud, BlueStacks Cloud, Genymotion Cloud) or any setup where you
-          can read the file but not download it? Open
-          <code class="text-gray-300">DATA.text</code> in a text editor or file manager on the device,
-          select all, copy, then paste it here — the clipboard carries it fine, it's plain text.
+          For cloud emulators (LDCloud/LDPlayer Cloud, BlueStacks Cloud, Genymotion Cloud) and any
+          setup where the file can't reach this browser. The save is plain text, so the clipboard
+          carries it perfectly — the hard part is getting at it, because it lives in
+          <code class="text-gray-300">Android/data/</code>, which <strong class="text-gray-300">Android 11
+          and later block</strong> for ordinary file-manager apps.
+        </p>
+        <p class="text-xs text-gray-400">Try these in order — the first one that works is fine:</p>
+        <ol class="text-xs text-gray-400 list-decimal ml-4 space-y-1">
+          <li>
+            <strong class="text-gray-300">The emulator's own file manager / file transfer.</strong>
+            Cloud emulators usually expose a files panel or shared folder in their web UI that is
+            <em>not</em> subject to the Android app restriction. Download
+            <code class="text-gray-300">DATA.text</code> from
+            <code class="text-gray-300">/storage/emulated/0/Android/data/com.OctocubeGamesCompany.CIFI/files/</code>
+            and use the file drop above instead — that's the easiest route if it's available.
+          </li>
+          <li>
+            <strong class="text-gray-300">The device's built-in Files app.</strong> The system file
+            manager is often still allowed into <code class="text-gray-300">Android/data</code> where
+            third-party ones are not. Open the file, select all, copy, paste below.
+          </li>
+          <li>
+            <strong class="text-gray-300">Move the account to a device you can read.</strong> CIFI has
+            cloud save — sign in on the cloud emulator, sync, then sign in on a phone or a local
+            emulator and pull the save there with
+            <code class="text-gray-300">npx cifi-bridge</code> or its file manager.
+          </li>
+        </ol>
+        <p class="text-xs text-gray-500">
+          Not verified against LDCloud directly — if none of these work, say which step failed and
+          what you saw, and the instructions can be corrected rather than guessed at.
         </p>
         <textarea id="importSavePasteInput" rows="4" spellcheck="false"
           class="w-full bg-gray-800 border border-gray-600 rounded px-2 py-2 text-white text-xs font-mono"
@@ -525,25 +552,25 @@
   </div>
 </div>
 
-<script src="icons.js?v=20260809f"></script>
-<script src="hunterDefs.js?v=20260809f"></script>
-<script src="shipSchema.js?v=20260809f"></script>
-<script src="shipsPage.js?v=20260809f"></script>
-<script src="upgradeEffects.js?v=20260809f"></script>
-<script src="hunterSimBrowser.js?v=20260809f"></script>
-<script src="optimizer/space.js?v=20260809f"></script>
+<script src="icons.js?v=20260809g"></script>
+<script src="hunterDefs.js?v=20260809g"></script>
+<script src="shipSchema.js?v=20260809g"></script>
+<script src="shipsPage.js?v=20260809g"></script>
+<script src="upgradeEffects.js?v=20260809g"></script>
+<script src="hunterSimBrowser.js?v=20260809g"></script>
+<script src="optimizer/space.js?v=20260809g"></script>
 <!-- storeSchema depends on HUNTER_DEFS (hunterDefs.js) and AllocSpace (optimizer/space.js). -->
-<script src="storeSchema.js?v=20260809f"></script>
-<script src="optimizer/search.js?v=20260809f"></script>
-<script src="optimizer/runner.js?v=20260809f"></script>
-<script src="saveImport.js?v=20260809f"></script>
-<script src="buildCode.js?v=20260809f"></script>
-<script src="costFormulas.js?v=20260809f"></script>
-<script src="incomeModel.js?v=20260809f"></script>
-<script src="hunterStatPath.js?v=20260809f"></script>
-<script src="hunterStatPathBrowser.js?v=20260809f"></script>
-<script src="hunterStatPathPage.js?v=20260809f"></script>
-<script src="app.js?v=20260809f"></script>
+<script src="storeSchema.js?v=20260809g"></script>
+<script src="optimizer/search.js?v=20260809g"></script>
+<script src="optimizer/runner.js?v=20260809g"></script>
+<script src="saveImport.js?v=20260809g"></script>
+<script src="buildCode.js?v=20260809g"></script>
+<script src="costFormulas.js?v=20260809g"></script>
+<script src="incomeModel.js?v=20260809g"></script>
+<script src="hunterStatPath.js?v=20260809g"></script>
+<script src="hunterStatPathBrowser.js?v=20260809g"></script>
+<script src="hunterStatPathPage.js?v=20260809g"></script>
+<script src="app.js?v=20260809g"></script>
 <script>
   // Custom (non-Tabler) sidebar icons: real game-asset SVG paths copied verbatim from the
   // live site's rendered DOM (Relics/Loop Mods/Milestones use bespoke icons, not Tabler's).
