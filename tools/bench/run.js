@@ -19,12 +19,32 @@
 // rather than burning an hour to tell you something it knew in the first minute. Pass --all to
 // run everything regardless (for a full picture once it's close).
 //
+//   node tools/bench/run.js --sample=12        # THE EVERYDAY GATE: a stratified random handful
+//   node tools/bench/run.js --sample=12 --seed=1234   # reproduce a specific handful exactly
 //   node tools/bench/run.js                    # every build, stop at first failure
 //   node tools/bench/run.js --all              # every build, never stop early
 //   node tools/bench/run.js borge              # one hunter
 //   node tools/bench/run.js borge 0 10         # a slice
 //   node tools/bench/run.js --batch=6          # override batch size
 //   node tools/bench/run.js borge --all --resume --out=borge.json
+//
+// WHICH ONE TO RUN. The full sweep is 182 builds and takes HOURS -- the high-level Borge builds
+// dominate, since evaluation cost scales with how far a build progresses. That is too slow to
+// run per change, and a gate nobody runs catches nothing. So `--sample=N` is the everyday gate
+// and the full sweep is reserved for large or fundamental changes (anything touching the search,
+// the legality model, the objective table, or the cost/param resolution).
+//
+// SAMPLING IS STRATIFIED, NOT UNIFORM. A uniform draw over 182 fixtures is mostly cheap
+// low-level builds -- fast, and nearly blind to the high-level behaviour where problems actually
+// live. The sample instead splits the fixtures of each hunter into N/hunters level bands and
+// draws one from each band, so every run covers the whole level range.
+//
+// AND IT IS SEEDED. The seed defaults to a different value each run (that is the point -- a new
+// handful each time eventually covers everything), but it is always PRINTED, and `--seed=` replays
+// that exact handful. So the gate stays varied without a failure ever being unreproducible.
+//
+// The pass criteria are IDENTICAL in sampled and full runs. Sampling reduces how much is checked,
+// never how strictly. Do not "speed up" this gate by loosening a threshold.
 //
 // RESUMABLE. A full sweep runs for hours, and long runs here have repeatedly been killed part
 // way through with their buffered stdout lost -- which made every attempt start over from zero.
@@ -49,8 +69,21 @@ function parseArgs(argv) {
   const positional = argv.filter((a) => !a.startsWith('--'));
   const batchFlag = flags.find((f) => f.startsWith('--batch='));
   const outFlag = flags.find((f) => f.startsWith('--out='));
+  const sampleFlag = flags.find((f) => f.startsWith('--sample='));
+  const seedFlag = flags.find((f) => f.startsWith('--seed='));
+  const sample = sampleFlag ? Number(sampleFlag.split('=')[1]) : 0;
+  if (sampleFlag && !(Number.isInteger(sample) && sample > 0)) {
+    throw new Error(`--sample must be a positive integer, got "${sampleFlag.split('=')[1]}"`);
+  }
   return {
+    sample,
+    // Varies per run by default so repeated gates cover different builds over time; always
+    // reported, so any failure can be replayed exactly with --seed=.
+    seed: seedFlag ? Number(seedFlag.split('=')[1]) : (Date.now() % 2147483647),
     runAll: flags.includes('--all'),
+    // Print the chosen fixtures and exit. Lets you see what a seed selects (and confirm a seed
+    // reproduces) without paying for the run.
+    listOnly: flags.includes('--list'),
     resume: flags.includes('--resume'),
     // A separate results file per run keeps hunters independent, so --resume can never carry
     // one hunter's results into another's run.
@@ -73,7 +106,60 @@ function selectFixtures(args) {
   // Cheapest (lowest level) first, so a systemic problem surfaces in seconds rather than after
   // the slowest high-level builds have run.
   all.sort((a, b) => (a.level || 0) - (b.level || 0));
+  if (args.sample) return stratifiedSample(all, hunters, args.sample, args.seed);
   return all.slice(args.from, args.to === undefined ? all.length : args.to);
+}
+
+// Deterministic PRNG. Math.random would make a failing sample unreproducible, which is the one
+// thing a sampled gate cannot afford: "it failed on some builds, I don't know which" is not a
+// bug report. mulberry32 -- small, well-distributed, and seeded.
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function next() {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Pick `count` fixtures spread across every hunter AND across each hunter's level range.
+ *
+ * Uniform sampling over the pooled fixtures would skew toward whichever hunter has the most of
+ * them and toward the cheap low-level builds, which is close to useless: the interesting
+ * behaviour (and every parity oddity we know of) lives at high level. Splitting each hunter's
+ * fixtures into equal level bands and drawing one per band guarantees the run touches the whole
+ * range every time, however small the sample.
+ */
+function stratifiedSample(all, hunters, count, seed) {
+  const rand = mulberry32(seed);
+  const perHunter = Math.max(1, Math.floor(count / hunters.length));
+  const picked = [];
+
+  for (const h of hunters) {
+    const pool = all.filter((f) => f.hunter === h);
+    if (!pool.length) continue;
+    const bands = Math.min(perHunter, pool.length);
+    for (let b = 0; b < bands; b++) {
+      const lo = Math.floor((b * pool.length) / bands);
+      const hi = Math.floor(((b + 1) * pool.length) / bands);
+      const band = pool.slice(lo, Math.max(hi, lo + 1));
+      picked.push(band[Math.floor(rand() * band.length)]);
+    }
+  }
+
+  // Any remainder from the integer division goes to builds not already chosen, so --sample=10
+  // across 3 hunters really runs 10 rather than silently running 9.
+  const chosen = new Set(picked.map((f) => `${f.hunter}/${f.set}#${f.index}`));
+  const rest = all.filter((f) => !chosen.has(`${f.hunter}/${f.set}#${f.index}`));
+  while (picked.length < count && rest.length) {
+    picked.push(rest.splice(Math.floor(rand() * rest.length), 1)[0]);
+  }
+
+  picked.sort((a, b) => (a.level || 0) - (b.level || 0));
+  return picked;
 }
 
 /**
@@ -159,7 +245,21 @@ async function main() {
     console.log(`resuming: ${prior.length} build(s) already done, ${before - fixtures.length} skipped`);
   }
 
+  if (args.listOnly) {
+    console.log(`${fixtures.length} build(s)${args.sample ? `, seed ${args.seed}` : ''}:`);
+    for (const f of fixtures) console.log(`  ${f.hunter}/${f.set}#${f.index} level ${f.level} (${f.mode})`);
+    return;
+  }
+
   totalTarget = results.length + fixtures.length;
+  if (args.sample) {
+    // Printed BEFORE the run, not just at the end -- a run that gets killed part way through
+    // must still leave behind enough to replay exactly what it was doing.
+    console.log(`SAMPLED GATE: ${fixtures.length} of the full 182 builds, seed ${args.seed}`);
+    console.log(`  replay this exact handful:  node tools/bench/run.js --sample=${args.sample} --seed=${args.seed}`);
+    console.log(`  full sweep (hours):         node tools/bench/run.js --all`);
+    console.log(`  ${fixtures.map((f) => `${f.hunter}#${f.index}(L${f.level})`).join(' ')}`);
+  }
   console.log(`${fixtures.length} build(s) to run, batches of ${args.batchSize}, ${args.runAll ? 'running all' : 'stopping at first failure'}\n`);
 
   const startedAt = Date.now();

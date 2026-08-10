@@ -247,6 +247,21 @@ guaranteed by construction and asserted at the end, not repaired.
 
 ## Validation — run these
 
+**Run the SAMPLED gate per change; run the full sweep only after large or fundamental changes.**
+The full sweep is 182 builds and takes hours (evaluation cost scales with how far a build
+progresses, so the high-level Borge fixtures dominate). A gate too slow to run is a gate nobody
+runs. `--sample=N` draws a *stratified* handful — one per level band per hunter, so every run
+spans the whole level range instead of skewing to the cheap low-level builds where nothing
+interesting happens. The seed varies per run (that is the point: repeated gates cover different
+builds over time) but is always printed, and `--seed=` replays a handful exactly, so a failure is
+never unreproducible. `--list` shows the selection without paying for the run.
+
+**Sampling reduces how MUCH is checked, never how STRICTLY.** The pass criteria are identical in
+sampled and full runs. Do not "speed up" this gate by loosening a threshold.
+
+Run the full sweep after: any change to the search, the legality model, the objective table, or
+cost/param resolution.
+
 ```bash
 node tools/bench/schema-test.js        # store schema invariants (fast, run always)
 node tools/bench/relic-cost-test.js    # relic cost table + fragment arithmetic (fast)
@@ -255,8 +270,11 @@ node tools/bench/path-relic-test.js    # effective path never recommends an iner
 node tools/bench/relic-sweep.js        # which relics actually move the sim (slow)
 node tools/bench/gem-coverage-test.js  # every gem param is reachable from the Gem Planner
 node tools/bench/live-override-diff.js <live-bundle.js>   # gap check vs the original tool
-node tools/bench/run.js                # optimizer gate: every known build, stops at first failure
-node tools/bench/run.js --all          # full picture
+node tools/bench/run.js --sample=12    # THE EVERYDAY GATE: stratified handful, ~minutes
+node tools/bench/run.js --sample=12 --seed=1234   # replay one exactly
+node tools/bench/run.js --sample=12 --list        # see the selection without running it
+node tools/bench/run.js                # every known build, stops at first failure
+node tools/bench/run.js --all          # full sweep, hours
 node tools/bench/run.js borge 0 10     # a slice while iterating
 node tools/bench/show.js               # pretty-print the last results.json
 ```
