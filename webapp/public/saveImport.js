@@ -261,7 +261,7 @@ function mapSaveToStore(save) {
   // value-diff-confirmed against a nonzero real number.
   if (save.DiamondUltimaLevel !== undefined) globalUpgrades['ultima.ulti'] = realNum(save.DiamondUltimaLevel);
 
-  unmapped.push('loopmods', 'diamondspecials', 'iap', 'trinkets');
+  unmapped.push('loopmods', 'iap', 'trinkets');
 
   // Gems: tree level + 6 boolean nodes per tree. Every tree except Exodus stores its nodes
   // as individual `${prefix}GemNode{n}Level` fields; Exodus alone stores them as a single
@@ -315,6 +315,24 @@ function mapSaveToStore(save) {
       attributes,
       hunterStats,
     };
+  });
+
+  // Diamond specials -- the DiamondShop's DU<N>Level family.
+  //
+  // Identified by EFFECT COEFFICIENT, which makes it a proof rather than a positional guess. The
+  // IL2CPP dump names the slots semantically (DU21Hunt*, DU22Loot*, DU23Loot*) and the scene
+  // carries their bonus values; those values match the coefficients our own resolveParam already
+  // uses:
+  //   DU21 "Hunt"  bonus 3      -> reviveboost, which resolveParam computes as 3 * value
+  //   DU22 "Loot"  bonus 0.025  -> hunterloot,  which resolveParam computes as 1 + 0.025 * value
+  // Both cap at 10 and both read 10 on an account the player confirmed has them maxed.
+  //
+  // DU23 is a THIRD loot booster (bonus 0.01, cap 10) that this tool does not model, and it also
+  // reads 10 -- which is exactly why picking "the slot whose level is 10" would not have worked.
+  const DIAMOND_SPECIAL_SLOT = { reviveboost: 21, hunterloot: 22 };
+  Object.entries(DIAMOND_SPECIAL_SLOT).forEach(([id, n]) => {
+    const v = save[`DU${n}Level`];
+    if (v !== undefined) globalUpgrades[`diamondspecials.${id}`] = realNum(v);
   });
 
   // Construction Milestones. `Milestone<N>Acquired`, N = the milestone's own number, which is the

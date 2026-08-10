@@ -291,13 +291,19 @@ think one is wrong, disprove it with a test.
     are a third, separate family again.
   - `loopmods` — the save has `LM<N>Level` ×295 but index→entity is only partly recoverable; see
     the cost-fingerprint mapping above, which pins 8 of the 39 published names.
-  - `diamondspecials` — **located but not disambiguated.** They live in the DiamondShop's
-    `DU<N>Level` family (the IL2CPP dump confirms `DiamondShop` owns `DU<N>StartCost/Additive/
-    Bonus1/Bonus2/MaxLevel`). The player confirmed Hunter Loot Booster and Revive Boost are BOTH
-    maxed at 10, and exactly five DU entries read 10: DU1, DU13, DU21, DU22, DU23. Which two is
-    unresolved — the dump's field names are positional (`DU0Object`, `DU1MK1StartCost`) with no
-    semantic labels, and the scene carries only one DU record. `DiamondUltimaLevel = 0` matches
-    the player not having unlocked it, which independently confirms that neighbouring mapping.
+  - **`diamondspecials` now import**, identified by EFFECT COEFFICIENT rather than position —
+    which is what makes it a proof. The IL2CPP dump names the DiamondShop slots semantically
+    (`DU21Hunt*`, `DU22Loot*`, `DU23Loot*`) and the scene carries their bonus values, and those
+    match the coefficients `resolveParam` already uses: DU21 bonus **3** → `reviveboost`
+    (`3 × value`), DU22 bonus **0.025** → `hunterloot` (`1 + 0.025 × value`). Both cap at 10 and
+    read 10 on an account confirmed to have them maxed.
+    **DU23 is a third loot booster (bonus 0.01, cap 10) that this tool does not model — and it
+    also reads 10.** So "pick the slot whose level is 10" would have been a coin flip between
+    three. The coefficient is what disambiguates.
+    The rest of the family, cross-checked against player-reported in-game levels: DU9 Token (6),
+    DU10 Cells (17), DU11 MP (25), DU12 Gens, DU13 Shards (10), DU14 RP (8), DU15 AP (15),
+    DU16 OP (30); DU0 is the generator amplifier and DU1–8 are the MK1–8 gen boosters
+    (`DU1MK1StartCost` in the dump confirms the MK numbering).
   - `trinkets`, `iap` — **absent from THIS save, which is not the same as never persisted.** Searched exhaustively by both our ids and the game's own labels ("Traversal
     Pack", "Hunter Loot Booster", "Revive Boost"), plus an inverted search: `tools/save/unclaimed.js`
     lists every field no importer reads, so nothing can hide behind an unexpected name. Zero hits.
