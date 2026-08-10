@@ -78,7 +78,9 @@ There is exactly one place for each of these. **Do not add a second.**
 | Relic + fragment costs | `webapp/public/costFormulas.js` (`RELIC_SPECS`, `fragmentsOnHand`) |
 | Upgrade unlock gates | `webapp/public/hunterDefs.js` (`UPGRADE_GATES`, `isUpgradeUnlocked`) |
 | Full gem/gate reference (all 97) | `tools/reference/gem-gates.json`, `tools/reference/gem-trees.json` |
-| Pulled APK / save / IL2CPP | `tools/gamefiles/` (gitignored; see its README) |
+| Pulled APK / save / IL2CPP / captures | `tools/gamefiles/` (gitignored; see its README) |
+| Headless IL2CPP dumper (metadata v39) | `tools/il2cpp-cli/` |
+| Server-table capture | `tools/capture/` |
 | Coarse evaluation fidelity | `HunterOptimizer.SCREEN_ITERATIONS` (one value, shared) |
 | Full evaluation fidelity | `HunterOptimizer.FINAL_ITERATIONS` |
 | Build share-code encode/decode | `webapp/public/buildCode.js` |
