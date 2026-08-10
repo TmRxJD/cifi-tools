@@ -289,8 +289,16 @@ think one is wrong, disprove it with a test.
     **The save's `CM<N>` boolean family is NOT this** — all 26 are false on an account that owns
     20 milestones, so it is a claim/notification flag and is deliberately unused. Shard milestones
     are a third, separate family again.
-  - `loopmods` — the save has `LM<N>Level` ×295 but index→entity is only partly recoverable; see
-    the cost-fingerprint mapping above, which pins 8 of the 39 published names.
+  - `loopmods` — **only FOUR are tool inputs**: `trample` (Borge, cap 1), `scavenger` (Borge,
+    cap 25), `scavenger2` (Ozzy, cap 25) and `stelzi` (all three, cap 8). `stelzi` is already
+    pinned to **LM279** by cost fingerprint. The other three need a save diff, and
+    `tools/save/diff.js` is built for exactly that: change one known mod by a distinctive amount,
+    re-pull, and an index that moved by that exact delta is identified unambiguously.
+    **Deltas, not absolute values** — an idle game mutates hundreds of fields between pulls, so a
+    unique delta survives the churn where a value match would not.
+    Do NOT try to narrow candidates using the scene's MaxLevel: the scene↔save index alignment is
+    unresolved (LM98 reads 35 and LM167 reads 27 against a scene cap of 25), so that filter is
+    unsound. The diff works purely on save indices and does not depend on it.
   - **`diamondspecials` now import**, identified by EFFECT COEFFICIENT rather than position —
     which is what makes it a proof. The IL2CPP dump names the DiamondShop slots semantically
     (`DU21Hunt*`, `DU22Loot*`, `DU23Loot*`) and the scene carries their bonus values, and those
