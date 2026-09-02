@@ -436,12 +436,15 @@ window.GEM_TREES = {
   exodus: {
     label: 'Exodus', maxLevel: 5, nodeCount: 6, upgradeKeys: [], gradient: 'linear-gradient(135deg, #5a95f5 0%, #6326f1 40%, #ec4899 100%)',
     // Confirmed directly on a real account (2026-07): Exodus actually has 7 non-sim bonus
-    // fields, not the 2 (Cells/Shards Bonus) this file previously listed -- 5 more (RP/MP/AP/
-    // Materials/Orbs Bonus) only appear once Exodus's own level is maxed (5/5), matching the
-    // same self-gating this file's node-visibility logic in app.js was just fixed for
-    // (Exodus is the one tree that gates on its OWN max level, not "3 always + 3 more once
-    // Exodus is maxed" like every other tree). Border colors copied verbatim from the live
-    // DOM's computed styles. nonSimUnlocks mirrors upgradeKeys' own `unlocks` convention.
+    // fields, not the 2 (Cells/Shards Bonus) this file previously listed. Border colors copied
+    // verbatim from the live DOM's computed styles. nonSimUnlocks mirrors upgradeKeys' own
+    // `unlocks` convention.
+    //
+    // CORRECTED (2026-09) straight from the live bundle's own gem-tree config array (index-*.js,
+    // Exodus's literal `upgrades:[...]` list, each entry's own `unlock` field) -- the previous
+    // note here claimed all 7 fields gate on Exodus's OWN max level (5/5), which was wrong for
+    // 6 of them: the real gate is a GRADUAL unlock at levels 1/2/3/4/4/5/5, not "2 always shown +
+    // 5 more at max". Only materials-bonus and orbs-bonus actually gate at 5.
     nonSimKeys: ['cells-bonus', 'shards-bonus', 'rp-bonus', 'mp-bonus', 'ap-bonus', 'materials-bonus', 'orbs-bonus'],
     nonSimLabels: {
       'cells-bonus': 'Cells Bonus', 'shards-bonus': 'Shards Bonus', 'rp-bonus': 'RP Bonus',
@@ -451,7 +454,10 @@ window.GEM_TREES = {
       'cells-bonus': 999, 'shards-bonus': 999, 'rp-bonus': 999, 'mp-bonus': 999, 'ap-bonus': 999,
       'materials-bonus': 999, 'orbs-bonus': 999,
     },
-    nonSimUnlocks: { 'rp-bonus': 5, 'mp-bonus': 5, 'ap-bonus': 5, 'materials-bonus': 5, 'orbs-bonus': 5 },
+    nonSimUnlocks: {
+      'cells-bonus': 1, 'shards-bonus': 2, 'rp-bonus': 3, 'mp-bonus': 4, 'ap-bonus': 4,
+      'materials-bonus': 5, 'orbs-bonus': 5,
+    },
     nonSimFieldColors: {
       'cells-bonus': '#39ff94', 'shards-bonus': '#39d3ff', 'rp-bonus': '#ec8e34', 'mp-bonus': '#ff3842',
       'ap-bonus': '#2a47cc', 'materials-bonus': '#8b5a3c', 'orbs-bonus': '#ba88fc',
