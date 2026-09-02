@@ -185,3 +185,22 @@ def call_targets(insns):
 # own production -> load the Meltdown field -> BigDouble.Pow) -- proving Meltdown applies to
 # every generator tier, not just MK1. See shipsPage.js's own Meltdown comment for the fix this
 # produced, and git log for the exact commit.
+#
+# --- Second worked example: relic bonus formula shapes (2026-09-02) ----------------------------
+#
+# OuroRelics.get_FinalRelic{4,16,17}Bonus are all the identical tiny shape: read the relic's own
+# per-level coefficient from a field on `this` (a runtime config value, invisible from static
+# disassembly -- this confirms the FORMULA, not the number), read the relic's LEVEL via a call,
+# then `1.0 + level * coefficient`, done. This matches the simple linear-per-level bonus shape
+# hunterDefs.js already assumes for these relics (never verified against game code before this).
+#
+# get_FinalRelic7Bonus and get_FinalRelic19Bonus are structurally different (multiple field
+# chases, an extra multiplication) -- consistent with, and does not contradict, this project's
+# separately-confirmed finding (tools/bench/relic-arg-probe.js / relic-sweep.js) that r7 and r19
+# reach the hunter-sim wasm but change nothing there: this ship-side getter almost certainly
+# computes a DIFFERENT effect (their real "Loot xN" bonus) via a different code path than
+# whatever hunter-sim param was probed inert.
+#
+# Not pursued further: the actual per-level coefficients (the field values themselves) require
+# reading a live save or a ScriptableObject config table, not code -- disassembly only confirms
+# shape here, same limit as the r5/r6 cap-raise investigation above.
