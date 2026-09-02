@@ -115,6 +115,7 @@ window.HUNTER_DEFS = {
           { id: 'trample', label: 'Trample: Borge', maxLevel: 1, temporary: true },
           { id: 'scavenger', label: 'Scavengers Advantage', maxLevel: 25, temporary: true },
           { id: 'stelzi', label: 'Mutual Mining Agreement', maxLevel: 8, temporary: true },
+          { id: 'roe', label: 'Ultima: Rule of Experience', maxLevel: Infinity, temporary: true },
         ],
       },
       shardmilestones: { label: 'Milestones', items: [{ id: 'm0', label: '#0 The Eternal Milestone', maxLevel: Infinity }] },
@@ -134,6 +135,9 @@ window.HUNTER_DEFS = {
           { id: 'cm53', label: 'CM #53', maxLevel: 1 , temporary: true },
           { id: 'cm54', label: 'CM #54', maxLevel: 1 , temporary: true },
           { id: 'cm57', label: 'CM #57', maxLevel: 1 , temporary: true },
+          { id: 'cm58', label: 'CM #58', maxLevel: 1, temporary: true },
+          { id: 'cm_ultima', label: 'CM Ultima #2', maxLevel: Infinity, temporary: true },
+          { id: 'cm_ultimas', label: 'CM Ultima Count', maxLevel: Infinity, temporary: true },
           { id: 'milestoneCount', label: 'Milestone Count', maxLevel: 75 , temporary: true },
         ],
       },
@@ -145,6 +149,7 @@ window.HUNTER_DEFS = {
       },
       diamondcards: { label: 'Diamond Cards', items: [{ id: 'gaiden', label: 'Gaiden Card', maxLevel: 1 }] },
       iap: { label: 'IAP', items: [{ id: 'travpack', label: 'Traversal Pack', maxLevel: 1 }] },
+      mats_exchange: { label: 'Mats Exchange', items: [{ id: 'tysconDrives', label: 'Tyscon Drives', maxLevel: Infinity }] },
       ultima: { label: 'Diamond Ultima', items: [{ id: 'ulti', label: 'Ultima Hunter Loot Rewards Boost', maxLevel: Infinity }] },
       gadgets: { label: 'Gadgets', items: [{ id: 'wrench', label: 'The Wrench of Gore', maxLevel: Infinity }] },
       trinkets: {
@@ -224,13 +229,14 @@ window.HUNTER_DEFS = {
           { id: 'i104', label: 'Inscryption #104', maxLevel: 8 },
         ],
       },
-      loopmods: { label: 'Loop Mods', items: [{ id: 'scavenger2', label: 'Scavengers Advantage 2', maxLevel: 25, temporary: true }, { id: 'stelzi', label: 'Mutual Mining Agreement', maxLevel: 8, temporary: true }] },
+      loopmods: { label: 'Loop Mods', items: [{ id: 'scavenger2', label: 'Scavengers Advantage 2', maxLevel: 25, temporary: true }, { id: 'stelzi', label: 'Mutual Mining Agreement', maxLevel: 8, temporary: true }, { id: 'roe', label: 'Ultima: Rule of Experience', maxLevel: Infinity, temporary: true }] },
       shardmilestones: { label: 'Milestones', items: [{ id: 'm0', label: '#0 The Eternal Milestone', maxLevel: Infinity }] },
       researches: { label: 'Researches', items: [{ id: 'res81', label: 'Research #81', maxLevel: 6 }, { id: 'res95', label: 'Research #95', maxLevel: 6 }, { id: 'res105', label: 'Research #105', maxLevel: 6 }] },
-      cms: { label: 'Construction Milestones', items: [{ id: 'cm46', label: 'CM #46', maxLevel: 1, temporary: true }, { id: 'cm47', label: 'CM #47', maxLevel: 1, temporary: true }, { id: 'cm48', label: 'CM #48', maxLevel: 1, temporary: true }, { id: 'cm51', label: 'CM #51', maxLevel: 1, temporary: true }, { id: 'cm53', label: 'CM #53', maxLevel: 1, temporary: true }, { id: 'cm54', label: 'CM #54', maxLevel: 1, temporary: true }, { id: 'cm57', label: 'CM #57', maxLevel: 1, temporary: true }, { id: 'milestoneCount', label: 'Milestone Count', maxLevel: 75, temporary: true }] },
+      cms: { label: 'Construction Milestones', items: [{ id: 'cm46', label: 'CM #46', maxLevel: 1, temporary: true }, { id: 'cm47', label: 'CM #47', maxLevel: 1, temporary: true }, { id: 'cm48', label: 'CM #48', maxLevel: 1, temporary: true }, { id: 'cm51', label: 'CM #51', maxLevel: 1, temporary: true }, { id: 'cm53', label: 'CM #53', maxLevel: 1, temporary: true }, { id: 'cm54', label: 'CM #54', maxLevel: 1, temporary: true }, { id: 'cm57', label: 'CM #57', maxLevel: 1, temporary: true }, { id: 'cm58', label: 'CM #58', maxLevel: 1, temporary: true }, { id: 'cm_ultima', label: 'CM Ultima #2', maxLevel: Infinity, temporary: true }, { id: 'cm_ultimas', label: 'CM Ultima Count', maxLevel: Infinity, temporary: true }, { id: 'milestoneCount', label: 'Milestone Count', maxLevel: 75, temporary: true }] },
       diamondspecials: { label: 'Diamond Specials', items: [{ id: 'hunterloot', label: 'Hunter Loot Booster', maxLevel: 10 }, { id: 'reviveboost', label: 'Revive Boost', maxLevel: 10 }] },
       diamondcards: { label: 'Diamond Cards', items: [{ id: 'iridian', label: 'Iridian Card', maxLevel: 1 }] },
       iap: { label: 'IAP', items: [{ id: 'travpack', label: 'Traversal Pack', maxLevel: 1 }] },
+      mats_exchange: { label: 'Mats Exchange', items: [{ id: 'tysconDrives', label: 'Tyscon Drives', maxLevel: Infinity }] },
       ultima: { label: 'Diamond Ultima', items: [{ id: 'ulti', label: 'Ultima Hunter Loot Rewards Boost', maxLevel: Infinity }] },
       gadgets: { label: 'Gadgets', items: [{ id: 'zaptron', label: 'Zaptron-533 Bio-Repair Tool', maxLevel: Infinity }] },
       trinkets: {
@@ -297,13 +303,14 @@ window.HUNTER_DEFS = {
     globalUpgrades: {
       // All confirmed exact against main.js's vA table (not assumptions).
       relics: { label: 'Relics', items: [{ id: 't2r5', label: '#5 The Gorgon Eye', maxLevel: 100, requires: { gem: 'power', gemLevel: 3 } }, { id: 't2r7', label: "#7 Arthur's Sword", maxLevel: 40, requires: { gem: 'power', gemLevel: 3 } }] },
-      inscryptions: { label: 'Inscryptions', items: [{ id: 'i105', label: 'Inscryption #105', maxLevel: 8 }] },
+      inscryptions: { label: 'Inscryptions', items: [{ id: 'i105', label: 'Inscryption #105', maxLevel: 8 }, { id: 'i114', label: 'Inscryption #114', maxLevel: 3 }, { id: 'i115', label: 'Inscryption #115', maxLevel: 7 }] },
       gadgets: { label: 'Gadgets', items: [{ id: 'anchor', label: 'The Anchor of Ages', maxLevel: Infinity }] },
-      loopmods: { label: 'Loop Mods', items: [{ id: 'stelzi', label: 'Mutual Mining Agreement', maxLevel: 8, temporary: true }] },
-      researches: { label: 'Researches', items: [{ id: 'res81', label: 'Research #81', maxLevel: 6 }, { id: 'res95', label: 'Research #95', maxLevel: 6 }, { id: 'res105', label: 'Research #105', maxLevel: 6 }] },
-      cms: { label: 'Construction Milestones', items: [{ id: 'cm46', label: 'CM #46', maxLevel: 1, temporary: true }, { id: 'cm47', label: 'CM #47', maxLevel: 1, temporary: true }, { id: 'cm48', label: 'CM #48', maxLevel: 1, temporary: true }, { id: 'cm51', label: 'CM #51', maxLevel: 1, temporary: true }, { id: 'cm53', label: 'CM #53', maxLevel: 1, temporary: true }, { id: 'cm54', label: 'CM #54', maxLevel: 1, temporary: true }, { id: 'cm57', label: 'CM #57', maxLevel: 1, temporary: true }, { id: 'milestoneCount', label: 'Milestone Count', maxLevel: 75, temporary: true }] },
+      loopmods: { label: 'Loop Mods', items: [{ id: 'stelzi', label: 'Mutual Mining Agreement', maxLevel: 8, temporary: true }, { id: 'roe', label: 'Ultima: Rule of Experience', maxLevel: Infinity, temporary: true }] },
+      researches: { label: 'Researches', items: [{ id: 'res81', label: 'Research #81', maxLevel: 6 }, { id: 'res95', label: 'Research #95', maxLevel: 6 }, { id: 'res105', label: 'Research #105', maxLevel: 6 }, { id: 'res112', label: 'Research #112', maxLevel: 6 }] },
+      cms: { label: 'Construction Milestones', items: [{ id: 'cm46', label: 'CM #46', maxLevel: 1, temporary: true }, { id: 'cm47', label: 'CM #47', maxLevel: 1, temporary: true }, { id: 'cm48', label: 'CM #48', maxLevel: 1, temporary: true }, { id: 'cm51', label: 'CM #51', maxLevel: 1, temporary: true }, { id: 'cm53', label: 'CM #53', maxLevel: 1, temporary: true }, { id: 'cm54', label: 'CM #54', maxLevel: 1, temporary: true }, { id: 'cm57', label: 'CM #57', maxLevel: 1, temporary: true }, { id: 'cm58', label: 'CM #58', maxLevel: 1, temporary: true }, { id: 'cm_ultima', label: 'CM Ultima #2', maxLevel: Infinity, temporary: true }, { id: 'cm_ultimas', label: 'CM Ultima Count', maxLevel: Infinity, temporary: true }, { id: 'milestoneCount', label: 'Milestone Count', maxLevel: 75, temporary: true }] },
       diamondspecials: { label: 'Diamond Specials', items: [{ id: 'hunterloot', label: 'Hunter Loot Booster', maxLevel: 10 }, { id: 'reviveboost', label: 'Revive Boost', maxLevel: 10 }] },
       iap: { label: 'IAP', items: [{ id: 'travpack', label: 'Traversal Pack', maxLevel: 1 }] },
+      mats_exchange: { label: 'Mats Exchange', items: [{ id: 'tysconDrives', label: 'Tyscon Drives', maxLevel: Infinity }] },
       ultima: { label: 'Diamond Ultima', items: [{ id: 'ulti', label: 'Ultima Hunter Loot Rewards Boost', maxLevel: Infinity }] },
       trinkets: {
         label: 'Trinkets', items: [
@@ -366,7 +373,20 @@ window.UPGRADE_GATES = {
   'upgrades.cms.cm53': { gem: 'power', level: 2 }, // CM #53
   'upgrades.cms.cm54': { gem: 'power', level: 2 }, // CM #54
   'upgrades.cms.cm57': { gem: 'power', level: 2 }, // CM #57
+  // Found 2026-09 via live-override-diff.js against a fresh bundle -- cm58/cm_ultima/
+  // cm_ultimas/loopmods.roe/researches.res112/inscryptions.i114/i115 were all real live-tool
+  // overrides this file never listed at all (not a wrong gate -- simply never modelled).
+  'upgrades.cms.cm58': { gem: 'power', level: 2 }, // CM #58
+  'upgrades.cms.cm_ultima': { gem: 'power', level: 3 }, // CM Ultima #2
+  'upgrades.cms.cm_ultimas': { gem: 'power', level: 3 }, // CM Ultima Count
   'upgrades.cms.milestoneCount': { gem: 'exodus', level: 1 }, // Milestones Count
+  'upgrades.loopmods.roe': { gem: 'temporal', level: 4 }, // Ultima: Rule of Experience
+  'upgrades.researches.res112': { gem: 'innovation', level: 3 }, // Research #112 (Knox)
+  // mats_exchange.tysconDrives deliberately has NO gate entry here: unlike roe (a real
+  // declarative {id,unlock_gem,unlock_lvl} object), the bundle's own gate-coverage extraction
+  // finds no such object for tysconDrives itself -- only the "Mats Exchange" NAV PAGE gates at
+  // temporal level 4 (a UI-reachability gate, not necessarily the override's own value gate).
+  // Adding one here on that weaker basis was wrong; left unmapped rather than guessed.
   'upgrades.trinkets.last_handbook': { gem: 'creation', level: 4 }, // The Lost Last Manufacturer
   'upgrades.trinkets.transmission_amplifier': { gem: 'creation', level: 4 }, // The Pocket Directive Transmission Amplifier
   'upgrades.trinkets.ouro_codex': { gem: 'creation', level: 4 }, // The Ouroboros Recursive Codex
@@ -464,7 +484,13 @@ window.GEM_TREES = {
     },
   },
   temporal: {
-    label: 'Temporal', maxLevel: 3, nodeCount: 6, upgradeKeys: [], gradient: 'linear-gradient(135deg, #dc2626 0%, #e67b7b 100%)',
+    // maxLevel CORRECTED 2026-09 from 3 to 4: the live bundle's own tree config declares
+    // maxLevel:4 directly, and two real sim-relevant overrides (loopmods.roe, mats_exchange.
+    // tysconDrives) plus a whole "Mats Exchange" nav page all gate at temporal level 4 -- three
+    // independent pieces of evidence a tree capped at 3 could never satisfy (this is exactly
+    // what gem-tree-test.js's satisfiability check is for). The earlier "3" came from the
+    // game's own IL2CPP metadata at an earlier point -- Temporal likely gained a 4th tier since.
+    label: 'Temporal', maxLevel: 4, nodeCount: 6, upgradeKeys: [], gradient: 'linear-gradient(135deg, #dc2626 0%, #e67b7b 100%)',
     nonSimKeys: ['mp-bonus-lms', 'mp-bonus-ticks'],
     nonSimLabels: { 'mp-bonus-lms': 'MP Bonus (LMs)', 'mp-bonus-ticks': 'MP Bonus (Ticks)' },
     nonSimCaps: { 'mp-bonus-lms': 50, 'mp-bonus-ticks': 50 },
