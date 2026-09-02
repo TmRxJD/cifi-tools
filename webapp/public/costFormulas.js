@@ -192,8 +192,14 @@
   // floored -- except that a few relics leave the value UNFLOORED below a cutoff, which is what
   // 'floorFrom' records (r3/r4 floor from level 10, r2 from level 20). Two relics do not fit the
   // shape at all and carry an explicit 'adjust' instead.
+  // maxLevel for every relic here (tier-1 and tier-2) is cross-checked against the live tool's
+  // own `JP` relic-definition table by tools/bench/relic-maxlevel-check.js. That check caught
+  // r1 (was 1000, really 100), r13 and r18 (were 100, really 200) -- run it against a fresh
+  // bundle after touching any cap here. It also caught t2r10 almost being "fixed" to 25 from a
+  // DIFFERENT, unrelated bundle table that happens to share the `key:"t2rN"`/`max:` shape (an
+  // orb-calculator input widget, not the relic's real cap) -- see that script's own comment.
   const RELIC_SPECS = {
-    r1: { maxLevel: 1000, start: 1, add: 0.9, exp: 1.17, corr: [[1.03, 10], [1.04, 20]] },
+    r1: { maxLevel: 100, start: 1, add: 0.9, exp: 1.17, corr: [[1.03, 10], [1.04, 20]] },
     r2: { maxLevel: 100, start: 0.6, add: 0.2, exp: 1.09, corr: [[1.006, 10], [1.007, 20], [1.022, 30]], floorFrom: 20 },
     r3: { maxLevel: 100, start: 0.7, add: 0.5, exp: 1.12, corr: [[1.02, 10], [1.04, 20], [1.07, 30]], floorFrom: 10 },
     r4: { maxLevel: 100, start: 0.8, add: 0.4, exp: 1.12, corr: [[1.02, 10], [1.015, 20]], floorFrom: 10 },
@@ -240,12 +246,12 @@
       corr: [[1.01, 10]],
       adjust: (n, level) => (level > 50 ? n * Math.pow(1.02, Math.max(0, level - 30)) : n),
     },
-    r13: { maxLevel: 100, start: 10, add: 1, exp: 1.023, corr: [[1.001, 10], [1.002, 20], [1.003, 50]] },
+    r13: { maxLevel: 200, start: 10, add: 1, exp: 1.023, corr: [[1.001, 10], [1.002, 20], [1.003, 50]] },
     r14: { maxLevel: 8, start: 20, add: 30, exp: 2, corr: [] },
     r15: { maxLevel: 8, start: 30, add: 40, exp: 2, corr: [] },
     r16: { maxLevel: 100, start: 40, add: 5, exp: 1.08, corr: [[1.028, 10]] },
     r17: { maxLevel: 100, start: 50, add: 6, exp: 1.1, corr: [[1.037, 10]] },
-    r18: { maxLevel: 100, start: 60, add: 6, exp: 1.03, corr: [[1.01, 10], [1.02, 20]] },
+    r18: { maxLevel: 200, start: 60, add: 6, exp: 1.03, corr: [[1.01, 10], [1.02, 20]] },
     r19: { maxLevel: 8, start: 666, add: 111, exp: 1.66, corr: [] },
     r20: { maxLevel: 100, start: 1000, add: 50, exp: 1.2, corr: [] },
   };
@@ -267,10 +273,7 @@
     t2r7: { baseCost: 3e5, additive: 85e4, exp0: 1.71, iterativeExp: 1.09, iterativeThreshold: 8, maxLevel: 40 },
     t2r8: { baseCost: 21e5, additive: 84e4, exp0: 1.42, iterativeExp: 1.21, iterativeN: 4, maxLevel: 21 },
     t2r9: { baseCost: 8e5, additive: 8e4, exp0: 1.45, maxLevel: 100 },
-    // maxLevel 25, not 5 -- re-pulled directly from the live bundle's own relic field table
-    // (`key:"t2r10"`, `max:25`), which also independently re-confirms t2r4 (25) and t2r8 (21)
-    // above. The `5` here was wrong; nothing in this repo's history shows where it came from.
-    t2r10: { baseCost: 6e6, additive: 8e4, exp0: 15, iterativeExp: 21, iterativeThreshold: 1, maxLevel: 25 },
+    t2r10: { baseCost: 6e6, additive: 8e4, exp0: 15, iterativeExp: 21, iterativeThreshold: 1, maxLevel: 5 },
   };
 
   function tier2CostAtLevel(spec, level) {

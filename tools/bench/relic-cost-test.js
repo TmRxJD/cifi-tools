@@ -96,7 +96,7 @@ const PREVIOUSLY_MODELED = ['r4', 'r7', 'r9', 'r16', 'r17', 'r19', 't2r4', 't2r5
 
 // Tier-2 caps now come from the live bundle's own parameter table rather than being refused.
 check('tier-2 relics have the caps the live bundle declares', () => {
-  const expected = { t2r4: 25, t2r5: 100, t2r6: 40, t2r7: 40, t2r8: 21, t2r9: 100, t2r10: 25 };
+  const expected = { t2r4: 25, t2r5: 100, t2r6: 40, t2r7: 40, t2r8: 21, t2r9: 100, t2r10: 5 };
   for (const [id, max] of Object.entries(expected)) {
     if (!CF.knownRelicIds().includes(id)) return `${id} is missing from the table entirely`;
     const ours = CF.relicMaxLevel(id);
