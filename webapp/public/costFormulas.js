@@ -267,7 +267,10 @@
     t2r7: { baseCost: 3e5, additive: 85e4, exp0: 1.71, iterativeExp: 1.09, iterativeThreshold: 8, maxLevel: 40 },
     t2r8: { baseCost: 21e5, additive: 84e4, exp0: 1.42, iterativeExp: 1.21, iterativeN: 4, maxLevel: 21 },
     t2r9: { baseCost: 8e5, additive: 8e4, exp0: 1.45, maxLevel: 100 },
-    t2r10: { baseCost: 6e6, additive: 8e4, exp0: 15, iterativeExp: 21, iterativeThreshold: 1, maxLevel: 5 },
+    // maxLevel 25, not 5 -- re-pulled directly from the live bundle's own relic field table
+    // (`key:"t2r10"`, `max:25`), which also independently re-confirms t2r4 (25) and t2r8 (21)
+    // above. The `5` here was wrong; nothing in this repo's history shows where it came from.
+    t2r10: { baseCost: 6e6, additive: 8e4, exp0: 15, iterativeExp: 21, iterativeThreshold: 1, maxLevel: 25 },
   };
 
   function tier2CostAtLevel(spec, level) {
