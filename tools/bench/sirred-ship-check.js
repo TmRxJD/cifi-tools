@@ -20,9 +20,16 @@
 //
 //   node tools/bench/sirred-ship-check.js
 
+// tools/reference/sirred-install-coefficients.json holds each node's real base coefficient (the
+// literal right after `1 +`/`1f +` in its Ins<N> method -- e.g. Aux10's is 0.0003), extracted
+// programmatically from the same decompiled sources (see that pipeline's own script, run once
+// and not checked in, only its output is). Our `effect` text's own "X%" is that coefficient * 100
+// -- e.g. "+0.03% Shards gained" <-> 0.0003 -- so this is a direct numeric comparison, not a
+// judgment call about wording.
 const path = require('path');
 const H = require('./harness.js');
 const slots = require('../reference/sirred-install-slots.json');
+const coefficients = require('../reference/sirred-install-coefficients.json');
 
 const sb = H.browserSandbox();
 const CATALOG = sb.ShipData.SHIP_NODE_CATALOG;
@@ -50,12 +57,30 @@ for (const [shipId, prefix] of Object.entries(SHIP_PREFIX)) {
       console.log(`GATE MISMATCH ${designation} ("${node.name}"): ours ${expectedGate}, SirRed ${live.unlockThreshold}`);
       problems++;
     }
+    // AOTC (Demeter node 1, "Ahead of the Curve") has no real in-game percentage at all -- its
+    // payoff lands next loop reset, so SirRed's own Ins1 branches into a ranking-only heuristic
+    // (Pow(value,5) or a hardcoded placeholder) instead of a real formula, same as this project's
+    // own documented special-casing of it. Comparing a coefficient here would just be comparing
+    // two unrelated placeholders.
+    const isAotc = sb.ShipData.AOTC && Number(shipId) === sb.ShipData.AOTC.shipId && code === sb.ShipData.AOTC.slot;
+    const liveCoeff = coefficients[designation];
+    if (liveCoeff !== undefined && !isAotc) {
+      const m = node.effect.match(/([\d.]+)%/);
+      const oursPct = m ? parseFloat(m[1]) : null;
+      const livePct = liveCoeff * 100;
+      // Float round-trip through the decompiler can leave noise past ~6 significant figures
+      // (e.g. 0.00027 stored as a float), so compare with a relative tolerance rather than ===.
+      if (oursPct === null || Math.abs(oursPct - livePct) > Math.max(1e-9, livePct * 1e-6)) {
+        console.log(`COEFFICIENT MISMATCH ${designation} ("${node.name}"): ours ${oursPct}%, SirRed ${livePct}%`);
+        problems++;
+      }
+    }
   }
 }
 
 console.log(`\ncompared ${compared} install slots across ${Object.keys(SHIP_PREFIX).length} ships`);
 if (problems === 0) {
-  console.log('every cap and gate matches SirRed\'s community tool exactly (at the documented 5x multiplier)');
+  console.log('every cap, gate and coefficient matches SirRed\'s community tool exactly (caps at the documented 5x multiplier)');
   process.exit(0);
 } else {
   console.log(`${problems} discrepancy(ies)`);
