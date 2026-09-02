@@ -39,9 +39,41 @@ loader, not a failure; the dump completes and CodeRegistration/MetadataRegistrat
 **Does:** every type, field (with offsets), method signature, property and enum in the game —
 813k lines for CIFI, plus stub assemblies including `Assembly-CSharp.dll`.
 
-**Does not:** method *bodies*. Il2CppDumper recovers structure and addresses, not code. Constants
-computed in code are therefore still invisible; you would need Ghidra/IDA against `libil2cpp.so`
-using the generated script, or typetrees (below) for serialized data.
+**Does not:** method *bodies*, by itself. Il2CppDumper recovers structure and addresses, not code.
+Constants computed in code are therefore still invisible from `dump.cs` alone — but see
+`script.json` below, which gets you the rest of the way for a targeted question without a full
+Ghidra/IDA project.
+
+## Getting method addresses (`script.json`) — and then real disassembly
+
+`Program.cs` as shipped only calls `Il2CppDecompiler.Decompile` (→ `dump.cs`) and
+`DummyAssemblyExporter.Export` (→ `DummyDll/`) — **neither carries a single address**. The fork's
+own `StructGenerator.WriteScript(outputDir)` builds exactly that (a method name → RVA map, plus
+strings and an `il2cpp.h`), but nothing in this CLI calls it. Add it:
+
+```csproj
+<!-- Cli.csproj, alongside the existing Outputs/ includes -->
+<Compile Include="../dumpersrc/Il2CppDumper/Outputs/StructGenerator.cs" />
+<Compile Include="../dumpersrc/Il2CppDumper/Outputs/StructInfo.cs" />
+<Compile Include="../dumpersrc/Il2CppDumper/Outputs/HeaderConstants.cs" />
+```
+```csharp
+// Program.cs, right after the DummyDll export block
+new StructGenerator(executor).WriteScript(outputDir);
+```
+
+This writes `script.json` (~1 GB for CIFI — one entry per method, `{"Address": <RVA>, "Name":
+"TypeName$$MethodName", ...}`) alongside `dump.cs`. `analyze.py` in this directory streams it (too
+big to load whole) to resolve a method name to its address, or a disassembled call target back to
+a name — and wraps the matching ELF64 PT_LOAD parsing + `capstone` disassembly needed to actually
+read the code at that address. **CIFI's `libil2cpp.so` is x86_64** (the emulator's ABI,
+`split_config.x86_64.apk` — not ARM64, which a real device build would be); `analyze.py` checks
+this and refuses to disassemble as the wrong architecture rather than silently producing garbage.
+
+This is real, targeted decompilation, not a Ghidra replacement: it answers "does function A call
+function B / read field-offset N", not "show me A's full logic as readable pseudocode". That was
+enough to settle a real question this project had — see `analyze.py`'s own worked example (the
+Meltdown investigation, 2026-09) for the exact recipe, and its docstring for the API.
 
 **Typetrees:** the shipped assets have them stripped, so UnityPy reads MonoBehaviour headers but
 not script fields. The `DummyDll/` output is what AssetRipper or AssetStudio need to reconstruct
