@@ -83,7 +83,10 @@ const SHIP_NODE_CATALOG = {
     3: { source: 'wiki', ruId: 3, name: 'Deja Vu Theory', max: 10, gateAtTotalInstalls: 5, gearKey: 'loopResetsDone', effect: '+0.1% Mod Points Gained, per Loop Prestige done, per crew member' },
     4: { source: 'wiki', ruId: 4, name: 'Data Theory', max: 20, gateAtTotalInstalls: 20, gearKey: 'loopModsOwned', effect: '+0.05% MK2 output, per Loop Mod owned, per crew member' },
     5: { source: 'wiki', ruId: 5, name: 'Flashback Theory', max: 20, gateAtTotalInstalls: 20, gearKey: 'loopModsOwned', effect: '+0.05% MK3 output, per Loop Mod owned, per crew member' },
-    6: { source: 'wiki', ruId: 6, name: 'Observation Theory', max: 20, gateAtTotalInstalls: 20, gearKey: 'loopModsOwned', effect: '+0.01% MK4 output, per Loop Mod owned, per crew member' },
+    // gateAtTotalInstalls corrected 2026-09-02 against the game's own FleetManager scene data
+    // (tools/reference/research.json, RU6.Requirement=40) -- the wiki said 20, matching slot
+    // 4/5's gate instead of the real value, which actually matches slot 7's 40.
+    6: { source: 'confirmed', ruId: 6, name: 'Observation Theory', max: 20, gateAtTotalInstalls: 40, gearKey: 'loopModsOwned', effect: '+0.01% MK4 output, per Loop Mod owned, per crew member' },
     7: { source: 'wiki', ruId: 7, name: 'Reflection Theory', max: 20, gateAtTotalInstalls: 40, gearKey: 'loopModsOwned', effect: '+0.01% MK3 output, per Loop Mod owned, per crew member (wiki text as-is -- possibly meant "all Generators")' },
     // Nodes 8/9/10/11: `max` corrected 2026-07-31 by direct screenshot comparison against a
     // live account (real caps 150/50/125/100 at 5x). Node 9/11 levels also swapped -- same
@@ -127,21 +130,25 @@ const SHIP_NODE_CATALOG = {
     11: { source: 'confirmed', name: 'Phylogenetic Analysis', max: 55, ruId: 9, gateAtTotalInstalls: 100, gearKey: 'operationsCompleted', effect: '+0.04% Research Points gained, per Operation Completed, per crew member' },
   },
   6: { // Koios -- ranks up by completing Studies. Unlocks Research Points. Wiki page had no
-    // explicit unlock-requirement numbers (different page format from the others) -- gates
-    // unconfirmed for this ship. `max` values are the wiki's BASE cap (see nodeMaxLevel).
+    // explicit unlock-requirement numbers (different page format from the others), so every
+    // gate here read as unconfirmed (0/none) until corrected 2026-09-02 against the game's own
+    // FleetManager scene data (tools/reference/research.json shipTrees.Research, keyed by each
+    // node's own ruId) -- ALL 10 of this ship's gated slots were simply missing a gate
+    // entirely, not just wrong, so the optimizer/effective-path could offer any of them before
+    // its real prerequisite was met. `max` values are the wiki's BASE cap (see nodeMaxLevel).
     1: { source: 'wiki', ruId: 1, name: 'The Venn Hypothesis', max: 250, gearKey: ['studiesThisLR', 'operationsCompleted'], effect: '+0.25% Cells gained, per completed Study & Operation, per crew member' },
-    2: { source: 'wiki', ruId: 2, name: 'Unobtanium Drills', max: 5, gearKey: 'studiesThisLR', effect: '+0.003% Shards gained, per Study completed, per crew member' },
-    3: { source: 'wiki', ruId: 3, name: 'Modification Thesis', max: 5, gearKey: 'totalCompletedResearch', effect: '+2.5% Mod Points gained, per fully completed Research, per crew member' },
-    4: { source: 'wiki', ruId: 4, name: 'The Study of Threesium', max: 5, gearKey: 'researchLevels', effect: '+0.5% MK3 & MK6 outputs, per level in Researches (a maxed Research counts as 3), per crew member' },
-    5: { source: 'wiki', ruId: 5, name: 'The Big Brainium Thesis', max: 5, gearKey: 'studiesThisLR', effect: '+0.001% Research Points gained, per Study completed, per crew member' },
-    6: { source: 'wiki', ruId: 6, name: 'The Connectivity Thesis', max: 10, effect: '+1% Mod Points & Shards gained, per crew member' },
-    7: { source: 'wiki', ruId: 7, name: 'The Overclocking Thesis', max: 10, gearKey: 'studiesThisLR', effect: '+0.1% MK1, MK2, MK3, MK4, MK5, MK6 outputs, per Study completed, per crew member' },
+    2: { source: 'confirmed', ruId: 2, name: 'Unobtanium Drills', max: 5, gateAtTotalInstalls: 5, gearKey: 'studiesThisLR', effect: '+0.003% Shards gained, per Study completed, per crew member' },
+    3: { source: 'confirmed', ruId: 3, name: 'Modification Thesis', max: 5, gateAtTotalInstalls: 5, gearKey: 'totalCompletedResearch', effect: '+2.5% Mod Points gained, per fully completed Research, per crew member' },
+    4: { source: 'confirmed', ruId: 4, name: 'The Study of Threesium', max: 5, gateAtTotalInstalls: 10, gearKey: 'researchLevels', effect: '+0.5% MK3 & MK6 outputs, per level in Researches (a maxed Research counts as 3), per crew member' },
+    5: { source: 'confirmed', ruId: 5, name: 'The Big Brainium Thesis', max: 5, gateAtTotalInstalls: 10, gearKey: 'studiesThisLR', effect: '+0.001% Research Points gained, per Study completed, per crew member' },
+    6: { source: 'confirmed', ruId: 6, name: 'The Connectivity Thesis', max: 10, gateAtTotalInstalls: 30, effect: '+1% Mod Points & Shards gained, per crew member' },
+    7: { source: 'confirmed', ruId: 7, name: 'The Overclocking Thesis', max: 10, gateAtTotalInstalls: 30, gearKey: 'studiesThisLR', effect: '+0.1% MK1, MK2, MK3, MK4, MK5, MK6 outputs, per Study completed, per crew member' },
     // Nodes 8-11: `max` corrected 2026-07-31, account-confirmed directly (real caps
     // 300/150/200/750 at 5x). Node 9/11 ruId swapped -- same universal pattern.
-    8: { source: 'wiki', ruId: 8, name: 'Modified Portable Arcade', max: 60, effect: '+3% output of all Generators, per crew member' },
-    9: { source: 'wiki', ruId: 11, name: 'Improved Mk1 Printing Fuel', max: 30, gearKey: 'studiesThisLR', effect: '+1% Cells gained, per Study completed, per crew member' },
-    10: { source: 'wiki', ruId: 10, name: 'Shard Scanning Breakthrough', max: 40, gearKey: 'studiesThisLR', effect: '+0.01% Shards gained, per Study completed, per crew member' },
-    11: { source: 'wiki', ruId: 9, name: 'Robo-Research Assistants', max: 150, gearKey: 'studiesThisLR', effect: '+0.02% Research Points gained, per Study completed, per crew member' },
+    8: { source: 'confirmed', ruId: 8, name: 'Modified Portable Arcade', max: 60, gateAtTotalInstalls: 100, effect: '+3% output of all Generators, per crew member' },
+    9: { source: 'confirmed', ruId: 11, name: 'Improved Mk1 Printing Fuel', max: 30, gateAtTotalInstalls: 100, gearKey: 'studiesThisLR', effect: '+1% Cells gained, per Study completed, per crew member' },
+    10: { source: 'confirmed', ruId: 10, name: 'Shard Scanning Breakthrough', max: 40, gateAtTotalInstalls: 100, gearKey: 'studiesThisLR', effect: '+0.01% Shards gained, per Study completed, per crew member' },
+    11: { source: 'confirmed', ruId: 9, name: 'Robo-Research Assistants', max: 150, gateAtTotalInstalls: 100, gearKey: 'studiesThisLR', effect: '+0.02% Research Points gained, per Study completed, per crew member' },
   },
   7: { // Zeus -- ranks up by completing Missions. Unlocks Academy Points / Gear Sets. Wiki page
     // had no explicit unlock-requirement numbers -- gates below are user-confirmed directly

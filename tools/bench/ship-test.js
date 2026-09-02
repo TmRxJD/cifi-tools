@@ -402,6 +402,38 @@ function categorySaturated(shipId, cat, levels, threshold = 0.9) {
   return spent / capacity >= threshold;
 }
 
+/**
+ * Did this category go through a real gate-driven STARVATION gap -- exhausted every node it
+ * could currently reach, then sat idle for a long stretch waiting on a later, higher-gated node
+ * in the SAME category, before reopening?
+ *
+ * categorySaturated() alone cannot see this: it sums a category's TOTAL capacity across every
+ * node regardless of gate, so a category like Koios's researchPoints (a tiny max-5 node open
+ * early, plus a max-150 node gated at 100 total installs) reads as "only 10% used" even after
+ * the max-5 node capped out and the category went cold for 65 straight clicks -- nowhere near
+ * categorySaturated's 90% threshold, so the cross-category ratio check judged it "live" for the
+ * whole window and flagged the allocator for a skew that gating, not unfairness, produced.
+ * Found on Koios once its real gates (5/10/30/100 in four separate tiers, confirmed against
+ * tools/reference/research.json) replaced the placeholder gate-at-0 the wiki never gave it --
+ * every other ship's gated nodes cluster at one or two tiers, so this shape hadn't shown up
+ * before. A starved gap is real gate behavior working as intended, not a fairness bug, so it
+ * belongs in the exclusion list right alongside a saturated or not-yet-open category.
+ *
+ * `gapClicks` is intentionally generous (a quarter of the budget): normal round-robin turn-taking
+ * between several live categories produces short gaps of a handful of clicks, not dozens.
+ */
+function categoryStarved(shipId, cat, clicks, budget) {
+  const inCat = (slot) => [...new Set(sb.effectResources(CATALOG[shipId][slot].effect)
+    .map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))].includes(cat);
+  const hits = clicks.map((slot, i) => (inCat(slot) ? i : -1)).filter((i) => i >= 0);
+  if (hits.length < 2) return false;
+  const gapClicks = Math.max(10, budget * 0.25);
+  for (let i = 1; i < hits.length; i++) {
+    if (hits[i] - hits[i - 1] > gapClicks) return true;
+  }
+  return false;
+}
+
 // THE property that actually matters, and the one the anti-repeat rule exists to serve. Repeated
 // installs are perfectly fine -- dumping several points into one node in a row is correct when
 // the weights say so. What must hold is that spend across categories tracks the weights as the
@@ -439,7 +471,8 @@ check('spend across categories tracks the weights once both are live', () => {
     const spendAll = spendByCategory(shipId, clicks);
     const live = Object.keys(firstClick).filter((c) => (weights[c] || 0) > 0
       && firstClick[c] <= earlyCutoff
-      && !categorySaturated(shipId, c, levels));
+      && !categorySaturated(shipId, c, levels)
+      && !categoryStarved(shipId, c, clicks, clicks.length));
 
     for (let i = 0; i < live.length; i++) {
       for (let j = i + 1; j < live.length; j++) {
