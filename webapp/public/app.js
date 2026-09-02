@@ -3205,6 +3205,15 @@ async function processImportedSaveText(rawText, silent) {
         if (!store.gems[treeKey]) return;
         store.gems[treeKey].level = treeState.level;
         treeState.nodes.forEach((on, i) => { store.gems[treeKey].nodes[i] = on; });
+        // Named "GU" upgrades (Attraction only, so far -- see saveImport.js) were being
+        // computed by mapCifiSaveToStore and then silently dropped here: this loop only ever
+        // copied .level/.nodes, never .upgrades, so any account's real Attraction loot-bonus
+        // investment never reached the evaluator even after a correct import.
+        if (treeState.upgrades) {
+          Object.entries(treeState.upgrades).forEach(([key, val]) => {
+            if (key in store.gems[treeKey].upgrades) store.gems[treeKey].upgrades[key] = val;
+          });
+        }
       });
     });
   }

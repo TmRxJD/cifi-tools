@@ -362,6 +362,29 @@ function mapSaveToStore(save) {
   // `ExodusGemNodeLevels` array (confirmed against a live save -- `ExodusGemNode1Level` etc.
   // don't exist at all for Exodus, so reading them the same way as the other 6 trees always
   // silently returned "unallocated" regardless of the account's real Exodus node levels).
+  //
+  // Named "GU" upgrades (Attraction/Creation only -- confirmed straight from the live bundle's
+  // own gem-tree config, see hunterDefs.js's GEM_TREES comment, that every OTHER tree's GU
+  // fields are non-sim bookkeeping). The save carries these as `{prefix}GU{n}Level` and, until
+  // now, saveImport.js never read them at all -- meaning any account with real Attraction/
+  // Creation gem investment had those bonuses silently ignored by the evaluator on every
+  // import, exactly the same class of bug as the loopmods/trinkets/iap gap fixed earlier.
+  //
+  // Attraction's GU-index -> named-upgrade order is CONFIRMED, not assumed: this account's real
+  // AttractionQualityLevel is 2, and hunterDefs.js's own `unlocks` table (itself extracted from
+  // the live bundle) gates borge-loot-bonus at level 1 and ozzy-loot-bonus at level 2 -- exactly
+  // the two upgrades reachable at this account's real level, and exactly AttractionGU1/GU2 are
+  // the only two non-zero slots in the save (GU3-6, gated at level 3+, all read 0). GU-index
+  // therefore matches declaration/unlock order for Attraction.
+  //
+  // Creation is NOT wired in, and should not be guessed at: this account's CreationQualityLevel
+  // is 1, yet all 3 of this tool's known Creation upgrades (borge/ozzy/knox-stat-bonus) gate at
+  // level 4 -- so CreationGU1's real nonzero value (3) cannot be any of them. Creation has 11
+  // raw GU slots in the save vs only 4 named here (3 sim + mech-bonus-cap), so most of that
+  // tree's upgrades are simply not identified yet. Wiring GU1 to the wrong upgrade would be
+  // worse than leaving it unmapped -- exactly the trap the inscryption slot mapping fell into
+  // once already.
+  const ATTRACTION_GU_ORDER = ['borge-loot-bonus', 'ozzy-loot-bonus', 'catch-up-power-borge-ozzy', 'knox-loot-bonus', 'catch-up-power-knox'];
   const gems = {};
   Object.entries(GEM_TREE_SAVE_PREFIX).forEach(([treeKey, prefix]) => {
     const level = save[`${prefix}QualityLevel`];
@@ -376,6 +399,14 @@ function mapSaveToStore(save) {
       }
     }
     gems[treeKey] = { level: level !== undefined ? realNum(level) : 0, nodes };
+    if (treeKey === 'attraction') {
+      const upgrades = {};
+      ATTRACTION_GU_ORDER.forEach((key, i) => {
+        const v = save[`AttractionGU${i + 1}Level`];
+        if (v !== undefined) upgrades[key] = realNum(v);
+      });
+      if (Object.keys(upgrades).length) gems.attraction.upgrades = upgrades;
+    }
   });
 
   // Per-hunter: level, highest stage, talents (positional Skill1..8Level)
