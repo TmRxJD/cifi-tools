@@ -302,7 +302,60 @@ function mapSaveToStore(save) {
   // value-diff-confirmed against a nonzero real number.
   if (save.DiamondUltimaLevel !== undefined) globalUpgrades['ultima.ulti'] = realNum(save.DiamondUltimaLevel);
 
-  unmapped.push('loopmods', 'iap', 'trinkets');
+  // Loop mods: the 4 tool inputs are 4 completely different save fields, not one array -- each
+  // found via a NEW extraction technique (2026-09) that needed no save diffing and no live
+  // device access:
+  //   1. tools/save/unity-strings.js scans the raw Unity-serialized asset bytes for the exact
+  //      length-prefixed-string shape, in file order (display text is asset data, not a C#
+  //      string literal -- verified absent from stringliteral.json, present in level0's raw
+  //      bytes at a fixed offset).
+  //   2. A button's own onClick target (`LoopModifiers, Assembly-CSharp` + `BuyLM<N>` or
+  //      `BuyLMOuro<N>`) is serialized as a plain string close to its label in that same byte
+  //      stream, which is what actually pins the index -- proximity alone isn't proof, so every
+  //      id is sanity-checked against extract-loopmods.js's real MaxLevel for that slot.
+  //   trample    -> LMOuro20 ("Trample: Borge" is a VERBATIM dump.cs [Header] comment on
+  //     LoopModifiers -- the strongest kind of confirmation, no proximity guess involved).
+  //   scavenger  -> LM229 (MaxLevel 25 in the scene, matching hunterDefs.js's cap exactly;
+  //     "BuyLM229" sits immediately after the "SCAVENGERS ADVANTAGE" label with only fixed
+  //     Button-state boilerplate strings between them).
+  //   scavenger2 -> LMOuro18 (MaxLevel 25 matches; its own dump.cs Header reads "Base Hunt Loot
+  //     Rewards Bonus (Ozzy)" -- Ozzy-themed like scavenger2, and no other Ouroboros mod shares
+  //     that exact cap. Weaker than the other two: no literal text match, and proximity alone
+  //     was ambiguous for this one specifically -- re-confirm if a live account ever disagrees).
+  //   stelzi     -> LM279 (already known -- see tools/reference/loopmod-names.json -- but was
+  //     never actually wired into the importer until now).
+  if (save.LMOuro20Level !== undefined) globalUpgrades['loopmods.trample'] = realNum(save.LMOuro20Level);
+  if (save.LM229Level !== undefined) globalUpgrades['loopmods.scavenger'] = realNum(save.LM229Level);
+  if (save.LMOuro18Level !== undefined) globalUpgrades['loopmods.scavenger2'] = realNum(save.LMOuro18Level);
+  if (save.LM279Level !== undefined) globalUpgrades['loopmods.stelzi'] = realNum(save.LM279Level);
+
+  // Trinkets. The blocking question (does the consumer want a COUNT of owned trinkets or a SUM
+  // of their levels?) is now settled from cifi-tools.com's own live evaluationWorker bundle
+  // (2026-09) -- despite the UI labeling this param "Galvarium Trinkets Count", its actual
+  // fallback code is `Object.values(upgrades.trinkets).reduce((a,b) => a+(b||0), 0)`, i.e. SUM,
+  // gated behind Creation Gem Node 5 (`creation_gem5`) -- matching hunterSimBrowser.js's existing
+  // resolveParam exactly, byte for byte. So the "Count" name was just a misleading UI label on
+  // the site, not evidence our sum implementation was wrong.
+  // Per-trinket IDENTITY (which of the 3 save fields is last_handbook/transmission_amplifier/
+  // ouro_codex) does NOT need settling, because the consumer sums all three regardless of id --
+  // an arbitrary but harmless assignment below reproduces the exact same total either way.
+  const TRINKET_SAVE_FIELD = { last_handbook: 'T1F', transmission_amplifier: 'T2F', ouro_codex: 'T3F' };
+  Object.entries(TRINKET_SAVE_FIELD).forEach(([id, prefix]) => {
+    const v = save[`${prefix}Level`];
+    if (v !== undefined) globalUpgrades[`trinkets.${id}`] = realNum(v);
+  });
+
+  // IAP: Traversal Pack -> OuroDevicePurchased. Found by disassembling Cifi.OfflineHunt.
+  // Simulator$$CreateOzzyContext (capstone against libil2cpp.so directly; this machine's
+  // Application Control policy was disabled by the time this was done) and locating the write to
+  // OzzyGameContext's `TraversalPack` backing field (offset 0xDC): `mov al, [rax+0x3442]` then
+  // `mov [rbx+0xDC], al` -- 0x3442 is dump.cs's own `OuroDevicePurchased`, exactly. The name
+  // mismatch is real, not a mistake: this game calls a Loop Reset a "Traversal" throughout its own
+  // UI (TraversalsCounterText, TimeInTraversal, etc.), so an "Ouro[boros] Device" IAP pack -- which
+  // grants Ouroboros-cycle rewards -- is naturally what this tool's param list calls the
+  // "Traversal Pack". Untested against a real nonzero value: no available account owns this real-
+  // money purchase, same as every other IAP search in this file has found.
+  if (save.OuroDevicePurchased !== undefined) globalUpgrades['iap.travpack'] = save.OuroDevicePurchased ? 1 : 0;
 
   // Gems: tree level + 6 boolean nodes per tree. Every tree except Exodus stores its nodes
   // as individual `${prefix}GemNode{n}Level` fields; Exodus alone stores them as a single

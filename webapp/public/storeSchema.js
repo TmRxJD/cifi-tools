@@ -44,6 +44,10 @@
     'hunterBuilds', 'relics', 'inscriptions', 'diamondCards', 'milestone', 'gems',
     'shipRanks', 'shipGear', 'unlockedGens', 'gearSets', 'fleetBadges', 'fleetResearch',
     'researches', 'diamondUltima',
+    // Added later than the rest: saveImport.js's mapCifiSaveToStore had computed these for a
+    // while, but nothing ever copied them from `mapped.globalUpgrades` into the real store --
+    // they'd get decoded on every import and then silently dropped every time.
+    'diamondSpecials', 'cms', 'gadgets', 'loopmods', 'trinkets', 'iap',
   ];
 
   function defaultImportPrefs() {

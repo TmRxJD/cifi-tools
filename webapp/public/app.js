@@ -678,10 +678,14 @@ const BASE_STAT_LABELS = {
 // Built per-hunter (Base Stats / Relics / Inscryptions read straight from HUNTER_DEFS so
 // Ozzy/Knox get their OWN relic and inscription ID lists -- these are NOT shared with
 // Borge's; e.g. Ozzy's relics are r4/r7/r17/t2r7, not Borge's r4/r7/r16/r19, and each
-// hunter's inscription IDs are entirely disjoint). Loop Mods/Diamond Specials/Diamond
-// Cards/Gem Nodes below are still Borge-specific (Ozzy uses "Construction Milestones"
-// instead of "Loop Mods" with different fields, which hasn't been mapped out yet) -- rather
-// than show mismatched fields for other hunters, those groups are Borge-only for now.
+// hunter's inscription IDs are entirely disjoint).
+//
+// GENERIC_GLOBAL_GROUPS (below) used to be a Borge-only hardcoded block (Loop Mods/Diamond
+// Specials/Diamond Cards, on the mistaken assumption Ozzy/Knox equivalents "hadn't been
+// mapped out"). HUNTER_DEFS already declares all of these per hunter with the right
+// per-hunter item lists (Ozzy's Loop Mods is scavenger2+stelzi, not trample+scavenger;
+// Knox's is stelzi alone) -- this reads that generically instead, the same way
+// Relics/Inscryptions/Gadgets already do a few lines up.
 function getOverrideGroups() {
   const d = defs();
   const groups = [
@@ -721,39 +725,37 @@ function getOverrideGroups() {
       fields: [{ key: `upgrades.gadgets.${gadget.id}`, label: gadget.label, global: () => store.globalUpgrades[`gadgets.${gadget.id}`] }],
     });
   }
+  // Every remaining globalUpgrades category HUNTER_DEFS declares (loopmods/diamondspecials/
+  // diamondcards/iap/ultima/trinkets/cms), read the same generic way as Relics/Inscryptions/
+  // Gadgets above -- one group per category, one field per item, for whichever hunter is
+  // current. `toggle: true` on a maxLevel-1 item matches the boolean-pill rendering the
+  // Loop Mods/Diamond Cards rows already used for Trample/Gaiden/Iridian.
+  const GENERIC_GLOBAL_GROUPS = [
+    ['loopmods', 'Loop Mods'], ['diamondspecials', 'Diamond Specials'], ['diamondcards', 'Diamond Cards'],
+    ['iap', 'IAP'], ['ultima', 'Diamond Ultima'], ['trinkets', 'Trinkets'], ['cms', 'Construction Milestones'],
+  ];
+  GENERIC_GLOBAL_GROUPS.forEach(([cat, title]) => {
+    const items = d.globalUpgrades?.[cat]?.items || [];
+    if (!items.length) return;
+    groups.push({
+      title,
+      fields: items.map((it) => ({
+        key: `upgrades.${cat}.${it.id}`,
+        label: it.label,
+        toggle: it.maxLevel === 1,
+        global: () => store.globalUpgrades[`${cat}.${it.id}`],
+      })),
+    });
+  });
   if (currentHunter === 'borge') {
-    groups.push(
-      {
-        title: 'Loop Mods',
-        fields: [
-          { key: 'upgrades.loopmods.trample', label: 'Trample: Borge', toggle: true, global: () => store.globalUpgrades['loopmods.trample'] },
-          { key: 'upgrades.loopmods.scavenger', label: "Scavenger's Advantage", global: () => store.globalUpgrades['loopmods.scavenger'] },
-          { key: 'upgrades.loopmods.stelzi', label: 'Mutual Mining Agreement: The Stelzi', global: () => store.globalUpgrades['loopmods.stelzi'] },
-        ],
-      },
-      {
-        title: 'Diamond Specials',
-        fields: [
-          { key: 'upgrades.diamondspecials.hunterloot', label: 'Hunter Loot Booster', global: () => store.globalUpgrades['diamondspecials.hunterloot'] },
-          { key: 'upgrades.diamondspecials.reviveboost', label: 'Revive Boost', global: () => store.globalUpgrades['diamondspecials.reviveboost'] },
-        ],
-      },
-      {
-        title: 'Diamond Cards',
-        fields: [
-          { key: 'upgrades.diamondcards.gaiden', label: 'Gaiden Card', toggle: true, global: () => store.globalUpgrades['diamondcards.gaiden'] },
-          { key: 'upgrades.diamondcards.iridian', label: 'Iridian Card', toggle: true, global: () => store.globalUpgrades['diamondcards.iridian'] },
-        ],
-      },
-      {
-        title: 'Gem Nodes & Upgrades',
-        fields: [
-          { key: 'upgrades.gems_nodes.attraction_level', label: 'Attraction Gem Level', global: () => store.gems?.attraction?.level },
-          { key: 'upgrades.gems_nodes.attraction_catchUp', label: 'Attraction Catch-Up Power', global: () => store.gems?.attraction?.upgrades?.['catch-up-power-borge-ozzy'] },
-          { key: 'upgrades.gems_nodes.attraction_lootBorge', label: 'Attraction Loot (Borge)', global: () => store.gems?.attraction?.upgrades?.['borge-loot-bonus'] },
-        ],
-      },
-    );
+    groups.push({
+      title: 'Gem Nodes & Upgrades',
+      fields: [
+        { key: 'upgrades.gems_nodes.attraction_level', label: 'Attraction Gem Level', global: () => store.gems?.attraction?.level },
+        { key: 'upgrades.gems_nodes.attraction_catchUp', label: 'Attraction Catch-Up Power', global: () => store.gems?.attraction?.upgrades?.['catch-up-power-borge-ozzy'] },
+        { key: 'upgrades.gems_nodes.attraction_lootBorge', label: 'Attraction Loot (Borge)', global: () => store.gems?.attraction?.upgrades?.['borge-loot-bonus'] },
+      ],
+    });
   }
   return groups;
 }
@@ -3190,6 +3192,12 @@ async function processImportedSaveText(rawText, silent) {
   applyUpgradesByPrefix('shardmilestones.', 'milestone #0', cats.milestone);
   applyUpgradesByPrefix('researches.', 'researches', cats.researches);
   applyUpgradesByPrefix('ultima.', 'diamond ultima', cats.diamondUltima);
+  applyUpgradesByPrefix('diamondspecials.', 'diamond specials', cats.diamondSpecials);
+  applyUpgradesByPrefix('cms.', 'construction milestones', cats.cms);
+  applyUpgradesByPrefix('gadgets.', 'gadgets', cats.gadgets);
+  applyUpgradesByPrefix('loopmods.', 'loop mods', cats.loopmods);
+  applyUpgradesByPrefix('trinkets.', 'trinkets', cats.trinkets);
+  applyUpgradesByPrefix('iap.', 'iap', cats.iap);
 
   if (cats.gems) {
     diffApply('gems', () => store.gems, () => {
