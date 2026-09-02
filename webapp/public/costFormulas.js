@@ -420,6 +420,7 @@
     i105: { startValue: 5e20, multiplier: 3 }, i106: { startValue: 6e20, multiplier: 3 },
     i107: { startValue: 7e20, multiplier: 3 }, i108: { startValue: 8e20, multiplier: 3 },
     i109: { startValue: 9e20, multiplier: 3 }, i110: { startValue: 1e21, multiplier: 10 },
+    i114: { startValue: 2.5000000000000002e+28, multiplier: 10 }, i115: { startValue: 1e+29, multiplier: 5 },
   };
   function inscryptionCostAtLevel(id, level) {
     if (level <= 0) return 0;

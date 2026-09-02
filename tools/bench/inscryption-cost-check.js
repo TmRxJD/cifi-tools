@@ -46,15 +46,17 @@ function objectLiteralAt(src, from) {
 }
 
 const bundle = fs.readFileSync(bundlePath, 'utf8');
-// Anchor on the assignment rather than a bare `mV`, which also appears at call sites.
-const at = bundle.indexOf('mV={');
+// Anchor on the object's own shape (an i11 entry with startValue) rather than a minified
+// variable name, which churns between builds -- the earlier `mV={` anchor went stale when
+// the site was rebuilt and a different minified identifier ended up in that slot.
+const at = bundle.indexOf('{i11:{startValue:');
 if (at < 0) {
-  console.error('could not find the `mV=` cost map in this bundle -- the site may have been '
-    + 'rebuilt with different minified names. Search it for `startValue:` to find the new one.');
+  console.error('could not find the inscryption cost map in this bundle -- its shape may have '
+    + 'changed. Search it for `startValue:` to find the new one.');
   process.exit(1);
 }
 const liveSrc = objectLiteralAt(bundle, at);
-if (!liveSrc) { console.error('`mV=` found but its object literal is unbalanced'); process.exit(1); }
+if (!liveSrc) { console.error('cost map found but its object literal is unbalanced'); process.exit(1); }
 const live = vm.runInNewContext(`(${liveSrc})`);
 
 const oursSrc = fs.readFileSync(path.join(__dirname, '../../webapp/public/costFormulas.js'), 'utf8');
