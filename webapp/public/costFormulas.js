@@ -219,6 +219,20 @@
     // one number. We take the BASE cap and do not model the raise -- the raised value is not
     // stated alongside the flag, and offering levels the account cannot buy is the
     // silent-optimism failure this file exists to avoid.
+    //
+    // The raise mechanism itself is now confirmed (2026-09-02, disassembled directly from
+    // libil2cpp.so -- see tools/il2cpp-cli/analyze.py): `OuroRelics.get_FinalR5MaxLevel` returns
+    // base + GemNodes.FinalPower1Bonus4 + ExodusGemNodes.FinalExodus3Bonus2 (the exodus term
+    // appearing TWICE in R5's own sum -- not a disassembly error, the base getter it calls into
+    // already includes one copy, and R5 adds a second); `get_FinalR6MaxLevel` returns base +
+    // FinalPower1Bonus4 only, no Exodus term. FinalPower1Bonus4 is a trivial `gemLevel *
+    // perLevelConstant` read (Power gem tree, node 1) -- an ordinary linear gem raise, matching
+    // this project's existing GEM_TREES cost-scaling shape. FinalExodus3Bonus2 is NOT that simple:
+    // it sums four separate account counters (unresolved which), divides by a constant via a
+    // compiler-emitted integer-division idiom, and floors the result at 5 -- some kind of
+    // milestone/progression-derived value, not a flat per-level gem bonus. Still not modeled:
+    // the exact per-level constant for Power1Bonus4, and what FinalExodus3Bonus2's four inputs
+    // actually are, are both real gaps -- this only narrows WHERE to look, not the final number.
     r5: { maxLevel: 8, start: 1, add: 5, exp: 20, corr: [] },
     r6: { maxLevel: 8, start: 30, add: 20, exp: 9, corr: [] },
     r7: { maxLevel: 100, start: 2, add: 1.8, exp: 1.14, corr: [[1.01, 10], [1.02, 20]] },
