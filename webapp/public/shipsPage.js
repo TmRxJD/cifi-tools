@@ -267,6 +267,13 @@ const FLEET_BOOST_ITEMS = [
 // against a real node's in-game "Total Bonus" readout (Cradle's Mitosis Enhancements showed
 // x1.23m in-game; this tool's own formula, otherwise matching, only reached x175.30k at x3 --
 // x7 closes that exact gap).
+//
+// The SHAPE (not the literal x7/x3 numbers, which live in a runtime config field invisible to
+// static disassembly -- same limit as the relic bonus check above) is now independently
+// confirmed too (2026-09-02, disassembled: Badges.get_FinalBadge2Bonus and
+// get_FinalDarkBadge1Bonus, both `owned ? storedMultiplier : 1.0`, no per-level scaling) --
+// matching exactly what computeFleetBadgeMultipliers already does. Both badges checked follow
+// the identical pattern, for whatever that consistency is worth as corroboration.
 const FLEET_BADGE_ITEMS = [
   { key: 'badge_innovation', name: 'Innovation Badge', source: 'Badge', ships: [1, 2, 3, 4], mult: 7, note: 'Cradle, Auxesia, Zagreus & Hephaestus rank installs gain x7 power.' },
   { key: 'badge_dark_innovation', name: 'Dark Innovation Badge', source: 'Badge', ships: [1, 2, 3, 4, 5, 6, 7], mult: 3, note: 'All ship rank installs gain x3 power.' },
