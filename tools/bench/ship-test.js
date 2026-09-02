@@ -142,8 +142,14 @@ check('spends the whole budget unless the ship physically cannot absorb it', () 
     if (spent >= budget) continue;
     const capacity = Object.keys(CATALOG[shipId])
       .reduce((s, slot) => s + sb.nodeMaxLevel(shipId, slot), 0);
+    // AOTC below its threshold is deliberately excluded by the allocator itself (its payoff
+    // lands next loop, not this one, so the normal marginal-value engine can't score it) --
+    // "room left" has to honor that same exclusion, or a budget too small to reach any other
+    // open node reads as a bug instead of the documented policy it actually is.
+    const aotcSuppressed = shipId === AOTC.shipId && budget < AOTC.autoMaxAtBudget;
     const roomLeft = Object.keys(CATALOG[shipId])
-      .some((slot) => (levels[slot] || 0) < sb.nodeMaxLevel(shipId, slot)
+      .some((slot) => !(aotcSuppressed && slot === AOTC.slot)
+        && (levels[slot] || 0) < sb.nodeMaxLevel(shipId, slot)
         && !(CATALOG[shipId][slot].gateAtTotalInstalls > spent - (levels[slot] || 0)));
     if (roomLeft) {
       return `ship ${shipId} budget ${budget} weights ${wName}: stopped at ${spent} with capacity `

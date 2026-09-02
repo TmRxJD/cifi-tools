@@ -1,0 +1,310 @@
+{
+ "Aux01": {
+  "maxLevel": 1250,
+  "unlockThreshold": 0
+ },
+ "Aux02": {
+  "maxLevel": 75,
+  "unlockThreshold": 5
+ },
+ "Aux03": {
+  "maxLevel": 75,
+  "unlockThreshold": 5
+ },
+ "Aux04": {
+  "maxLevel": 100,
+  "unlockThreshold": 25
+ },
+ "Aux05": {
+  "maxLevel": 100,
+  "unlockThreshold": 25
+ },
+ "Aux06": {
+  "maxLevel": 100,
+  "unlockThreshold": 50
+ },
+ "Aux07": {
+  "maxLevel": 100,
+  "unlockThreshold": 50
+ },
+ "Aux08": {
+  "maxLevel": 125,
+  "unlockThreshold": 100
+ },
+ "Aux09": {
+  "maxLevel": 150,
+  "unlockThreshold": 100
+ },
+ "Aux10": {
+  "maxLevel": 50,
+  "unlockThreshold": 100
+ },
+ "Aux11": {
+  "maxLevel": 150,
+  "unlockThreshold": 100
+ },
+ "Cra01": {
+  "maxLevel": 1250,
+  "unlockThreshold": 0
+ },
+ "Cra02": {
+  "maxLevel": 125,
+  "unlockThreshold": 5
+ },
+ "Cra03": {
+  "maxLevel": 125,
+  "unlockThreshold": 5
+ },
+ "Cra04": {
+  "maxLevel": 100,
+  "unlockThreshold": 25
+ },
+ "Cra05": {
+  "maxLevel": 100,
+  "unlockThreshold": 25
+ },
+ "Cra06": {
+  "maxLevel": 50,
+  "unlockThreshold": 40
+ },
+ "Cra07": {
+  "maxLevel": 75,
+  "unlockThreshold": 40
+ },
+ "Cra08": {
+  "maxLevel": 500,
+  "unlockThreshold": 100
+ },
+ "Cra09": {
+  "maxLevel": 250,
+  "unlockThreshold": 100
+ },
+ "Cra10": {
+  "maxLevel": 150,
+  "unlockThreshold": 100
+ },
+ "Cra11": {
+  "maxLevel": 200,
+  "unlockThreshold": 100
+ },
+ "Dem01": {
+  "maxLevel": 25,
+  "unlockThreshold": 0
+ },
+ "Dem02": {
+  "maxLevel": 1250,
+  "unlockThreshold": 1
+ },
+ "Dem03": {
+  "maxLevel": 125,
+  "unlockThreshold": 1
+ },
+ "Dem04": {
+  "maxLevel": 125,
+  "unlockThreshold": 10
+ },
+ "Dem05": {
+  "maxLevel": 125,
+  "unlockThreshold": 10
+ },
+ "Dem06": {
+  "maxLevel": 25,
+  "unlockThreshold": 25
+ },
+ "Dem07": {
+  "maxLevel": 50,
+  "unlockThreshold": 25
+ },
+ "Dem08": {
+  "maxLevel": 25,
+  "unlockThreshold": 100
+ },
+ "Dem09": {
+  "maxLevel": 125,
+  "unlockThreshold": 100
+ },
+ "Dem10": {
+  "maxLevel": 625,
+  "unlockThreshold": 100
+ },
+ "Dem11": {
+  "maxLevel": 275,
+  "unlockThreshold": 100
+ },
+ "Heph01": {
+  "maxLevel": 1250,
+  "unlockThreshold": 0
+ },
+ "Heph02": {
+  "maxLevel": 25,
+  "unlockThreshold": 5
+ },
+ "Heph03": {
+  "maxLevel": 25,
+  "unlockThreshold": 5
+ },
+ "Heph04": {
+  "maxLevel": 75,
+  "unlockThreshold": 20
+ },
+ "Heph05": {
+  "maxLevel": 75,
+  "unlockThreshold": 20
+ },
+ "Heph06": {
+  "maxLevel": 25,
+  "unlockThreshold": 60
+ },
+ "Heph07": {
+  "maxLevel": 100,
+  "unlockThreshold": 60
+ },
+ "Heph08": {
+  "maxLevel": 200,
+  "unlockThreshold": 100
+ },
+ "Heph09": {
+  "maxLevel": 425,
+  "unlockThreshold": 100
+ },
+ "Heph10": {
+  "maxLevel": 425,
+  "unlockThreshold": 100
+ },
+ "Heph11": {
+  "maxLevel": 425,
+  "unlockThreshold": 100
+ },
+ "Koi01": {
+  "maxLevel": 1250,
+  "unlockThreshold": 0
+ },
+ "Koi02": {
+  "maxLevel": 25,
+  "unlockThreshold": 5
+ },
+ "Koi03": {
+  "maxLevel": 25,
+  "unlockThreshold": 5
+ },
+ "Koi04": {
+  "maxLevel": 25,
+  "unlockThreshold": 10
+ },
+ "Koi05": {
+  "maxLevel": 25,
+  "unlockThreshold": 10
+ },
+ "Koi06": {
+  "maxLevel": 50,
+  "unlockThreshold": 30
+ },
+ "Koi07": {
+  "maxLevel": 50,
+  "unlockThreshold": 30
+ },
+ "Koi08": {
+  "maxLevel": 300,
+  "unlockThreshold": 100
+ },
+ "Koi09": {
+  "maxLevel": 150,
+  "unlockThreshold": 100
+ },
+ "Koi10": {
+  "maxLevel": 200,
+  "unlockThreshold": 100
+ },
+ "Koi11": {
+  "maxLevel": 750,
+  "unlockThreshold": 100
+ },
+ "Zag01": {
+  "maxLevel": 1250,
+  "unlockThreshold": 0
+ },
+ "Zag02": {
+  "maxLevel": 50,
+  "unlockThreshold": 5
+ },
+ "Zag03": {
+  "maxLevel": 50,
+  "unlockThreshold": 5
+ },
+ "Zag04": {
+  "maxLevel": 100,
+  "unlockThreshold": 20
+ },
+ "Zag05": {
+  "maxLevel": 100,
+  "unlockThreshold": 20
+ },
+ "Zag06": {
+  "maxLevel": 100,
+  "unlockThreshold": 40
+ },
+ "Zag07": {
+  "maxLevel": 100,
+  "unlockThreshold": 40
+ },
+ "Zag08": {
+  "maxLevel": 150,
+  "unlockThreshold": 100
+ },
+ "Zag09": {
+  "maxLevel": 50,
+  "unlockThreshold": 100
+ },
+ "Zag10": {
+  "maxLevel": 125,
+  "unlockThreshold": 100
+ },
+ "Zag11": {
+  "maxLevel": 100,
+  "unlockThreshold": 100
+ },
+ "Zeus01": {
+  "maxLevel": 1250,
+  "unlockThreshold": 0
+ },
+ "Zeus02": {
+  "maxLevel": 5,
+  "unlockThreshold": 0
+ },
+ "Zeus03": {
+  "maxLevel": 5,
+  "unlockThreshold": 0
+ },
+ "Zeus04": {
+  "maxLevel": 75,
+  "unlockThreshold": 2
+ },
+ "Zeus05": {
+  "maxLevel": 100,
+  "unlockThreshold": 2
+ },
+ "Zeus06": {
+  "maxLevel": 75,
+  "unlockThreshold": 50
+ },
+ "Zeus07": {
+  "maxLevel": 250,
+  "unlockThreshold": 50
+ },
+ "Zeus08": {
+  "maxLevel": 250,
+  "unlockThreshold": 100
+ },
+ "Zeus09": {
+  "maxLevel": 250,
+  "unlockThreshold": 100
+ },
+ "Zeus10": {
+  "maxLevel": 250,
+  "unlockThreshold": 100
+ },
+ "Zeus11": {
+  "maxLevel": 250,
+  "unlockThreshold": 100
+ }
+}
