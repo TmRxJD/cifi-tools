@@ -475,9 +475,9 @@ function effectResources(effect) {
   // ALSO pushed here so every resource-totals consumer (computeResourceBonuses/nodeOwnBonusPct)
   // folds an All-Gens node's contribution into each tier's OWN total individually, instead of
   // bucketing it under one separate "All Gens" pseudo-resource -- each generator tier needs to
-  // be factored separately (not lumped together) for Meltdown to correctly apply to only MK1's
-  // share of an All-Gens bonus in the displayed totals, same as it already does in the
-  // optimizer's internal ranking (see poolAdjustedNodeValue).
+  // be factored separately (not lumped together) for Meltdown to correctly apply per-tier to an
+  // All-Gens bonus in the displayed totals, same as it already does in the optimizer's internal
+  // ranking (see poolAdjustedNodeValue).
   if (/all generators|all gens\b/i.test(effect)) {
     tags.push('allGens');
     GEN_TIERS.forEach((n) => tags.push(`mk${n}`));
@@ -581,7 +581,8 @@ function computeResourceBonuses(shipId, levels) {
     // 'allGens' is a detection-only marker (see effectResources) -- its equivalent contribution
     // is already fully captured via the individual mk1..mk8 tags pushed alongside it, so it's
     // skipped here to avoid a redundant separate "All Gens" total that would double-count
-    // against each tier's own total and can't correctly reflect MK1-only Meltdown anyway.
+    // against each tier's own total (and would collapse the per-tier Meltdown melt into one
+    // combined figure instead of each tier's own).
     effectResources(meta.effect).forEach((res) => { if (res === 'allGens') return; mults[res] = (mults[res] || 1) * factor; });
   });
   // Fleet Boost items with a pctEffect (Rank Benefits / Crew Motivation Modules, Rule of the
@@ -1543,29 +1544,24 @@ function nodeTiePriority(tags) {
 // nodes happen to run several orders of magnitude smaller per-point than its Cells nodes). That
 // mismatch was the real bug in an earlier version of this optimizer: equal 50/50 weights still
 // dumped everything into Cells, because raw pct magnitude silently dominated the weight.
-// Meltdown -- confirmed account-side to affect ONLY MK1 output, not MK2-8 (an earlier version
-// applied the same exponent to every generator tier, which was wrong).
-//
-// A conflicting data point exists and is deliberately NOT followed: SirRed's CIFI Ouroboros
-// Helper Tool (decompiled 2026-09-02, see tools/bench/sirred-ship-check.js) raises every node
-// whose effect touches specific MK tiers to `meltdownValue^tierCount` -- e.g. Demeter's Ins4/5/7
-// (each a 2-tier node) get `^meltdown^2`, Ins8 (all-gens) gets `^meltdown^gensUnlocked` -- and
-// this shape is identical across at least Koios and Demeter, so it is not a one-ship fluke in
-// that tool. It still doesn't override direct account observation: that tool is an early
-// hobby project whose own comment section documents several acknowledged bugs/approximations,
-// and the game's own IL2CPP dump has no method bodies and no per-tier data to arbitrate with
-// (checked: zero Pow/meltdown formula hits, no dedicated per-MK-tier meltdown field). If this
-// ever gets re-tested in-game, that conflicting formula shape is the thing to check against.
-// Direct Cells/Shards/RP/MP/Academy/Materials bonuses, and MK2-8, are all Meltdown-immune and
-// use a plain un-melted
-// ratio (exponent 1). MK1's own real cumulative pool (this account's actual current total, from
-// crew/gear/research/real installed levels, not a fictional "0") gets raised to the Meltdown
-// exponent, so an MK1 node's real marginal value depends on how saturated MK1 already is. An
-// "All Gens" node touches all 8 tiers at once, so its value is the product of each tier's own
-// marginal ratio -- only the MK1 factor is melted, MK2-8 factors are plain ratios. This uses
-// ONLY real account data (current per-tier totals, the stored Meltdown value) -- no invented
-// constants. It does NOT change what budget/plan the optimizer outputs (that's still a from-zero
-// simulation per the earlier fix) -- it only changes how a candidate node's real relative value
+// Meltdown melts EVERY generator tier's output, not just MK1 -- REVERSED 2026-09-02. This file
+// used to claim the opposite ("confirmed account-side to affect ONLY MK1"), which a direct
+// disassembly of the game's own libil2cpp.so (x86_64 -- this build is the emulator target, not
+// ARM64) disproved: GeneratorManager's get_MK1Production/get_MK2Production/get_MK5Production are
+// byte-identical at the relevant site -- load own-tier production into xmm0, load
+// `this->OR->FinalMeltdownPower` into xmm1 (OuroborosResetter via GeneratorManager+0x118, the
+// field itself at OuroborosResetter+0x378), check a flag, call BigDouble.Pow(xmm0, xmm1). No
+// per-tier difference at any of the three checked. SirRed's CIFI Ouroboros Helper Tool
+// (decompiled -- Mono, not IL2CPP, so ilspycmd reads it directly) independently agrees: its
+// formulas raise every MK-tier-touching node to `meltdownValue^tierCount` across every ship
+// checked (Koios, Demeter, Cradle). Direct Cells and non-generator resources (Shards/RP/MP/
+// Academy/Materials bonuses that don't touch a tier) remain Meltdown-immune, plain ratio
+// (exponent 1) -- only generator-tier output is affected, but that now means ALL of MK1-8, not
+// MK1 alone. An "All Gens" node touches all 8 tiers at once, so its value is the product of
+// each tier's own marginal ratio, each melted the same way. This uses ONLY real account data
+// (current per-tier totals, the stored Meltdown value) -- no invented constants. It does NOT
+// change what budget/plan the optimizer outputs (that's still a from-zero simulation per the
+// earlier fix) -- it only changes how a candidate node's real relative value
 // is judged, which is a different question from what the final plan displays.
 function nodeLinearIncrement(shipId, slot) {
   const meta = SHIP_NODE_CATALOG[shipId]?.[slot];
@@ -1661,15 +1657,22 @@ function poolAdjustedNodeValue(shipId, slot, pools, runLength) {
     const base = pools.cells || MELTDOWN_POOL_EPS;
     return (((base + increment) / base - 1) * 100) * bias.cells;
   }
-  // Meltdown only melts MK1 -- confirmed account-side, corrects an earlier version that applied
-  // the same exponent to every generator tier. Every other tier (MK2-8, and the MK2-8 slice of
-  // an All-Gens node) uses a plain, un-melted ratio (exponent 1), same as Direct Cells above.
+  // Meltdown melts EVERY generator tier, not just MK1 -- reversed 2026-09-02 from the opposite
+  // claim this comment used to make. That earlier "MK1-only" model was disassembly-checked
+  // directly against libil2cpp.so (x86_64, not ARM64 -- this is an emulator build) and disproven:
+  // GeneratorManager's get_MK1Production, get_MK2Production and get_MK5Production are BYTE-
+  // IDENTICAL in shape at the relevant site -- each loads its own tier's raw production into
+  // xmm0, loads `this->OR->FinalMeltdownPower` (OuroborosResetter, offsets 0x118 then 0x378) into
+  // xmm1, checks one flag, then calls BigDouble.Pow(xmm0, xmm1). Checked at all three tiers with
+  // no difference in the pattern; nothing suggests MK6-8 differ. This also matches SirRed's CIFI
+  // Ouroboros Helper Tool's own decompiled formulas (Mono, not IL2CPP -- ilspycmd reads it
+  // directly), which apply meltdownValue^tierCount to every MK-tier-touching node across every
+  // ship checked (Koios, Demeter, Cradle) -- two independent sources now agree.
   const affectedTiers = isAllGens ? GEN_TIERS.map((n) => `mk${n}`) : genTiers;
   let ratio = 1;
   affectedTiers.forEach((tier) => {
     const base = pools[tier] || MELTDOWN_POOL_EPS;
-    const exponent = tier === 'mk1' ? meltdown : 1;
-    ratio *= Math.pow((base + increment) / base, exponent);
+    ratio *= Math.pow((base + increment) / base, meltdown);
   });
   return ((ratio - 1) * 100) * bias.gen;
 }
