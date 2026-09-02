@@ -370,21 +370,28 @@ function mapSaveToStore(save) {
   // Creation gem investment had those bonuses silently ignored by the evaluator on every
   // import, exactly the same class of bug as the loopmods/trinkets/iap gap fixed earlier.
   //
-  // Attraction's GU-index -> named-upgrade order is CONFIRMED, not assumed: this account's real
-  // AttractionQualityLevel is 2, and hunterDefs.js's own `unlocks` table (itself extracted from
-  // the live bundle) gates borge-loot-bonus at level 1 and ozzy-loot-bonus at level 2 -- exactly
-  // the two upgrades reachable at this account's real level, and exactly AttractionGU1/GU2 are
-  // the only two non-zero slots in the save (GU3-6, gated at level 3+, all read 0). GU-index
-  // therefore matches declaration/unlock order for Attraction.
-  //
-  // Creation is NOT wired in, and should not be guessed at: this account's CreationQualityLevel
-  // is 1, yet all 3 of this tool's known Creation upgrades (borge/ozzy/knox-stat-bonus) gate at
-  // level 4 -- so CreationGU1's real nonzero value (3) cannot be any of them. Creation has 11
-  // raw GU slots in the save vs only 4 named here (3 sim + mech-bonus-cap), so most of that
-  // tree's upgrades are simply not identified yet. Wiring GU1 to the wrong upgrade would be
-  // worse than leaving it unmapped -- exactly the trap the inscryption slot mapping fell into
-  // once already.
-  const ATTRACTION_GU_ORDER = ['borge-loot-bonus', 'ozzy-loot-bonus', 'catch-up-power-borge-ozzy', 'knox-loot-bonus', 'catch-up-power-knox'];
+  // GU-index -> named-upgrade order for BOTH trees is now CONFIRMED directly from the live
+  // cifi-tools.com bundle's own gem-tree config array (`index-*.js`, each tree's literal
+  // `upgrades:[...]` list) -- not inferred from gating alone. Cross-checked against a real
+  // account both ways:
+  //   Attraction: array is [borge-loot-bonus(unlock1), ozzy-loot-bonus(2), catch-up-power-
+  //     borge-ozzy(3), knox-loot-bonus(4), catch-up-power-knox(4), ship-evo-bonus(4)] -- 6
+  //     entries, matching AttractionGU1-6 exactly. The account's real AttractionQualityLevel
+  //     is 2, and exactly GU1/GU2 (the two upgrades reachable at level 2) are non-zero.
+  //   Creation: array is [mech-bonus-cap(1), hardware-bonus(2), software-bonus(2), cells-
+  //     bonus(3), mp-bonus(3), shards-bonus(3), rp-bonus(3), f-trinket-tier-bonus(4), borge-
+  //     stat-bonus(4), ozzy-stat-bonus(4), knox-stat-bonus(4)] -- 11 entries, matching
+  //     CreationGU1-11 exactly. The account's real CreationQualityLevel is 1, and GU1
+  //     (mech-bonus-cap, the ONLY upgrade reachable at level 1) is exactly the one non-zero
+  //     slot -- which also proves the earlier guess (that GU1-3 might be Borge/Ozzy/Knox Stat
+  //     Bonus) would have been wrong: those three are actually GU9-11.
+  //   Only the fields the live bundle itself marks `hunter:true` are hunter-sim-relevant and
+  //   wired in here. The rest (hardware/software/cells/mp/shards/rp-bonus, f-trinket-tier-
+  //   bonus, mech-bonus-cap, Attraction's ship-evo-bonus) affect fleet/economy systems this
+  //   tool doesn't model yet -- out of scope for the Hunter Sim, not a mapping gap.
+  const ATTRACTION_GU_ORDER = ['borge-loot-bonus', 'ozzy-loot-bonus', 'catch-up-power-borge-ozzy', 'knox-loot-bonus', 'catch-up-power-knox']; // GU6 ship-evo-bonus omitted: not hunter-relevant
+  const CREATION_GU_ORDER = [null, null, null, null, null, null, null, null, 'borge-stat-bonus', 'ozzy-stat-bonus', 'knox-stat-bonus']; // GU1-8 omitted: not hunter-relevant
+  const GU_ORDER_BY_TREE = { attraction: ATTRACTION_GU_ORDER, creation: CREATION_GU_ORDER };
   const gems = {};
   Object.entries(GEM_TREE_SAVE_PREFIX).forEach(([treeKey, prefix]) => {
     const level = save[`${prefix}QualityLevel`];
@@ -399,13 +406,15 @@ function mapSaveToStore(save) {
       }
     }
     gems[treeKey] = { level: level !== undefined ? realNum(level) : 0, nodes };
-    if (treeKey === 'attraction') {
+    const guOrder = GU_ORDER_BY_TREE[treeKey];
+    if (guOrder) {
       const upgrades = {};
-      ATTRACTION_GU_ORDER.forEach((key, i) => {
-        const v = save[`AttractionGU${i + 1}Level`];
+      guOrder.forEach((key, i) => {
+        if (!key) return;
+        const v = save[`${prefix}GU${i + 1}Level`];
         if (v !== undefined) upgrades[key] = realNum(v);
       });
-      if (Object.keys(upgrades).length) gems.attraction.upgrades = upgrades;
+      if (Object.keys(upgrades).length) gems[treeKey].upgrades = upgrades;
     }
   });
 
