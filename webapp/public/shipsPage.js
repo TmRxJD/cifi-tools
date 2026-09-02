@@ -1537,8 +1537,20 @@ function nodeTiePriority(tags) {
 // mismatch was the real bug in an earlier version of this optimizer: equal 50/50 weights still
 // dumped everything into Cells, because raw pct magnitude silently dominated the weight.
 // Meltdown -- confirmed account-side to affect ONLY MK1 output, not MK2-8 (an earlier version
-// applied the same exponent to every generator tier, which was wrong). Direct Cells/Shards/RP/
-// MP/Academy/Materials bonuses, and MK2-8, are all Meltdown-immune and use a plain un-melted
+// applied the same exponent to every generator tier, which was wrong).
+//
+// A conflicting data point exists and is deliberately NOT followed: SirRed's CIFI Ouroboros
+// Helper Tool (decompiled 2026-09-02, see tools/bench/sirred-ship-check.js) raises every node
+// whose effect touches specific MK tiers to `meltdownValue^tierCount` -- e.g. Demeter's Ins4/5/7
+// (each a 2-tier node) get `^meltdown^2`, Ins8 (all-gens) gets `^meltdown^gensUnlocked` -- and
+// this shape is identical across at least Koios and Demeter, so it is not a one-ship fluke in
+// that tool. It still doesn't override direct account observation: that tool is an early
+// hobby project whose own comment section documents several acknowledged bugs/approximations,
+// and the game's own IL2CPP dump has no method bodies and no per-tier data to arbitrate with
+// (checked: zero Pow/meltdown formula hits, no dedicated per-MK-tier meltdown field). If this
+// ever gets re-tested in-game, that conflicting formula shape is the thing to check against.
+// Direct Cells/Shards/RP/MP/Academy/Materials bonuses, and MK2-8, are all Meltdown-immune and
+// use a plain un-melted
 // ratio (exponent 1). MK1's own real cumulative pool (this account's actual current total, from
 // crew/gear/research/real installed levels, not a fictional "0") gets raised to the Meltdown
 // exponent, so an MK1 node's real marginal value depends on how saturated MK1 already is. An
