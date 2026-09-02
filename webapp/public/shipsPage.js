@@ -368,10 +368,22 @@ function nodeIconPath(shipId, code) {
   return prefix ? `assets/nodes/${prefix}${code}.png` : null;
 }
 
-// Which global RU registry category (see shipSchema.js) each ship's 11-slot grid reads from.
-// Confirmed for ships 1 and 5 via live diffs. Ships 2-4,6,7 are guesses based on process of
-// elimination + thematic fit with their wiki node names -- NOT yet confirmed via a diff.
-const SHIP_CATEGORY = { 1: 'Gen', 2: 'Tech', 3: 'Loop', 4: 'Auto', 5: 'Shard', 6: 'Research', 7: 'Academy' };
+// Which global RU registry category (see shipSchema.js) each ship's install grid reads from.
+// CONFIRMED for all 8 ships (2026-09-02) by disassembling each category's BuyRU1<Category>()
+// handler directly against libil2cpp.so (capstone; r2/Ghidra were blocked by this machine's
+// Application Control policy at the time) and reading which Ship{n}RankPoints struct offset
+// each one decrements -- cross-checked against dump.cs's own field-offset comments, e.g.
+// BuyRU1Shard decrements MasterManager+0x4AF8, which dump.cs declares as `Ship5RankPoints`. This
+// also independently confirms the earlier live-diff results for ships 1 and 5, and settles 2-4/6/7
+// which were previously only a thematic guess. Each category has 13 numbered slots in the game's
+// own data (tools/reference/research.json), not 11 -- the 11-slot grid seen in the save's
+// Ship{n}RU{1-11}AutomationLevelGoal fields is an auto-buy TARGET setting, a different thing (see
+// shipSchema.js). Ship 8 (Ouroboros) owns the 8th category, Ouroboros -- not in SHIP_NODE_CATALOG
+// above since it has no wiki page (nodes are largely unreleased; see research.json's Ouroboros
+// tree for the 5 real, low-cap nodes that do exist).
+const SHIP_CATEGORY = {
+  1: 'Gen', 2: 'Tech', 3: 'Loop', 4: 'Auto', 5: 'Shard', 6: 'Research', 7: 'Academy', 8: 'Ouroboros',
+};
 
 // Rows as tapped on the real in-game grid while diffing Ship1/Ship5 -- an 11-node 4/3/4
 // honeycomb (row 1 = grid positions 1-4, row 2 staggered = 5-7, row 3 = 8-11). GRID_TO_CODE

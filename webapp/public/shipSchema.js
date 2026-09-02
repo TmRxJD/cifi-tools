@@ -20,31 +20,79 @@
 //     `RU{id}{Category}Level` (e.g. installing 1 point into Ship5's "On-Site Printing Vehicles"
 //     node changed `RU11ShardLevel` 2->3 and nothing else under `Ship5RU*`). Cost per install
 //     confirmed flat at 1 ship rank point regardless of current level.
-//   UNCONFIRMED: the full id mapping from each ship's 11-node grid position to its RU{id}
-//     (only RU11 = Ship5 grid position 4 "On-Site Printing Vehicles" confirmed so far -- one
-//     diff per node is needed per ship, each spending a real, non-refundable rank point).
-//     Node names/descriptions/max-levels for all 11 of Ship5's ("Demeter") grid positions were
-//     read directly from the game's own upgrade-detail popups (in order): 1 "Liquid Extraction
-//     Tech" (+2.5% all Generator output/crew, max 25), 2 "Canned Mineral Water" (+0.02%
-//     MK1+MK4 output/Op Completed/crew, max 125), 3 "The Hexagonal Advantage" (+0.001% Mod
-//     Points/Op Completed/crew, max 25), 4 "On-Site Printing Vehicles" = RU11 (+3% Cells/Op
-//     Completed/crew, max 125), 5 "Better Mineral Extraction" (+1% Shards/crew, max 1250),
-//     6 "Ahead of the Curve" (+1 completed op/crew on new-run start, max 25), 7 "Rare Organism
-//     Detection" (+0.2% Cells/Op Completed/crew, max 125), 8 "On-Site GPR Hotspot Scanners"
-//     (+0.08% Shards/Op Completed/crew, max 625), 9 "Shardlytics" (+0.1% MK3+MK6 output/Op
-//     Completed/crew, max 50), 10 "Bi-Product Goo" (+0.02% MK2+MK5 output/Op Completed/crew,
-//     max 125), 11 "Phylogenetic Analysis" (+0.04% Research Points/Op Completed/crew, max 275).
-//     Do NOT assume other ships share this exact grid layout/order -- verify per ship.
+//   RESOLVED (2026-09-02, via direct disassembly -- see tools/bench/extract-research.js's header
+//     for the full method): there is no shared 11-slot grid every ship picks from. EACH ship owns
+//     exactly ONE of 8 categories outright and spends only its OWN Ship{n}RankPoints on it:
+//       Ship1 Gen | Ship2 Tech | Ship3 Loop | Ship4 Auto | Ship5 Shard | Ship6 Research |
+//       Ship7 Academy | Ship8 Ouroboros
+//     confirmed by disassembling each category's BuyRU1<Category>() handler directly against
+//     libil2cpp.so (capstone, no r2/Ghidra -- this machine's Application Control policy blocks
+//     running radare2.exe) and reading which Ship{n}RankPoints struct offset each one decrements
+//     -- cross-checked against dump.cs's own field-offset comments, e.g. BuyRU1Shard decrements
+//     MasterManager+0x4AF8 which dump.cs declares as `Ship5RankPoints`. Independently confirmed
+//     by the node names below: Ship5's ("Demeter") 11 real nodes are ALL shard-themed, matching
+//     Ship5 = Shard exactly. Each category has 13 numbered slots (not 11 -- the earlier count was
+//     from the save's Ship{n}RU{1-11}AutomationLevelGoal fields, which cap at 11; the real
+//     category trees in tools/reference/research.json go to 13). `Requirement` on each slot is the
+//     level needed in the PREVIOUS slot to unlock it (that ship's own dependency chain, not
+//     cross-ship). Node names/descriptions for Ship5 specifically were read directly from the
+//     game's own upgrade-detail popups (in order): 1 "Liquid Extraction Tech" (+2.5% all Generator
+//     output/crew, max 25), 2 "Canned Mineral Water" (+0.02% MK1+MK4 output/Op Completed/crew,
+//     max 125), 3 "The Hexagonal Advantage" (+0.001% Mod Points/Op Completed/crew, max 25),
+//     4 "On-Site Printing Vehicles" (+3% Cells/Op Completed/crew, max 125), 5 "Better Mineral
+//     Extraction" (+1% Shards/crew, max 1250), 6 "Ahead of the Curve" (+1 completed op/crew on
+//     new-run start, max 25), 7 "Rare Organism Detection" (+0.2% Cells/Op Completed/crew, max 125),
+//     8 "On-Site GPR Hotspot Scanners" (+0.08% Shards/Op Completed/crew, max 625), 9 "Shardlytics"
+//     (+0.1% MK3+MK6 output/Op Completed/crew, max 50), 10 "Bi-Product Goo" (+0.02% MK2+MK5
+//     output/Op Completed/crew, max 125), 11 "Phylogenetic Analysis" (+0.04% Research Points/Op
+//     Completed/crew, max 275). Slots 12-13 exist in the cost table but have no popup reading yet.
+//     Do NOT assume other ships' categories share this exact node ORDER -- only Ship5/Shard has
+//     been read from in-game popups; the other 7 categories' node names are still unconfirmed
+//     (the cost/cap numbers in research.json are real regardless of the name).
 //   NOT MAPPED YET (aggregate stats only, no per-item breakdown found): loop mods
 //     (AchievementLoopModsLevel etc. are totals/achievements, not a per-mod level list),
 //     shard milestones (same -- TotalShardMilestones is an aggregate, not itemized).
 
 const SHIP_IDS = [1, 2, 3, 4, 5, 6, 7, 8];
 
-// Slots 1-11 are the RU automation goals every ship exposes (`Ship{n}RU{k}AutomationLevelGoal`
-// / `Ship{n}AppliedRU{k}AutomationLevelGoal`). This is distinct from the global RU registry
-// below (RU0..RU~110), which tracks each RU node's own Active/Level/CurrentDrain state.
+// Slots 1-11 are the RU automation-GOAL fields every ship exposes (`Ship{n}RU{k}AutomationLevelGoal`
+// / `Ship{n}AppliedRU{k}AutomationLevelGoal`) -- an auto-buy target setting, NOT the real install
+// level (see the top-of-file note). This is distinct from the global RU registry below
+// (RU0..RU~110, ResearchLaboratory's tree), which is itself distinct again from SHIP_CATEGORY's
+// per-ship trees (FleetManager's, 13 real slots each) -- three separate "RU"-prefixed id spaces.
 const SHIP_RU_SLOTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+
+// Each ship owns exactly one category tree and spends only its own RankPoints on it -- see the
+// RESOLVED note above for how this was confirmed. 13 numbered slots per category (tools/reference/
+// research.json's shipTrees), read from the save as `RU{slot}{Category}Level`.
+//
+// The shipId -> category map itself lives in shipsPage.js's `SHIP_CATEGORY` (window.ShipData.
+// SHIP_CATEGORY), not here -- it was already established there (with a wiki-cross-referenced
+// node catalog depending on it) before this file's own version was added, and index.html loads
+// this file first, so shipsPage.js is the one that has to be the single source of truth. Read it
+// lazily inside the function below rather than caching it at load time.
+const SHIP_CATEGORY_SLOTS = 13;
+
+/**
+ * Extracts a ship's own category-tree levels (its real installed upgrades, spent from its own
+ * RankPoints) -- e.g. mapSaveToShipCategoryTree(save, 5) reads Ship5's Shard tree via
+ * RU{1..13}ShardLevel. Distinct from mapSaveToShips' ruGoal/ruApplied, which are only the
+ * auto-buy TARGET setting, not the actual installed level.
+ * @param {Object} save
+ * @param {number} shipId 1-8
+ * @returns {Object<number, number>} slot -> installed level
+ */
+function mapSaveToShipCategoryTree(save, shipId) {
+  const category = window.ShipData.SHIP_CATEGORY[shipId];
+  if (!category) throw new Error(`unknown ship id ${shipId}`);
+  const levels = {};
+  for (let slot = 1; slot <= SHIP_CATEGORY_SLOTS; slot++) {
+    const v = save[`RU${slot}${category}Level`];
+    if (v !== undefined) levels[slot] = realNum(v);
+  }
+  return levels;
+}
+window.mapCifiSaveToShipCategoryTree = mapSaveToShipCategoryTree;
 
 function realNum(v) {
   if (v == null) return 0;
