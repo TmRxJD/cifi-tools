@@ -10,8 +10,8 @@ same question into: name the methods, read the C.
     python tools/il2cpp-cli/decompile.py --targets tools/il2cpp-cli/targets.json
     python tools/il2cpp-cli/decompile.py --list 'GeneratorManager..get_MK'
 
-Output goes to tools/gamefiles/apk-<ver>/decompiled/<label>.c (gitignored with the rest of
-gamefiles). Re-running reuses the saved Ghidra project, so only the first run pays import cost.
+Output and the Ghidra project go to B:\huntersim-re (override with HUNTERSIM_SCRATCH) -- a
+project is ~215MB per run and must not sit on the system drive. Re-running reuses the project.
 
 SETUP (one time). Needs Ghidra 11.3+ (PyGhidra is in-tree from 11.3; 10.x will not work) and a
 JDK 21. Point GHIDRA_INSTALL_DIR at the install -- this file falls back to the known local path.
@@ -49,11 +49,19 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from dumpindex import DumpIndex                                    # noqa: E402
 
-DEFAULT_GHIDRA = r"E:\tools\ghidra_12.1.3_PUBLIC"
+DEFAULT_GHIDRA = os.environ.get("GHIDRA_INSTALL_DIR", r"E:\tools\ghidra_12.1.3_PUBLIC")
 GAMEFILES = os.path.join(HERE, "..", "gamefiles", "apk-0.7.3.54")
 DEFAULT_SO = os.path.join(GAMEFILES, "extracted", "libil2cpp.so")
-DEFAULT_OUT = os.path.join(GAMEFILES, "decompiled")
-PROJECT_DIR = os.path.join(GAMEFILES, "ghidra-project")
+
+# A Ghidra project for a 58MB libil2cpp.so is ~215MB, and every run of this tool makes one. That
+# does not belong on the system drive: C: on this machine hit 0.2GB free after three runs. B: is
+# the big scratch volume -- override with HUNTERSIM_SCRATCH if yours differs. Only the decompiled
+# .c files (a few hundred KB) come back into the repo, and even those are gitignored under
+# tools/gamefiles/.
+SCRATCH = os.environ.get("HUNTERSIM_SCRATCH") or (
+    r"B:\huntersim-re" if os.path.isdir("B:\\") else os.path.join(GAMEFILES, "scratch"))
+DEFAULT_OUT = os.path.join(SCRATCH, "decompiled")
+PROJECT_DIR = os.path.join(SCRATCH, "ghidra-project")
 PROJECT_NAME = "cifi_il2cpp"
 
 
@@ -102,6 +110,23 @@ def main():
 
     idx = DumpIndex()
 
+    # Deterministic span for a callee that has no dump.cs entry (IL2CPP runtime helpers): scan
+    # forward with capstone to its first RET. Ghidra's own flow-following alternative is unbounded
+    # and does not terminate usefully on this binary.
+    _elf_holder = {}
+
+    def span_to_ret(addr, limit=0x600):
+        try:
+            if "elf" not in _elf_holder:
+                from analyze import Elf
+                _elf_holder["elf"] = Elf(args.so)
+            for insn in _elf_holder["elf"].disasm_function(addr, addr + limit):
+                if insn.mnemonic == "ret":
+                    return (insn.address - addr) + insn.size
+        except Exception:                                              # noqa: BLE001
+            pass
+        return 0x80        # no RET found in range -- fall back, and the warning will say so
+
     if args.list_pattern:
         for rva, _o, name, sig in idx.find(args.list_pattern)[:100]:
             print(f"0x{rva:X}  {name}\n           {sig}")
@@ -112,7 +137,10 @@ def main():
 
     targets = resolve_targets(args, idx)
     os.makedirs(args.out, exist_ok=True)
-    os.makedirs(PROJECT_DIR, exist_ok=True)
+    # Deliberately do NOT pre-create PROJECT_DIR's project: pyghidra calls
+    # GhidraProject.createProject(...) and throws "Unable to delete test project" if it finds a
+    # directory it did not make. Create only the parent.
+    os.makedirs(os.path.dirname(PROJECT_DIR) or ".", exist_ok=True)
 
     if not os.path.isdir(args.ghidra):
         print(f"ERROR: Ghidra not found at {args.ghidra}. Set GHIDRA_INSTALL_DIR.", file=sys.stderr)
@@ -137,17 +165,49 @@ def main():
                 "bool": BooleanDataType(), "int": IntegerDataType(),
                 "long": LongDataType()}.get(kind, PointerDataType())
 
-    def declare_callees(program, fm, flat, idx, entry, span, monitor):
-        """Give every address this function CALLs a named, minimal function stub.
+    def apply_signature(program, fn, monitor, kind="pointer", param_count=2):
+        """Declare a function's arity and return type.
 
-        A one-byte body is deliberate: we only need Ghidra to agree that the target is a function
-        so the call is emitted as a call, and to have a name to print. Letting it compute a real
-        body would mean disassembling (and following the flow of) every callee, which is the cost
-        this whole approach exists to avoid.
+        Needed on the TARGET because a stripped binary otherwise decompiles to `void f(void)` plus
+        a tail call instead of a body. Needed just as much on every CALLEE STUB, for a different
+        and much less obvious reason -- see declare_callees.
+        """
+        try:
+            d = FunctionDefinitionDataType(fn.getName())
+            d.setReturnType(ret_type(kind))
+            n = max(param_count, 0)
+            params = []
+            for i in range(n):
+                pointerish = (i == 0 or i == n - 1)   # `this` and the trailing MethodInfo*
+                params.append(ParameterDefinitionImpl(
+                    f"a{i+1}", PointerDataType() if pointerish else LongDataType(), None))
+            d.setArguments(params)
+            ApplyFunctionSignatureCmd(
+                fn.getEntryPoint(), d, SourceType.USER_DEFINED).applyTo(program, monitor)
+            return True
+        except Exception as exc:                                       # noqa: BLE001
+            print(f"  (signature not applied for {fn.getName()}: {exc})")
+            return False
+
+    def declare_callees(program, fm, flat, idx, entry, span, monitor):
+        """Give every address this function CALLs a named, RETURNING function stub.
+
+        THE BOUNDING BUG THIS FIXES. A stub whose body is a single instruction contains no RET, so
+        Ghidra concludes the callee does not return. Its decompiler then rewrites `call X` as a
+        branch -- reported as "Possible PIC construction ... Changing call to branch" -- and inlines
+        X into the caller. X's own calls are then unknown too, so it recurses, and a 324-byte
+        function decompiles to ~960k chars of C spanning half the binary. Pinning the caller's body
+        with setBody does NOT stop this: the flow rewrite happens below that level.
+
+        The cure is to make each stub look like a normal returning function, which
+        setNoReturn(False) plus an explicit signature does. The stub body stays one instruction --
+        we still never disassemble the callee, which is the whole point of the approach.
         """
         listing = program.getListing()
         end = entry.add(max(span, 1) - 1)
         seen = set()
+        made = 0
+        failures = []
         insn = listing.getInstructionAt(entry)
         while insn is not None and insn.getAddress().compareTo(end) <= 0:
             mnemonic = insn.getMnemonicString().lower()
@@ -158,7 +218,9 @@ def main():
                         continue
                     seen.add(target)
                     addr = flat.toAddr(target)
-                    if fm.getFunctionAt(addr) is not None:
+                    existing = fm.getFunctionAt(addr)
+                    if existing is not None:
+                        existing.setNoReturn(False)
                         continue
                     hit = idx.name_at(target)
                     # Only name it when the address is EXACTLY a method start; landing mid-body
@@ -166,22 +228,62 @@ def main():
                     # than none.
                     label = hit[2].replace("$$", "__").replace(".", "_") \
                         if (hit and hit[0] == target) else f"sub_{target:X}"
-                    # A function cannot be created over undefined bytes, and we deliberately did
-                    # NOT disassemble the callee (that is the cost being avoided). Disassemble one
-                    # small window -- just enough to hang a function off -- then pin the body to
-                    # it. Skipping this step is why an earlier version silently created nothing,
-                    # left every call looking like a branch, and produced a 440k-char "function".
+                    # Give the callee its REAL span from the dump index, not a one-instruction
+                    # stub. This is what actually bounds the caller: a stub body holds no RET, so
+                    # Ghidra decides the callee never returns, rewrites `call` as a branch, and
+                    # inlines it -- and since the inlined code's own calls are unknown too, it
+                    # cascades until a 454-byte function decompiles to ~150k chars of C. Measured:
+                    # the caller's body was pinned correctly at 454 bytes the whole time, so
+                    # setBody was never the problem. Disassembling a handful of small callees is
+                    # far cheaper than the full auto-analysis this design exists to avoid.
+                    # The callee's body MUST contain its RET. Without one Ghidra infers "does not
+                    # return", rewrites `call` as a branch, and INLINES the callee -- which then
+                    # cascades through the callee's own unknown calls. Measured: the caller's own
+                    # body stayed correctly pinned at its exact span the whole time, so setBody was
+                    # never the lever; this is.
+                    #
+                    # Not every callee is in dump.cs: IL2CPP RUNTIME helpers (the class-init guard
+                    # called at the top of essentially every managed method, e.g. 0x1AFA484) sit
+                    # below the lowest managed-method RVA and have no index entry, so there is no
+                    # span to look up. Letting Ghidra follow flow to find the end instead is worse
+                    # than the disease -- unbounded, it disassembles huge swathes of the binary and
+                    # was killed after 15 minutes on two functions.
+                    #
+                    # So bound it deterministically: scan forward with capstone to the callee's
+                    # first RET. Cheap, terminates, and needs no Ghidra round-trips.
+                    if hit and hit[0] == target:
+                        c_start, c_end = idx.bounds(hit[2])
+                        window = min((c_end - c_start) if c_end else 0x400, 0x4000)
+                    else:
+                        window = span_to_ret(target)
+                    callee_body = AddressSet(addr, addr.add(max(window, 1) - 1))
+                    DisassembleCommand(callee_body, callee_body, True).applyTo(program, monitor)
+                    if listing.getInstructionAt(addr) is None:
+                        failures.append((target, "no instruction at target"))
+                        continue
+                    fn = None
                     try:
-                        stub = AddressSet(addr, addr.add(0xF))
-                        DisassembleCommand(stub, None, False).applyTo(program, monitor)
-                        first = listing.getInstructionAt(addr)
-                        if first is not None:
-                            fm.createFunction(label, addr,
-                                              AddressSet(addr, addr.add(first.getLength() - 1)),
-                                              SourceType.USER_DEFINED)
-                    except Exception:                                  # noqa: BLE001
-                        pass
+                        fn = fm.createFunction(label, addr, callee_body, SourceType.USER_DEFINED)
+                    except Exception as exc:                           # noqa: BLE001
+                        # Overlaps an existing ELF symbol or another function. What matters is that
+                        # SOMETHING owns the address, not that we named it -- so fall back rather
+                        # than swallowing, which is how these silently failed to exist for a while.
+                        try:
+                            fn = fm.createFunction(None, addr, callee_body, SourceType.DEFAULT)
+                        except Exception:                              # noqa: BLE001
+                            fn = fm.getFunctionAt(addr) or fm.getFunctionContaining(addr)
+                            if fn is None:
+                                failures.append((target, type(exc).__name__))
+                    if fn is not None:
+                        fn.setNoReturn(False)
+                        try:
+                            fn.setInline(False)   # never fold a callee into the caller's body
+                        except Exception:                              # noqa: BLE001
+                            pass
+                        apply_signature(program, fn, monitor)
+                        made += 1
             insn = listing.getInstructionAfter(insn.getAddress())
+        return made, failures
 
     print(f"Opening {args.so} (analysis OFF, image base 0)...")
     with pyghidra.open_program(args.so, project_location=PROJECT_DIR,
@@ -223,19 +325,22 @@ def main():
             entry = flat.toAddr(t["address"])
             status, code = "?", ""
             try:
-                # Gotcha 2: disassemble ONLY this function's own bytes. followFlow=False matters --
-                # with it on, disassembly runs through every `call` into the callee and Ghidra,
-                # having no analysis to tell it those targets are functions, reports "Possible PIC
-                # construction ... Changing call to branch" and folds the entire reachable program
-                # into one body (354k chars of C for a 324-byte function, observed).
+                # Gotcha 2: disassemble ONLY this function's own bytes. Restricting to `body`
+                # keeps flow from running off into callees, whose bytes we deliberately never
+                # disassemble.
                 body = AddressSet(entry, entry.add(max(t["span"], 1) - 1))
-                DisassembleCommand(body, None, False).applyTo(program, monitor)
+                DisassembleCommand(body, body, True).applyTo(program, monitor)
 
-                # Declare every call target as its own function, named from the dump index, with a
-                # deliberately minimal body. Two payoffs: the calls stay calls (so this function's
-                # body stops at its own span), and the decompiled C reads
-                # `FleetManager__get_FinalCradleCrew(...)` instead of `FUN_02134e7f(...)`.
-                declare_callees(program, fm, flat, idx, entry, t["span"], monitor)
+                # Declare every call target as a named, RETURNING function. This is what actually
+                # bounds the body -- see declare_callees for why a non-returning stub causes the
+                # decompiler to inline the callee and blow the output up.
+                stubs, stub_failures = declare_callees(
+                    program, fm, flat, idx, entry, t["span"], monitor)
+                if stub_failures:
+                    # Loud, not silent: an undeclared callee is the difference between a clean
+                    # 2k-char function and an inlined 900k-char one, so it must be visible.
+                    print(f"    WARNING {len(stub_failures)} callee stub(s) not declared: "
+                          + ", ".join(f"0x{a:X} ({why})" for a, why in stub_failures[:4]))
 
                 fn = fm.getFunctionAt(entry)
                 if fn is None:
@@ -246,21 +351,7 @@ def main():
                     status = "no-function"
                 else:
                     # Gotcha 3: without a signature this decompiles to a stub.
-                    try:
-                        d = FunctionDefinitionDataType(fn.getName())
-                        d.setReturnType(ret_type(t["returnType"]))
-                        n = max(t["paramCount"], 0)
-                        params = []
-                        for i in range(n):
-                            pointerish = (i == 0 or i == n - 1)
-                            params.append(ParameterDefinitionImpl(
-                                f"a{i+1}",
-                                PointerDataType() if pointerish else LongDataType(), None))
-                        d.setArguments(params)
-                        ApplyFunctionSignatureCmd(
-                            fn.getEntryPoint(), d, SourceType.USER_DEFINED).applyTo(program, monitor)
-                    except Exception as exc:                      # noqa: BLE001
-                        print(f"  (signature not applied for {t['label']}: {exc})")
+                    apply_signature(program, fn, monitor, t["returnType"], t["paramCount"])
                     res = decomp.decompileFunction(fn, args.timeout, monitor)
                     if res and res.decompileCompleted() and res.getDecompiledFunction():
                         code = res.getDecompiledFunction().getC()
@@ -270,12 +361,29 @@ def main():
             except Exception as exc:                              # noqa: BLE001
                 status = f"exception: {exc}"
 
+            # Ghidra prefixes the body with one comment line per decompiler note. On these
+            # functions that was 1167 of 2151 lines -- more than half the file, and none of it an
+            # answer to anything. Keep the tally, because it is a useful health signal (a spike in
+            # call->branch conversions means callees are being inlined into the body again), and
+            # drop the lines themselves.
+            kept, dropped, pic = [], 0, 0
+            for line in code.split("\n"):
+                if line.lstrip().startswith("/* WARNING:"):
+                    dropped += 1
+                    if "Changing call to branch" in line:
+                        pic += 1
+                else:
+                    kept.append(line)
+            code = "\n".join(kept).lstrip("\n")
             path = os.path.join(args.out, t["label"] + ".c")
             with open(path, "w", encoding="utf-8") as f:
                 f.write(f"/* {t['name']} */\n/* address: 0x{t['address']:X}"
-                        f"  span: 0x{t['span']:X} */\n/* status: {status} */\n\n{code}")
+                        f"  span: 0x{t['span']:X} */\n/* status: {status} */\n"
+                        f"/* decompiler notes suppressed: {dropped}"
+                        f" ({pic} call->branch) */\n\n{code}")
             results.append((t["label"], status, len(code), path))
-            print(f"  {t['label']:48} {status:12} {len(code):>7} chars")
+            print(f"  {t['label']:48} {status:12} {len(code):>7} chars"
+                  f"  ({dropped} notes hidden, {pic} call->branch)")
 
         program.endTransaction(outer_tx, True)
         decomp.dispose()

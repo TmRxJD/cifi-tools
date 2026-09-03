@@ -262,6 +262,29 @@ think one is wrong, disprove it with a test.
     over a run (each tier feeds the next tier's count, so it is genuinely worth more than one
     application — but the magnitude is a time integral, not a formula). `nodeMarginalLogGain`
     deliberately applies it once and says so, rather than inventing a multiplier.
+- **GEAR really does buff a specific install node, from inside that node's own factor, and it
+  compounds as `base^level`.** Both halves verified in the binary, and both were previously only
+  wiki-sourced assumptions:
+  - `FleetManager::get_RUGen1Bonus` (0x2134C85) calls `Gear::get_GreenItem1Bonus1`, and
+    `get_RUGen4Bonus` (0x21352AC) calls `Gear::get_WhiteItem1Bonus1`, while `get_RUGen2Bonus` —
+    whose node no gear piece targets — has no gear call at all. So the per-piece "buffs install N"
+    mapping in `GEAR_SETS` is real, and `computeGearNodeMultiplier` belongs exactly where it is:
+    multiplied into that one node's increment, not applied globally.
+  - `Gear::get_GreenItem1Bonus1` (0x200B1AD) is nine instructions ending in a TAIL CALL to
+    `BigDouble::Pow`: it loads a per-piece BigDouble base (`this+0xA0`) and the piece's LEVEL
+    (`this->[0x20]+0x4488`) and returns `base ^ level`. **Exponential, not linear** — so a level-913
+    piece really is worth ~1.01^913 ≈ 8819x on its target node, which is why one Cradle node can
+    legitimately dwarf its neighbours. (The base itself is a runtime field and cannot be read
+    statically; only the SHAPE is proven. `x1.01/level` remains wiki-sourced.)
+  - The full verified factor list for a Cradle node is: base coefficient (`FleetManager+0x57C`),
+    crew, its own level (`MasterManager+0x4B08 + 4*(n-1)`), `Badges.FinalBadge2Bonus`,
+    `ResearchLaboratory.FinalShip1InstallsBonus`, a `GemPerks` field (+0x22D8),
+    `Badges.FinalDarkBadge1Bonus`, `ResearchLaboratory.FinalAllShipsInstallsBonus`, and a
+    `Gear::get_*ItemNBonus*` term when a piece targets that node.
+    **Known modelling gaps, both uniform-per-ship so they shift magnitude more than ranking:** the
+    `GemPerks` factor is not modelled at all, and we model `FinalShip1InstallsBonus` only as Fleet
+    Analysis 2 (`computeFleetResearchShipMultipliers`, correctly empty when FA2 is 0 — FA1 grants
+    only the 5x CAP, not an effect multiplier).
 - **The APK IS dumped.** CIFI 0.7.3.54 is Unity **6000.3.8f1** with IL2CPP metadata **v39**;
   Perfare's Il2CppDumper caps at v31, but AndnixSH's fork supports v39 and `tools/il2cpp-cli/`
   wraps it in a headless CLI (see its README). Output lives in
