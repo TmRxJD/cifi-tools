@@ -26,3 +26,7 @@ tools/gamefiles/*
 # Built bridge installers -- release artifacts, rebuilt from source by CI.
 bridge/dist/
 bridge/installer/*/.build/
+
+# Python bytecode from the il2cpp tooling
+__pycache__/
+*.pyc

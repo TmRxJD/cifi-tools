@@ -104,6 +104,8 @@ There is exactly one place for each of these. **Do not add a second.**
 | Loop-mod definitions + name mapping | `tools/reference/loop-mods.json`, `loopmod-names.json` |
 | Pulled APK / save / IL2CPP / captures | `tools/gamefiles/` (gitignored; see its README) |
 | Headless IL2CPP dumper (metadata v39) | `tools/il2cpp-cli/` |
+| Method name -> RVA (replaces script.json) | `tools/il2cpp-cli/dumpindex.py` |
+| Decompile named methods to readable C | `tools/il2cpp-cli/decompile.py` (Ghidra + PyGhidra) |
 | Server-table capture | `tools/capture/` |
 | Per-hunter evaluation fidelity (UI) | `store[hunter].iterations` + `StoreSchema.ITERATIONS` / `clampIterations` |
 | Cancellation of long sim work | `HunterSim.throwIfAborted` / `isAbort` / `ABORTED` |
@@ -233,6 +235,33 @@ think one is wrong, disprove it with a test.
   - **Knox has a 9th talent in the game (cap 50, the Ultima signature) that we correctly do NOT
     model** — `params.json` exposes no `ultima` argument for Knox, so the evaluator has nowhere to
     put it. Adding it would be an input that reaches nothing. Do not "fix" this.
+- **Ship install bonuses MULTIPLY as independent factors, and Meltdown exponentiates the whole
+  product exactly ONCE.** Read out of `libil2cpp.so` and confirmed twice — by hand from capstone,
+  then independently from Ghidra-decompiled C via `tools/il2cpp-cli/decompile.py`:
+  - `GeneratorManager::get_MK1Production` (RVA 0x1D7249B) is one flat chain of
+    `BigDouble::op_Multiply`. Every bonus is its own factor, including install nodes: `RUGen2Bonus`
+    and `RUGen4Bonus` — both Cradle nodes boosting MK1 — are multiplied in SEPARATELY. **Nothing
+    is ever summed into a shared per-tier pool.** One node's getter
+    (`FleetManager::get_RUGen2Bonus`, 0x2134F20) tail-calls `op_Addition` onto a literal 1 over
+    `coeff(+0x57C) * FinalCradleCrew * level(+0x4B0C) * badges * FinalShip1InstallsBonus`, i.e.
+    exactly `1 + pct*crew*counter*mults*level`, referencing no other node.
+  - Meltdown (`OuroborosResetter.FinalMeltdownPower`, +0x378 via `GeneratorManager+0x118`) is
+    applied at exactly two `Pow` sites, both gated on `MasterManagerOuro.FirstOuroResetDone`
+    (+0x178): `Pow(BaseOutput, m)` inside each `get_MKnProduction`, and `Pow(MK1Production, m)`
+    inside `get_CellProduction` (0x1D72357). Since `(A*B)^m == A^m * B^m`, that second site gives
+    **every** factor inside MK1Production — install nodes included — an effective exponent of `m`.
+    `get_CellProductionTotalMult` is applied OUTSIDE that Pow, so direct "Cells gained" bonuses
+    keep exponent 1. (The melted branch also carries a flat x0.8; constant, so it cannot affect
+    allocation.)
+  - **There is NO `m^tierCount`.** `MK2Gains` (0x1D8043E-region) adds `MK2Production` into the MK1
+    count with a plain `op_Addition` and no Pow of its own, so a higher-tier bonus reaches Cells
+    through the MK1 count and still picks up `m` exactly once. An older note in this repo asserted
+    `meltdownValue^tierCount` (attributed to SirRed's tool); the binary does not do that, and the
+    claim was never verified against SirRed's actual source. **Do not reintroduce it.**
+  - What is NOT settled by the binary: how much an "All Gens" bonus compounds down the tier chain
+    over a run (each tier feeds the next tier's count, so it is genuinely worth more than one
+    application — but the magnitude is a time integral, not a formula). `nodeMarginalLogGain`
+    deliberately applies it once and says so, rather than inventing a multiplier.
 - **The APK IS dumped.** CIFI 0.7.3.54 is Unity **6000.3.8f1** with IL2CPP metadata **v39**;
   Perfare's Il2CppDumper caps at v31, but AndnixSH's fork supports v39 and `tools/il2cpp-cli/`
   wraps it in a headless CLI (see its README). Output lives in

@@ -423,14 +423,13 @@ const RESOURCE_KEYWORDS = [
 // ("MK1-MK4 output") -- all matches get the same per-level percentage from that one node.
 function effectResources(effect) {
   const tags = RESOURCE_KEYWORDS.filter(([, re]) => re.test(effect)).map(([r]) => r);
-  // 'allGens' is kept as a marker tag (poolAdjustedNodeValue/nodeTiePriority/etc still check
+  // 'allGens' is kept as a marker tag (nodeMarginalLogGain/nodeTiePriority/etc still check
   // for it to detect "this is an all-gens effect"), but the actual per-tier mk1..mk8 tags are
   // ALSO pushed here so every resource-totals consumer (computeResourceBonuses/nodeOwnBonusPct)
   // folds an All-Gens node's contribution into each tier's OWN total individually, instead of
   // bucketing it under one separate "All Gens" pseudo-resource -- each generator tier needs to
-  // be factored separately (not lumped together) for Meltdown to correctly apply per-tier to an
-  // All-Gens bonus in the displayed totals, same as it already does in the optimizer's internal
-  // ranking (see poolAdjustedNodeValue).
+  // be factored separately (not lumped together) so the displayed totals show an All-Gens node's
+  // real contribution to each tier.
   if (/all generators|all gens\b/i.test(effect)) {
     tags.push('allGens');
     GEN_TIERS.forEach((n) => tags.push(`mk${n}`));
@@ -1488,9 +1487,9 @@ document.getElementById('closeNewLoadoutModalBtn').onclick = () => document.getE
 // player's point of view there is only "how much do I care about Cells", not a separate
 // "Generators" dial: generators only exist to eventually produce Cells, so a player never wants
 // to favor one without the other. The actual direct-Cells-vs-generator-tier SPLIT is decided
-// entirely by the plumbing, not the player: poolAdjustedNodeValue already independently values
-// each generator tier against its own real (Meltdown-melted) pool and direct Cells against its
-// own (melt-immune) pool, and the greedy allocator below picks whichever single point -- direct
+// entirely by the plumbing, not the player: nodeMarginalLogGain values a generator-stage node
+// with the Meltdown exponent the binary actually applies and a direct-Cells node without it (see
+// that function's comment), and the greedy allocator below picks whichever single point -- direct
 // or generator -- has the best real marginal value right now. Bucket membership here only decides
 // whether a slider's weight applies at all (>0) -- it is not a second weight dimension. `other`
 // (untagged effects, e.g. flat "+1 completed operation" with no %) gets no weight -- it's never
@@ -1550,34 +1549,10 @@ function nodeLinearIncrement(shipId, slot) {
   const gearNodeMult = computeGearNodeMultiplier(Number(shipId), Number(slot));
   return parseFloat(m[1]) * crew * gearMult * researchMult * gearNodeMult;
 }
-const MELTDOWN_POOL_EPS = 1e-6;
-// Generator-like intermediate pools: the 8 MK tiers, plus Tech Software/Hardware Upgrade output
-// (see effectResources) -- all of these compound before feeding a final resource, so they get
-// tracked and Meltdown-melted the same way, distinct from a direct final-resource bonus.
+// Generator-like intermediate stages: the MK tiers, plus Tech Software/Hardware Upgrade output
+// (see effectResources) -- these all compound before feeding a final resource, so they take
+// Meltdown's exponent, unlike a direct final-resource bonus. See nodeMarginalLogGain.
 function isGenLikeTag(tag) { return /^mk\d+$/.test(tag) || TECH_UPGRADE_TAGS.includes(tag); }
-// Real current total for each Meltdown-relevant pool ('cells', 'mk1'..'mk8', techSoftware/
-// techHardware), summed from this ship's ACTUAL installed levels (not the optimizer's
-// hypothetical from-zero plan).
-function computeShipRealPoolTotals(shipId) {
-  const catalog = SHIP_NODE_CATALOG[shipId] || {};
-  const installs = getShipInput(shipId).installs || {};
-  const pools = { cells: MELTDOWN_POOL_EPS };
-  GEN_TIERS.forEach((n) => { pools[`mk${n}`] = MELTDOWN_POOL_EPS; });
-  TECH_UPGRADE_TAGS.forEach((t) => { pools[t] = MELTDOWN_POOL_EPS; });
-  Object.keys(catalog).forEach((slot) => {
-    const level = installs[slot] || 0;
-    if (level <= 0) return;
-    const increment = nodeLinearIncrement(shipId, slot) * level;
-    // effectResources already expands an "All Gens" effect into individual mk1..mk8 tags (plus
-    // the 'allGens' marker, skipped below) -- no separate allGens-specific credit pass needed,
-    // that would double-count every tier's pool.
-    const tags = effectResources(catalog[slot].effect);
-    tags.forEach((tag) => {
-      if (tag === 'cells' || isGenLikeTag(tag)) pools[tag] = (pools[tag] || MELTDOWN_POOL_EPS) + increment;
-    });
-  });
-  return pools;
-}
 // Gear qualifiers that keep climbing over the course of a single run (ticks/operations/studies/
 // missions/loop-fills all accumulate as you play), vs. ones that are effectively static within a
 // run (loop mods owned, automations unlocked, manually-purchased generators, tech upgrades --
@@ -1609,51 +1584,106 @@ const RUN_LENGTH_BIAS = {
 function runLengthBiasFor(runLength) {
   return RUN_LENGTH_BIAS[runLength] || RUN_LENGTH_BIAS.long;
 }
-// Marginal value of spending one more point on `slot` right now, given the current (real +
-// whatever this optimization run has hypothetically added so far) pool totals. Mutates nothing.
-function poolAdjustedNodeValue(shipId, slot, pools, runLength) {
+// ===================== The real value model, read out of the game binary =====================
+//
+// EVERY claim in this block was verified by disassembling libil2cpp.so (x86_64 -- this build is
+// the Android emulator ABI, not ARM64) against the RVAs dump.cs carries inline. Method addresses
+// and field offsets are quoted so any of it can be re-checked directly. This REPLACES an earlier
+// "shared additive pool per generator tier" model that was wrong in a way that cost real value
+// (see the allocator comment below and tools/bench/real-save-optimizer-check.js).
+//
+// GeneratorManager::get_MK1Production (RVA 0x1D7249B) is one flat chain of BigDouble::op_Multiply
+// (0x24E7EB3). Every bonus source in the game is an INDEPENDENT MULTIPLICATIVE FACTOR in it:
+//
+//   MK1Production = Pow(BaseOutput, FinalMeltdownPower)      <- Pow at 0x1D72BD9, ONE per getter
+//                 x CellGeneratorsMK1                        <- MasterManager+0x548, the gen count
+//                 x TU1Bonus x TU2Bonus x TotalLoopMK1Bonus x DiamondShop.FinalMK1Bonus
+//                 x RUGen2Bonus x RUGen4Bonus x RULoop2Bonus x RUAuto1Bonus x RUTech4Bonus x ...
+//                 x FinalAllGensBonus x TickMultiplier x (every other bonus, each its own factor)
+//
+// The decisive detail: RUGen2Bonus (0x1D72743) and RUGen4Bonus (0x1D72E44) are BOTH Cradle
+// install nodes that boost MK1 output, and each is multiplied in SEPARATELY. Install nodes are
+// never summed into a shared pool anywhere. A single node's own getter
+// (FleetManager::get_RUGen2Bonus, RVA 0x2134F20) tail-calls BigDouble::op_Addition (0x24E7CB0)
+// onto a literal 1, over a product of its own coefficient (FleetManager+0x57C), its own level
+// (+0x4B0C), FinalCradleCrew, the innovation badges and FinalShip1InstallsBonus
+// (ResearchLaboratory+0x5AE8) -- i.e. exactly `1 + pct*crew*counter*multipliers*level`, self
+// contained, referencing no other node. That is what nodeLinearIncrement already computes.
+//
+// WHERE MELTDOWN ACTUALLY LANDS. FinalMeltdownPower (OuroborosResetter+0x378, reached via
+// GeneratorManager+0x118) is applied by exactly two Pow sites, both gated on the same flag,
+// MasterManagerOuro::FirstOuroResetDone (+0x178) -- Meltdown switches on after the first
+// Ouroboros reset, and each getter contains one Pow plus a duplicate un-melted branch:
+//   1. inside get_MKnProduction: Pow(BaseOutput, m) -- the tier's RAW BASE only, no bonuses.
+//   2. inside get_CellProduction (RVA 0x1D72357, Pow at 0x1D723F4): Pow(MK1Production, m) --
+//      the ENTIRE MK1 production, every install bonus included.
+// Because (A*B)^m == A^m * B^m, site 2 gives every factor inside MK1Production an effective
+// exponent of m. get_CellProductionTotalMult is applied OUTSIDE that Pow (0x1D72430), so direct
+// "Cells gained" bonuses keep exponent 1. That is why generator nodes are melted and direct
+// resource nodes are not -- and it is a property of where the Pow sits, not a special case.
+//
+// NO PER-TIER COMPOUNDING OF THE EXPONENT. MK2Gains (RVA 0x1D809B6) adds MK2Production into the
+// MK1 count with a plain op_Addition and NO Pow of its own. So a higher-tier bonus reaches Cells
+// through the MK1 count, which is itself just another factor inside MK1Production, and therefore
+// also picks up exponent m exactly ONCE. There is no m^tierCount anywhere in the chain; an
+// earlier comment here asserted that shape and it is not what the binary does.
+//
+// WHAT IS STILL A MODELLED APPROXIMATION, not read from the binary: an "All Gens" node multiplies
+// every tier at once, and because each tier feeds the next tier's count, its benefit genuinely
+// compounds along the unlocked chain over a run. The exact compounding depends on run length and
+// tier dynamics, which no static formula can settle -- treating it as one factor per UNLOCKED
+// tier (below) is a deliberate approximation of that chain, and is flagged as such rather than
+// presented as proven. GROWTH_VALUE_BOOST and RUN_LENGTH_BIAS remain heuristics too.
+
+// Marginal gain from putting ONE more point into `slot`, given the levels this planning run has
+// assigned so far, returned as a LOG gain. Log because the objective is a product of factors
+// (maximise prod(resource_r ^ weight_r)), whose log is sum(weight_r * log(resource_r)) -- so a
+// weighted sum of log-gains is exactly the right thing for the greedy loop to rank on, it makes
+// gains on different resources genuinely comparable (a 2x on Shards and a 2x on Cells score the
+// same), and it cannot overflow the way a raw product of real-account ratios does. Mutates
+// nothing. Diminishing returns are real and need no pool: a node's own factor is 1 + inc*level,
+// so each extra point moves it by (1+inc*(L+1))/(1+inc*L), which shrinks on its own as L grows.
+function nodeMarginalLogGain(shipId, slot, levels, runLength) {
   const meta = SHIP_NODE_CATALOG[shipId]?.[slot];
   if (!meta) return 0;
-  const increment = nodeLinearIncrement(shipId, slot) * (nodeScalesWithGrowth(meta.gearKey) ? GROWTH_VALUE_BOOST : 1);
+  // nodeLinearIncrement is in PERCENT per level; /100 to get the factor's per-level fraction.
+  const increment = nodeLinearIncrement(shipId, slot)
+    * (nodeScalesWithGrowth(meta.gearKey) ? GROWTH_VALUE_BOOST : 1) / 100;
   if (increment <= 0) return 0;
+  const level = levels[slot] || 0;
+  const logRatio = Math.log1p(increment * (level + 1)) - Math.log1p(increment * level);
+  if (logRatio <= 0) return 0;
   const tags = effectResources(meta.effect);
-  const genTiers = tags.filter(isGenLikeTag);
   const isAllGens = tags.includes('allGens');
-  if (!isAllGens && genTiers.length === 0 && !tags.includes('cells')) return increment; // Shards/RP/MP/Academy/Materials -- flat linear value, no pool tracking (known gap, not modeled yet)
-  const meltdown = getShipGear().meltdown || 0;
-  const bias = runLengthBiasFor(runLength);
+  const genTiers = tags.filter(isGenLikeTag);
   if (!isAllGens && genTiers.length === 0) {
-    // Direct Cells: bypasses the Meltdown EXPONENT (exponent 1, no melt), but is NOT exempt from
-    // real diminishing returns -- it still saturates relative to its own (typically enormous,
-    // real-account) pool. This is what lets Generator nodes naturally overtake as a run
-    // progresses: Cells' pool grows huge fast (it gets first pick early since it's un-melted),
-    // so its OWN relative marginal gain shrinks toward ~0 quickly, while less-saturated
-    // Generator tiers keep offering a comparatively bigger relative jump despite the melt.
-    const base = pools.cells || MELTDOWN_POOL_EPS;
-    return (((base + increment) / base - 1) * 100) * bias.cells;
+    // Direct final-resource bonus (Cells/Shards/RP/MP/Academy/Materials): outside the Meltdown
+    // Pow, exponent 1.
+    return logRatio * runLengthBiasFor(runLength).cells;
   }
-  // Meltdown melts EVERY generator tier, not just MK1 -- reversed 2026-09-02 from the opposite
-  // claim this comment used to make. That earlier "MK1-only" model was disassembly-checked
-  // directly against libil2cpp.so (x86_64, not ARM64 -- this is an emulator build) and disproven:
-  // GeneratorManager's get_MK1Production, get_MK2Production and get_MK5Production are BYTE-
-  // IDENTICAL in shape at the relevant site -- each loads its own tier's raw production into
-  // xmm0, loads `this->OR->FinalMeltdownPower` (OuroborosResetter, offsets 0x118 then 0x378) into
-  // xmm1, checks one flag, then calls BigDouble.Pow(xmm0, xmm1). Checked at all three tiers with
-  // no difference in the pattern; nothing suggests MK6-8 differ. This also matches SirRed's CIFI
-  // Ouroboros Helper Tool's own decompiled formulas (Mono, not IL2CPP -- ilspycmd reads it
-  // directly), which apply meltdownValue^tierCount to every MK-tier-touching node across every
-  // ship checked (Koios, Demeter, Cradle) -- two independent sources now agree.
-  const affectedTiers = isAllGens ? GEN_TIERS.map((n) => `mk${n}`) : genTiers;
-  let ratio = 1;
-  affectedTiers.forEach((tier) => {
-    const base = pools[tier] || MELTDOWN_POOL_EPS;
-    ratio *= Math.pow((base + increment) / base, meltdown);
-  });
-  return ((ratio - 1) * 100) * bias.gen;
+  // Generator-stage bonus: exponent m (the Meltdown power) applied ONCE -- see site 2 above.
+  //
+  // An All-Gens node deliberately gets the SAME single application, not one per tier. Its bonus
+  // really does multiply every tier (FinalAllGensBonus is a factor in each get_MKnProduction),
+  // and because each tier feeds the next tier's count that genuinely compounds down the chain
+  // over a run -- so the true value is somewhere ABOVE this. But how far above depends on run
+  // length and on how much each tier is actually contributing, which no static reading of the
+  // binary can settle: the propagation is a time integral, not a formula. An earlier version of
+  // this function multiplied the log-gain by the number of unlocked tiers (x8 on a real account),
+  // which assumes the whole chain saturates instantly from a single point -- on the reference
+  // save that alone pushed 164 of 400 Cradle points into one All-Gens node. Per this project's
+  // "no invented constants" rule, and the same conservative-default principle that makes a
+  // missing gem level mean LOCKED, the unprovable multiplier is left out rather than guessed.
+  // Undervaluing an All-Gens node is a smaller error than fabricating a factor of 8.
+  const meltdown = getShipGear().meltdown || 0;
+  // Meltdown is only live once the first Ouroboros reset is done; before that the binary takes
+  // the un-melted branch, i.e. exponent 1. A stored 0 means "not melting yet", not "worth zero".
+  const exponent = meltdown > 0 ? meltdown : 1;
+  return logRatio * exponent * runLengthBiasFor(runLength).gen;
 }
 // Real allocator -- pure marginal-value greedy: every single point goes to whichever weighted,
-// eligible node currently offers the best real gain, recomputed against the running pool after
-// every pick so diminishing returns are exact. REPLACES an earlier category-fair-queueing engine
+// eligible node currently offers the best real gain, recomputed after every pick so diminishing
+// returns are exact (see nodeMarginalLogGain). REPLACES an earlier category-fair-queueing engine
 // (weighted round-robin across resource categories, spending toward each category's "target
 // share" of the budget) that had a real bug: it gave every resource BUCKET an equal target spend
 // share regardless of how many nodes populated it. On Cradle, 9 of 11 nodes all shared the single
@@ -1712,12 +1742,6 @@ function optimizeShipInstalls(shipId, budget, weights, prepForLongRun, runLength
     categoryOf[slot] = [...new Set(effectResources(catalog[slot].effect).map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))];
   });
   const nodeWeight = (slot) => categoryOf[slot].reduce((max, c) => Math.max(max, weights[c] || 0), 0);
-  // Meltdown pool totals -- seeded from this ship's REAL current state, then mutated as THIS
-  // optimization run hypothetically adds points, so later picks correctly see a more-saturated
-  // pool than earlier ones (real, account-grounded diminishing returns per generator tier).
-  // Independent of `levels`/`spent` above, which stay a from-zero plan per the earlier fix --
-  // this only feeds the value comparison, not the output.
-  const pools = computeShipRealPoolTotals(shipId);
   // AOTC below its threshold is skipped ENTIRELY, per the policy above -- including here in the
   // main loop. Excluding it only from the pre-step above was not enough: the allocator could
   // still pick it, so a small-budget Demeter plan spent points on a node whose payoff lands next
@@ -1735,8 +1759,9 @@ function optimizeShipInstalls(shipId, budget, weights, prepForLongRun, runLength
       if (!nodeEligible(slot)) return;
       const w = nodeWeight(slot);
       if (requireWeight ? w <= 0 : w > 0) return;
-      const raw = poolAdjustedNodeValue(shipId, slot, pools, runLength);
-      const score = raw * (requireWeight ? w : 1);
+      // Log-gain x slider weight IS the objective's own marginal: maximising
+      // prod(resource ^ weight) means maximising sum(weight * log(resource)).
+      const score = nodeMarginalLogGain(shipId, slot, levels, runLength) * (requireWeight ? w : 1);
       const priority = nodeTiePriority(effectResources(catalog[slot].effect));
       if (score > bestScore || (score === bestScore && priority < bestPriority)) {
         bestScore = score; bestSlot = slot; bestPriority = priority;
@@ -1750,12 +1775,6 @@ function optimizeShipInstalls(shipId, budget, weights, prepForLongRun, runLength
     levels[slot] = (levels[slot] || 0) + 1;
     spent += 1;
     clicks.push(slot);
-    const increment = nodeLinearIncrement(shipId, slot);
-    // Same expansion as computeShipRealPoolTotals -- effectResources already lists every
-    // individual mk1..mk8 tag for an All-Gens node, no separate allGens-specific credit pass.
-    effectResources(catalog[slot].effect).forEach((tag) => {
-      if (tag === 'cells' || isGenLikeTag(tag)) pools[tag] = (pools[tag] || MELTDOWN_POOL_EPS) + increment;
-    });
   }
   return { levels, clicks };
 }

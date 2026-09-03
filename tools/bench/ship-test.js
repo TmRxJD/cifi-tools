@@ -68,8 +68,7 @@ seedAccount();
 
 /** True when at least one node on this ship has a non-zero value -- i.e. the model is live. */
 function valueModelIsLive(shipId) {
-  const pools = sb.computeShipRealPoolTotals(shipId);
-  return Object.keys(CATALOG[shipId]).some((slot) => sb.poolAdjustedNodeValue(shipId, slot, pools, 'long') > 0);
+  return Object.keys(CATALOG[shipId]).some((slot) => sb.nodeMarginalLogGain(shipId, slot, {}, 'long') > 0);
 }
 
 let failures = 0;
@@ -268,10 +267,10 @@ check('no investment in single-tier nodes for locked generators', () => {
 /**
  * Every eligible (weighted, ungated, unmaxed, unlocked-tier) node's weighted marginal score at
  * the current state -- an independent reassembly from the same exported building blocks the
- * allocator itself uses (poolAdjustedNodeValue, nodeMaxLevel, RESOURCE_TO_WEIGHT_BUCKET), used to
+ * allocator itself uses (nodeMarginalLogGain, nodeMaxLevel, RESOURCE_TO_WEIGHT_BUCKET), used to
  * check that the allocator's own pick really was the best one available, not just A plausible one.
  */
-function bestEligibleScore(shipId, levels, totalInstalls, unlocked, weights, pools, runLength, excludeSlot) {
+function bestEligibleScore(shipId, levels, totalInstalls, unlocked, weights, runLength, excludeSlot) {
   let best = -Infinity;
   for (const slot of Object.keys(CATALOG[shipId])) {
     if (slot === excludeSlot) continue;
@@ -287,15 +286,14 @@ function bestEligibleScore(shipId, levels, totalInstalls, unlocked, weights, poo
     const cats = [...new Set(tags.map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))];
     const w = cats.reduce((m, c) => Math.max(m, weights[c] || 0), 0);
     if (w <= 0) continue; // only the weighted pass is checked here -- see note below
-    const raw = sb.poolAdjustedNodeValue(shipId, slot, pools, runLength);
-    best = Math.max(best, raw * w);
+    best = Math.max(best, sb.nodeMarginalLogGain(shipId, slot, levels, runLength) * w);
   }
   return best;
 }
 
 check('greedy always spends on the single best-scoring eligible node at each step, and only '
   + 'falls back to a zero-weighted node when nothing weighted was eligible at that moment', () => {
-  // Replays the plan's own click sequence, recomputing pool state exactly as
+  // Replays the plan's own click sequence, recomputing each node's marginal value exactly as
   // optimizeShipInstalls does. Two things checked per click: (1) if the picked node is itself
   // weighted, no OTHER weighted-eligible node ever outscored it; (2) if the picked node is
   // UNWEIGHTED (the last-resort fallback pass), no weighted node was eligible at all at that
@@ -310,7 +308,6 @@ check('greedy always spends on the single best-scoring eligible node at each ste
   for (const { shipId, budget, weights, wName } of cases()) {
     const { clicks } = plan(shipId, budget, weights);
     const levels = {};
-    const pools = sb.computeShipRealPoolTotals(shipId);
     let total = 0;
     for (let i = 0; i < clicks.length; i++) {
       const slot = clicks[i];
@@ -319,9 +316,9 @@ check('greedy always spends on the single best-scoring eligible node at each ste
         const tags = sb.effectResources(CATALOG[shipId][slot].effect);
         const cats = [...new Set(tags.map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))];
         const w = cats.reduce((m, c) => Math.max(m, weights[c] || 0), 0);
-        const rivalBest = bestEligibleScore(shipId, levels, total, unlocked, weights, pools, 'long', slot);
+        const rivalBest = bestEligibleScore(shipId, levels, total, unlocked, weights, 'long', slot);
         if (w > 0) {
-          const ownScore = sb.poolAdjustedNodeValue(shipId, slot, pools, 'long') * w;
+          const ownScore = sb.nodeMarginalLogGain(shipId, slot, levels, 'long') * w;
           if (rivalBest > ownScore + 1e-9) {
             return `ship ${shipId} budget ${budget} weights ${wName}: click ${i} picked slot ${slot} `
               + `(score ${ownScore.toFixed(6)}) while another eligible node scored ${rivalBest.toFixed(6)}`;
@@ -333,14 +330,6 @@ check('greedy always spends on the single best-scoring eligible node at each ste
       }
       levels[slot] = (levels[slot] || 0) + 1;
       total += 1;
-      if (!isAotc) {
-        const increment = sb.nodeLinearIncrement(shipId, slot);
-        sb.effectResources(CATALOG[shipId][slot].effect).forEach((tag) => {
-          if (tag === 'cells' || /^mk\d+$/.test(tag) || tag === 'techSoftware' || tag === 'techHardware') {
-            pools[tag] = (pools[tag] || 1e-6) + increment;
-          }
-        });
-      }
     }
   }
   return null;

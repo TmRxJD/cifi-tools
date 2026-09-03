@@ -46,7 +46,6 @@ let suspects = 0;
 for (const shipId of Object.keys(CATALOG)) {
   if (wanted.length && !wanted.includes(shipId)) continue;
   const nodes = CATALOG[shipId];
-  const pools = sb.computeShipRealPoolTotals(Number(shipId));
   const lines = [];
 
   for (const [slot, meta] of Object.entries(nodes)) {
@@ -54,7 +53,7 @@ for (const shipId of Object.keys(CATALOG)) {
     const cats = [...new Set(tags.map((t) => BUCKET[t]).filter(Boolean))];
     const max = sb.nodeMaxLevel(Number(shipId), slot);
     const inc = sb.nodeLinearIncrement(Number(shipId), slot);
-    const val = sb.poolAdjustedNodeValue(Number(shipId), slot, pools, 'long');
+    const val = sb.nodeMarginalLogGain(Number(shipId), slot, {}, 'long');
     const effect = String(meta.effect || '').replace(/\s+/g, ' ');
 
     // Heuristics for "the parse deserves a human look", not proof of error:

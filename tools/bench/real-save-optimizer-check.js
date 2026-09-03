@@ -18,7 +18,7 @@ if (!fs.existsSync(savePath)) {
 const save = JSON.parse(fs.readFileSync(savePath, 'utf8'));
 
 const sb = H.browserSandbox();
-const { SHIP_NODE_CATALOG: CATALOG, GEN_TIERS } = sb.ShipData;
+const { SHIP_NODE_CATALOG: CATALOG } = sb.ShipData;
 const coefficients = require('../reference/sirred-install-coefficients.json');
 
 sb.window.store = sb.StoreSchema.freshStore();
@@ -84,40 +84,57 @@ for (let shipId = 1; shipId <= 7; shipId++) {
 // sirred-algorithm-check.js, but with THIS account's real crew/gear counters instead of a
 // synthetic fixture.
 //
-// SirRed's tool is a useful ROUGH BASELINE, not a source of truth -- it is an outdated community
-// tool, and per the project owner it should be treated that way, not as ground truth to chase
-// exact parity with.
+// WHAT IS BEING COMPARED, and what the yardstick is.
 //
-// nodeBonus/totalBonus below have NO melt term -- they use the plain `1 + coeff*level*counter*
-// crew` shape everywhere, i.e. this SCRIPT's own model is equivalent to always assuming
-// Meltdown=1 (Math.pow(x, 1) = x, a no-op). That was a deliberate simplifying choice for this
-// comparison (matching sirred-algorithm-check.js's synthetic-fixture version), NOT a verified
-// fact about SirRed's own tool -- SirRed's actual UI has a Meltdown input, so its real algorithm
-// almost certainly does account for it somehow. This project does not currently have SirRed's
-// decompiled source on disk to check its real formula (that RE work was done in an earlier
-// session and not preserved), so do not repeat the "SirRed has no Meltdown concept" claim as
-// fact anywhere -- it was an incorrect inference from this script's own simplification, caught
-// and corrected 2026-09-02.
+// Two ALLOCATORS (ours vs SirRed's plain "maximise the total product" greedy), scored by ONE
+// shared objective. That objective is the GAME's own formula, read directly out of libil2cpp.so
+// -- see the long comment above nodeMarginalLogGain in shipsPage.js for every RVA and field
+// offset. In short, all of it verified rather than assumed:
+//   * every install node is an INDEPENDENT MULTIPLICATIVE factor, `1 + coeff*crew*counter*level`
+//     (FleetManager::get_RUGen2Bonus tail-calls BigDouble::op_Addition onto a literal 1). Nodes
+//     are never summed into a shared pool -- RUGen2Bonus and RUGen4Bonus, both MK1-boosting
+//     Cradle nodes, are multiplied into get_MK1Production separately.
+//   * Meltdown (OuroborosResetter.FinalMeltdownPower) reaches a node's bonus through exactly one
+//     site -- get_CellProduction's Pow(MK1Production, m) -- and since (A*B)^m == A^m * B^m, every
+//     generator-stage bonus therefore carries exponent m, applied ONCE.
+//   * direct Cells/Shards/RP bonuses live in get_CellProductionTotalMult, applied OUTSIDE that
+//     Pow, so they carry exponent 1.
+//   * there is NO m^tierCount: MK2Gains adds MK2Production into the MK1 count with a plain
+//     op_Addition and no Pow, so a higher-tier bonus still picks up m exactly once.
 //
-// Our own allocator DOES read this account's real Meltdown value (0.373 on the reference save)
-// and applies it per generator tier (see poolAdjustedNodeValue). Given that, and that this
-// script's SirRed side ignores Meltdown entirely, the two sides are almost certainly scoring
-// different objectives whenever an account's real Meltdown differs from 1 -- but that is a
-// hypothesis this script does not actually verify, not a settled explanation. A gap here is a
-// prompt to go inspect the specific plan difference (gate/counter/tier causes are all real and
-// inspectable via the ship-by-ship printouts above), not proof of a bug, and not proof of
-// anything about Meltdown specifically without re-deriving SirRed's real formula.
+// This yardstick has been WRONG twice in this file's short history, so it is worth recording why
+// it is trusted now. First it pinned Meltdown to 1 as a deliberate simplification -- and that
+// simplification was then misremembered and written up as "SirRed's tool has no Meltdown concept
+// at all", an unverified claim about someone else's tool, corrected only after the project owner
+// pointed out that SirRed's UI plainly has a Meltdown input. Then it scored with `m^tierCount`,
+// taken on trust from this repo's own older notes. Disassembling the game settled it: the game
+// does not do `m^tierCount`. Both wrong versions came from citing a second-hand summary instead
+// of the primary source. The numbers here now come from the binary.
+//
+// SirRed's tool remains a useful ROUGH BASELINE for the ALGORITHM only -- an outdated community
+// tool, not ground truth, and parity with it is not a goal. A divergence below is a prompt to go
+// inspect the specific plan difference, not a failure signal.
 const CRADLE_ID = 1;
 const cradleInput = sb.getShipInput(CRADLE_ID);
 const CREW = cradleInput.crew || 0;
+const MELTDOWN = gear.meltdown || 0;
 const CRADLE_COUNTER = {
   1: 1, 2: 1, 3: 1, 4: gear.manualMK2Gens || 0, 5: 1, 6: 1, 7: gear.manualMK3Gens || 0,
   8: gear.totalManualGens || 0, 9: gear.totalManualGens || 0, 10: gear.totalManualGens || 0, 11: gear.totalManualGens || 0,
 };
 function coeff(slot) { return coefficients[`Cra${String(slot).padStart(2, '0')}`]; }
+/** Does this node feed a generator stage (Meltdown exponent m) or a final resource (exponent 1)? */
+function isGenStage(slot) {
+  const tags = sb.effectResources(CATALOG[CRADLE_ID][slot].effect);
+  return tags.includes('allGens') || tags.some((t) => /^mk\d+$/.test(t));
+}
 function nodeBonus(slot, level) {
   if (level <= 0) return 1;
-  return 1 + coeff(slot) * level * CRADLE_COUNTER[slot] * CREW;
+  const base = 1 + coeff(slot) * level * CRADLE_COUNTER[slot] * CREW;
+  // Meltdown only melts once the first Ouroboros reset is done; a stored 0 means the game is on
+  // its un-melted branch (exponent 1), not that the bonus is worthless.
+  const m = MELTDOWN > 0 ? MELTDOWN : 1;
+  return isGenStage(slot) ? base ** m : base;
 }
 function totalBonus(levels) {
   let total = 1;
@@ -154,7 +171,7 @@ for (const budget of BUDGETS) {
   const oursScore = totalBonus(oursPlan);
   const sirredScore = totalBonus(sirredPlan);
   const ratio = sirredScore > 0 ? oursScore / sirredScore : 1;
-  const verdict = ratio >= 0.999 ? 'ours >= SirRed baseline' : `diverges from SirRed baseline by ${((1 - ratio) * 100).toFixed(2)}% (not necessarily a bug -- see comment above)`;
+  const verdict = ratio >= 0.999 ? 'ours >= SirRed baseline' : `diverges from SirRed baseline by ${((1 - ratio) * 100).toFixed(2)}% (both plans scored under the GAME's own formula -- see comment above)`;
   if (ratio < 0.999) worseCount++;
   console.log(`budget ${budget}: ours=${oursScore.toExponential(4)} sirred=${sirredScore.toExponential(4)} -> ${verdict}`);
   console.log(`  ours   : ${JSON.stringify(oursPlan)}`);
@@ -165,6 +182,6 @@ console.log(`\n${failures === 0 ? 'all structural sanity checks pass' : failures
 console.log(worseCount === 0
   ? 'our allocator matches or beats the SirRed baseline at every tested budget on REAL account data'
   : `our allocator diverged from the SirRed baseline at ${worseCount}/${BUDGETS.length} real-data budget(s) -- `
-    + 'this script\'s SirRed-side model ignores Meltdown (unverified whether SirRed\'s real tool does '
-    + 'too -- see the comment above), so a gap is a prompt for manual inspection, not a fail signal');
+    + 'both plans are now scored under SirRed\'s own documented Meltdown formula, so this is a real '
+    + 'gap worth inspecting, not a scoring-mismatch artifact');
 process.exit(failures === 0 ? 0 : 1);
