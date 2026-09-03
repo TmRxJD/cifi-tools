@@ -317,11 +317,23 @@ think one is wrong, disprove it with a test.
   `Inventory.TechSampleAllGensBonusBonus`, `GemPerks.FinalAllGensBonus` and
   `MultiverseMarket.FinalISAllGensBonus` -- so the tool's per-ship resource totals are one slice of
   a much longer multiply chain, and should never be read as absolute production.
-  In the per-node bonus itself, `RUGen2Bonus` has exactly three, and two of them are NOT modelled:
-  `GemPerks.FinalPowerGU1Bonus` and `ResearchLaboratory.FinalAllShipsInstallsBonus` (the third,
-  `FinalShip1InstallsBonus`, is our Fleet Analysis 2 term). Both are uniform across a ship's nodes,
-  so they cannot reorder the optimizer -- and both are level 0 on the reference account -- but they
-  scale every install bonus and are a real gap for magnitudes.
+  In the per-node bonus itself, `RUGen2Bonus` has exactly three: `FinalShip1InstallsBonus` (our
+  Fleet Analysis 2 term), `GemPerks.FinalPowerGU1Bonus` and
+  `ResearchLaboratory.FinalAllShipsInstallsBonus` (= `FinalRU83InstallsBonus *
+  FinalRU96InstallsBonus`). The last two are uniform across a ship's nodes, so they cannot reorder
+  the optimizer. **Their unowned case is now modelled exactly** -- `PowerGU1BonusCalc` returns a
+  literal 1 when `PowerGU1Level <= 0`, and the research product is 1 at level 0, which is the
+  reference account -- and `unmodelledInstallBonusTerms()` reports when an account owns them.
+  Their ACTIVE branches remain uncomputable: PowerGU1 needs `PowerGU1BonusExponentCrew` /
+  `PowerGU1BonusExponentRank`, and GemPerks is one of the classes whose type tree does not match
+  its serialized layout, so those values cannot be read; and we have no RU83/RU96 -> per-level
+  installs mapping.
+- **The loop-mod crew/rank terms ARE modelled.** `LM240Bonus` (crew) and `LM239Bonus1` (rank) are
+  linear in the recovered C# -- `LM<n>Level * LM<n>BonusExponent1` -- and `loop-mods.json` already
+  carried `BonusExponent1` for every mod, which is that same field. An earlier note in this file
+  said that file had the costs but not the per-level bonus; **that was wrong**. LM240 gives 1 crew
+  per level and LM239 gives 8 ranks per level, asserted against the extracted scene data by
+  `tools/bench/crew-rank-check.js` so the constants in `shipSchema.js` cannot drift from it.
 - **Ship install bonuses MULTIPLY as independent factors, and Meltdown exponentiates the whole
   product exactly ONCE.** Read out of `libil2cpp.so` and confirmed twice — by hand from capstone,
   then independently from Ghidra-decompiled C via `tools/il2cpp-cli/decompile.py`:

@@ -131,14 +131,19 @@ function realNum(v) {
 // Crew/Rank inputs were simplified -- both say 8 crew per level and 1 rank per level, and the two
 // were derived independently.
 //
-// NOT MODELLED, and deliberately loud about it rather than silently dropped: the game also adds
-// `LM240Bonus` to crew and `LM239Bonus1 + ResearchLaboratory.FinalAllShipsRanksBonus` to rank.
-// Both loop mods are level 0 on the reference save so they contribute nothing there, and
-// tools/reference/loop-mods.json carries their costs but not their per-level Bonus, so the
-// coefficient cannot be sourced yet. `unmodelledCrewRankTerms()` reports when a save would
-// actually be affected -- see its comment.
+// The loop-mod terms ARE modelled now. `LM240Bonus` (crew) and `LM239Bonus1` (rank) are both
+// plainly linear in the recovered C# -- `LM<n>Level * LM<n>BonusExponent1` -- and
+// tools/reference/loop-mods.json already carries `BonusExponent1` for every mod, which is the
+// same field. An earlier note here claimed that file had the costs but not the per-level bonus;
+// that was wrong. Values below are asserted against it by tools/bench/crew-rank-check.js.
+//
+// Still NOT modelled, and reported rather than dropped: `ResearchLaboratory
+// .FinalAllShipsRanksBonus` (= FinalRU83RankUpsBonus + FinalRU96RankUpsBonus). Both research
+// units are level 0 on the reference save.
 const FREE_CREW_PER_LEVEL = 8;
 const FREE_RANK_PER_LEVEL = 1;
+const LM240_CREW_PER_LEVEL = 1;    // LM240BonusExponent1, loop-mods.json entry 240
+const LM239_RANK_PER_LEVEL = 8;    // LM239BonusExponent1, loop-mods.json entry 239
 const FREE_SHIP_GRANTS = {
   1: { rankIS: 48, crewIS: 49 },   // Cradle
   2: { rankIS: 50, crewIS: 51 },   // Auxesia
@@ -156,10 +161,14 @@ const FREE_SHIP_GRANTS = {
  */
 function unmodelledCrewRankTerms(save) {
   const out = [];
-  const lm240 = Number(save.LM240Level) || 0;
-  const lm239 = Number(save.LM239Level) || 0;
-  if (lm240 > 0) out.push(`LM240 (level ${lm240}) adds crew the importer cannot compute`);
-  if (lm239 > 0) out.push(`LM239 (level ${lm239}) adds ranks the importer cannot compute`);
+  // LM239/LM240 are modelled now; what remains is the all-ships RANKS research bonus,
+  // FinalAllShipsRanksBonus = FinalRU83RankUpsBonus + FinalRU96RankUpsBonus. We have no mapping
+  // from those research units to a per-level amount, so report rather than guess.
+  const ru83 = Number(save.RU83Level) || 0;
+  const ru96 = Number(save.RU96Level) || 0;
+  if (ru83 > 0 || ru96 > 0) {
+    out.push(`RU83 (level ${ru83}) / RU96 (level ${ru96}) add all-ships ranks the importer cannot compute`);
+  }
   return out;
 }
 window.unmodelledCrewRankTerms = unmodelledCrewRankTerms;
@@ -192,8 +201,12 @@ function mapSaveToShips(save) {
     // On the reference save that is +80 crew and +8 ranks for Cradle alone -- crew 600 -> 680,
     // a 13% understatement of every Cradle install bonus.
     const free = FREE_SHIP_GRANTS[n];
-    const freeCrew = free ? FREE_CREW_PER_LEVEL * realNum(save[`IS${free.crewIS}Level`]) : 0;
-    const freeRanks = free ? FREE_RANK_PER_LEVEL * realNum(save[`IS${free.rankIS}Level`]) : 0;
+    // Loop-mod crew/ranks are GLOBAL (one LM240/LM239 level, applied to every ship), unlike the
+    // per-ship inscryptions.
+    const lmCrew = LM240_CREW_PER_LEVEL * realNum(save.LM240Level);
+    const lmRanks = LM239_RANK_PER_LEVEL * realNum(save.LM239Level);
+    const freeCrew = (free ? FREE_CREW_PER_LEVEL * realNum(save[`IS${free.crewIS}Level`]) : 0) + lmCrew;
+    const freeRanks = (free ? FREE_RANK_PER_LEVEL * realNum(save[`IS${free.rankIS}Level`]) : 0) + lmRanks;
 
     ships[n] = {
       rank: realNum(save[`${p}Rank`]) + freeRanks,

@@ -378,6 +378,43 @@ function shipEvolutionMultiplier(shipId, evoLevel) {
   return use;
 }
 
+// Two further multipliers sit inside EVERY install node's bonus, alongside the badges and Fleet
+// Analysis term we already apply (see the RUGen2Bonus chain in CLAUDE.md):
+//
+//   GemPerks.FinalPowerGU1Bonus
+//   ResearchLaboratory.FinalAllShipsInstallsBonus  ( = FinalRU83InstallsBonus * FinalRU96InstallsBonus )
+//
+// Both are UNIFORM across a ship's nodes, so they scale every candidate equally and cannot reorder
+// the optimizer -- but they do scale the magnitudes.
+//
+// Both are exactly 1 when their source is unowned, and that branch is modelled precisely:
+// `PowerGU1BonusCalc` returns a literal 1 when `PowerGU1Level <= 0`, and the all-ships installs
+// bonus is the product of two research bonuses that are 1 at level 0. When they ARE owned we
+// cannot compute them -- PowerGU1's active branch needs `PowerGU1BonusExponentCrew` /
+// `PowerGU1BonusExponentRank`, and GemPerks is one of the classes whose type tree does not match
+// its serialized layout, so those values are unreadable; and we have no mapping from RU83/RU96 to
+// a per-level installs bonus. So this returns 1 and `unmodelledInstallBonusTerms()` says so.
+function installBonusGlobalMultiplier() {
+  return 1;
+}
+
+/** Install-bonus multipliers we cannot compute for this account. Empty when the model is exact. */
+function unmodelledInstallBonusTerms() {
+  const gems = (window.store && window.store.gems) || {};
+  const research = (window.store && window.store.fleetResearch && window.store.fleetResearch.levels) || {};
+  const out = [];
+  const gu1 = Number(gems.powerGU1Level || gems.PowerGU1Level || 0) || 0;
+  if (gu1 > 0) {
+    out.push(`PowerGU1 (level ${gu1}) multiplies every install bonus by an amount this tool cannot compute`);
+  }
+  const ru83 = Number(research.ru83 || 0) || 0;
+  const ru96 = Number(research.ru96 || 0) || 0;
+  if (ru83 > 0 || ru96 > 0) {
+    out.push(`RU83/RU96 all-ships installs bonus (levels ${ru83}/${ru96}) is not modelled`);
+  }
+  return out;
+}
+
 /** Evolution factors we cannot compute for this account, for honest reporting. Empty when fine. */
 function unmodelledEvolutionTerms() {
   const gems = (window.store && window.store.gems) || {};
