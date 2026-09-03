@@ -448,6 +448,13 @@ window.attributeBudgetForLevel = (level) => 3 * level;
 // Gradients + per-field border colors copied verbatim from the live bundle's gem config
 // objects (dO/hO/pO/fO/gO/mO/vO in index-CBtvNH_D.js) so card headers/badges/accent bars
 // match pixel-for-pixel instead of approximating with Tailwind palette classes.
+//
+// qualityCosts' shape (a per-level array, not a formula) is confirmed against the game itself,
+// not just the live bundle (2026-09-02, disassembled): TextHandlerGemNodes.SetGemNodeCostText
+// reads a level's cost via `List<BigDouble>.get_Item(level)`, not a computed function call --
+// the game stores these as a precomputed lookup list too. Went looking for a formula to check
+// coefficients against and found there isn't one on the game's side either; the live bundle
+// (already this data's real source) is the right place to keep pulling the actual numbers from.
 window.GEM_TREES = {
   // nonSimKeys/nonSimLabels/nonSimCaps: fields the live site tracks per gem tree that don't
   // feed the sim at all (pure account bookkeeping) -- confirmed directly on cifi-tools.com
