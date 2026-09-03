@@ -34,7 +34,12 @@ import UnityPy
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "reference", "gear-names.json")
-LEVEL0 = os.path.join(HERE, "..", "gamefiles", "apk-0.7.3.54", "assets", "level0")
+# Which pulled build to read. Every conclusion drawn from these files is about ONE build, so make
+# the build switchable and print it -- comparing two versions is how you tell "the game does not do
+# this" apart from "this build does not do this yet", which is exactly the distinction the
+# Yellow/Black gear question turned on.
+APK_DIR = os.environ.get("CIFI_APK", "apk-0.7.3.54")
+LEVEL0 = os.path.join(HERE, "..", "gamefiles", APK_DIR, "assets", "level0")
 
 ROW = re.compile(r"ItemSelectionLayout/(\d+)(?:-([A-Za-z]+)-Q(\d+))?/ReqBox/(DescText|LevelText)$")
 PRINTABLE = re.compile(rb"[ -~]{3,}")
@@ -155,13 +160,13 @@ def main():
                    "ItemSelectionLayout/<index>/ReqBox/{DescText,LevelText} in level0",
         "_meaning": "Displayed gear piece names, in the crafting menu's own order. Rows carrying a "
                     "gemGate are locked behind that gem at the given quality.",
-        "_game": "CIFI 0.7.3.54",
+        "_game": APK_DIR,
         "rows": ordered,
     }
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(json.dumps(payload, indent=2) + "\n")
-    print(f"wrote {len(ordered)} gear name(s) to {OUT}", file=sys.stderr)
+    print(f"wrote {len(ordered)} gear name(s) from {APK_DIR} to {OUT}", file=sys.stderr)
     for r in ordered:
         gate = f"  [{r['gemGate']} Q{r['quality']}]" if r["gemGate"] else ""
         print(f"  {r['index']:2}  {r['name']:<26}{gate}")

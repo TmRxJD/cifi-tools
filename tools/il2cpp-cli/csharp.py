@@ -47,13 +47,17 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-GAMEFILES = os.path.join(HERE, "..", "gamefiles", "apk-0.7.3.54")
+# Which pulled build to decompile. Switchable because "the game does not do X" and "this build
+# does not do X yet" are different claims, and telling them apart means running the same extraction
+# against two versions -- see the Yellow/Black gear question.
+APK_DIR = os.environ.get("CIFI_APK", "apk-0.7.3.54")
+GAMEFILES = os.path.join(HERE, "..", "gamefiles", APK_DIR)
 SCRATCH = os.environ.get("HUNTERSIM_SCRATCH") or (
     r"B:\huntersim-re" if os.path.isdir("B:\\") else os.path.join(GAMEFILES, "scratch"))
 
 CPP2IL_EXE = os.path.join(SCRATCH, "cpp2il", "Cpp2IL.exe")
-CPP2IL_OUT = os.path.join(SCRATCH, "cpp2il_out")
-CS_CACHE = os.path.join(SCRATCH, "csharp")
+CPP2IL_OUT = os.path.join(SCRATCH, "cpp2il_out" if APK_DIR == "apk-0.7.3.54" else f"cpp2il_out-{APK_DIR}")
+CS_CACHE = os.path.join(SCRATCH, "csharp" if APK_DIR == "apk-0.7.3.54" else f"csharp-{APK_DIR}")
 UNITY_VERSION = "6000.3.8f1"
 DEFAULT_ASSEMBLY = "Assembly-CSharp.dll"
 

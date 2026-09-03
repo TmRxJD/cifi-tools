@@ -1,7 +1,7 @@
 {
   "_source": "RU<Category><n>Bonus property bodies in the recovered FleetManager C# (tools/il2cpp-cli/csharp.py)",
   "_meaning": "Gear.<Color>Item<N>Bonus<M> is multiplied into that node's bonus. M=1 is the piece's install1 target, M=2 its install2.",
-  "_game": "CIFI 0.7.3.54",
+  "_game": "apk-0.7.3.61",
   "mappings": [
     {
       "category": "Academy",

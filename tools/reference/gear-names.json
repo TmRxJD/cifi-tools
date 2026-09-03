@@ -1,7 +1,7 @@
 {
   "_source": "AcademyCanvas/YourAcademyMenu/GearMenu/CraftingNewGearPiecePanel/ItemSelectionLayout/<index>/ReqBox/{DescText,LevelText} in level0",
   "_meaning": "Displayed gear piece names, in the crafting menu's own order. Rows carrying a gemGate are locked behind that gem at the given quality.",
-  "_game": "CIFI 0.7.3.54",
+  "_game": "apk-0.7.3.61",
   "rows": [
     {
       "index": 0,

@@ -739,12 +739,28 @@ think one is wrong, disprove it with a test.
   to prevent. When a future build wires them, `extract-gear-installs.py` will start emitting Yellow
   and Black rows and `gear-install-check.js` will print SKIP lines for them -- that is the signal to
   add the sets.
-  **IMPORTANT CAVEAT, and the most likely reason to revisit this:** all of the above describes the
-  APK in `tools/gamefiles/apk-0.7.3.54`. Gear plainly does buff install nodes -- that is the whole
-  point of the system, and it is confirmed for all 54 mappings we model. **If the live game shows
-  install icons on Yellow or Black pieces, the client is NEWER than our dump and the answer is to
-  re-pull the APK and re-run `extract-gear-installs.py`, not to re-argue this from the old files.**
-  A conclusion about a specific build is not a conclusion about the game.
+  **CONFIRMED AGAINST A SECOND, NEWER BUILD.** The above was derived from 0.7.3.54; the live client
+  was 0.7.3.61, so it was pulled (`tools/gamefiles/apk-0.7.3.61`) and every gear extraction re-run
+  against it. **Everything is identical:** the same 37 menu names and gem gates, the same 26
+  set-bonus -> resource mappings, and FleetManager still calls exactly **54** gear getters across
+  the same six colours with **zero** Yellow or Black. The player also reports no Yellow or Black set
+  in game, which agrees. So these are unreleased content in both builds, not a modelling gap.
+  **The extractors are now build-switchable via `CIFI_APK`** (`csharp.py`, `extract-gear-names.py`,
+  `extract-gear-installs.py`, `extract-gear-set-bonuses.py`), e.g.
+  `CIFI_APK=apk-0.7.3.61 python tools/bench/extract-gear-installs.py`. Cpp2IL output is cached
+  per-build so two versions cannot overwrite each other. **`typetree.py` is NOT switchable** -- it
+  needs an Il2CppDumper run (`dump.cs` + `DummyDll`) that exists only for 0.7.3.54, so
+  `gear-set-bonus-map.json` records `_mappingFrom` and `_valuesFrom` separately rather than
+  labelling the whole file with one version it does not have.
+  Keep the general rule regardless: **a conclusion about a specific build is not a conclusion about
+  the game.** Comparing two builds is what turns "the game does not do this" into a claim you can
+  actually support -- and re-pulling is cheap (`adb pull` the two APKs; MuMu's ADB is on port 16384
+  once the instance is actually booted, which `MuMuManager.exe info -v 0` will tell you).
+  **When reassembling `level0` from the APK's `level0.split*` parts, concatenate in NUMERIC order**
+  -- a shell glob gives split0, split1, split10, split2 and silently produces a corrupt scene -- and
+  extract `sharedassets0.assets` and `globalgamemanagers.assets` alongside it, or MonoScript
+  references do not resolve and every `Text` component reads as an unknown type (which looks exactly
+  like "the menu path changed").
 - **`getGearSets()` reconciles the stored list against `REAL_GEAR_PIECES` by name; it used to
   return the stored list verbatim.** That meant the store, not the code, was authoritative for
   game-sourced data: **any piece added later never appeared for anyone who had ever opened the Ships

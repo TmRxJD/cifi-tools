@@ -30,6 +30,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "reference", "gear-set-bonus-map.json")
 CSHARP = os.path.join(HERE, "..", "il2cpp-cli", "csharp.py")
+# csharp.py reads the same variable, so one env var switches the whole extraction.
+APK_DIR = os.environ.get("CIFI_APK", "apk-0.7.3.54")
 
 # `<TotalSetCellBonus>k__BackingField = ...` -- the auto-property backing field, which is what
 # closes each resource's block. ilspycmd emits the angle brackets literally when decompiling a
@@ -48,6 +50,19 @@ RESOURCE_LABEL = {
     "RP": "Research Points",
     "AP": "Academy Points",
 }
+
+
+def typetree_build():
+    """Which build typetree.py actually reads, taken from its own source rather than assumed.
+
+    It needs an Il2CppDumper run (dump.cs + DummyDll), so it cannot simply follow CIFI_APK. Reading
+    the constant means this label self-corrects the day typetree.py becomes build-switchable,
+    instead of quietly going stale.
+    """
+    tt = os.path.join(HERE, "..", "il2cpp-cli", "typetree.py")
+    with open(tt, encoding="utf-8") as f:
+        m = re.search(r'GAMEFILES\s*=\s*os\.path\.join\([^)]*?"(apk-[\d.]+)"', f.read())
+    return m.group(1) if m else "unknown"
 
 
 def read_bonus_values():
@@ -145,7 +160,12 @@ def main():
         "unusedBonuses": unused,
         "_meaning": "<color>SetBonus<index> is multiplied into that resource's TotalSet<...>Bonus. "
                     "The index is the piece's position within its colour.",
-        "_game": "CIFI 0.7.3.54",
+        # The two halves can come from DIFFERENT builds and saying so is the point: csharp.py honours
+        # CIFI_APK, but typetree.py needs an Il2CppDumper run (dump.cs + DummyDll) that currently
+        # exists only for 0.7.3.54. Labelling the whole file with one version would claim a
+        # provenance half the data does not have.
+        "_mappingFrom": APK_DIR,
+        "_valuesFrom": typetree_build(),
         "mappings": sorted(mappings, key=lambda m: (m["color"], m["index"])),
     }
     os.makedirs(os.path.dirname(OUT), exist_ok=True)

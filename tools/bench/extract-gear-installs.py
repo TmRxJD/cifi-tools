@@ -20,6 +20,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "reference", "gear-install-map.json")
 CSHARP = os.path.join(HERE, "..", "il2cpp-cli", "csharp.py")
+# csharp.py reads the same variable, so one env var switches the whole extraction.
+APK_DIR = os.environ.get("CIFI_APK", "apk-0.7.3.54")
 
 PROP = re.compile(r"^\tpublic \w[\w<>]* (RU([A-Za-z]+)(\d+)Bonus)\s*$")
 MEMBER = re.compile(r"^\t(public|private|internal|protected)\s")
@@ -68,7 +70,7 @@ def main():
                    "(tools/il2cpp-cli/csharp.py)",
         "_meaning": "Gear.<Color>Item<N>Bonus<M> is multiplied into that node's bonus. M=1 is the "
                     "piece's install1 target, M=2 its install2.",
-        "_game": "CIFI 0.7.3.54",
+        "_game": APK_DIR,
         "mappings": sorted(mappings, key=lambda e: (e["category"], e["node"], e["color"], e["item"])),
     }
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
