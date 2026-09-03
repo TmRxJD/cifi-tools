@@ -514,11 +514,21 @@ think one is wrong, disprove it with a test.
   `{id:"r5",…,maxLevel:8,canBeUpgraded:!0}`, the same for r6, and `maxLevel:100` for r9. That also
   reconciles the community table — Ryther's "8 rising to 11" was the base cap and the raise
   reported as one number.
-  **We hold the BASE cap and deliberately do not model the raise**: the raised value is not
-  published next to the `canBeUpgraded` flag, and offering levels the account cannot buy is the
-  same silent-optimism failure as defaulting a gate to unlocked. Costs were always exact;
-  `relicPriceableLevels()` still walks further than the cap for callers that need it. The refusal
-  mechanism stays (tier-2 caps are still not in the extracted dataset) and is still tested.
+  **We hold the BASE cap and deliberately do not model the raise**: the raised value depends on
+  live gem state, and offering levels the account cannot buy is the same silent-optimism failure as
+  defaulting a gate to unlocked. Costs were always exact; `relicPriceableLevels()` still walks
+  further than the cap for callers that need it. The refusal mechanism stays (tier-2 caps are still
+  not in the extracted dataset) and is still tested.
+  **CONFIRMED AGAINST THE GAME, and the two community sources were BOTH right.** The game caps
+  tier-1 relics in three bands — `Tier1LowRelicsMaxLevel` 200, `Medium` 100, `High` 8 (authored
+  data) — and dispatches each relic to one of them in `CheckRelic<N>MaxLevelStatus()` (recovered
+  C#). All 20 assignments match what we ship, r10 and r12 included; `tools/bench/relic-cap-check.js`
+  asserts it against `tools/reference/relic-caps.json`.
+  The raises are real and there are TWO of them, which is exactly why the sources appeared to
+  disagree: `FinalTier1<Band>RelicsMaxLevel = base + GemNodes.FinalExodus3Bonus` for every band,
+  and r5/r6/r14 additionally add `GemNodes.FinalPower1Bonus4`. Ryther was describing the Power
+  raise on High-band relics; the fragment planner was describing the Exodus raise. Not modelling
+  them is now a deliberate choice about a KNOWN mechanism rather than an unresolved disagreement.
 - **A modal that starts async work must cancel it on close, and `titledModal` fires `modal-close`
   so it can.** Closing used to just `remove()` the overlay, leaving the Effective Path walk
   running: invisible, uncancellable, and still competing for the main thread and for wasm

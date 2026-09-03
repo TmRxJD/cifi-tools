@@ -1,0 +1,92 @@
+{
+  "_game": "CIFI 0.7.3.54",
+  "_raises": "FinalTier1<Band>RelicsMaxLevel = base + GemNodes.FinalExodus3Bonus. r5, r6 and r14 additionally add GemNodes.FinalPower1Bonus4. This is why the two community sources disagreed -- both raises are real and they are different.",
+  "_source": "band per relic parsed from CheckRelic<N>MaxLevelStatus() in the recovered C# (tools/il2cpp-cli/csharp.py); band base values read as authored serialized data (tools/il2cpp-cli/typetree.py)",
+  "bandBaseMaxLevel": {
+    "High": 8,
+    "Low": 200,
+    "Medium": 100
+  },
+  "relicBand": {
+    "r1": {
+      "band": "Medium",
+      "powerRaised": false
+    },
+    "r10": {
+      "band": "High",
+      "powerRaised": false
+    },
+    "r11": {
+      "band": "High",
+      "powerRaised": false
+    },
+    "r12": {
+      "band": "Medium",
+      "powerRaised": false
+    },
+    "r13": {
+      "band": "Low",
+      "powerRaised": false
+    },
+    "r14": {
+      "band": "High",
+      "powerRaised": true
+    },
+    "r15": {
+      "band": "High",
+      "powerRaised": false
+    },
+    "r16": {
+      "band": "Medium",
+      "powerRaised": false
+    },
+    "r17": {
+      "band": "Medium",
+      "powerRaised": false
+    },
+    "r18": {
+      "band": "Low",
+      "powerRaised": false
+    },
+    "r19": {
+      "band": "High",
+      "powerRaised": false
+    },
+    "r2": {
+      "band": "Medium",
+      "powerRaised": false
+    },
+    "r20": {
+      "band": "Medium",
+      "powerRaised": false
+    },
+    "r3": {
+      "band": "Medium",
+      "powerRaised": false
+    },
+    "r4": {
+      "band": "Medium",
+      "powerRaised": false
+    },
+    "r5": {
+      "band": "High",
+      "powerRaised": true
+    },
+    "r6": {
+      "band": "High",
+      "powerRaised": true
+    },
+    "r7": {
+      "band": "Medium",
+      "powerRaised": false
+    },
+    "r8": {
+      "band": "Medium",
+      "powerRaised": false
+    },
+    "r9": {
+      "band": "Medium",
+      "powerRaised": false
+    }
+  }
+}
