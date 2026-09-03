@@ -102,14 +102,52 @@ export async function evaluateOnLiveSite(hunter, testBuild) {
     testBuild.globalUpgrades || {},
     {},
   );
-  const stats = await importCodeAndReadStats(hunter, code);
+  const stats = await importCodeAndReadStats(hunter, code, {
+    accountUpgrades: testBuild.accountUpgrades,
+    hunterStats: testBuild.accountHunterStats,
+  });
   return { ...stats, buildCode: code };
 }
 
 // Imports a build code AS-IS (no regeneration) -- used to test real, pre-existing
 // build-share codes (e.g. from a user's own account history) rather than ones this server
 // generated itself, so decode/encode round-trip bugs can't hide behind always regenerating.
-export async function importCodeAndReadStats(hunter, code) {
+/**
+ * Seed the live site's ACCOUNT-WIDE upgrade state before a build is imported.
+ *
+ * WHY THIS EXISTS. A build share code carries only that hunter's CODE_PARAMS. Everything else --
+ * most relics, every trinket, most inscryptions -- lives in the site's own account state, under
+ * the `hunter-data` localStorage key. Without a way to set it, those upgrades simply cannot be
+ * compared: passing them to compare_builds applied them to the CLONE while the site evaluated
+ * zero, which reported a real level-49 Borge as 98% off and looked like a clone bug.
+ *
+ * Writing account state directly is how the site itself stores it, so this exercises the real
+ * resolution path rather than a test hook. Only the keys given are touched; the rest of
+ * `hunter-data` is left exactly as found.
+ */
+async function seedAccountUpgrades(page, accountUpgrades, hunterStats, hunter) {
+  if (!accountUpgrades && !hunterStats) return;
+  await page.evaluate(({ ups, stats, h }) => {
+    const raw = localStorage.getItem('hunter-data');
+    const d = raw ? JSON.parse(raw) : {};
+    d.upgrades = d.upgrades || {};
+    for (const [flatKey, value] of Object.entries(ups || {})) {
+      const dot = flatKey.indexOf('.');
+      const cat = dot === -1 ? flatKey : flatKey.slice(0, dot);
+      const id = dot === -1 ? null : flatKey.slice(dot + 1);
+      if (!id) continue;
+      d.upgrades[cat] = d.upgrades[cat] || {};
+      d.upgrades[cat][id] = value;
+    }
+    if (stats && Object.keys(stats).length) {
+      d.hunterStats = d.hunterStats || {};
+      d.hunterStats[h] = { ...(d.hunterStats[h] || {}), ...stats };
+    }
+    localStorage.setItem('hunter-data', JSON.stringify(d));
+  }, { ups: accountUpgrades || {}, stats: hunterStats || {}, h: hunter });
+}
+
+export async function importCodeAndReadStats(hunter, code, opts = {}) {
   const browser = await getBrowser();
   const context = await browser.newContext();
   const page = await context.newPage();
@@ -120,9 +158,19 @@ export async function importCodeAndReadStats(hunter, code) {
     // live site's own gating), so a guest session can never click it into view. The route
     // itself isn't actually gated server-side though -- navigating directly to it works.
     await page.goto(`${LIVE_URL}${HUNTER_NAV_HREF[hunter]}`, { waitUntil: 'domcontentloaded' });
+    // Account state must exist BEFORE the app reads it, so seed then reload.
+    if (opts.accountUpgrades || opts.hunterStats) {
+      await seedAccountUpgrades(page, opts.accountUpgrades, opts.hunterStats, hunter);
+      await page.goto(`${LIVE_URL}${HUNTER_NAV_HREF[hunter]}`, { waitUntil: 'domcontentloaded' });
+    }
     await page.getByRole('button', { name: 'Import', exact: true }).click();
     await page.locator('textarea').first().fill(code);
-    await page.getByRole('button', { name: /^Import with Upgrades/ }).click();
+    // "Import with Upgrades" writes the CODE's upgrades over the account's, which would undo the
+    // seeding. With seeded state, import talents/attributes only and let the account supply the
+    // rest -- which is also how a real player uses the site.
+    await page.getByRole('button', {
+      name: (opts.accountUpgrades || opts.hunterStats) ? /^Import Build Only/ : /^Import with Upgrades/,
+    }).click();
     await page.getByRole('button', { name: 'Create Build', exact: true }).click();
     await page.getByText('Main Statistics').waitFor({ timeout: 15000 });
     const text = await page.locator('main').innerText();

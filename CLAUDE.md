@@ -1516,6 +1516,7 @@ node tools/bench/upgrade-item-parity.js <live-bundle.js>  # every item's cap + c
 node tools/bench/talent-attribute-parity.js <live-bundle.js> # talents/attrs/stat caps
 node tools/bench/attribute-tree-check.js # the attribute DEPENDENCY tree vs the GAME
 node tools/bench/cap-raise-check.js    # every cap the GAME can RAISE is accounted for
+node tools/bench/real-account-optimizer-check.js # optimizer vs the REAL save build
 CIFI_APK=apk-0.7.3.61 python tools/bench/cap-raise-audit.py --write
 CIFI_APK=apk-0.7.3.61 python tools/bench/extract-attribute-tree.py --write
 node tools/bench/relic-tier2-check.js [live-bundle.js]    # tier-2 relic caps vs the GAME
