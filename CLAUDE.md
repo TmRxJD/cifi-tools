@@ -152,6 +152,7 @@ There is exactly one place for each of these. **Do not add a second.**
 | Fleet badge -> ships + value | `tools/reference/badge-map.json` |
 | Every factor per install node | `tools/reference/node-factors.json` |
 | Zod schemas for the references | `tools/bench/reference-schemas.js` |
+| Zod schemas for the app's own data | `tools/bench/app-schemas.js` |
 | Authored tier-2 relic caps/costs | `tools/reference/relic-tier2.json` |
 | Omitted uniform per-node terms | `tools/reference/uniform-node-terms.json` |
 | Gear piece names (the game's own) | `tools/reference/gear-names.json` |
@@ -1046,19 +1047,51 @@ think one is wrong, disprove it with a test.
   no Academy node reads a per-ship installs research, which independently confirms
   `shipOrder: [1..6]` excluding Zeus -- and `Badge5` is read by exactly ONE Shard node, so it
   belongs to that node's own formula rather than being a ship multiplier.
-- **Reference files are schema-enforced with zod (`reference-schema-test.js`), and zod is a DEV
-  dependency only — the shipped webapp still has no build step.** The failure it prevents is
-  specific: when an extractor changes shape, a consumer reads `undefined`, and a bench comparing it
-  to the other side's `undefined` PASSES. A silently empty reference looks exactly like a clean run.
-  Schemas are `.strict()`, so a NEW key fails too — a new field usually means the extractor learned
-  something no consumer has been taught to read.
-  **The first version of these schemas failed its own negative control**: `z.record()` accepts `{}`,
-  so "silently empty payload" passed. Payload collections now use a `nonEmptyRecord` helper. Three
-  controls are verified: empty payload, wrong type, and an unexpected key.
-  The test also reports when the references come from MORE THAN ONE BUILD. That is allowed — older
-  files stay valid until re-extracted — but it is the early warning for the mixed-build class of
-  error, where resolving one build's offsets against another's `dump.cs` returns confident nonsense
-  rather than failing.
+- **EVERY data file is schema-enforced with zod, and zod is a DEV dependency only -- the shipped
+  webapp still has no build step.** Two modules, split by where the data comes from:
+  `reference-schemas.js` covers the 24 game-derived files under `tools/reference/`, and
+  `app-schemas.js` covers the app's own data -- `params.json`, the persisted store, and the decoded
+  save fixtures.
+  The failure mode this prevents is specific and has happened repeatedly: an extractor changes
+  shape, a consumer reads `undefined`, and the bench comparing it to the other side's `undefined`
+  PASSES. A silently empty reference looks exactly like a clean run. Schemas are `.strict()`
+  wherever the shape is fully known, so a NEW key fails too -- a new field usually means the
+  extractor learned something no consumer has been taught to read.
+  **The registry is completeness-checked against the DIRECTORY, not against itself.** Iterating the
+  schema list can only validate files someone remembered to declare, so a reference added later is
+  exactly as unprotected as one with no test at all -- and invisible. `reference-schema-test.js`
+  now reads `tools/reference/` and FAILS on any `.json` with no schema.
+  **The store schema is hand-written, because `StoreSchema.SCHEMA` declares factories rather than
+  types -- so it is a duplicated rule, the kind this repo has watched drift before.** The guard is
+  a key-set comparison between the two, which fails both ways: a field added to `SCHEMA` with no
+  zod entry, and a zod entry for a field `SCHEMA` does not declare.
+  **Shape and invariants are different checks and both are needed.** `validateStore()` checks
+  RELATIONSHIPS ("an inferred level must be able to fund the allocation it was inferred from");
+  the zod schema checks SHAPE (`gems.<tree>.nodes` is six booleans). Shape drift is the one that
+  produces a silent `undefined` at a read site instead of a thrown error -- and `isUpgradeUnlocked`
+  indexes `nodes[gate.node - 1]`, so a short array silently locks an upgrade the account owns.
+  **The store is validated in three states, not just fresh.** A shape can be right when it is
+  created and wrong once it has been used, so the bench checks `freshStore()`, a store carrying a
+  build and gem state, and a store after a REAL save import -- which is where a mistake in
+  `mapSaveToStore` would actually surface. The real-save case SKIPS rather than fabricating a save
+  when none has been pulled; a synthetic one would only re-test the factory. (`harness.js` now
+  loads `saveImport.js` so the hunter-side importer is reachable from a bench at all.)
+  **Where a schema is loose, it says why.** Several payloads are genuinely heterogeneous -- loop
+  mods declare v2/v3 tiers only sometimes, `scene-defs` families each have their own field set,
+  `gem-trees` upgrade rows carry `weight` as a string, a number OR an empty object depending on the
+  upgrade kind. Pinning a union of every observed shape would fail the moment the game adds a field,
+  which is the change a reference should absorb rather than reject. So the envelope is strict, the
+  collections must be non-empty, and the leaf VALUE types are pinned -- which is what a drifted read
+  actually breaks.
+  Two values that look like defects and are not: `authored-values.FleetManager.EvoBonusHephaestus5`
+  stays an unflattened `{mantissa, exponent}` because 1e500 overflows a JS double, and a `null` cost
+  on a gem quality level or node means declared-but-unreleased. Neither may be coerced -- a null
+  cost turned into 0 reads as "free", which is the silent-zero trap this file bans elsewhere.
+  **All of it is verified with negative controls**, because a schema that cannot fail is
+  decoration: empty payload, wrong type, unexpected key, a short gem-nodes array, a duplicate wasm
+  parameter name, a hunter stat arriving as a string, a gear piece persisted without its name, a
+  negative fragment balance, an undeclared store field, and an unschemaed file appearing in
+  `tools/reference/`.
 - **A THIRD fleet badge was missing entirely: `Badge12` ("Innovation Badge #2"), x222 on Demeter,
   Koios and Zeus.** The tool modelled `Badge2` (x7) and `DarkBadge1` (x3) and stopped there. The
   game reads `FinalBadge2Bonus` in every Gen/Tech/Loop/Auto node and `FinalBadge12Bonus` in every
@@ -1310,6 +1343,7 @@ node tools/bench/param-plumbing-check.js # every sim param is settable into its 
 node tools/bench/override-liveness-check.js # every override the UI offers reaches the evaluator
 node tools/bench/wasm-arity-check.js   # wasm argument count == params.json, per hunter
 node tools/bench/reference-schema-test.js # zod: every reference file matches its schema
+node tools/bench/app-schema-test.js    # zod: params.json, the store, the save fixture
 node tools/bench/growth-counter-check.js # per-run counter classification + zero-counter warning
 node tools/bench/allocator-check.js     # allocator vs a reference greedy, ALL 7 ships
 python tools/il2cpp-cli/typetree.py --dump FleetManager --grep BaseBonus  # read authored data

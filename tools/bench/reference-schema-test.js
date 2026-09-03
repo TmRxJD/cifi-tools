@@ -61,7 +61,21 @@ for (const [file, schema] of Object.entries(schemas)) {
   console.log(`ok   ${file}`);
 }
 
-console.log(`\nvalidated ${Object.keys(schemas).length} reference file(s) against their schemas`);
+// COMPLETENESS. Validating the files we happen to have declared says nothing about a file added
+// later: an unschemaed reference is exactly as unprotected as one with no test at all, and it is
+// invisible here because the loop above iterates the SCHEMA LIST, not the directory. So the
+// directory is the source of truth for which files must be checked, and a missing schema fails
+// rather than silently skipping.
+const onDisk = fs.readdirSync(REF_DIR).filter((f) => f.endsWith('.json')).sort();
+const unschemaed = onDisk.filter((f) => !schemas[f]);
+if (unschemaed.length) {
+  failures += unschemaed.length;
+  console.log('');
+  unschemaed.forEach((f) => console.log(`FAIL ${f}: no schema declared in reference-schemas.js`));
+}
+
+console.log(`\nvalidated ${Object.keys(schemas).length} of ${onDisk.length} reference file(s) `
+  + 'against their schemas');
 
 if (builds.size > 1) {
   console.log('\nNOTE: these references come from more than one build:');

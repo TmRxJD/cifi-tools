@@ -79,7 +79,7 @@ function browserSandbox() {
   sb.self = sb;
   sb.globalThis = sb;
   vm.createContext(sb);
-  for (const f of ['hunterDefs.js', 'shipSchema.js', 'shipsPage.js', 'buildCode.js', 'costFormulas.js', 'hunterSimBrowser.js', 'optimizer/space.js', 'optimizer/objective.js', 'storeSchema.js']) {
+  for (const f of ['hunterDefs.js', 'shipSchema.js', 'shipsPage.js', 'buildCode.js', 'costFormulas.js', 'hunterSimBrowser.js', 'optimizer/space.js', 'optimizer/objective.js', 'storeSchema.js', 'saveImport.js']) {
     vm.runInContext(fs.readFileSync(path.join(PUBLIC, f), 'utf8'), sb, { filename: f });
   }
   sandbox = sb;

@@ -1,0 +1,158 @@
+'use strict';
+// Zod schemas for the app's OWN data: the wasm parameter lists, the persisted store, and the
+// decoded-save fixture. `reference-schemas.js` covers the game-derived files under
+// tools/reference/; this covers everything else the tool actually runs on.
+//
+// WHY THE STORE IS IN HERE AT ALL, given storeSchema.js already validates it. `validateStore()`
+// checks INVARIANTS -- relationships between fields, like "an inferred level must be able to fund
+// the allocation it was inferred from". This checks SHAPE: that `gems.<tree>.nodes` is six
+// booleans and not, say, an object keyed by node number. The two catch different bugs, and shape
+// drift is the one that produces a silent `undefined` at a read site rather than a thrown error.
+// The store is the one thing here with no backend behind it -- there is no re-fetching a store
+// that was written in a wrong shape.
+//
+// Zod stays a DEV dependency: nothing in this file is loaded by the browser, so the shipped webapp
+// still has no build step.
+
+const { z } = require('zod');
+
+const nonEmptyRecord = (key, value) => z.record(key, value)
+  .refine((o) => Object.keys(o).length > 0, { message: 'is empty -- nothing was produced' });
+
+const count = z.number().int().nonnegative();
+const numericKey = z.string().regex(/^\d+$/, 'expected a numeric id as the key');
+
+// A gem tree as the Gem Planner persists it. `nodes` is SIX booleans -- the game's own structure is
+// 7 trees x 6 nodes, confirmed against its metadata -- and the length matters: `isUpgradeUnlocked`
+// indexes `nodes[gate.node - 1]`, so a short array silently reads `undefined` and locks an upgrade
+// the account has actually bought.
+const gemTree = z.object({
+  level: count,
+  nodes: z.array(z.boolean()).length(6),
+  upgrades: z.record(z.string(), z.union([z.number(), z.boolean()])),
+}).strict();
+
+// Per-hunter state. The stat NAMES differ per hunter (Ozzy has multichance/multipower where Borge
+// has critchance/critpower; Knox has block/charge/reload/proj), so the record is left open on keys
+// and closed on value type -- a stat that arrives as a string is the failure worth catching, and
+// asserting the exact stat list here would duplicate hunterDefs.js and drift from it.
+const hunterState = z.object({
+  hunterStats: nonEmptyRecord(z.string().min(1), z.number()),
+  builds: z.array(z.unknown()),
+  iterations: z.number().int().positive(),
+  lootFilter: z.object({
+    mat1: z.boolean(), mat2: z.boolean(), mat3: z.boolean(), xp: z.boolean(),
+  }).strict(),
+}).strict();
+
+// Free-form maps the user fills in, keyed by ship or generator id. Declared explicitly as
+// open-valued rather than left off the schema, so that "we chose not to constrain this" is
+// distinguishable from "nobody thought about it".
+const freeFormMap = z.record(z.string(), z.unknown());
+
+const storeSchema = z.object({
+  globalUpgrades: z.record(z.string(), z.unknown()),
+  gems: nonEmptyRecord(z.string().min(1), gemTree),
+  categories: z.array(z.object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    isSystem: z.boolean(),
+  }).passthrough()).min(1),
+  viewMode: z.string().min(1),
+
+  ships: freeFormMap,
+  researchUnits: freeFormMap,
+  shipBuilds: freeFormMap,
+  shipInputs: freeFormMap,
+
+  // Mostly plain counters, plus `focusWeights`, which is a nested per-resource weighting map.
+  // The union says so rather than a blanket z.unknown(): a counter arriving as a string is the
+  // failure worth catching, and it is what a bad import produces.
+  shipGear: nonEmptyRecord(
+    z.string().min(1),
+    z.union([z.number(), z.record(z.string().min(1), z.number())]),
+  ),
+  gearSets: z.object({
+    // Every piece's game-sourced fields are owned by REAL_GEAR_PIECES; the store owns only
+    // level/owned. Both are checked because a piece persisted without a name cannot be reconciled
+    // back to its definition -- pieces are keyed by name.
+    pieces: z.array(z.object({
+      name: z.string().min(1),
+      level: count,
+    }).passthrough()).min(1),
+  }).passthrough(),
+  fleetBoosts: z.object({ levels: z.record(z.string(), count) }).passthrough(),
+  fleetResearch: z.object({ levels: z.record(z.string(), count) }).passthrough(),
+  fleetBadges: z.object({ owned: z.record(z.string(), z.boolean()) }).passthrough(),
+  unlockedGens: z.record(numericKey, z.boolean()),
+
+  optimizerSettings: z.object({
+    shipEnabled: z.record(numericKey, z.boolean()),
+    zaglag: z.boolean(),
+    prepForLongRun: z.boolean(),
+    runLength: z.string().min(1),
+  }).passthrough(),
+  importPrefs: z.object({
+    categories: z.record(z.string(), z.boolean()),
+    autoPoll: z.boolean(),
+    quiet: z.boolean(),
+    checklistCollapsed: z.boolean(),
+  }).passthrough(),
+  loadoutTabs: z.object({
+    tabs: z.array(z.object({ id: z.number() }).passthrough()).min(1),
+    activeId: z.number(),
+    nextId: z.number(),
+  }).passthrough(),
+  effectivePathMode: z.string().min(1),
+
+  // Fragments are ACCOUNT-WIDE, which is why they sit at the top level rather than under a hunter.
+  // `perDay` is a user input the sim cannot infer; `current` comes from the save and `currentAt`
+  // stamps it so accrual restarts from a real number.
+  fragments: z.object({
+    perDay: z.number().nonnegative(),
+    current: z.number().nonnegative(),
+    currentAt: z.number().nonnegative(),
+    autoAccrue: z.boolean(),
+  }).strict(),
+
+  settings: z.object({
+    advancedTalents: z.record(z.string(), z.unknown()),
+    ui: z.record(z.string(), z.boolean()),
+  }).passthrough(),
+
+  borge: hunterState,
+  ozzy: hunterState,
+  knox: hunterState,
+}).strict();
+
+// The ordered wasm argument names per hunter. Order IS the contract -- an argument's position is
+// its slot -- and a duplicate name would make two parameters resolve to one slot, silently.
+// Lengths are not asserted here: wasm-arity-check.js compares them against the real module's
+// arity, which is a stronger check than any number written down twice.
+const paramsSchema = z.object({
+  borge: z.array(z.string().min(1)).min(1),
+  ozzy: z.array(z.string().min(1)).min(1),
+  knox: z.array(z.string().min(1)).min(1),
+}).strict().superRefine((val, ctx) => {
+  for (const [hunter, names] of Object.entries(val)) {
+    const seen = new Set();
+    names.forEach((n, i) => {
+      if (seen.has(n)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [hunter, i],
+          message: `duplicate parameter name "${n}" -- two parameters would share one wasm slot`,
+        });
+      }
+      seen.add(n);
+    });
+  }
+});
+
+// The decoded-save fixture the save benches read. A save is a flat map of field name -> value, and
+// its value types are genuinely mixed (numbers, booleans, strings, BigDouble pairs, arrays), so
+// what is worth pinning is that it is a non-empty flat map with plausible field names -- an empty
+// or nested fixture would make every save bench pass while comparing nothing.
+const decodedSaveSchema = nonEmptyRecord(z.string().min(1), z.unknown());
+
+module.exports = { storeSchema, paramsSchema, decodedSaveSchema };

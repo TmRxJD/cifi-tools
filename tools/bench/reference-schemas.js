@@ -35,6 +35,24 @@ const nonEmptyRecord = (key, value) => z.record(key, value)
 // A BigDouble as the game serialises it: 16 bytes, a double mantissa then an int64 exponent.
 const bigDouble = z.object({ mantissa: z.number(), exponent: z.number().int() }).strict();
 
+// Provenance as the SCRIPTED extractors spell it. Files written by the Python/typetree tools use
+// `_source`/`_game`; those written by the JS scene extractors use `generatedFrom`/`note`. Both are
+// real conventions in this repo, so both are declared rather than one being retrofitted onto the
+// other -- renaming a field in a generated file just to satisfy a schema would put the schema in
+// charge of the data instead of the other way round.
+const generatedMeta = {
+  generatedFrom: z.string().min(1),
+  note: z.string().min(1),
+};
+
+// A BigDouble as the game serialises it, in the flattened form the extractors emit.
+const bigDoublePair = z.object({ mantissa: z.number(), exponent: z.number() }).strict();
+
+// A number that must actually be finite. NaN and Infinity do not survive JSON, but a mis-parsed
+// BigDouble can still land as null or a string, and this makes that intent explicit where it
+// matters rather than leaving a bare z.number().
+const finite = z.number().finite();
+
 const schemas = {
   'badge-map.json': z.object({
     ...meta,
@@ -143,6 +161,300 @@ const schemas = {
       value: z.number(),
     }).strict()).min(1),
   }).strict(),
+  // ---------------------------------------------------------------------------------------------
+  // Authored game data
+  // ---------------------------------------------------------------------------------------------
+
+  // Flat name -> value per class. The MAGNITUDES are deliberately unconstrained: this file carries
+  // everything from 0.0012 to 5e400, so any bound would be a guess about game balance rather than
+  // a schema. What is enforced is that every class is non-empty and every value is either a finite
+  // number or an unflattened BigDouble -- not the null/string/object shapes a broken typetree read
+  // produces.
+  //
+  // The BigDouble case is REAL, not a leftover: `FleetManager.EvoBonusHephaestus5` is 1e500, which
+  // overflows a JavaScript double, so the extractor keeps it as {mantissa, exponent} rather than
+  // flattening it to Infinity. A schema demanding a plain number here would be demanding the
+  // extractor throw information away.
+  'authored-values.json': z.object({
+    ...meta,
+    _note: z.string().min(1),
+    classes: nonEmptyRecord(
+      z.string().min(1),
+      nonEmptyRecord(z.string().min(1), z.union([finite, bigDoublePair])),
+    ),
+  }).strict(),
+
+  'gem-gates.json': z.object({
+    ...generatedMeta,
+    entries: z.array(z.object({
+      id: z.string().min(1),
+      // null on any of these means the bundle declared no such text for the entry, which is a real
+      // state rather than a gap -- several gated entries carry an id and a gate and nothing else.
+      name: z.string().nullable(),
+      label: z.string().nullable(),
+      category: z.string().nullable(),
+      description: z.string().nullable(),
+      gem: z.string().min(1),
+      // which bundle construct the tree was recovered from, when it was not stated outright
+      treeResolvedFrom: z.string().optional(),
+      // a gate's level is never 0: a level-0 requirement is no gate at all
+      level: z.number().int().positive(),
+      treeKnown: z.boolean(),
+      // the second half of a gate, present only on the entries that need a specific gem node
+      node: z.number().int().positive().optional(),
+    }).strict()).min(1),
+  }).strict(),
+
+  'gem-trees.json': z.object({
+    ...generatedMeta,
+    plannerIdToSimParam: nonEmptyRecord(z.string().min(1), z.string().min(1)),
+    trees: nonEmptyRecord(z.string().min(1), z.object({
+      id: z.string().min(1),
+      name: z.string().min(1),
+      maxLevel: z.number().int().positive(),
+      color: z.object({
+        primary: z.string().min(1),
+        secondary: z.string().min(1),
+        gradient: z.string().min(1),
+      }).strict(),
+      // A null cost is a declared-but-UNRELEASED quality level -- Evolution declares levels the
+      // game does not sell yet. Same meaning as a null gemNode cost below, and the same reason it
+      // must not be coerced to 0: a 0 would read as "free", the silent-zero trap this repo has
+      // been bitten by on relic costs.
+      qualityCosts: z.array(z.object({
+        level: z.number().int().positive(),
+        cost: z.number().nonnegative().nullable(),
+      }).strict()).min(1),
+      // Structure confirmed against the game's own metadata: 7 trees x 6 nodes. A null cost is a
+      // declared-but-unreleased node, which gem-tree-test.js asserts sits above the tree's cap.
+      gemNodes: z.array(z.object({
+        node: z.number().int().min(1).max(6),
+        cost: z.number().nullable(),
+        unlockRequirement: z.string().nullable().optional(),
+      }).strict()).length(6),
+      // The upgrade rows are not uniform, and the variation is the bundle's own. `weight` is a
+      // resource NAME on a plain resource upgrade ("Cells"), a flat NUMBER on an additive one
+      // (bonus-blueprints: 500), and an empty object on a per-ship upgrade that carries `resource`
+      // and `effects` instead (cradle-bonus). Declaring the union keeps the schema honest about a
+      // shape the site really has; collapsing it to one type would mean the schema disagreeing
+      // with the data it validates.
+      upgrades: z.array(z.object({
+        id: z.string().min(1),
+        name: z.string().min(1),
+        weight: z.union([z.string().min(1), z.number(), z.record(z.string(), z.unknown())]).optional(),
+        baseCost: z.number().nonnegative(),
+        costMultiplier: z.number().positive(),
+        maxLevel: z.number().int().positive(),
+        color: z.string().min(1),
+        unlock: z.number().int().nonnegative(),
+        // absent where an upgrade's cost curve has no step-ups at all
+        costBumps: z.array(z.object({
+          startLevel: z.number().int().nonnegative(),
+          multiplier: z.number(),
+        }).strict()).optional(),
+        multiplier: z.record(z.string(), z.unknown()).optional(),
+        type: z.string().min(1).optional(),
+        resource: z.string().min(1).optional(),
+        // a FLAG ("this upgrade is hunter-side"), not a hunter name
+        hunter: z.boolean().optional(),
+        effects: z.array(z.object({
+          resource: z.string().min(1),
+          multiplier: z.record(z.string(), z.unknown()),
+        }).strict()).optional(),
+      }).strict()),
+    }).strict()),
+  }).strict(),
+
+  // The map is asserted elsewhere to be a BIJECTION (inscryption-slot-test.js); that is a relation
+  // between entries, so it cannot be expressed here. What the schema pins is that the ids and slots
+  // are positive integers inside the 110-row shop, which is what a drifted extraction breaks first.
+  'inscryption-slots.json': z.object({
+    ...generatedMeta,
+    provenDisplayedToSlot: nonEmptyRecord(numericKey, z.number().int().min(1).max(110)),
+    unnamedSlots: z.array(z.number().int().min(1).max(110)),
+  }).strict(),
+
+  'relic-caps.json': z.object({
+    ...meta,
+    _raises: z.string().min(1),
+    bandBaseMaxLevel: z.object({
+      Low: z.number().int().positive(),
+      Medium: z.number().int().positive(),
+      High: z.number().int().positive(),
+    }).strict(),
+    relicBand: nonEmptyRecord(z.string().regex(/^r\d+$/), z.object({
+      band: z.enum(['Low', 'Medium', 'High']),
+      powerRaised: z.boolean(),
+    }).strict()),
+  }).strict(),
+
+  'ship-node-coefficients.json': z.object({
+    ...meta,
+    _how: z.string().min(1),
+    baseBonusByCategory: nonEmptyRecord(z.string().min(1), nonEmptyRecord(numericKey, finite)),
+  }).strict(),
+
+  // ---------------------------------------------------------------------------------------------
+  // Scene-extracted tables
+  // ---------------------------------------------------------------------------------------------
+
+  // The per-mod field set is genuinely heterogeneous -- a mod may or may not declare v2/v3 tiers,
+  // an Ouroboros mod carries BigDouble costs where a normal one carries plain numbers -- so the
+  // record VALUES are not pinned to one field set. That is a deliberate limit, not an oversight:
+  // enumerating a union of every observed shape would fail the moment the game adds a mod with one
+  // more field, which is exactly the change a reference should absorb rather than reject. The
+  // envelope is strict, both collections must be non-empty, and every value must be a number or a
+  // BigDouble -- which is what a drifted read actually breaks.
+  'loop-mods.json': z.object({
+    ...generatedMeta,
+    loopMods: nonEmptyRecord(numericKey, nonEmptyRecord(
+      z.string().min(1), z.union([finite, bigDoublePair]),
+    )),
+    ouroLoopMods: nonEmptyRecord(numericKey, nonEmptyRecord(
+      z.string().min(1), z.union([finite, bigDoublePair]),
+    )),
+  }).strict(),
+
+  // The four buckets partition every published mod, and three of them being empty would mean the
+  // matcher pinned everything -- so only `mapped` is required to be non-empty.
+  'loopmod-names.json': z.object({
+    note: z.string().min(1),
+    mapped: z.array(z.object({
+      index: z.number().int().nonnegative(),
+      name: z.string().min(1),
+      tier: z.string().min(1),
+      buffs: z.string().min(1),
+      startCostExponent: z.number(),
+      maxLevel: z.number().int().positive(),
+    }).strict()).min(1),
+    ambiguous: z.array(z.object({
+      name: z.string().min(1),
+      // "ambiguous" means more than one candidate index; one candidate is a match, not ambiguity
+      candidates: z.array(z.number().int().nonnegative()).min(2),
+      startCostExponent: z.number(),
+    }).strict()),
+    conflicting: z.array(z.object({
+      name: z.string().min(1),
+      candidate: z.number().int().nonnegative(),
+      reason: z.string().min(1),
+    }).strict()),
+    unmatched: z.array(z.object({
+      name: z.string().min(1),
+      startCostExponent: z.number(),
+      maxLevel: z.number().int().positive(),
+    }).strict()),
+  }).strict(),
+
+  // Scraped from the live site rather than extracted from the game, so it records a source URL
+  // instead of a build. Costs are published as base-10 EXPONENTS, which is what makes them directly
+  // comparable to the scene's BigDouble exponents -- see match-loopmods.js.
+  'loopmod-overview.json': z.object({
+    source: z.string().min(1),
+    note: z.string().min(1),
+    mods: z.array(z.object({
+      name: z.string().min(1),
+      tier: z.string().min(1),
+      buffs: z.string().min(1),
+      maxLevelShown: z.number().int().positive(),
+      levels: z.array(z.object({
+        level: z.number().int().nonnegative(),
+        costE: z.number(),
+      }).strict()).min(1),
+    }).strict()).min(1),
+  }).strict(),
+
+  'research.json': z.object({
+    ...generatedMeta,
+    categoryShip: nonEmptyRecord(z.string().min(1), z.number().int().positive()),
+    // Every field is optional because the entries genuinely differ: exactly ONE carries an
+    // explicit `levelCosts` table of BigDoubles, and the other 79 carry a `StartCost` +
+    // `GrowthExponent` pair the cost curve is derived from. The object is nonetheless `.strict()`
+    // -- an unexpected key means the extractor learned a field no consumer reads yet, which is
+    // precisely what these schemas exist to surface.
+    research: nonEmptyRecord(numericKey, z.object({
+      levelCosts: nonEmptyRecord(z.string().regex(/^Level\d+Cost$/), bigDoublePair).optional(),
+      StartCost: finite.optional(),
+      GrowthExponent: finite.optional(),
+      Bonus1: finite.optional(),
+      Bonus2: finite.optional(),
+      Bonus3: finite.optional(),
+      Bonus4: finite.optional(),
+      Bonus5: finite.optional(),
+      Bonus6: finite.optional(),
+      Bonus7: finite.optional(),
+      Bonus8: finite.optional(),
+    }).strict()),
+    shipTrees: nonEmptyRecord(z.string().min(1), nonEmptyRecord(numericKey, z.object({
+      MaxLevel: z.number(),
+      BaseBonus: finite,
+      Requirement: z.number(),
+    }).strict())),
+  }).strict(),
+
+  // 18 numbered families, each a map of index -> authored fields whose SHAPE differs per family
+  // (a Relic carries StartCost, a BorgeSkill carries a cap). Values may be plain numbers or
+  // BigDoubles. The family names are pinned because a MISSING family is the failure that matters:
+  // scene-defs-test.js compares our caps and costs against these, and an absent family silently
+  // compares nothing. VexinSkill is listed deliberately -- it is present and entirely zeroed, which
+  // is itself the finding that Vexin is unauthored content.
+  'scene-defs.json': z.object({
+    ...generatedMeta,
+    families: z.object(Object.fromEntries(
+      ['RU', 'SU', 'TU', 'Badge', 'Relic', 'POM', 'POI', 'TUQ', 'POK', 'MK', 'Project',
+        'OzzySkill', 'KnoxSkill', 'VexinSkill', 'BorgeSkill', 'UDU', 'ATU', 'DU']
+        .map((k) => [k, nonEmptyRecord(numericKey, z.record(z.string().min(1), z.unknown()))]),
+    )).strict(),
+  }).strict(),
+
+  // ---------------------------------------------------------------------------------------------
+  // The save-field ledger and the SirRed baseline
+  // ---------------------------------------------------------------------------------------------
+
+  'save-full-map.json': z.object({
+    ...generatedMeta,
+    fieldCount: z.number().int().positive(),
+    presentInSample: z.number().int().nonnegative(),
+    extraSaveKeys: z.array(z.string()),
+    summary: z.array(z.object({
+      category: z.string().min(1),
+      confidence: z.string().min(1),
+      count: z.number().int().nonnegative(),
+      description: z.string().min(1),
+    }).strict()).min(1),
+    categories: nonEmptyRecord(z.string().min(1), z.object({
+      confidence: z.string().min(1),
+      description: z.string().min(1),
+      fields: z.array(z.object({
+        type: z.string().min(1),
+        name: z.string().min(1),
+        offset: z.string().regex(/^0x[0-9A-Fa-f]+$/),
+        inSample: z.boolean(),
+        // absent from the sample save is a real state, and so is a null-valued field
+        sampleValue: z.unknown().optional(),
+      }).strict()).min(1),
+    }).strict()),
+  }).strict(),
+
+  // SirRed's decompiled community tool. These two are a BASELINE, not an authority -- changing our
+  // data to match them has produced a wrong value twice (the 10x Demeter coefficients, and the
+  // Demeter 2/3 gates the game says are 0). They are schema-checked anyway so that a re-extraction
+  // which silently produces nothing gets caught: sirred-ship-check.js is a REPORT that exits 0, so
+  // an empty file there would look exactly like agreement.
+  //
+  // Both are FLAT designation -> value maps with no envelope at all, so there is no meta to check;
+  // the key pattern is the whole structural constraint (Cra01, Heph11, Zeus07).
+  'sirred-install-coefficients.json': nonEmptyRecord(
+    z.string().regex(/^(Cra|Aux|Zag|Heph|Dem|Koi|Zeus)\d{2}$/), finite,
+  ),
+
+  'sirred-install-slots.json': nonEmptyRecord(
+    z.string().regex(/^(Cra|Aux|Zag|Heph|Dem|Koi|Zeus)\d{2}$/),
+    z.object({
+      maxLevel: z.number().int().positive(),
+      unlockThreshold: z.number().int().nonnegative(),
+    }).strict(),
+  ),
+
 };
 
 module.exports = { schemas, meta, numericKey };
