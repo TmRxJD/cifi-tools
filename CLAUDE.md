@@ -436,10 +436,26 @@ think one is wrong, disprove it with a test.
     `ResearchLaboratory.FinalShip1InstallsBonus`, a `GemPerks` field (+0x22D8),
     `Badges.FinalDarkBadge1Bonus`, `ResearchLaboratory.FinalAllShipsInstallsBonus`, and a
     `Gear::get_*ItemNBonus*` term when a piece targets that node.
-    **Known modelling gaps, both uniform-per-ship so they shift magnitude more than ranking:** the
-    `GemPerks` factor is not modelled at all, and we model `FinalShip1InstallsBonus` only as Fleet
-    Analysis 2 (`computeFleetResearchShipMultipliers`, correctly empty when FA2 is 0 — FA1 grants
-    only the 5x CAP, not an effect multiplier).
+    **Both of the terms once listed here as unexplained modelling gaps are now IDENTIFIED, and both
+    are exactly 1 until a specific upgrade is bought — so omitting them is exact for an account that
+    has not bought them, not an approximation:**
+    - The `GemPerks` factor is `FinalPowerGU<n>Bonus`, one per ship category (Gen=GU1, Tech=GU2,
+      Loop=GU3, Auto=GU4, Shard=GU5, Research=GU6, Academy=GU7). **All seven `PowerGU<n>BonusCalc`
+      getters open with `if (PowerGU<n>Level <= 0) return 1;`** — verified by reading all seven, not
+      by generalising from GU1. The real gap is the missing INPUT: the gem store carries tree levels
+      and node booleans but no per-GU level, so we read 0 and therefore 1.
+    - `FinalShip<n>InstallsBonus` **is** Fleet Analysis 2: `ResearchLaboratory` assigns it from
+      `FinalRU78Bonus<n>`, which confirms our identification rather than leaving it a guess. But the
+      same expression also computes `FinalRU78Bonus<n> * FinalRU101Bonus<n>`, and Cpp2IL renders the
+      store as taking only the RU78 half — a discarded product is the usual sign of a mis-rendered
+      SSA store, so **treat RU101 as a real second factor**. It is inert until owned
+      (`FinalRU101Bonus1` is `BigDouble result = 1; ... if (RU101Level > 0) {...}`) and costs 1e5850,
+      so no realistic account has it yet.
+    A word on method: I wrote an extractor to turn "inert when unowned" into a checked reference
+    file, and deleted it. It reported `inertWhenUnowned: false` for the RU terms while the same
+    regexes, run against the same recovered body, returned true — and I could not explain the
+    difference. Shipping a reference whose values contradict the code it claims to describe is worse
+    than shipping none, so the facts above stand on the getter bodies quoted here.
 - **The APK IS dumped.** CIFI 0.7.3.54 is Unity **6000.3.8f1** with IL2CPP metadata **v39**;
   Perfare's Il2CppDumper caps at v31, but AndnixSH's fork supports v39 and `tools/il2cpp-cli/`
   wraps it in a headless CLI (see its README). Output lives in
