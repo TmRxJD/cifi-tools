@@ -154,6 +154,7 @@ There is exactly one place for each of these. **Do not add a second.**
 | Zod schemas for the references | `tools/bench/reference-schemas.js` |
 | Zod schemas for the app's own data | `tools/bench/app-schemas.js` |
 | Authored tier-2 relic caps/costs | `tools/reference/relic-tier2.json` |
+| Attribute dependency tree (game) | `tools/reference/attribute-tree.json` |
 | Omitted uniform per-node terms | `tools/reference/uniform-node-terms.json` |
 | Gear piece names (the game's own) | `tools/reference/gear-names.json` |
 | Gear set bonus -> resource + value | `tools/reference/gear-set-bonus-map.json` |
@@ -1368,6 +1369,8 @@ node tools/bench/inscryption-cost-check.js <live-bundle.js> # inscryption costs 
 node tools/bench/gate-coverage.js <live-bundle.js>        # our gates vs the bundle's
 node tools/bench/upgrade-item-parity.js <live-bundle.js>  # every item's cap + control type
 node tools/bench/talent-attribute-parity.js <live-bundle.js> # talents/attrs/stat caps
+node tools/bench/attribute-tree-check.js # the attribute DEPENDENCY tree vs the GAME
+CIFI_APK=apk-0.7.3.61 python tools/bench/extract-attribute-tree.py --write
 node tools/bench/relic-tier2-check.js [live-bundle.js]    # tier-2 relic caps vs the GAME
 CIFI_APK=apk-0.7.3.61 python tools/bench/extract-relic-tier2.py --write  # -> relic-tier2.json
 node tools/bench/live-override-diff.js <live-bundle.js>   # gap check vs the original tool

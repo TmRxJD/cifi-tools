@@ -184,6 +184,20 @@ const schemas = {
     ),
   }).strict(),
 
+  // The attribute dependency tree, recovered from HuntersAttributes.CheckPOMUnlcoks(). Keys are
+  // the GAME's own POM/POI/POK indices, not our attribute ids -- attribute-tree-check.js joins the
+  // two by tree shape. All three hunters are required: a hunter silently dropping out of this file
+  // would leave its legality model unverified while the bench still reported a pass for the others.
+  'attribute-tree.json': z.object({
+    ...meta,
+    _meaning: z.string().min(1),
+    edges: z.object({
+      borge: nonEmptyRecord(numericKey, z.array(z.number().int().nonnegative()).min(1)),
+      ozzy: nonEmptyRecord(numericKey, z.array(z.number().int().nonnegative()).min(1)),
+      knox: nonEmptyRecord(numericKey, z.array(z.number().int().nonnegative()).min(1)),
+    }).strict(),
+  }).strict(),
+
   'gem-gates.json': z.object({
     ...generatedMeta,
     entries: z.array(z.object({

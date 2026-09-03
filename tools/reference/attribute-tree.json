@@ -1,0 +1,130 @@
+{
+  "_source": "HuntersAttributes.CheckPOMUnlcoks() in the recovered C# (tools/il2cpp-cli/csharp.py). An edge is `if (<PFX><parent>Level != 0) { <PFX><child>LockedObject.SetActive(false); }` -- the dependency expressed as UI state, which is where the game states it.",
+  "_game": "apk-0.7.3.61",
+  "_meaning": "indices are the game's own POM/POI/POK numbering, NOT our attribute ids; attribute-tree-check.js joins the two by tree shape plus authored cost/cap.",
+  "edges": {
+    "borge": {
+      "1": [
+        0
+      ],
+      "2": [
+        1
+      ],
+      "3": [
+        2
+      ],
+      "4": [
+        0
+      ],
+      "5": [
+        4
+      ],
+      "6": [
+        0
+      ],
+      "7": [
+        6
+      ],
+      "8": [
+        6
+      ],
+      "9": [
+        8
+      ],
+      "10": [
+        5
+      ],
+      "11": [
+        2
+      ],
+      "12": [
+        9
+      ],
+      "13": [
+        10
+      ],
+      "14": [
+        11
+      ]
+    },
+    "ozzy": {
+      "1": [
+        0
+      ],
+      "2": [
+        0
+      ],
+      "3": [
+        1
+      ],
+      "4": [
+        1
+      ],
+      "5": [
+        2
+      ],
+      "6": [
+        5
+      ],
+      "7": [
+        5
+      ],
+      "8": [
+        7
+      ],
+      "9": [
+        4
+      ],
+      "10": [
+        5
+      ],
+      "11": [
+        8
+      ],
+      "12": [
+        10
+      ],
+      "13": [
+        9
+      ],
+      "14": [
+        11
+      ]
+    },
+    "knox": {
+      "1": [
+        0
+      ],
+      "2": [
+        1
+      ],
+      "3": [
+        2
+      ],
+      "4": [
+        0
+      ],
+      "5": [
+        4
+      ],
+      "6": [
+        0
+      ],
+      "7": [
+        6
+      ],
+      "8": [
+        7
+      ],
+      "9": [
+        0
+      ],
+      "10": [
+        9
+      ],
+      "11": [
+        10
+      ]
+    }
+  }
+}
