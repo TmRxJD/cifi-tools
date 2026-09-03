@@ -113,8 +113,24 @@
     if (name === 'upgrades.gems_nodes.creation_galvTrinketsCount') {
       if (state.overrides && name in state.overrides) return state.overrides[name];
       if (!exodusGateUnlocked(state, 'upgrades.gems_nodes.creation_gem5', 4)) return 0;
-      if (!state.upgrades?.trinkets) return 0;
-      return Object.values(state.upgrades.trinkets).reduce((a, b) => a + (b || 0), 0);
+      // The live tool exposes the SUM as the override; we expose the three trinkets individually,
+      // which is friendlier but only if those inputs actually arrive. They did not: this summed
+      // only state.upgrades.trinkets, so a value typed into our Overrides panel for a single
+      // trinket was silently discarded -- our override table advertised three keys that reached
+      // nothing. Per-trinket overrides now take precedence over the stored level, trinket by
+      // trinket, so both routes work and either can express the same account.
+      const stored = state.upgrades?.trinkets || {};
+      const ov = state.overrides || {};
+      const ids = new Set([
+        ...Object.keys(stored),
+        ...Object.keys(ov).filter((k) => k.startsWith('upgrades.trinkets.')).map((k) => k.split('.')[2]),
+      ]);
+      let total = 0;
+      ids.forEach((id) => {
+        const key = `upgrades.trinkets.${id}`;
+        total += (key in ov ? ov[key] : stored[id]) || 0;
+      });
+      return total;
     }
     if (state.overrides && name in state.overrides) {
       if (name === 'upgrades.diamondspecials.hunterloot') return 1 + 0.025 * (state.overrides[name] || 0);

@@ -938,6 +938,31 @@ think one is wrong, disprove it with a test.
   `resolveParam` has a generic override path almost everything is settable, which is what makes the
   exceptions worth finding -- it flagged `exodus_gem3` (Ozzy) and `exodus_gem5` (Knox), whose
   branches ignored an explicit override entirely.
+- **The 6 overrides we expose beyond the live tool are now decided, and they split cleanly in two.**
+  `live-override-diff.js` reports them as "additionally exposed", which is a statement about UI
+  surface, not about whether they work -- so each was probed for whether it reaches the evaluator:
+  - **`diamondspecials.hunterloot`, `iap.travpack`, `ultima.ulti` are REAL parameters** with their
+    own slot in `params.json` (which comes from the live bundle), each moving exactly one argument.
+    The evaluator reads them; the original simply does not surface them in its Overrides panel.
+    Exposing them is a genuine enhancement -- KEEP.
+  - **The 3 trinket overrides were DEAD.** The live tool exposes the summed
+    `creation_galvTrinketsCount`; we expose the three trinkets individually, which is friendlier,
+    but the resolver summed only `state.upgrades.trinkets` and ignored per-trinket overrides. A
+    value typed into our Overrides panel was silently discarded. Fixed: per-trinket overrides now
+    take precedence over the stored level, trinket by trinket, so both routes express the same
+    account. KEEP, now that they work.
+- **`override-liveness-check.js` makes "the panel offers it" and "it does something" the same
+  claim.** Every control in `globalUpgrades` must move at least one argument, probed with every gem
+  tree maxed so gated inputs (trinkets need Creation 5) are not reported dead. The live-vs-clone
+  diff could never have caught this: it compares which KEYS each tool exposes, not whether ours do
+  anything.
+  **18 controls are allow-listed as inert IN THE ORIGINAL TOO** -- `loopmods.roe`, `cms.cm58`,
+  `cms.cm_ultima`, `cms.cm_ultimas`, `mats_exchange.tysconDrives`, `inscryptions.i114/i115`,
+  `researches.res112` -- keys the live bundle's own table exposes and its evaluator declares no
+  parameter for. They are listed individually rather than covered by a rule like "no own parameter
+  means it may be dead", because that rule would have excused the trinket bug: those have no
+  parameter of their own either, they feed a derived one. Mirroring the original is deliberate here,
+  but it does mean a user can type into eight controls that change nothing in either tool.
 - **THE HUNTER SIDE IS VALIDATED AGAINST THE LIVE cifi-tools BUNDLE, NOT THE APK, AND THAT
   DISTINCTION FOUND A REAL BUG THAT TWO ROUNDS OF INTERNAL REASONING MISSED.** The site was built
   with the game's devs, so for anything it models its bundle IS the verification -- fetch it from
@@ -1238,6 +1263,7 @@ node tools/bench/uniform-term-check.js # omitted per-node terms are provably 1 u
 node tools/bench/badge-check.js        # fleet badges: ships + multipliers vs the GAME
 node tools/bench/node-factor-check.js  # EVERY factor in every node getter is accounted for
 node tools/bench/param-plumbing-check.js # every sim param is settable into its own slot
+node tools/bench/override-liveness-check.js # every override the UI offers reaches the evaluator
 node tools/bench/reference-schema-test.js # zod: every reference file matches its schema
 node tools/bench/growth-counter-check.js # per-run counter classification + zero-counter warning
 node tools/bench/allocator-check.js     # allocator vs a reference greedy, ALL 7 ships
