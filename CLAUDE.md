@@ -155,6 +155,7 @@ There is exactly one place for each of these. **Do not add a second.**
 | Zod schemas for the app's own data | `tools/bench/app-schemas.js` |
 | Authored tier-2 relic caps/costs | `tools/reference/relic-tier2.json` |
 | Attribute dependency tree (game) | `tools/reference/attribute-tree.json` |
+| Which caps the game can raise | `tools/reference/cap-raises.json` |
 | Omitted uniform per-node terms | `tools/reference/uniform-node-terms.json` |
 | Gear piece names (the game's own) | `tools/reference/gear-names.json` |
 | Gear set bonus -> resource + value | `tools/reference/gear-set-bonus-map.json` |
@@ -722,6 +723,39 @@ think one is wrong, disprove it with a test.
   invented one, all false -- the same code-split mistake that once produced a bogus "we expose 6
   extras" report. **Fetch the whole bundle (main + every `./Name-hash.js` chunk it references)
   before running any bundle comparison.**
+- **THE GAME RAISES CAPS, AND EVERY RAISE IS NOW ENUMERATED AND CLASSIFIED.** An authored
+  `MaxLevel` is frequently only the BASE, so a tool holding the base withholds levels the account
+  can really buy, and one holding a raised value unconditionally offers levels it cannot -- both
+  silent, because the optimizer simply allocates against the wrong ceiling.
+  The game marks its own: a raisable cap has a computed `Final<X>MaxLevel` property beside the
+  authored field, and the property body IS the raise formula. All **104** of them are extracted
+  (`cap-raise-audit.py` -> `cap-raises.json`) and each is sorted into a bucket by
+  `cap-raise-check.js`:
+  - **92 modelled** -- 91 ship install caps, every one exactly `FinalShipRanksMaxLevelBonus *
+    <authored base>` (verified for all of them, not generalised from one), plus
+    `FinalBorgeSkill6MaxLevel` = `BorgeSkill6MaxLevel + FinalAttraction2Bonus2LuckyLooterLevel`,
+    which is Call Me Lucky Loot 10 -> 12 on Attraction gem node 2. **That confirms our
+    `dynamicMaxLevel` against the GAME, where it had only ever been matched to the live bundle's
+    `getMaxValue`.**
+  - **6 base-only by policy** -- the tier-1 relic bands (`FinalExodus3Bonus2`, plus
+    `FinalPower1Bonus4` on r5/r6/r14). Unchanged decision, now a checked classification rather than
+    a comment.
+  - **6 belonging to a system we do not model** -- the Ouroboros ship's install caps.
+  **An unrecognised raise operand FAILS.** That is the whole point: a new mechanism cannot arrive
+  unexamined.
+- **ABSENCE OF A `Final*MaxLevel` PROPERTY IS THE EVIDENCE THAT A CAP IS STATIC, and it is now
+  asserted.** `cap-raise-check.js` fails if one ever appears for hunter ATTRIBUTE caps, TIER-2
+  RELIC caps, or any talent other than Borge skill 6 -- so "attribute caps cannot be raised" is a
+  checked claim rather than an assumption. It also fails if `FinalBorgeSkill6MaxLevel` DISAPPEARS,
+  since our `dynamicMaxLevel` would then be raising a cap the game no longer raises.
+- **THE GAME HAS ALREADY WIRED INSTALL NODES 12 AND 13 IN EVERY CATEGORY, AND THEY ARE UNRELEASED.**
+  All 14 carry a `Requirement` and UI objects but `MaxLevel 0` and `BaseBonus 0`, so they cannot be
+  bought and contribute nothing -- not modelling them is correct today, exactly like `POK11` and
+  the Yellow/Black gear sets. They are recorded in `cap-raises.json` as a TRIPWIRE: the moment a
+  build authors one, `cap-raise-check.js` fails, which is precisely when the fleet model gains a
+  real gap. This is the check to look at first after any future APK pull.
+  Verified with four negative controls: attribute caps becoming raisable, an unrecognised raise
+  operand, install node 12 being authored, and the talent raise disappearing.
 - **A modal that starts async work must cancel it on close, and `titledModal` fires `modal-close`
   so it can.** Closing used to just `remove()` the overlay, leaving the Effective Path walk
   running: invisible, uncancellable, and still competing for the main thread and for wasm
@@ -1370,6 +1404,8 @@ node tools/bench/gate-coverage.js <live-bundle.js>        # our gates vs the bun
 node tools/bench/upgrade-item-parity.js <live-bundle.js>  # every item's cap + control type
 node tools/bench/talent-attribute-parity.js <live-bundle.js> # talents/attrs/stat caps
 node tools/bench/attribute-tree-check.js # the attribute DEPENDENCY tree vs the GAME
+node tools/bench/cap-raise-check.js    # every cap the GAME can RAISE is accounted for
+CIFI_APK=apk-0.7.3.61 python tools/bench/cap-raise-audit.py --write
 CIFI_APK=apk-0.7.3.61 python tools/bench/extract-attribute-tree.py --write
 node tools/bench/relic-tier2-check.js [live-bundle.js]    # tier-2 relic caps vs the GAME
 CIFI_APK=apk-0.7.3.61 python tools/bench/extract-relic-tier2.py --write  # -> relic-tier2.json

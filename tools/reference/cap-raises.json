@@ -1,0 +1,1261 @@
+{
+  "_source": "Final*MaxLevel property bodies recovered from FleetManager, BorgeUpgrades, OuroRelics via tools/il2cpp-cli/csharp.py; the full name list is grepped from dump.cs.",
+  "_game": "apk-0.7.3.61",
+  "_meaning": "a cap with a Final<X>MaxLevel property is RAISABLE and the operands are its raise formula; a cap with no such property is static, and that absence is the evidence that it cannot be raised.",
+  "raisable": {
+    "FinalBorgeSkill6MaxLevel": {
+      "class": "BorgeUpgrades",
+      "operands": [
+        "BorgeSkill6MaxLevel",
+        "FinalAttraction2Bonus2LuckyLooterLevel"
+      ]
+    },
+    "FinalR14MaxLevel": {
+      "class": "OuroRelics",
+      "operands": [
+        "ExodusGemNodes",
+        "FinalExodus3Bonus2",
+        "FinalTier1HighRelicsMaxLevel",
+        "Unmanaged"
+      ]
+    },
+    "FinalR5MaxLevel": {
+      "class": "OuroRelics",
+      "operands": [
+        "ExodusGemNodes",
+        "FinalExodus3Bonus2",
+        "FinalPower1Bonus4",
+        "FinalTier1HighRelicsMaxLevel",
+        "Unmanaged"
+      ]
+    },
+    "FinalR6MaxLevel": {
+      "class": "OuroRelics",
+      "operands": [
+        "FinalPower1Bonus4",
+        "FinalTier1HighRelicsMaxLevel",
+        "Unmanaged"
+      ]
+    },
+    "FinalRU10AcademyMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU10AcademyMaxLevel"
+      ]
+    },
+    "FinalRU10AutoMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU10AutoMaxLevel"
+      ]
+    },
+    "FinalRU10GenMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU10GenMaxLevel"
+      ]
+    },
+    "FinalRU10LoopMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU10LoopMaxLevel"
+      ]
+    },
+    "FinalRU10ResearchMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU10ResearchMaxLevel"
+      ]
+    },
+    "FinalRU10ShardMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU10ShardMaxLevel"
+      ]
+    },
+    "FinalRU10TechMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU10TechMaxLevel"
+      ]
+    },
+    "FinalRU11AcademyMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU11AcademyMaxLevel"
+      ]
+    },
+    "FinalRU11AutoMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU11AutoMaxLevel"
+      ]
+    },
+    "FinalRU11GenMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU11GenMaxLevel"
+      ]
+    },
+    "FinalRU11LoopMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU11LoopMaxLevel"
+      ]
+    },
+    "FinalRU11ResearchMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU11ResearchMaxLevel"
+      ]
+    },
+    "FinalRU11ShardMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU11ShardMaxLevel"
+      ]
+    },
+    "FinalRU11TechMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU11TechMaxLevel"
+      ]
+    },
+    "FinalRU12AcademyMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU12AcademyMaxLevel"
+      ]
+    },
+    "FinalRU12AutoMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU12AutoMaxLevel"
+      ]
+    },
+    "FinalRU12GenMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU12GenMaxLevel"
+      ]
+    },
+    "FinalRU12LoopMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU12LoopMaxLevel"
+      ]
+    },
+    "FinalRU12ResearchMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU12ResearchMaxLevel"
+      ]
+    },
+    "FinalRU12ShardMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU12ShardMaxLevel"
+      ]
+    },
+    "FinalRU12TechMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU12TechMaxLevel"
+      ]
+    },
+    "FinalRU13AcademyMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU13AcademyMaxLevel"
+      ]
+    },
+    "FinalRU13AutoMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU13AutoMaxLevel"
+      ]
+    },
+    "FinalRU13GenMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU13GenMaxLevel"
+      ]
+    },
+    "FinalRU13LoopMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU13LoopMaxLevel"
+      ]
+    },
+    "FinalRU13ResearchMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU13ResearchMaxLevel"
+      ]
+    },
+    "FinalRU13ShardMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU13ShardMaxLevel"
+      ]
+    },
+    "FinalRU13TechMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU13TechMaxLevel"
+      ]
+    },
+    "FinalRU1AcademyMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU1AcademyMaxLevel"
+      ]
+    },
+    "FinalRU1AutoMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU1AutoMaxLevel"
+      ]
+    },
+    "FinalRU1GenMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU1GenMaxLevel"
+      ]
+    },
+    "FinalRU1LoopMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU1LoopMaxLevel"
+      ]
+    },
+    "FinalRU1OuroborosMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalOuroRank",
+        "FinalT2Relic3Bonus",
+        "Math",
+        "Method",
+        "OuroRelics",
+        "RU1OuroborosMaxLevel",
+        "Unmanaged"
+      ]
+    },
+    "FinalRU1ResearchMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU1ResearchMaxLevel"
+      ]
+    },
+    "FinalRU1ShardMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU1ShardMaxLevel"
+      ]
+    },
+    "FinalRU1TechMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU1TechMaxLevel"
+      ]
+    },
+    "FinalRU2AcademyMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU2AcademyMaxLevel"
+      ]
+    },
+    "FinalRU2AutoMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU2AutoMaxLevel"
+      ]
+    },
+    "FinalRU2GenMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU2GenMaxLevel"
+      ]
+    },
+    "FinalRU2LoopMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU2LoopMaxLevel"
+      ]
+    },
+    "FinalRU2OuroborosMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalOuroRank",
+        "FinalT2Relic3Bonus",
+        "Math",
+        "Method",
+        "OuroRelics",
+        "RU2OuroborosMaxLevel",
+        "Unmanaged"
+      ]
+    },
+    "FinalRU2ResearchMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU2ResearchMaxLevel"
+      ]
+    },
+    "FinalRU2ShardMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU2ShardMaxLevel"
+      ]
+    },
+    "FinalRU2TechMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU2TechMaxLevel"
+      ]
+    },
+    "FinalRU3AcademyMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU3AcademyMaxLevel"
+      ]
+    },
+    "FinalRU3AutoMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU3AutoMaxLevel"
+      ]
+    },
+    "FinalRU3GenMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU3GenMaxLevel"
+      ]
+    },
+    "FinalRU3LoopMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU3LoopMaxLevel"
+      ]
+    },
+    "FinalRU3OuroborosMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalOuroRank",
+        "FinalT2Relic3Bonus",
+        "Math",
+        "Method",
+        "OuroRelics",
+        "RU3OuroborosMaxLevel",
+        "Unmanaged"
+      ]
+    },
+    "FinalRU3ResearchMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU3ResearchMaxLevel"
+      ]
+    },
+    "FinalRU3ShardMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU3ShardMaxLevel"
+      ]
+    },
+    "FinalRU3TechMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU3TechMaxLevel"
+      ]
+    },
+    "FinalRU4AcademyMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU4AcademyMaxLevel"
+      ]
+    },
+    "FinalRU4AutoMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU4AutoMaxLevel"
+      ]
+    },
+    "FinalRU4GenMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU4GenMaxLevel"
+      ]
+    },
+    "FinalRU4LoopMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU4LoopMaxLevel"
+      ]
+    },
+    "FinalRU4OuroborosMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalOuroRank",
+        "FinalT2Relic3Bonus",
+        "Math",
+        "Method",
+        "OuroRelics",
+        "RU4OuroborosMaxLevel",
+        "Unmanaged"
+      ]
+    },
+    "FinalRU4ResearchMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU4ResearchMaxLevel"
+      ]
+    },
+    "FinalRU4ShardMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU4ShardMaxLevel"
+      ]
+    },
+    "FinalRU4TechMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU4TechMaxLevel"
+      ]
+    },
+    "FinalRU5AcademyMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU5AcademyMaxLevel"
+      ]
+    },
+    "FinalRU5AutoMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU5AutoMaxLevel"
+      ]
+    },
+    "FinalRU5GenMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU5GenMaxLevel"
+      ]
+    },
+    "FinalRU5LoopMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU5LoopMaxLevel"
+      ]
+    },
+    "FinalRU5OuroborosMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalOuroRank",
+        "FinalT2Relic3Bonus",
+        "Math",
+        "Method",
+        "OuroRelics",
+        "RU5OuroborosMaxLevel",
+        "Unmanaged"
+      ]
+    },
+    "FinalRU5ResearchMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU5ResearchMaxLevel"
+      ]
+    },
+    "FinalRU5ShardMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU5ShardMaxLevel"
+      ]
+    },
+    "FinalRU5TechMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU5TechMaxLevel"
+      ]
+    },
+    "FinalRU6AcademyMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU6AcademyMaxLevel"
+      ]
+    },
+    "FinalRU6AutoMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU6AutoMaxLevel"
+      ]
+    },
+    "FinalRU6GenMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU6GenMaxLevel"
+      ]
+    },
+    "FinalRU6LoopMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU6LoopMaxLevel"
+      ]
+    },
+    "FinalRU6OuroborosMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalOuroRank",
+        "FinalT2Relic3Bonus",
+        "Math",
+        "Method",
+        "OuroRelics",
+        "RU6OuroborosMaxLevel",
+        "Unmanaged"
+      ]
+    },
+    "FinalRU6ResearchMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU6ResearchMaxLevel"
+      ]
+    },
+    "FinalRU6ShardMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU6ShardMaxLevel"
+      ]
+    },
+    "FinalRU6TechMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU6TechMaxLevel"
+      ]
+    },
+    "FinalRU7AcademyMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU7AcademyMaxLevel"
+      ]
+    },
+    "FinalRU7AutoMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU7AutoMaxLevel"
+      ]
+    },
+    "FinalRU7GenMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU7GenMaxLevel"
+      ]
+    },
+    "FinalRU7LoopMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU7LoopMaxLevel"
+      ]
+    },
+    "FinalRU7ResearchMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU7ResearchMaxLevel"
+      ]
+    },
+    "FinalRU7ShardMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU7ShardMaxLevel"
+      ]
+    },
+    "FinalRU7TechMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU7TechMaxLevel"
+      ]
+    },
+    "FinalRU8AcademyMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU8AcademyMaxLevel"
+      ]
+    },
+    "FinalRU8AutoMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU8AutoMaxLevel"
+      ]
+    },
+    "FinalRU8GenMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU8GenMaxLevel"
+      ]
+    },
+    "FinalRU8LoopMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU8LoopMaxLevel"
+      ]
+    },
+    "FinalRU8ResearchMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU8ResearchMaxLevel"
+      ]
+    },
+    "FinalRU8ShardMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU8ShardMaxLevel"
+      ]
+    },
+    "FinalRU8TechMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU8TechMaxLevel"
+      ]
+    },
+    "FinalRU9AcademyMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU9AcademyMaxLevel"
+      ]
+    },
+    "FinalRU9AutoMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU9AutoMaxLevel"
+      ]
+    },
+    "FinalRU9GenMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU9GenMaxLevel"
+      ]
+    },
+    "FinalRU9LoopMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU9LoopMaxLevel"
+      ]
+    },
+    "FinalRU9ResearchMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU9ResearchMaxLevel"
+      ]
+    },
+    "FinalRU9ShardMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU9ShardMaxLevel"
+      ]
+    },
+    "FinalRU9TechMaxLevel": {
+      "class": "FleetManager",
+      "operands": [
+        "FinalShipRanksMaxLevelBonus",
+        "RU9TechMaxLevel"
+      ]
+    },
+    "FinalTier1HighRelicsMaxLevel": {
+      "class": "OuroRelics",
+      "operands": [
+        "ExodusGemNodes",
+        "FinalExodus3Bonus2",
+        "Tier1HighRelicsMaxLevel",
+        "Unmanaged"
+      ]
+    },
+    "FinalTier1LowRelicsMaxLevel": {
+      "class": "OuroRelics",
+      "operands": [
+        "ExodusGemNodes",
+        "FinalExodus3Bonus2",
+        "Tier1LowRelicsMaxLevel",
+        "Unmanaged"
+      ]
+    },
+    "FinalTier1MediumRelicsMaxLevel": {
+      "class": "OuroRelics",
+      "operands": [
+        "ExodusGemNodes",
+        "FinalExodus3Bonus2",
+        "Tier1MediumRelicsMaxLevel",
+        "Unmanaged"
+      ]
+    }
+  },
+  "allFinalMaxLevelNames": [
+    "FinalAttractionGU3MaxLevel",
+    "FinalAttractionGU5MaxLevel",
+    "FinalAttractionGU6MaxLevel",
+    "FinalAttractionUpgradesMaxLevel",
+    "FinalBorgeSkill6MaxLevel",
+    "FinalConnectionsMaxLevelBonus",
+    "FinalCreationUpgradesMaxLevel",
+    "FinalDU0MaxLevel",
+    "FinalDU17MK9MaxLevel",
+    "FinalDU18MK10MaxLevel",
+    "FinalDU19MK11MaxLevel",
+    "FinalDU1MK1MaxLevel",
+    "FinalDU20MK12MaxLevel",
+    "FinalDU2MK2MaxLevel",
+    "FinalDU3MK3MaxLevel",
+    "FinalDU4MK4MaxLevel",
+    "FinalDU5MK5MaxLevel",
+    "FinalDU6MK6MaxLevel",
+    "FinalDU7MK7MaxLevel",
+    "FinalDU8MK8MaxLevel",
+    "FinalEvolutionUpgradesMaxLevel",
+    "FinalExodusUpgradesMaxLevel",
+    "FinalInnovationGU8MaxLevel",
+    "FinalInnovationGU9MaxLevel",
+    "FinalInnovationUpgradesMaxLevel",
+    "FinalLM0MaxLevel",
+    "FinalLM10MaxLevel",
+    "FinalLM112MaxLevel",
+    "FinalLM113MaxLevel",
+    "FinalLM114MaxLevel",
+    "FinalLM115MaxLevel",
+    "FinalLM116MaxLevel",
+    "FinalLM117MaxLevel",
+    "FinalLM11MaxLevel",
+    "FinalLM11v3MaxLevel",
+    "FinalLM128MaxLevel",
+    "FinalLM129MaxLevel",
+    "FinalLM12MaxLevel",
+    "FinalLM12v3MaxLevel",
+    "FinalLM131MaxLevel",
+    "FinalLM132MaxLevel",
+    "FinalLM134MaxLevel",
+    "FinalLM135MaxLevel",
+    "FinalLM137MaxLevel",
+    "FinalLM138MaxLevel",
+    "FinalLM13MaxLevel",
+    "FinalLM140MaxLevel",
+    "FinalLM141MaxLevel",
+    "FinalLM143MaxLevel",
+    "FinalLM144MaxLevel",
+    "FinalLM146MaxLevel",
+    "FinalLM147MaxLevel",
+    "FinalLM149MaxLevel",
+    "FinalLM150MaxLevel",
+    "FinalLM151MaxLevel",
+    "FinalLM152MaxLevel",
+    "FinalLM153MaxLevel",
+    "FinalLM154MaxLevel",
+    "FinalLM155MaxLevel",
+    "FinalLM156MaxLevel",
+    "FinalLM157MaxLevel",
+    "FinalLM159MaxLevel",
+    "FinalLM15MaxLevel",
+    "FinalLM160MaxLevel",
+    "FinalLM161MaxLevel",
+    "FinalLM163MaxLevel",
+    "FinalLM164MaxLevel",
+    "FinalLM165MaxLevel",
+    "FinalLM166MaxLevel",
+    "FinalLM167MaxLevel",
+    "FinalLM168MaxLevel",
+    "FinalLM172MaxLevel",
+    "FinalLM173MaxLevel",
+    "FinalLM17MaxLevel",
+    "FinalLM184MaxLevel",
+    "FinalLM185MaxLevel",
+    "FinalLM186MaxLevel",
+    "FinalLM187MaxLevel",
+    "FinalLM188MaxLevel",
+    "FinalLM190MaxLevel",
+    "FinalLM192MaxLevel",
+    "FinalLM193MaxLevel",
+    "FinalLM194MaxLevel",
+    "FinalLM195MaxLevel",
+    "FinalLM196MaxLevel",
+    "FinalLM197MaxLevel",
+    "FinalLM19MaxLevel",
+    "FinalLM1MaxLevel",
+    "FinalLM1v2MaxLevel",
+    "FinalLM206MaxLevel",
+    "FinalLM207MaxLevel",
+    "FinalLM208MaxLevel",
+    "FinalLM209MaxLevel",
+    "FinalLM210MaxLevel",
+    "FinalLM211MaxLevel",
+    "FinalLM212MaxLevel",
+    "FinalLM213MaxLevel",
+    "FinalLM214MaxLevel",
+    "FinalLM218MaxLevel",
+    "FinalLM219MaxLevel",
+    "FinalLM21MaxLevel",
+    "FinalLM220MaxLevel",
+    "FinalLM222MaxLevel",
+    "FinalLM224MaxLevel",
+    "FinalLM225MaxLevel",
+    "FinalLM227MaxLevel",
+    "FinalLM228MaxLevel",
+    "FinalLM229MaxLevel",
+    "FinalLM22MaxLevel",
+    "FinalLM234MaxLevel",
+    "FinalLM236MaxLevel",
+    "FinalLM237MaxLevel",
+    "FinalLM238MaxLevel",
+    "FinalLM239MaxLevel",
+    "FinalLM23MaxLevel",
+    "FinalLM241MaxLevel",
+    "FinalLM242MaxLevel",
+    "FinalLM243MaxLevel",
+    "FinalLM244MaxLevel",
+    "FinalLM245MaxLevel",
+    "FinalLM246MaxLevel",
+    "FinalLM247MaxLevel",
+    "FinalLM248MaxLevel",
+    "FinalLM249MaxLevel",
+    "FinalLM24MaxLevel",
+    "FinalLM250MaxLevel",
+    "FinalLM251MaxLevel",
+    "FinalLM252MaxLevel",
+    "FinalLM253MaxLevel",
+    "FinalLM254MaxLevel",
+    "FinalLM255MaxLevel",
+    "FinalLM256MaxLevel",
+    "FinalLM257MaxLevel",
+    "FinalLM258MaxLevel",
+    "FinalLM259MaxLevel",
+    "FinalLM25MaxLevel",
+    "FinalLM26MaxLevel",
+    "FinalLM27MaxLevel",
+    "FinalLM284MaxLevel",
+    "FinalLM287MaxLevel",
+    "FinalLM288MaxLevel",
+    "FinalLM294MaxLevel",
+    "FinalLM2MaxLevel",
+    "FinalLM2v2MaxLevel",
+    "FinalLM31MaxLevel",
+    "FinalLM32MaxLevel",
+    "FinalLM33MaxLevel",
+    "FinalLM34MaxLevel",
+    "FinalLM35MaxLevel",
+    "FinalLM368MaxLevel",
+    "FinalLM369MaxLevel",
+    "FinalLM36MaxLevel",
+    "FinalLM370MaxLevel",
+    "FinalLM371MaxLevel",
+    "FinalLM372MaxLevel",
+    "FinalLM373MaxLevel",
+    "FinalLM374MaxLevel",
+    "FinalLM375MaxLevel",
+    "FinalLM376MaxLevel",
+    "FinalLM377MaxLevel",
+    "FinalLM378MaxLevel",
+    "FinalLM379MaxLevel",
+    "FinalLM37MaxLevel",
+    "FinalLM380MaxLevel",
+    "FinalLM381MaxLevel",
+    "FinalLM382MaxLevel",
+    "FinalLM383MaxLevel",
+    "FinalLM384MaxLevel",
+    "FinalLM385MaxLevel",
+    "FinalLM386MaxLevel",
+    "FinalLM387MaxLevel",
+    "FinalLM388MaxLevel",
+    "FinalLM389MaxLevel",
+    "FinalLM390MaxLevel",
+    "FinalLM391MaxLevel",
+    "FinalLM392MaxLevel",
+    "FinalLM393MaxLevel",
+    "FinalLM394MaxLevel",
+    "FinalLM395MaxLevel",
+    "FinalLM396MaxLevel",
+    "FinalLM397MaxLevel",
+    "FinalLM398MaxLevel",
+    "FinalLM399MaxLevel",
+    "FinalLM3MaxLevel",
+    "FinalLM3v2MaxLevel",
+    "FinalLM400MaxLevel",
+    "FinalLM401MaxLevel",
+    "FinalLM402MaxLevel",
+    "FinalLM403MaxLevel",
+    "FinalLM404MaxLevel",
+    "FinalLM405MaxLevel",
+    "FinalLM406MaxLevel",
+    "FinalLM407MaxLevel",
+    "FinalLM408MaxLevel",
+    "FinalLM409MaxLevel",
+    "FinalLM410MaxLevel",
+    "FinalLM411MaxLevel",
+    "FinalLM412MaxLevel",
+    "FinalLM413MaxLevel",
+    "FinalLM414MaxLevel",
+    "FinalLM415MaxLevel",
+    "FinalLM416MaxLevel",
+    "FinalLM42MaxLevel",
+    "FinalLM43MaxLevel",
+    "FinalLM44MaxLevel",
+    "FinalLM4v2MaxLevel",
+    "FinalLM4v3MaxLevel",
+    "FinalLM52MaxLevel",
+    "FinalLM53MaxLevel",
+    "FinalLM53v2MaxLevel",
+    "FinalLM54MaxLevel",
+    "FinalLM54v2MaxLevel",
+    "FinalLM55MaxLevel",
+    "FinalLM55v2MaxLevel",
+    "FinalLM56MaxLevel",
+    "FinalLM57MaxLevel",
+    "FinalLM58MaxLevel",
+    "FinalLM59MaxLevel",
+    "FinalLM5v2MaxLevel",
+    "FinalLM5v3MaxLevel",
+    "FinalLM60MaxLevel",
+    "FinalLM61MaxLevel",
+    "FinalLM6v2MaxLevel",
+    "FinalLM6v3MaxLevel",
+    "FinalLM73MaxLevel",
+    "FinalLM74MaxLevel",
+    "FinalLM75MaxLevel",
+    "FinalLM76MaxLevel",
+    "FinalLM77MaxLevel",
+    "FinalLM78MaxLevel",
+    "FinalLM79MaxLevel",
+    "FinalLM7v2MaxLevel",
+    "FinalLM7v3MaxLevel",
+    "FinalLM80MaxLevel",
+    "FinalLM81MaxLevel",
+    "FinalLM82MaxLevel",
+    "FinalLM83MaxLevel",
+    "FinalLM84MaxLevel",
+    "FinalLM8v2MaxLevel",
+    "FinalLM8v3MaxLevel",
+    "FinalLM91MaxLevel",
+    "FinalLM92MaxLevel",
+    "FinalLM93MaxLevel",
+    "FinalLM94MaxLevel",
+    "FinalLM95MaxLevel",
+    "FinalLM96MaxLevel",
+    "FinalLM97MaxLevel",
+    "FinalLM98MaxLevel",
+    "FinalLM99MaxLevel",
+    "FinalLM9MaxLevel",
+    "FinalLMOuro12MaxLevel",
+    "FinalLMOuro13MaxLevel",
+    "FinalLMOuro14MaxLevel",
+    "FinalLMOuro16MaxLevel",
+    "FinalLMOuro17MaxLevel",
+    "FinalLMOuro21MaxLevel",
+    "FinalLMOuro22MaxLevel",
+    "FinalLMOuro25MaxLevel",
+    "FinalLMOuro30MaxLevel",
+    "FinalLMOuro31MaxLevel",
+    "FinalLMOuro32MaxLevel",
+    "FinalLMOuro33MaxLevel",
+    "FinalLMOuro34MaxLevel",
+    "FinalLMOuro35MaxLevel",
+    "FinalLMOuro36MaxLevel",
+    "FinalLMOuro37MaxLevel",
+    "FinalLMOuro38MaxLevel",
+    "FinalLMOuro39MaxLevel",
+    "FinalLMOuro3MaxLevel",
+    "FinalLMOuro40MaxLevel",
+    "FinalLMOuro41MaxLevel",
+    "FinalLMOuro42MaxLevel",
+    "FinalLMOuro7MaxLevel",
+    "FinalLMOuro8MaxLevel",
+    "FinalLMOuro9MaxLevel",
+    "FinalLoopersMaxLevelBonus",
+    "FinalMK1TokenBoostFillMaxLevel",
+    "FinalMK2TokenBoostFillMaxLevel",
+    "FinalMK3TokenBoostFillMaxLevel",
+    "FinalMK4TokenBoostFillMaxLevel",
+    "FinalMK5TokenBoostFillMaxLevel",
+    "FinalMK6TokenBoostFillMaxLevel",
+    "FinalMK7TokenBoostFillMaxLevel",
+    "FinalMK8TokenBoostFillMaxLevel",
+    "FinalMaxLevel",
+    "FinalMech10Upgrade1MaxLevel",
+    "FinalMech11Upgrade1MaxLevel",
+    "FinalMech12Upgrade1MaxLevel",
+    "FinalMech13Upgrade1MaxLevel",
+    "FinalMech14Upgrade1MaxLevel",
+    "FinalMech15Upgrade1MaxLevel",
+    "FinalMech16Upgrade1MaxLevel",
+    "FinalMech17Upgrade1MaxLevel",
+    "FinalMech1Upgrade1MaxLevel",
+    "FinalMech2Upgrade1MaxLevel",
+    "FinalMech3Upgrade1MaxLevel",
+    "FinalMech4Upgrade1MaxLevel",
+    "FinalMech5Upgrade1MaxLevel",
+    "FinalMech6Upgrade1MaxLevel",
+    "FinalMech7Upgrade1MaxLevel",
+    "FinalMech8Upgrade1MaxLevel",
+    "FinalMech9Upgrade1MaxLevel",
+    "FinalModBoostMaxLevel",
+    "FinalPowerUpgradesMaxLevel",
+    "FinalR14MaxLevel",
+    "FinalR5MaxLevel",
+    "FinalR6MaxLevel",
+    "FinalRU10AcademyMaxLevel",
+    "FinalRU10AutoMaxLevel",
+    "FinalRU10GenMaxLevel",
+    "FinalRU10LoopMaxLevel",
+    "FinalRU10ResearchMaxLevel",
+    "FinalRU10ShardMaxLevel",
+    "FinalRU10TechMaxLevel",
+    "FinalRU11AcademyMaxLevel",
+    "FinalRU11AutoMaxLevel",
+    "FinalRU11GenMaxLevel",
+    "FinalRU11LoopMaxLevel",
+    "FinalRU11ResearchMaxLevel",
+    "FinalRU11ShardMaxLevel",
+    "FinalRU11TechMaxLevel",
+    "FinalRU12AcademyMaxLevel",
+    "FinalRU12AutoMaxLevel",
+    "FinalRU12GenMaxLevel",
+    "FinalRU12LoopMaxLevel",
+    "FinalRU12ResearchMaxLevel",
+    "FinalRU12ShardMaxLevel",
+    "FinalRU12TechMaxLevel",
+    "FinalRU13AcademyMaxLevel",
+    "FinalRU13AutoMaxLevel",
+    "FinalRU13GenMaxLevel",
+    "FinalRU13LoopMaxLevel",
+    "FinalRU13ResearchMaxLevel",
+    "FinalRU13ShardMaxLevel",
+    "FinalRU13TechMaxLevel",
+    "FinalRU1AcademyMaxLevel",
+    "FinalRU1AutoMaxLevel",
+    "FinalRU1GenMaxLevel",
+    "FinalRU1LoopMaxLevel",
+    "FinalRU1OuroborosMaxLevel",
+    "FinalRU1ResearchMaxLevel",
+    "FinalRU1ShardMaxLevel",
+    "FinalRU1TechMaxLevel",
+    "FinalRU2AcademyMaxLevel",
+    "FinalRU2AutoMaxLevel",
+    "FinalRU2GenMaxLevel",
+    "FinalRU2LoopMaxLevel",
+    "FinalRU2OuroborosMaxLevel",
+    "FinalRU2ResearchMaxLevel",
+    "FinalRU2ShardMaxLevel",
+    "FinalRU2TechMaxLevel",
+    "FinalRU3AcademyMaxLevel",
+    "FinalRU3AutoMaxLevel",
+    "FinalRU3GenMaxLevel",
+    "FinalRU3LoopMaxLevel",
+    "FinalRU3OuroborosMaxLevel",
+    "FinalRU3ResearchMaxLevel",
+    "FinalRU3ShardMaxLevel",
+    "FinalRU3TechMaxLevel",
+    "FinalRU4AcademyMaxLevel",
+    "FinalRU4AutoMaxLevel",
+    "FinalRU4GenMaxLevel",
+    "FinalRU4LoopMaxLevel",
+    "FinalRU4OuroborosMaxLevel",
+    "FinalRU4ResearchMaxLevel",
+    "FinalRU4ShardMaxLevel",
+    "FinalRU4TechMaxLevel",
+    "FinalRU5AcademyMaxLevel",
+    "FinalRU5AutoMaxLevel",
+    "FinalRU5GenMaxLevel",
+    "FinalRU5LoopMaxLevel",
+    "FinalRU5OuroborosMaxLevel",
+    "FinalRU5ResearchMaxLevel",
+    "FinalRU5ShardMaxLevel",
+    "FinalRU5TechMaxLevel",
+    "FinalRU6AcademyMaxLevel",
+    "FinalRU6AutoMaxLevel",
+    "FinalRU6GenMaxLevel",
+    "FinalRU6LoopMaxLevel",
+    "FinalRU6OuroborosMaxLevel",
+    "FinalRU6ResearchMaxLevel",
+    "FinalRU6ShardMaxLevel",
+    "FinalRU6TechMaxLevel",
+    "FinalRU7AcademyMaxLevel",
+    "FinalRU7AutoMaxLevel",
+    "FinalRU7GenMaxLevel",
+    "FinalRU7LoopMaxLevel",
+    "FinalRU7ResearchMaxLevel",
+    "FinalRU7ShardMaxLevel",
+    "FinalRU7TechMaxLevel",
+    "FinalRU8AcademyMaxLevel",
+    "FinalRU8AutoMaxLevel",
+    "FinalRU8GenMaxLevel",
+    "FinalRU8LoopMaxLevel",
+    "FinalRU8ResearchMaxLevel",
+    "FinalRU8ShardMaxLevel",
+    "FinalRU8TechMaxLevel",
+    "FinalRU9AcademyMaxLevel",
+    "FinalRU9AutoMaxLevel",
+    "FinalRU9GenMaxLevel",
+    "FinalRU9LoopMaxLevel",
+    "FinalRU9ResearchMaxLevel",
+    "FinalRU9ShardMaxLevel",
+    "FinalRU9TechMaxLevel",
+    "FinalRankBenefitMaxLevelBonus",
+    "FinalShardMaxLevelBonus",
+    "FinalShipRanksMaxLevelBonus",
+    "FinalT2Duo1MaxLevel",
+    "FinalT2Duo2MaxLevel",
+    "FinalT2Duo3MaxLevel",
+    "FinalT2Duo4MaxLevel",
+    "FinalT2Duo5MaxLevel",
+    "FinalT3Trio1MaxLevel",
+    "FinalT3Trio2MaxLevel",
+    "FinalTier1HighRelicsMaxLevel",
+    "FinalTier1LowRelicsMaxLevel",
+    "FinalTier1MediumRelicsMaxLevel",
+    "FinalTrinityMaxLevelBonus",
+    "FinalUltimaBaseResourceMaxLevelIncrease",
+    "FinalUltimaMatsMaxLevelIncrease",
+    "FinalUltimaMaxLevel",
+    "FinalUltimaMaxLevelBonus",
+    "FinalVentureMaxLevelBonus"
+  ],
+  "_unreleasedMeaning": "install slots the game has wired (Requirement + UI) but not authored (MaxLevel 0, BaseBonus 0). Correctly unmodelled today; a build that authors one is a real gap.",
+  "unreleasedSlots": {
+    "RU12Gen": {
+      "maxLevel": 0,
+      "baseBonus": 0.0
+    },
+    "RU12Tech": {
+      "maxLevel": 0,
+      "baseBonus": 0.0
+    },
+    "RU12Loop": {
+      "maxLevel": 0,
+      "baseBonus": 0.0
+    },
+    "RU12Auto": {
+      "maxLevel": 0,
+      "baseBonus": 0.0
+    },
+    "RU12Shard": {
+      "maxLevel": 0,
+      "baseBonus": 0.0
+    },
+    "RU12Research": {
+      "maxLevel": 0,
+      "baseBonus": 0.0
+    },
+    "RU12Academy": {
+      "maxLevel": 0,
+      "baseBonus": 0.0
+    },
+    "RU13Gen": {
+      "maxLevel": 0,
+      "baseBonus": 0.0
+    },
+    "RU13Tech": {
+      "maxLevel": 0,
+      "baseBonus": 0.0
+    },
+    "RU13Loop": {
+      "maxLevel": 0,
+      "baseBonus": 0.0
+    },
+    "RU13Auto": {
+      "maxLevel": 0,
+      "baseBonus": 0.0
+    },
+    "RU13Shard": {
+      "maxLevel": 0,
+      "baseBonus": 0.0
+    },
+    "RU13Research": {
+      "maxLevel": 0,
+      "baseBonus": 0.0
+    },
+    "RU13Academy": {
+      "maxLevel": 0,
+      "baseBonus": 0.0
+    }
+  }
+}

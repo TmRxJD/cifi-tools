@@ -207,6 +207,24 @@ const schemas = {
     }).strict(),
   }).strict(),
 
+  // The cap-raise audit. `unreleasedSlots` is where a future build's new content shows up, so its
+  // values are `nullable` rather than optional: a slot the extractor could not read must arrive as
+  // an explicit null, not vanish -- a missing key would silently shrink the tripwire set.
+  'cap-raises.json': z.object({
+    ...meta,
+    _meaning: z.string().min(1),
+    _unreleasedMeaning: z.string().min(1),
+    raisable: nonEmptyRecord(z.string().regex(/^Final.*MaxLevel/), z.object({
+      class: z.string().min(1),
+      operands: z.array(z.string().min(1)).min(1),
+    }).strict()),
+    allFinalMaxLevelNames: z.array(z.string().min(1)).min(1),
+    unreleasedSlots: nonEmptyRecord(z.string().min(1), z.object({
+      maxLevel: z.number().nullable(),
+      baseBonus: z.number().nullable(),
+    }).strict()),
+  }).strict(),
+
   'gem-gates.json': z.object({
     ...generatedMeta,
     entries: z.array(z.object({
