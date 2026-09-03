@@ -136,7 +136,7 @@ There is exactly one place for each of these. **Do not add a second.**
 | Upgrade unlock gates | `webapp/public/hunterDefs.js` (`UPGRADE_GATES`, `isUpgradeUnlocked`) |
 | Full gem/gate reference (all 97) | `tools/reference/gem-gates.json`, `tools/reference/gem-trees.json` |
 | Inscryption display-id -> save slot | `tools/reference/inscryption-slots.json` (+ the resolver in `saveImport.js`) |
-| Game's own definition data (17 families) | `tools/reference/scene-defs.json` |
+| Game's own definition data (18 families) | `tools/reference/scene-defs.json` |
 | Loop-mod definitions + name mapping | `tools/reference/loop-mods.json`, `loopmod-names.json` |
 | Pulled APK / save / IL2CPP / captures | `tools/gamefiles/` (gitignored; see its README) |
 | Headless IL2CPP dumper (metadata v39) | `tools/il2cpp-cli/` (build recipe in its README; `CIFI_APK` picks the build) |
@@ -264,10 +264,11 @@ think one is wrong, disprove it with a test.
   the input, because our picture of gem levels comes from the Gem Planner the user may not have
   filled in.
 - **The GAME's own definition data is extracted, and our numbers agree with it.**
-  `tools/reference/scene-defs.json` holds 17 numbered families pulled from the scene —
-  `Relic` (20), `RU` (111), `SU` (30), `TU` (24), `Badge` (16), `POM`/`POI`/`POK` (attribute
-  costs + caps), `BorgeSkill`/`OzzySkill`/`KnoxSkill` (talent caps), `MK`, `Project`, `ATU`,
-  `UDU`, `TUQ`. `scene-defs-test.js` checks our data against it and **all 20 tier-1 relic start
+  `tools/reference/scene-defs.json` holds 18 numbered families pulled from the scene —
+  `Relic` (20), `RU` (116), `SU` (30), `TU` (24), `Badge` (23), `POM`/`POI`/`POK` (attribute
+  costs + caps), `BorgeSkill`/`OzzySkill`/`KnoxSkill` (talent caps), `VexinSkill` (empty — see
+  below), `MK`, `Project`, `ATU`, `UDU`, `TUQ`, `DU`. Counts are from 0.7.3.61; RU was 111 and
+  Badge 16 in 0.7.3.54. `scene-defs-test.js` checks our data against it and **all 20 tier-1 relic start
   costs, and every talent and attribute cap, now match the game itself** — a stronger source than
   the cifi-tools bundle everything was originally transcribed from.
   Two things that came out of that check:
@@ -808,6 +809,32 @@ think one is wrong, disprove it with a test.
     Filter that noise before reading a type diff, or the signal is unfindable.
   - `Gear.gearColor` enumerates only `purple, red, green, orange, blue` — no white despite White
     being fully wired, so that enum is partial/legacy and is NOT evidence about which sets exist.
+- **The AssetRipper scene export is SCRIPTED and build-aware: `tools/bench/export-scene.py`.** It
+  restages `<...>_Data` straight out of `base.apk` for `CIFI_APK`, drives AssetRipper's headless web
+  API, and reports the exported scene. Three things in it are load-bearing and each fails by
+  producing a plausible-looking EMPTY export rather than an error: the staged folder must be named
+  `*_Data` (that is what makes AssetRipper see a Unity build at all), the export must be
+  `/Export/UnityProject` and not `/Export/PrimaryContent` (`level0` is a scene, and scene contents
+  never appear in primary content), and `level0.split*` must be concatenated in NUMERIC order. The
+  DummyDlls must come from the same build as the assets. AssetRipper itself is not vendored --
+  drop the 1.3.14 win_x64 build in `<scratch>/assetripper/`.
+- **Re-extracted from 0.7.3.61, the HUNTER side has not changed at all.** `scene-defs.json` now
+  holds **18** families (an earlier count of 17 missed `VexinSkill`). Value diffs against 0.7.3.54:
+  **zero** across `BorgeSkill`, `OzzySkill`, `KnoxSkill`, `VexinSkill`, `POM`, `POI`, `POK` and
+  `Relic` -- every talent cap, attribute cost and cap, and all 20 relic start costs are identical,
+  and `scene-defs-test.js` still passes against the new export. Nothing in the update touches
+  hunter math.
+  What DID change is endgame fleet content: **7 new badges (17-23)** and **5 new research units
+  (RU111-115)**, all with astronomical values -- `Badge21` is `Bonus1 = 5e400`, and RU111-115 start
+  at 1e10000 through 1e12600. `Badge21` is exactly the new `MK1Production` factor found in the code
+  diff, so the two views agree. **One existing value was NERFED 10x: `RU91` Bonus5 0.01 -> 0.001 and
+  Bonus6 0.012 -> 0.0012.** We do not model RU91 (our ship coefficients come from FleetManager's own
+  `baseBonusByCategory`, a different numbering), and none of RU68/RU78/RU83/RU96 -- the ones we do
+  reference -- changed.
+- **`VexinSkill` is a FOURTH hunter in the scene, and it is empty: all 9 entries are
+  `Level 0, MaxLevel 0`, in both builds.** Borge/Ozzy/Knox by contrast carry real caps and bonuses.
+  So not modelling Vexin is correct, not an omission -- there is nothing authored to model. Do not
+  "discover" this later and treat it as a gap.
 - **`resolve-loads.py` offsets MUST come from the same build as the `dump.cs` they resolve against,
   and getting it wrong produces confident nonsense rather than an error.** Resolving 0.7.3.61
   offsets against 0.7.3.54's dump returned `ExpansionNextBonusText` where a bonus belonged and
@@ -921,6 +948,8 @@ node tools/save/inspect.js <DATA.text> [regex]            # decode + inspect a r
 node tools/bench/save-coverage.js      # which tool inputs the save could auto-fill (report)
 node tools/bench/loopmod-test.js       # loop-mod table vs a real save (report)
 node tools/bench/scene-defs-test.js    # our caps/costs vs the GAME's own scene data
+CIFI_APK=apk-0.7.3.61 python tools/bench/export-scene.py  # AssetRipper scene export for a build
+node tools/bench/extract-scene-defs.js <MainScene.unity> --write  # -> scene-defs.json
 node tools/bench/inscryption-cost-check.js <live-bundle.js> # inscryption costs vs the original
 node tools/bench/gate-coverage.js <live-bundle.js>        # our gates vs the bundle's
 node tools/bench/live-override-diff.js <live-bundle.js>   # gap check vs the original tool
