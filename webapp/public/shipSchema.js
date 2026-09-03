@@ -125,6 +125,45 @@ function realNum(v) {
  * @param {Object} save - decoded save JSON (see decodeSaveText in saveImport.js)
  * @returns {Object<number, ShipRecord>} keyed by ship id (1-8)
  */
+// Free crew / free ranks the game grants on top of what the player bought. Per-ship inscryption
+// slots, taken from the game's own MultiverseMarket code (FinalISFree<Ship>Crew =
+// IS<n>Bonus * IS<n>Level) and cross-checked against the grant table this repo modelled before the
+// Crew/Rank inputs were simplified -- both say 8 crew per level and 1 rank per level, and the two
+// were derived independently.
+//
+// NOT MODELLED, and deliberately loud about it rather than silently dropped: the game also adds
+// `LM240Bonus` to crew and `LM239Bonus1 + ResearchLaboratory.FinalAllShipsRanksBonus` to rank.
+// Both loop mods are level 0 on the reference save so they contribute nothing there, and
+// tools/reference/loop-mods.json carries their costs but not their per-level Bonus, so the
+// coefficient cannot be sourced yet. `unmodelledCrewRankTerms()` reports when a save would
+// actually be affected -- see its comment.
+const FREE_CREW_PER_LEVEL = 8;
+const FREE_RANK_PER_LEVEL = 1;
+const FREE_SHIP_GRANTS = {
+  1: { rankIS: 48, crewIS: 49 },   // Cradle
+  2: { rankIS: 50, crewIS: 51 },   // Auxesia
+  3: { rankIS: 53, crewIS: 54 },   // Zagreus
+  4: { rankIS: 55, crewIS: 56 },   // Hephaestus
+  5: { rankIS: 64, crewIS: 65 },   // Demeter
+  6: { rankIS: 67, crewIS: 68 },   // Koios
+};
+
+/**
+ * Terms the game applies to crew/rank that this importer cannot compute yet, for a given save.
+ * Returns [] when the save is unaffected. Never silently ignored: if one of these loop mods is
+ * owned, the imported crew/rank are LOW and every fleet bonus derived from them is low with them.
+ * @returns {string[]}
+ */
+function unmodelledCrewRankTerms(save) {
+  const out = [];
+  const lm240 = Number(save.LM240Level) || 0;
+  const lm239 = Number(save.LM239Level) || 0;
+  if (lm240 > 0) out.push(`LM240 (level ${lm240}) adds crew the importer cannot compute`);
+  if (lm239 > 0) out.push(`LM239 (level ${lm239}) adds ranks the importer cannot compute`);
+  return out;
+}
+window.unmodelledCrewRankTerms = unmodelledCrewRankTerms;
+
 function mapSaveToShips(save) {
   const ships = {};
   SHIP_IDS.forEach((n) => {
@@ -140,13 +179,33 @@ function mapSaveToShips(save) {
       if (applied !== undefined) ruApplied[slot] = realNum(applied);
     });
 
+    // `Ship{n}CrewLevel` and `Ship{n}Rank` are only what the player BOUGHT. The game adds free
+    // crew and free ranks on top, so importing the raw field understates both -- and crew
+    // multiplies every install node's bonus linearly, so the error propagates into every fleet
+    // number. Read out of the recovered C# (tools/il2cpp-cli/csharp.py, FleetManager):
+    //
+    //   FinalCradleCrew = LM.LM240Bonus  + MM.Ship1CrewLevel + Market.FinalISFreeCradleCrew
+    //   FinalCradleRank = LM.LM239Bonus1 + MM.Ship1Rank      + Market.FinalISFreeCradleRanks
+    //                                                        + RL.FinalAllShipsRanksBonus
+    //
+    // and in MultiverseMarket, FinalISFreeCradleCrew = IS49Bonus * IS49Level (etc. per ship).
+    // On the reference save that is +80 crew and +8 ranks for Cradle alone -- crew 600 -> 680,
+    // a 13% understatement of every Cradle install bonus.
+    const free = FREE_SHIP_GRANTS[n];
+    const freeCrew = free ? FREE_CREW_PER_LEVEL * realNum(save[`IS${free.crewIS}Level`]) : 0;
+    const freeRanks = free ? FREE_RANK_PER_LEVEL * realNum(save[`IS${free.rankIS}Level`]) : 0;
+
     ships[n] = {
-      rank: realNum(save[`${p}Rank`]),
+      rank: realNum(save[`${p}Rank`]) + freeRanks,
       rankPoints: realNum(save[`${p}RankPoints`]),
       rankProgress: realNum(save[`${p}RankProgress`]),
       unlocked: !!save[`${p}Unlocked`],
       firstUnlocked: save[`${p}FirstUnlocked`],
-      crewLevel: realNum(save[`${p}CrewLevel`]),
+      crewLevel: realNum(save[`${p}CrewLevel`]) + freeCrew,
+      purchasedCrewLevel: realNum(save[`${p}CrewLevel`]),
+      purchasedRank: realNum(save[`${p}Rank`]),
+      freeCrew,
+      freeRanks,
       crewAutomationLevel: realNum(save[`${p}CrewAutomationLevel`]),
       crewAutomationPurchased: !!save[`${p}CrewAutomationPurchased`],
       evoLevel: realNum(save[`${p}EvoLevel`]),
