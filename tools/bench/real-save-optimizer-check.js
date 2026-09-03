@@ -85,15 +85,28 @@ for (let shipId = 1; shipId <= 7; shipId++) {
 // synthetic fixture.
 //
 // SirRed's tool is a useful ROUGH BASELINE, not a source of truth -- it is an outdated community
-// tool with no Meltdown concept at all (nodeBonus/totalBonus below have no melt term, which is
-// mathematically equivalent to always assuming Meltdown=1, i.e. Math.pow(x, 1) = x, a no-op).
-// Our own allocator reads this account's REAL Meltdown value (0.373 on the reference save) and
-// applies it per generator tier (see poolAdjustedNodeValue), so once an account's real Meltdown
-// differs meaningfully from 1, the two are legitimately scoring DIFFERENT objectives, not the
-// same one with one side wrong. A gap here is a prompt to go look at WHY (gate/counter/tier
-// differences are all real, inspectable causes -- see the ship-by-ship printouts above), not
-// proof of a bug by itself. Treat "ours beats or roughly matches SirRed" as a sanity floor, and a
-// gap as a starting point for manual inspection, not an automatic fail signal.
+// tool, and per the project owner it should be treated that way, not as ground truth to chase
+// exact parity with.
+//
+// nodeBonus/totalBonus below have NO melt term -- they use the plain `1 + coeff*level*counter*
+// crew` shape everywhere, i.e. this SCRIPT's own model is equivalent to always assuming
+// Meltdown=1 (Math.pow(x, 1) = x, a no-op). That was a deliberate simplifying choice for this
+// comparison (matching sirred-algorithm-check.js's synthetic-fixture version), NOT a verified
+// fact about SirRed's own tool -- SirRed's actual UI has a Meltdown input, so its real algorithm
+// almost certainly does account for it somehow. This project does not currently have SirRed's
+// decompiled source on disk to check its real formula (that RE work was done in an earlier
+// session and not preserved), so do not repeat the "SirRed has no Meltdown concept" claim as
+// fact anywhere -- it was an incorrect inference from this script's own simplification, caught
+// and corrected 2026-09-02.
+//
+// Our own allocator DOES read this account's real Meltdown value (0.373 on the reference save)
+// and applies it per generator tier (see poolAdjustedNodeValue). Given that, and that this
+// script's SirRed side ignores Meltdown entirely, the two sides are almost certainly scoring
+// different objectives whenever an account's real Meltdown differs from 1 -- but that is a
+// hypothesis this script does not actually verify, not a settled explanation. A gap here is a
+// prompt to go inspect the specific plan difference (gate/counter/tier causes are all real and
+// inspectable via the ship-by-ship printouts above), not proof of a bug, and not proof of
+// anything about Meltdown specifically without re-deriving SirRed's real formula.
 const CRADLE_ID = 1;
 const cradleInput = sb.getShipInput(CRADLE_ID);
 const CREW = cradleInput.crew || 0;
@@ -152,5 +165,6 @@ console.log(`\n${failures === 0 ? 'all structural sanity checks pass' : failures
 console.log(worseCount === 0
   ? 'our allocator matches or beats the SirRed baseline at every tested budget on REAL account data'
   : `our allocator diverged from the SirRed baseline at ${worseCount}/${BUDGETS.length} real-data budget(s) -- `
-    + 'SirRed has no Meltdown concept, so this is expected once an account\'s real Meltdown differs from 1, not a fail signal on its own');
+    + 'this script\'s SirRed-side model ignores Meltdown (unverified whether SirRed\'s real tool does '
+    + 'too -- see the comment above), so a gap is a prompt for manual inspection, not a fail signal');
 process.exit(failures === 0 ? 0 : 1);
