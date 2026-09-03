@@ -78,32 +78,24 @@
     return gemTree(state, 'exodus')?.nodes?.[nodeIndex] || false;
   }
 
-  // TIER-2 RELICS ARE GATED IN THE SIM, NOT JUST IN THE UI, and this is measured rather than
-  // assumed. The live site ignores `relics.t2r7` entirely while Power gem level < 3 -- feeding it
-  // t2r7 at 5, 40, or anything else returns BYTE-IDENTICAL output -- and applies it normally once
-  // Power reaches 3. This tool applied it unconditionally, which is a large gap, not a rounding
-  // one: a level-70 Borge read 55.12m loot here against the site's 16.54m, a 70% overstatement,
-  // and average stage 251.6 against 222.6.
+  // TIER-2 RELICS ARE **NOT** GATED IN THE SIM. This is recorded because the opposite was briefly
+  // implemented here on strong-looking but wrong evidence, and the way it went wrong is the
+  // reusable part.
   //
-  // With Power 3 set on both sides the two agree exactly (loot 55,123,454 vs the site's 55.12m,
-  // stage 251.6202 vs 251.6, mat1 3.74b both), so the RELIC MATH was never wrong -- only the gate.
+  // Passing `relics.t2r7` through a BUILD CODE to cifi-tools produces byte-identical output at 0, 5
+  // and 40 -- three runs, no change -- which reads exactly like a sim-side gate, and a level-70
+  // Borge differed by 70% (55.12m here against the site's 16.54m). Setting Power gem 3 then made
+  // the site agree exactly, which looked like confirmation.
   //
-  // Deliberately narrow. Other gated categories are NOT gated here, because the site was measured
-  // NOT to gate them in the sim: a Borge build with `gadgets.wrench: 60` and no gem state at all
-  // matches the site within 0.33%, even though the wrench is nominally Exodus-4 gated. Applying
-  // every UPGRADE_GATES entry would therefore break parity that currently holds. Each additional
-  // category needs the same measurement before being added -- set it on the site's account with
-  // the gem below its gate and see whether the output moves.
-  function tierTwoRelicLocked(name, state) {
-    if (!/^upgrades\.relics\.t2r\d+$/.test(name)) return false;
-    const gate = global.UPGRADE_GATES && global.UPGRADE_GATES[name];
-    if (!gate) return false;
-    const tree = gemTree(state, gate.gem);
-    return !(tree && (tree.level || 0) >= gate.level);
-  }
-
+  // It was not. Setting t2r7 = 40 directly in the site's ACCOUNT state with Power gem **0** yields
+  // 55.12m / stage 251.6 / mat1 3.74b -- identical to the Power-3 result. The site applies tier-2
+  // relics regardless of gem level. What actually drops them is its IMPORT path: pasting a code
+  // does not bring gem-locked tier-2 relics into the account, so the sim simply never saw them.
+  //
+  // The lesson: "the site's output did not move" answers a question about the whole PIPELINE, not
+  // about the simulator. Before concluding a gate exists, set the value through the account -- the
+  // path a real player uses -- rather than through an importer that may filter it.
   function resolveParam(name, state) {
-    if (tierTwoRelicLocked(name, state)) return 0;
 
     // exodus_temporalEvolutionCount is the ONE derived count, and this mirrors the live tool's own
     // resolver exactly: gate on exodus_gem1 (an override on the gate speaks for it), then sum the

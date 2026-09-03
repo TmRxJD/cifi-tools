@@ -899,6 +899,25 @@ think one is wrong, disprove it with a test.
   attributes** on the site with no warning -- identical to ours.
   `attr-save-order-check.js` derives the mapping and fails if the shipped list drifts;
   `--print` regenerates it.
+- **GEM GATES ARE UI-ONLY. NO GATED CATEGORY IS GATED IN THE SIMULATOR, on the site or here.**
+  Measured per category with `sim-gate-probe.mjs`, which sets one upgrade three ways -- off, on with
+  no gems, on with the gate satisfied -- and reads the verdict off the site's own numbers. All five
+  categories with a measurable effect (gadgets, tier-2 relics, shard milestones, researches, CMs)
+  come back NOT GATED on both sides. Two more (`loopmods.roe`, `trinkets.last_handbook`) move
+  nothing even unlocked, so they are reported INERT rather than counted as agreement.
+- **A TIER-2 RELIC SIM GATE WAS BRIEFLY ADDED HERE ON STRONG-LOOKING EVIDENCE AND WAS WRONG. The
+  way it went wrong is the reusable part.** Passing `relics.t2r7` through a BUILD CODE gives the
+  site byte-identical output at 0, 5 and 40 -- three runs, no movement -- while this tool's numbers
+  moved 70% (55.12m against the site's 16.54m at level 70). Setting Power gem 3 then made the two
+  agree exactly, which read as confirmation of a Power-3 sim gate.
+  It was not. Setting `t2r7 = 40` directly in the site's ACCOUNT state with Power gem **0** returns
+  55.12m / stage 251.6 / mat1 3.74b -- identical to the Power-3 run. The site applies tier-2 relics
+  at any gem level; what drops them is its IMPORT path, which does not bring gem-locked tier-2
+  relics in from a pasted code, so its simulator never saw them.
+  **"The site's output did not move" is a fact about the whole PIPELINE, not about the simulator.**
+  Before concluding a gate exists, set the value through the ACCOUNT -- the path a real player uses
+  -- rather than through an importer that may filter it. The same trap in a milder form is why
+  `compare_builds` now reports `notTransportedToLive`.
 - **A modal that starts async work must cancel it on close, and `titledModal` fires `modal-close`
   so it can.** Closing used to just `remove()` the overlay, leaving the Effective Path walk
   running: invisible, uncancellable, and still competing for the main thread and for wasm
@@ -1556,6 +1575,8 @@ node tools/bench/attribute-tree-check.js # the attribute DEPENDENCY tree vs the 
 node tools/bench/cap-raise-check.js    # every cap the GAME can RAISE is accounted for
 node tools/bench/real-account-optimizer-check.js # optimizer vs the REAL save build
 node tools/bench/attr-save-order-check.js # save slot -> attribute, derived from the GAME
+node tools/bench/sim-gate-probe.mjs    # which gated upgrades the SITE gates in the SIM
+node tools/bench/save-mapping-check.js # every save field the importer reads, and its caps
 CIFI_APK=apk-0.7.3.61 python tools/bench/cap-raise-audit.py --write
 CIFI_APK=apk-0.7.3.61 python tools/bench/extract-attribute-tree.py --write
 node tools/bench/relic-tier2-check.js [live-bundle.js]    # tier-2 relic caps vs the GAME
