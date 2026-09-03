@@ -933,27 +933,34 @@ think one is wrong, disprove it with a test.
     after the tool moved to `sum`, reporting the allocator as wrong for preferring a dual-resource
     node. Known drift hazard, now flagged in place.
 - **The hunter-side equivalent of the factor audit is `param-plumbing-check.js`: every sim parameter
-  must be SETTABLE and must land in its OWN argument slot.** The fleet side asks whether every term
-  in the game's multiply chain is accounted for; here the chain is the wasm's argument vector, and
-  the question is whether `resolveParam` can actually drive each of its 281 slots (101 Borge / 89
-  Ozzy / 91 Knox). `resolveParam` has a generic override path, so nearly everything is settable by
-  name -- which is what makes the exceptions worth finding. It found two, both in the same place:
-  - **`exodus_gem3` (Ozzy) and `exodus_gem5` (Knox) ignored an explicit override entirely.** Their
-    branches never consulted `state.overrides`, while their Count twins did. A silently dropped
-    input is the one resolver failure this project treats as unacceptable.
-  - **Worse: overriding the Count moved only its own slot**, so the wasm received two arguments
-    holding DIFFERENT values for a single quantity -- a state the real game cannot produce.
-  Both are fixed by resolving each pair through one value, so an override on either name sets both.
-  **TWINS ARE DECLARED, NOT INFERRED**, because "these two arguments are the same thing" is a claim
-  about the evaluator rather than something to read off a diff.
-- **Borge's `exodus_gem1` is deliberately NOT twinned with `exodus_temporalEvolutionCount`, and
-  assuming otherwise silently changes every Borge evaluation.** The generic resolver reads
-  `upgrades.gems_nodes.<tree>_gemN` as the node's **0/1 owned flag**; only `gem3` and `gem5` carry
-  explicit branches returning the summed count, which is precisely what makes those two the same
-  quantity as their twin. While fixing the above I put `gem1` in the pair list, which converted a
-  boolean into a sum -- caught by checking what the generic path actually returns rather than
-  reasoning from the names. The symmetry of the naming is a trap: `gem1`/`gem3`/`gem5` look like one
-  family and are not.
+  must be SETTABLE and must land in its OWN argument slot.** The fleet chain is the game's multiply
+  chain; the hunter chain is the wasm's argument vector, 281 slots across the three hunters. Since
+  `resolveParam` has a generic override path almost everything is settable, which is what makes the
+  exceptions worth finding -- it flagged `exodus_gem3` (Ozzy) and `exodus_gem5` (Knox), whose
+  branches ignored an explicit override entirely.
+- **THE HUNTER SIDE IS VALIDATED AGAINST THE LIVE cifi-tools BUNDLE, NOT THE APK, AND THAT
+  DISTINCTION FOUND A REAL BUG THAT TWO ROUNDS OF INTERNAL REASONING MISSED.** The site was built
+  with the game's devs, so for anything it models its bundle IS the verification -- fetch it from
+  `cifi-tools.com/assets/index-*.js` (the filename is hashed; read it out of the served HTML).
+  What the bundle settled, after our own reasoning had gone wrong twice:
+  - Its gem-state map is `exodus: { nodes: { gem1..gem6, temporalEvolutionCount }, upgrades: {} }`,
+    and the loop consuming it assigns `gems_nodes[gemN] = node ? 1 : 0`. So **`exodus_gem3` and
+    `exodus_gem5` are 0/1 OWNED FLAGS**, exactly like `exodus_gem1`. Our resolver had special
+    branches returning `sum(power)+sum(innovation)` and `sum(attraction)+sum(creation)` -- simply
+    wrong, and wrong in a way no internal check could see.
+  - **`exodus_powerInnovationCount` and `exodus_attractionCreationCount` are never derived at all.**
+    They appear in neither half of that map and occur exactly ONCE each in the whole bundle (the
+    parameter list), so the original tool treats them as plain override params defaulting to 0. We
+    derived them from gem sums, which made our arguments differ from what the original would send
+    for the same account.
+  - Only `exodus_temporalEvolutionCount` is derived (gated on gem1, summing temporal+evolution),
+    which our code already matched.
+  **The lesson is about method, not gems.** Told two params "must" agree, I unified them and wrote a
+  bench asserting it -- which would have frozen our own bug in as an expectation. The authoritative
+  source said they were never related. When the original tool models something, read ITS code before
+  reasoning about ours; `live-override-diff.js`, `gate-coverage.js`, `inscryption-cost-check.js` and
+  `base-stat-cost-check.js` all take the bundle path for exactly this reason, and all four pass
+  against a freshly fetched bundle.
 - **`node-factor-check.js` is the general defence against another Badge12: EVERY term in every
   node's multiply chain must be accounted for by name.** `extract-node-factors.py` enumerates the
   whole chain per node -- named reads AND the operands inside Cpp2IL notes, resolved through

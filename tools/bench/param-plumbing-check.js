@@ -15,11 +15,13 @@
 //   * Worse, overriding the Count moved only its own slot, so the wasm received a pair of
 //     arguments holding DIFFERENT values for one quantity -- a state the real game cannot produce.
 //
-// TWINS. A few quantities are read twice under two names. Moving both slots together is correct and
-// expected; moving only one is the bug. They are declared below rather than inferred, because
-// "these two args are the same thing" is a claim about the evaluator, not something to guess from a
-// diff -- and Borge's exodus_gem1 is deliberately NOT a twin of its Count (the generic resolver
-// reads gemN as a 0/1 owned flag; only gem3/gem5 carry the summed-count branch).
+// NO TWINS. An earlier version of this bench declared exodus_gem3/powerInnovationCount and
+// exodus_gem5/attractionCreationCount as "twins" that had to move together, because our resolver
+// derived both halves from the same sum. The live cifi-tools bundle -- authoritative here, since
+// that tool was built with the game's devs -- says otherwise: `gemN` is a 0/1 owned flag and the
+// Count params are never derived at all. The resolver now matches, so every param moves exactly
+// one slot and there is nothing to declare. Keeping a twin table would have frozen our own bug in
+// as an expectation.
 //
 //   node tools/bench/param-plumbing-check.js [--verbose]
 
@@ -31,11 +33,9 @@ const sb = H.browserSandbox();
 const verbose = process.argv.includes('--verbose');
 const params = JSON.parse(fs.readFileSync(path.join(__dirname, '../../webapp/public/params.json'), 'utf8'));
 
-// quantities the wasm reads under two argument names -- an override on either must set both
-const TWINS = [
-  ['upgrades.gems_nodes.exodus_gem3', 'upgrades.gems_nodes.exodus_powerInnovationCount'],
-  ['upgrades.gems_nodes.exodus_gem5', 'upgrades.gems_nodes.exodus_attractionCreationCount'],
-];
+// Left deliberately empty -- see the note above. If a genuine two-name quantity ever appears,
+// declare it here rather than inferring it from a diff.
+const TWINS = [];
 const twinOf = new Map();
 TWINS.forEach(([a, b]) => { twinOf.set(a, b); twinOf.set(b, a); });
 

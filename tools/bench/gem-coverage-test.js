@@ -40,7 +40,18 @@ const baseState = (gemStates) => ({
 // state.upgrades.trinkets, gated behind Creation Gem 5. Our Overrides panel exposes the
 // individual trinkets (the live tool exposes the summed count instead), and the trinket-chain
 // check below is what verifies that route. Expected, so not a failure.
-const NEEDS_NON_GEM_INPUT = new Set(['upgrades.gems_nodes.creation_galvTrinketsCount']);
+// Params the live tool itself does NOT derive from gem state, verified against its bundle rather
+// than assumed. creation_galvTrinketsCount sums state.upgrades.trinkets behind a Creation-5 gate.
+// exodus_powerInnovationCount and exodus_attractionCreationCount appear in NEITHER the nodes nor
+// the upgrades half of the bundle's exodus gem-state map, and occur exactly once each in the whole
+// bundle (the parameter list), so the original tool treats them as plain override params defaulting
+// to 0. We used to derive them from gem sums, which made our arguments differ from what the
+// original would send for the same account -- a divergence dressed up as a convenience.
+const NEEDS_NON_GEM_INPUT = new Set([
+  'upgrades.gems_nodes.creation_galvTrinketsCount',
+  'upgrades.gems_nodes.exodus_powerInnovationCount',
+  'upgrades.gems_nodes.exodus_attractionCreationCount',
+]);
 const uncovered = [];
 const covered = [];
 

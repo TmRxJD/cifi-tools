@@ -79,43 +79,33 @@
   }
 
   function resolveParam(name, state) {
-    // Each of these is ONE quantity the wasm reads under TWO argument names -- a gem-node level
-    // and its "count" twin, computed identically. They must therefore always agree: the real game
-    // cannot produce a state where exodus_gem3 and exodus_powerInnovationCount differ.
-    //
-    // They used to be resolved by separate branches where only the Count half consulted
-    // state.overrides. That was wrong in both directions, and a param-plumbing sweep caught both:
-    // overriding the Count moved its own argument while its twin stayed at the derived value, so
-    // the wasm saw an impossible pair; and overriding the gem-node half was silently DROPPED, the
-    // one failure mode this project treats as unacceptable in a resolver. Resolving the pair
-    // through one value fixes both, and an override on EITHER name now sets both.
-    // NOTE the asymmetry, which is real and must be preserved: Borge's exodus_gem1 is NOT paired
-    // with exodus_temporalEvolutionCount. The generic resolver below reads `exodus_gemN` as the
-    // node's 0/1 OWNED FLAG, and gem1 has always taken that path; only gem3 and gem5 carried
-    // explicit branches returning the summed count, which is what makes those two -- and only
-    // those two -- the same quantity as their Count twin. Adding gem1 here silently converts a
-    // boolean into a sum and changes every Borge evaluation; it was in this list for one commit
-    // before that was caught.
-    const EXODUS_PAIRS = [
-      { gem: 'upgrades.gems_nodes.exodus_gem3', count: 'upgrades.gems_nodes.exodus_powerInnovationCount',
-        gate: 'upgrades.gems_nodes.exodus_gem3', gateIdx: 2, trees: ['power', 'innovation'] },
-      { gem: 'upgrades.gems_nodes.exodus_gem5', count: 'upgrades.gems_nodes.exodus_attractionCreationCount',
-        gate: 'upgrades.gems_nodes.exodus_gem5', gateIdx: 4, trees: ['attraction', 'creation'] },
-    ];
+    // exodus_temporalEvolutionCount is the ONE derived count, and this mirrors the live tool's own
+    // resolver exactly: gate on exodus_gem1 (an override on the gate speaks for it), then sum the
+    // temporal and evolution gem upgrades.
     if (name === 'upgrades.gems_nodes.exodus_temporalEvolutionCount') {
       if (state.overrides && name in state.overrides) return state.overrides[name];
       if (!exodusGateUnlocked(state, 'upgrades.gems_nodes.exodus_gem1', 0)) return 0;
       return sumGemUpgrades(state, 'temporal') + sumGemUpgrades(state, 'evolution');
     }
-    const exodusPair = EXODUS_PAIRS.find((p) => p.gem === name || p.count === name);
-    if (exodusPair) {
-      const ov = state.overrides || {};
-      // an override on either name speaks for the pair, so the two can never diverge
-      if (exodusPair.count in ov) return ov[exodusPair.count];
-      if (exodusPair.gem in ov) return ov[exodusPair.gem];
-      if (!exodusGateUnlocked(state, exodusPair.gate, exodusPair.gateIdx)) return 0;
-      return sumGemUpgrades(state, exodusPair.trees[0]) + sumGemUpgrades(state, exodusPair.trees[1]);
-    }
+    // NOTHING ELSE IN THE EXODUS FAMILY IS DERIVED, and getting that wrong cost two rounds of
+    // work. `exodus_gem3` and `exodus_gem5` used to have branches here returning
+    // sum(power)+sum(innovation) and sum(attraction)+sum(creation); a param-plumbing sweep then
+    // found they also ignored explicit overrides, and the "fix" was to pair each with its Count
+    // twin so an override on either set both.
+    //
+    // Checking the live bundle -- which is authoritative here, since cifi-tools was built with the
+    // game's devs -- showed the whole premise was wrong. Its gem-state mapping is
+    //   exodus: { nodes: { gem1..gem6, temporalEvolutionCount }, upgrades: {} }
+    // and the loop that consumes it assigns `gems_nodes[gemN] = node ? 1 : 0`. So exodus_gem3 and
+    // exodus_gem5 are 0/1 OWNED FLAGS, exactly like exodus_gem1 and exactly what our generic
+    // resolver already returns -- they need no branch at all. And exodus_powerInnovationCount /
+    // exodus_attractionCreationCount appear in NEITHER the nodes nor the upgrades map, and occur
+    // exactly once each in the entire bundle (the param list), so the live tool never derives them:
+    // they are plain override params defaulting to 0.
+    //
+    // They are therefore deliberately NOT special-cased here. Deriving them was a divergence from
+    // the source dressed up as a convenience, and it made two arguments disagree with what the
+    // original tool would send for the same account.
     if (name === 'upgrades.cms.milestoneCount') {
       if (state.overrides && name in state.overrides) return state.overrides[name];
       return state.upgrades?.cms?.milestoneCount || 0;
