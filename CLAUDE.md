@@ -33,24 +33,41 @@ point, not decoration.
    carry hard-won empirical findings. Preserve that. When you remove a workaround, say what it
    was compensating for.
 
-### Disassembly answers SHAPE. Type trees answer VALUES. Do not confuse the two.
+### Three questions, three tools. Using the wrong one costs days.
 
-**IL2CPP strips Unity's type trees.** That is the root cause behind a lot of this repo's archaeology:
-serialized MonoBehaviour data becomes opaque bytes with no field names, so recovering a designer
-number pushes you toward byte-offset scanning, or toward disassembling code to reconstruct a value
-that was never computed — it was *authored*. `tools/il2cpp-cli/typetree.py` reconstructs the type
-trees and the same data reads back as named fields (`FleetManager.RU2GenBaseBonus = 0.05`).
+| Question | Tool | What it gives |
+|---|---|---|
+| What number did a designer type? | `tools/il2cpp-cli/typetree.py` | authored serialized data (`FleetManager.RU2GenBaseBonus = 0.05`) |
+| What does this method DO? | `tools/il2cpp-cli/csharp.py` | **real C#**, with type/field/method names |
+| Exact field offsets, or when C# recovery fails | `decompile.py` / `analyze.py` | x86_64 disassembly and Ghidra C |
 
-- **A number a designer typed** (coefficients, costs, caps, bonus values) → `typetree.py`. It is
-  the ground truth, above the wiki and above any community tool.
-- **How numbers COMBINE** (is this summed or multiplied, where does the Meltdown `Pow` sit, does
-  this bonus reach that resource) → `decompile.py` / `analyze.py`. Type trees cannot tell you this.
+**IL2CPP strips Unity's type trees**, which is the root cause behind a lot of this repo's
+archaeology: serialized MonoBehaviour data becomes opaque bytes with no field names, so recovering
+a designer number pushes you toward byte-offset scanning, or toward disassembling code to
+reconstruct a value that was never computed — it was *authored*. `typetree.py` ends that.
 
-This is not theoretical. The first full run of `tools/bench/node-coefficient-check.js` matched 74
-of 76 ship-node coefficients and caught **two that were 10x wrong** — both introduced hours earlier
-by "correcting" the wiki against a reading of SirRed's decompiled constants. Demeter's On-Site
-Printing Vehicles had been set to 30% against an authored 3%, making it the ship's most valuable
-node by an order of magnitude. Inference lost to authored data, in the same session, twice.
+**Method bodies ARE recoverable, and this repo believed otherwise for far too long.** The working
+assumption — written into notes and acted on — was that il2cpp metadata v39 made C# recovery
+impossible, so game logic had to be read as assembly. It is false. Cpp2IL's issue #223 is still
+open and still says IL recovery is legacy-only, and #528 was closed as a duplicate of it; both
+predate the work. The code disagrees with the issue tracker: `LibCpp2IL` accepts metadata 23–108,
+`AsmResolverDllOutputFormatIlRecovery` really calls `methodContext.Analyze()` then
+`IlGenerator.GenerateIl(...)`, and a full SSA pipeline landed June–August 2026 with x86_64 as the
+*reference* architecture. **Measured on this build: 52,545 of 52,553 methods recovered (100%), in
+41 seconds.** The lesson is the one this file keeps relearning — a search result and an open issue
+are not primary sources; the code is.
+
+Neither tool replaces the others. C# recovery still emits
+`Cpp2ILHelpers.NoteDecompilerIssue("Unmanaged memory load: [... +5AF0]")` where a field load did
+not resolve; that is an honest marker, and the offset it prints is exactly what `analyze.py` reads
+and `typetree.py` names.
+
+None of this is theoretical. The first full run of `tools/bench/node-coefficient-check.js` matched
+74 of 76 ship-node coefficients and caught **two that were 10x wrong** — both introduced hours
+earlier by "correcting" the wiki against a reading of SirRed's decompiled constants. Demeter's
+On-Site Printing Vehicles had been set to 30% against an authored 3%, making it the ship's most
+valuable node by an order of magnitude. Inference lost to authored data, in the same session,
+twice.
 
 ### Where a value has to come from
 
@@ -126,6 +143,7 @@ There is exactly one place for each of these. **Do not add a second.**
 | Method name -> RVA (replaces script.json) | `tools/il2cpp-cli/dumpindex.py` |
 | Decompile named methods to readable C | `tools/il2cpp-cli/decompile.py` (Ghidra + PyGhidra) |
 | **Read AUTHORED serialized data (values)** | `tools/il2cpp-cli/typetree.py` |
+| **Read method BODIES as C# (logic)** | `tools/il2cpp-cli/csharp.py` (Cpp2IL + ilspycmd) |
 | Authored ship-node coefficients | `tools/reference/ship-node-coefficients.json` |
 | Server-table capture | `tools/capture/` |
 | Per-hunter evaluation fidelity (UI) | `store[hunter].iterations` + `StoreSchema.ITERATIONS` / `clampIterations` |
