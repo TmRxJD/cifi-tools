@@ -859,6 +859,46 @@ think one is wrong, disprove it with a test.
   importer lines (so changing a mapping without revisiting the classification fails), a guard
   against reintroducing an invented multiplier, the zero-counter warning on all 5 growth ships, and
   a non-degenerate Demeter plan. Verified with a negative control.
+- **The AOTC "max at 15" policy was WRONG, and the node was always scoreable.** Demeter slot 1
+  ("Ahead of the Curve") does not multiply a resource -- it GRANTS operations, and operations are
+  the counter 8 of Demeter's 11 nodes multiply by. The game says so plainly:
+  `LoopModifiers.PerformLoop()` adds `FleetManager.RUShard1Bonus` into the run's operation count and
+  stores it as `MasterManager.NewSMOpsFromAOTCThisRun`, and `RUShard1Bonus` is
+  `RU1ShardBaseBonus(1.0) * FinalDemeterCrew * <gear/badge/research> * RU1ShardLevel` -- linear, one
+  operation per crew member per level. So the old comment ("its payoff lands next loop, it can't be
+  scored by the marginal-value engine") was mistaken about the mechanic, not just cautious.
+  Measured against a brute-force optimum on the Demeter fixture, the binary rule was correct at
+  budgets >= 15 and <= 6 but left **2.6% -> 47.5%** on the table across 7-14, where the true optimum
+  ramps 1 -> 5 and a binary rule jumps 0 -> 5 at a single point.
+  It is now **scored** (`aotcMarginalLogGain`) and, because the choice is COUPLED -- AOTC's value
+  depends on how many operations-scaled nodes have levels, and theirs depends on the operations it
+  grants -- all six levels are **enumerated** and the best-scoring plan wins. Both halves of the
+  coupling matter: scoring AOTC alone still ran up to 24% behind until the ops-scaled nodes were
+  also valued at the RAISED counter (`effectiveOpsFor`). With both, the allocator is **optimal at
+  every tested budget**. `prepForLongRun` still forces the max, because that asserts a horizon the
+  within-run objective genuinely cannot see.
+  Consequences for the ship invariants: Demeter no longer takes a single greedy path, so
+  `ship-test.js` exempts it from "greedy picks the single best node each step" and from prefix
+  stability. Every other ship is still held to both exactly.
+- **A node's weight is the SUM of the sliders it touches, not the strongest one.** This is the
+  objective's own arithmetic -- maximising `prod(resource ^ weight)` means maximising
+  `sum(weight * log(resource))`, so a node whose factor multiplies both Cells and Shards contributes
+  to both. Five nodes are dual (`+X% A & B gained`: Koios 6, Zeus 4/5/6/7). The code took a `max`
+  and the comment above it asserted that was intended; reverting to `max` costs **15-29% on Zeus**
+  across budgets, so this is a measured fix, not a stylistic one.
+- **Three bench bugs found while testing the above, each of which made a correct allocator look
+  wrong.** They are the reusable part, because every one of them is a reference that quietly
+  models a DIFFERENT objective than the thing under test:
+  - `weightOf` returned `w || 1`, collapsing "no recognised bucket" (fallback 1) with "buckets the
+    user set to zero" (genuinely 0). It valued Cells nodes at weight 1 in a Cells-off scenario and
+    reported the tool as up to **99% worse** for correctly declining them. The silent-default trap
+    this file bans elsewhere, in a bench.
+  - The reference greedy SCORED with weights but PICKED without them, so it optimised the unweighted
+    product. That made it too weak to detect a real weighting regression -- reverting the tool to
+    `max` passed unnoticed until the reference's marginal carried the weight too.
+  - `ship-test.js` duplicates the weight rule (nodeWeight is module-private) and was still on `max`
+    after the tool moved to `sum`, reporting the allocator as wrong for preferring a dual-resource
+    node. Known drift hazard, now flagged in place.
 - **`allocator-check.js` is now the primary allocator gate: all 7 ships, 5 budgets, 35 combinations,
   scored against the GAME's authored coefficients rather than SirRed's tool.** The two SirRed
   benches remain but are Cradle-only — which is precisely why the growth-counter collapse went

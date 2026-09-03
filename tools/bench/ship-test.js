@@ -284,7 +284,7 @@ function bestEligibleScore(shipId, levels, totalInstalls, unlocked, weights, run
       if (single && Number(single.slice(2)) > 1 && unlocked[Number(single.slice(2))] === false) continue;
     }
     const cats = [...new Set(tags.map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))];
-    const w = cats.reduce((m, c) => Math.max(m, weights[c] || 0), 0);
+    const w = cats.reduce((sum, c) => sum + (weights[c] || 0), 0);
     if (w <= 0) continue; // only the weighted pass is checked here -- see note below
     best = Math.max(best, sb.nodeMarginalLogGain(shipId, slot, levels, runLength) * w);
   }
@@ -302,10 +302,15 @@ check('greedy always spends on the single best-scoring eligible node at each ste
   // gate their weighted nodes behind total-installs thresholds only a currently-unweighted node
   // can clear, so a small budget can legitimately run out partway through funding the weighted
   // nodes afterward -- room left at the END does not mean the earlier fallback spend was wrong.
-  // Demeter's AOTC burst is a policy special-case, not scored by the marginal-value engine at
-  // all, so it is skipped entirely.
+  // DEMETER IS EXCLUDED, and the reason is a real behaviour change rather than a convenience.
+  // AOTC's value is coupled to the rest of the ship (it grants the operations 8 other nodes scale
+  // with), so the allocator enumerates all six of its levels and keeps the best-scoring plan. The
+  // winning plan is therefore not a single greedy path: AOTC is pinned up front in each candidate
+  // run. Every other ship still takes the single-pass greedy and is still held to this invariant
+  // exactly.
   const unlocked = sb.getUnlockedGens();
   for (const { shipId, budget, weights, wName } of cases()) {
+    if (shipId === AOTC.shipId) continue;
     const { clicks } = plan(shipId, budget, weights);
     const levels = {};
     let total = 0;
@@ -315,7 +320,12 @@ check('greedy always spends on the single best-scoring eligible node at each ste
       if (!isAotc) {
         const tags = sb.effectResources(CATALOG[shipId][slot].effect);
         const cats = [...new Set(tags.map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))];
-        const w = cats.reduce((m, c) => Math.max(m, weights[c] || 0), 0);
+        // SUM, matching optimizeShipInstalls' own nodeWeight: maximising prod(resource ^ weight)
+        // means a node feeding two buckets contributes both. This is a DUPLICATE of the shipped
+        // rule (nodeWeight is module-private), so it is a known drift hazard -- it was still on the
+        // old MAX form after the tool moved to sum, and reported the allocator as wrong for
+        // correctly preferring a dual-resource node.
+        const w = cats.reduce((sum, c) => sum + (weights[c] || 0), 0);
         const rivalBest = bestEligibleScore(shipId, levels, total, unlocked, weights, 'long', slot);
         if (w > 0) {
           const ownScore = sb.nodeMarginalLogGain(shipId, slot, levels, 'long') * w;
@@ -343,8 +353,10 @@ check('a smaller budget is a prefix of a larger one (stable partial plans)', () 
         // AOTC is skipped entirely, at or above it is maxed FIRST, so the two plans necessarily
         // start differently. That is the policy working, not instability -- every other ship,
         // and Demeter away from the boundary, must still be prefix-stable.
-        if (shipId === AOTC.shipId
-          && BUDGETS[i - 1] < AOTC.autoMaxAtBudget && BUDGETS[i] >= AOTC.autoMaxAtBudget) continue;
+        // Demeter is exempt entirely now. Its AOTC level is chosen by enumeration, so a bigger
+        // budget can legitimately settle on a different pin -- and everything after it shifts.
+        // Prefix stability is a property of a single greedy path; Demeter no longer takes one.
+        if (shipId === AOTC.shipId) continue;
         const small = plan(shipId, BUDGETS[i - 1], weights).clicks;
         const large = plan(shipId, BUDGETS[i], weights).clicks;
         if (small.length > large.length) {
@@ -372,20 +384,33 @@ check('a smaller budget is a prefix of a larger one (stable partial plans)', () 
 // by "greedy always spends on the single best-scoring eligible node at each step" above and by
 // "a zero-weighted category is only funded as a last resort".
 
-check("Demeter's AOTC rule matches its documented policy", () => {
-  const { shipId, slot, autoMaxAtBudget } = AOTC;
+check("Demeter's AOTC is scored, not policed, and its level is chosen by enumeration", () => {
+  // REPLACES a test of the old binary policy ("skip entirely below 15 points, max at/above it").
+  // That policy was measured against a brute-force optimum and left up to 47.5% on the table
+  // between budgets 7 and 14, where the optimum ramps 1 -> 5. AOTC GRANTS OPERATIONS
+  // (LoopModifiers.PerformLoop adds FleetManager.RUShard1Bonus into the run's operation count), so
+  // its value is computable, and it is now scored like any other node -- with all six levels
+  // enumerated, because the choice is coupled to the rest of the ship.
+  const { shipId, slot } = AOTC;
   const weights = WEIGHT_SETS.even;
-  const below = plan(shipId, autoMaxAtBudget - 1, weights, false);
-  if ((below.levels[slot] || 0) !== 0) {
-    return `below the ${autoMaxAtBudget}-point threshold AOTC should be skipped entirely, got level ${below.levels[slot]}`;
+  const maxLevel = sb.nodeMaxLevel(shipId, slot);
+  const levelAt = (budget) => plan(shipId, budget, weights, false).levels[slot] || 0;
+
+  if (levelAt(4) !== 0) return `a 4-point budget should not fund AOTC, got ${levelAt(4)}`;
+  if (levelAt(60) !== maxLevel) return `a 60-point budget should max AOTC, got ${levelAt(60)} of ${maxLevel}`;
+  let prev = 0;
+  for (const budget of [4, 6, 8, 10, 12, 14, 16, 20, 30, 60]) {
+    const lvl = levelAt(budget);
+    if (lvl < prev) return `AOTC level fell from ${prev} to ${lvl} as the budget grew to ${budget}`;
+    prev = lvl;
   }
-  const at = plan(shipId, autoMaxAtBudget, weights, false);
-  if ((at.levels[slot] || 0) !== sb.nodeMaxLevel(shipId, slot)) {
-    return `at the ${autoMaxAtBudget}-point threshold AOTC should be maxed, got ${at.levels[slot] || 0} of ${sb.nodeMaxLevel(shipId, slot)}`;
+  const midband = [6, 7, 8, 9].map(levelAt);
+  if (!midband.some((l) => l > 0 && l < maxLevel)) {
+    return `AOTC never takes a partial level across budgets 6-9 (${midband.join(', ')}) -- `
+      + 'that is the binary policy this replaced, not a scored ramp';
   }
-  const prepped = plan(shipId, 5, weights, true);
-  if ((prepped.levels[slot] || 0) === 0) {
-    return 'prepForLongRun should max AOTC even on a small budget, got 0';
+  if ((plan(shipId, 5, weights, true).levels[slot] || 0) !== maxLevel) {
+    return 'prepForLongRun should still max AOTC even on a small budget';
   }
   return null;
 });

@@ -1941,14 +1941,87 @@ function runLengthBiasFor(runLength) {
 // same), and it cannot overflow the way a raw product of real-account ratios does. Mutates
 // nothing. Diminishing returns are real and need no pool: a node's own factor is 1 + inc*level,
 // so each extra point moves it by (1+inc*(L+1))/(1+inc*L), which shrinks on its own as L grows.
+// Ahead Of The Curve (Demeter slot 1) does not multiply a resource -- it GRANTS operations, and
+// operations are the "per X" counter that 8 of Demeter's 11 nodes multiply by. The game states it:
+// LoopModifiers.PerformLoop() adds FleetManager.RUShard1Bonus into the run's operation count and
+// stores it as MasterManager.NewSMOpsFromAOTCThisRun, and RUShard1Bonus is
+// `RU1ShardBaseBonus(1.0) * FinalDemeterCrew * <gear/badge/research mults> * RU1ShardLevel` --
+// linear in level, i.e. crew operations per level before multipliers.
+//
+// So its value IS computable, and this returns it: the marginal gain of one more AOTC level is the
+// improvement it produces across every operations-scaled node at their CURRENT planned levels.
+// That falls out with the right shape on its own -- worth nothing while no operations node has
+// levels yet, worth more as they fill in -- which is why it replaces the old
+// "max it outright above a budget threshold, otherwise skip it" policy. Measured against a
+// brute-force optimum on the Demeter fixture, that policy was correct at budgets >= 15 and <= 6 but
+// left up to 47.5% on the table across 7-14, because the true optimum ramps 1 -> 5 through that
+// band while a binary rule jumps 0 -> 5 at one point.
+const AOTC_GRANT_COUNTER = 'operationsCompleted';
+// A node's per-level fraction with the operations counter FACTORED OUT, so the counter can be
+// varied. Both directions of the AOTC coupling need this: valuing AOTC (how much do other nodes
+// improve when operations rise) and valuing those nodes (they must be worth more once AOTC has
+// actually raised operations). Mirrors nodeLinearIncrement's multiplier chain exactly, minus the
+// counter itself.
+function opsScaledPerUnit(shipId, slot) {
+  const meta = SHIP_NODE_CATALOG[shipId]?.[slot];
+  if (!meta || meta.gearKey !== AOTC_GRANT_COUNTER) return 0;
+  const pct = String(meta.effect).match(/([\d.]+)%/);
+  if (!pct) return 0;
+  const crew = getShipInput(shipId).crew || 0;
+  return parseFloat(pct[1]) / 100 * crew
+    * (computeFleetResearchShipMultipliers()[shipId] || 1)
+    * (computeFleetBadgeMultipliers()[shipId] || 1)
+    * computeGearNodeMultiplier(Number(shipId), Number(slot));
+}
+// Operations actually available to this ship's nodes once AOTC's grant is counted.
+function effectiveOpsFor(shipId, levels) {
+  const base = getShipGear()[AOTC_GRANT_COUNTER] || 0;
+  if (shipId !== AOTC_SHIP_ID) return base;
+  const crew = getShipInput(shipId).crew || 0;
+  return base + crew * (levels[AOTC_SLOT] || levels[Number(AOTC_SLOT)] || 0);
+}
+function aotcMarginalLogGain(shipId, slot, levels) {
+  const crew = getShipInput(shipId).crew || 0;
+  if (crew <= 0) return 0;
+  const gear = getShipGear();
+  const ops = effectiveOpsFor(shipId, levels); // already-bought AOTC levels count
+  const granted = crew; // one operation per crew member per level (RU1ShardBaseBonus = 1.0)
+  const catalog = SHIP_NODE_CATALOG[shipId] || {};
+  let gain = 0;
+  Object.keys(catalog).forEach((other) => {
+    if (String(other) === String(slot)) return;
+    const om = catalog[other];
+    if (om.gearKey !== AOTC_GRANT_COUNTER) return;
+    const otherLevel = levels[other] || 0;
+    if (otherLevel <= 0) return; // nothing to amplify yet
+    const perOp = opsScaledPerUnit(shipId, other);
+    if (!(perOp > 0)) return;
+    gain += Math.log1p(perOp * (ops + granted) * otherLevel)
+      - Math.log1p(perOp * ops * otherLevel);
+  });
+  return gain;
+}
+
 function nodeMarginalLogGain(shipId, slot, levels, runLength) {
   const meta = SHIP_NODE_CATALOG[shipId]?.[slot];
   if (!meta) return 0;
+  if (shipId === AOTC_SHIP_ID && String(slot) === AOTC_SLOT) {
+    return aotcMarginalLogGain(shipId, slot, levels);
+  }
   // nodeLinearIncrement is in PERCENT per level; /100 to get the factor's per-level fraction.
   // No growth multiplier: see GROWTH_VALUE_BOOST's removal note. The counter is used exactly as
   // entered, which undervalues nodes whose counter climbs during the run -- a known, deliberate
   // approximation rather than a hidden one.
-  const increment = nodeLinearIncrement(shipId, slot) / 100;
+  let increment = nodeLinearIncrement(shipId, slot) / 100;
+  // The other half of the AOTC coupling. nodeLinearIncrement reads the counter as ENTERED, but by
+  // the time these points are spent AOTC has raised operations, so valuing these nodes at the
+  // unraised counter credits AOTC for a boost and then never collects it. Leaving that
+  // inconsistency in place cost up to 24% against a brute-force optimum even once AOTC itself was
+  // scored correctly.
+  if (shipId === AOTC_SHIP_ID && meta.gearKey === AOTC_GRANT_COUNTER) {
+    const perOp = opsScaledPerUnit(shipId, slot);
+    if (perOp > 0) increment = perOp * effectiveOpsFor(shipId, levels);
+  }
   if (increment <= 0) return 0;
   const level = levels[slot] || 0;
   const logRatio = Math.log1p(increment * (level + 1)) - Math.log1p(increment * level);
@@ -2001,7 +2074,7 @@ function nodeMarginalLogGain(shipId, slot, levels, runLength) {
 // target to reach on top of existing installs. Real current installs are a separate concern
 // (see "Effective Path" in openLoadoutDetail, which uses this same ideal sequence's tail to
 // advise what to buy next from wherever you really are).
-function optimizeShipInstalls(shipId, budget, weights, prepForLongRun, runLength) {
+function allocateShipInstallsOnce(shipId, budget, weights, prepForLongRun, runLength, pinnedAotc) {
   const catalog = SHIP_NODE_CATALOG[shipId] || {};
   const levels = {};
   const clicks = [];
@@ -2024,29 +2097,44 @@ function optimizeShipInstalls(shipId, budget, weights, prepForLongRun, runLength
     }
     return true;
   };
-  // AOTC (Demeter's "Ahead of the Curve", slot 1): its payoff lands at the start of the NEXT
-  // loop reset, not the active run, so it can't be scored by the normal marginal-value engine
-  // (no % in its effect text, no immediate resource gain to weigh against anything else).
-  // Community approach: max it outright once Demeter's budget is comfortably large (>=15) or
-  // when explicitly prepping for a long run; otherwise skip it entirely so scarce points go
-  // straight into direct multipliers instead.
-  if (shipId === AOTC_SHIP_ID && (budget >= AOTC_AUTO_MAX_BUDGET || prepForLongRun)) {
-    const needed = Math.min(nodeMaxLevel(shipId, 1), budget - spent);
+  // AOTC (Demeter slot 1) is now SCORED, not policed -- see aotcMarginalLogGain. The old rule
+  // ("max it outright once the budget is >= 15 or when prepping for a long run, otherwise skip it
+  // entirely") was measured against a brute-force optimum on the Demeter fixture: correct at
+  // budgets >= 15 and <= 6, but it left up to 47.5% on the table across 7-14, where the true
+  // optimum ramps 1 -> 5 and a binary rule cannot. `prepForLongRun` still forces it to max, because
+  // that is a statement about a horizon the within-run objective genuinely cannot see -- not a
+  // substitute for scoring the node.
+  if (shipId === AOTC_SHIP_ID && (prepForLongRun || pinnedAotc != null)) {
+    const want = prepForLongRun ? nodeMaxLevel(shipId, 1) : pinnedAotc;
+    const needed = Math.min(want, nodeMaxLevel(shipId, 1), budget - spent);
     if (needed > 0) { levels[1] = needed; spent += needed; for (let i = 0; i < needed; i++) clicks.push('1'); }
   }
-  // Which weighted category/categories each node's effect feeds -- a node's own weight is the
-  // STRONGEST slider touching it (a node rarely feeds more than one bucket, but when it does it
-  // should count in favor of being bought whenever ANY of its sliders is turned up).
+  // Which weighted category/categories each node's effect feeds. A node's weight is the SUM of the
+  // sliders it touches, which is not a preference but the objective's own arithmetic: maximising
+  // prod(resource ^ weight) means maximising sum(weight * log(resource)), so a node whose factor f
+  // multiplies BOTH Cells and Shards contributes w_cells*log(f) + w_shards*log(f). Five nodes are
+  // like this ("+X% A & B gained": Koios 6, Zeus 4/5/6/7).
+  //
+  // This comment used to say the weight was the STRONGEST slider touching the node, and the code
+  // took a max. That silently undervalued every dual-resource node by treating one of its two
+  // contributions as free, and it contradicted the marginal-value derivation quoted at the pick
+  // site three lines below.
   const categoryOf = {}; // slot -> [categories]
   slots.forEach((slot) => {
     categoryOf[slot] = [...new Set(effectResources(catalog[slot].effect).map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))];
   });
-  const nodeWeight = (slot) => categoryOf[slot].reduce((max, c) => Math.max(max, weights[c] || 0), 0);
-  // AOTC below its threshold is skipped ENTIRELY, per the policy above -- including here in the
-  // main loop. Excluding it only from the pre-step above was not enough: the allocator could
-  // still pick it, so a small-budget Demeter plan spent points on a node whose payoff lands next
-  // loop, which is exactly what the policy exists to avoid.
-  const aotcSuppressed = shipId === AOTC_SHIP_ID && !(budget >= AOTC_AUTO_MAX_BUDGET || prepForLongRun);
+  // SUM, not max, across the buckets a node feeds. The objective is
+  // `maximise prod(resource_r ^ weight_r)`, whose log is `sum(weight_r * log(resource_r))` -- so a
+  // node whose effect reads "+X% Cells & Shards gained" multiplies TWO resources and contributes
+  // `(w_cells + w_shards) * log(factor)`. Taking the strongest slider instead undervalued exactly
+  // those nodes by up to 2x. Five of the 77 nodes are affected (Koios 6, Zeus 4/5/6/7), all of them
+  // literal "A & B gained" effects, so this is not a hypothetical.
+  // Summing preserves the property the previous max was there for -- a node stays eligible whenever
+  // ANY slider touching it is above zero, since a sum of non-negative weights is > 0 iff one is.
+  const nodeWeight = (slot) => categoryOf[slot].reduce((sum, c) => sum + (weights[c] || 0), 0);
+  // Nothing to suppress any more: the main loop evaluates AOTC on its merits like any other node.
+  // It is only pre-filled above when prepForLongRun has already maxed it.
+  const aotcSuppressed = shipId === AOTC_SHIP_ID && (prepForLongRun || pinnedAotc != null);
   const nodeEligible = (slot) => !(aotcSuppressed && slot === AOTC_SLOT)
     && (levels[slot] || 0) < nodeMaxLevel(shipId, slot)
     && gateMetFor(slot);
@@ -2084,6 +2172,56 @@ function optimizeShipInstalls(shipId, budget, weights, prepForLongRun, runLength
   // just after a reset. Report it instead of hiding it. Callers that ignore `warnings` still get
   // the same plan as before, so this cannot change any existing behaviour.
   return { levels, clicks, warnings: growthCounterWarnings(shipId) };
+}
+
+// Total objective value of a finished plan: sum over nodes of weight * log(node factor), evaluated
+// at the FINAL levels. Deliberately a function of the end state rather than of the path, which is
+// what makes two plans comparable.
+function planLogScore(shipId, levels, weights, runLength) {
+  const catalog = SHIP_NODE_CATALOG[shipId] || {};
+  const meltdown = getShipGear().meltdown || 0;
+  const exponent = meltdown > 0 ? meltdown : 1;
+  const bias = runLengthBiasFor(runLength);
+  let total = 0;
+  Object.keys(catalog).forEach((slot) => {
+    const level = levels[slot] || 0;
+    if (level <= 0) return;
+    const meta = catalog[slot];
+    let increment = nodeLinearIncrement(shipId, slot) / 100;
+    if (shipId === AOTC_SHIP_ID && meta.gearKey === AOTC_GRANT_COUNTER) {
+      const perOp = opsScaledPerUnit(shipId, slot);
+      if (perOp > 0) increment = perOp * effectiveOpsFor(shipId, levels);
+    }
+    if (increment <= 0) return;
+    const tags = effectResources(meta.effect);
+    const isGenStage = tags.includes('allGens') || tags.some(isGenLikeTag);
+    const w = [...new Set(tags.map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))]
+      .reduce((max, c) => Math.max(max, weights[c] || 0), 0);
+    total += Math.log1p(increment * level) * (isGenStage ? exponent * bias.gen : bias.cells) * (w || 1);
+  });
+  return total;
+}
+
+// AOTC is COUPLED to the rest of Demeter: its value depends on how many operations-scaled nodes
+// have levels, and their value depends on the operations it grants. A one-point-at-a-time greedy
+// cannot see round that loop, and measurably under-commits -- up to 4.5% behind a brute force that
+// simply tries every AOTC level. There are only six, so trying all of them is cheap and exact, and
+// it is the same move the hunter optimizer makes with dependency-closed support sets: enumerate the
+// small structural choice, be greedy only about depth. Other ships take the single-pass path
+// unchanged.
+function optimizeShipInstalls(shipId, budget, weights, prepForLongRun, runLength) {
+  if (shipId !== AOTC_SHIP_ID || prepForLongRun) {
+    return allocateShipInstallsOnce(shipId, budget, weights, prepForLongRun, runLength, null);
+  }
+  const maxAotc = Math.min(nodeMaxLevel(shipId, Number(AOTC_SLOT)), budget);
+  let best = null;
+  let bestScore = -Infinity;
+  for (let pin = 0; pin <= maxAotc; pin++) {
+    const plan = allocateShipInstallsOnce(shipId, budget, weights, prepForLongRun, runLength, pin);
+    const score = planLogScore(shipId, plan.levels, weights, runLength);
+    if (score > bestScore) { bestScore = score; best = plan; }
+  }
+  return best;
 }
 // Per-ship "include in Optimize Loadout" toggle + the Zaglag tactic toggle: while active,
 // Zagreus is skipped by the batch optimizer (as if not yet unlocked, leaving its budget unspent

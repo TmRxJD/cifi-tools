@@ -46,7 +46,47 @@ const verbose = process.argv.includes('--verbose');
 
 const CREW = 12;
 const BUDGETS = [10, 30, 75, 150, 300];
-const WEIGHTS = { cells: 1, shards: 1, researchPoints: 1, modPoints: 1, missionMaterials: 1, academyPoints: 1 };
+// Weight scenarios. Uneven weights are testable because the reference implements the OBJECTIVE's
+// own weighting -- a node's weight is the sum of the sliders it touches, which falls out of
+// maximising prod(resource ^ weight) -- rather than copying a rule from the tool. An earlier
+// version of this bench ran even weights only, on the grounds that a reference would have to
+// replicate our weighting rule to stay comparable; that was true while the tool took the MAX of a
+// node's sliders, and stopped being true once that was corrected to the sum the objective implies.
+const WEIGHT_SETS = {
+  even:      { cells: 1, shards: 1, researchPoints: 1, modPoints: 1, missionMaterials: 1, academyPoints: 1 },
+  cellsOnly: { cells: 5, shards: 0, researchPoints: 0, modPoints: 0, missionMaterials: 0, academyPoints: 0 },
+  shardTilt: { cells: 1, shards: 5, researchPoints: 1, modPoints: 0, missionMaterials: 0, academyPoints: 1 },
+  research:  { cells: 0, shards: 1, researchPoints: 5, modPoints: 1, missionMaterials: 0, academyPoints: 2 },
+  // Chosen to make DUAL-resource nodes pivotal: Koios 6 and Zeus 4/5/6/7 read "+X% A & B gained"
+  // and feed two buckets at once. With both sliders up and every other bucket off, a node's weight
+  // is 6 if you sum its buckets and 3 if you take the strongest -- so this scenario is the one that
+  // can tell those two rules apart. Without it, reverting the tool to `max` passes unnoticed.
+  dualPivot: { cells: 0, shards: 3, researchPoints: 0, modPoints: 3, missionMaterials: 0, academyPoints: 0 },
+};
+let WEIGHTS = WEIGHT_SETS.even;
+
+// The objective is over RESOURCES, not nodes. Five nodes read "+X% A & B gained" and multiply two
+// resources at once (Koios 6, Zeus 4/5/6/7), so their factor enters the product twice. Counting
+// each node once would understate them and would disagree with the tool for the right reason --
+// the reference has to model the objective, not the node list.
+const BUCKET = {
+  cells: 'cells', allGens: 'cells', shards: 'shards', researchPoints: 'researchPoints',
+  modPoints: 'modPoints', academyPoints: 'academyPoints', missionMaterials: 'missionMaterials',
+  techSoftware: 'cells', techHardware: 'cells',
+};
+GEN_TIERS.forEach((n) => { BUCKET[`mk${n}`] = 'cells'; });
+function weightOf(shipId, slot) {
+  const buckets = [...new Set(sb.effectResources(CATALOG[shipId][slot].effect)
+    .map((r) => BUCKET[r]).filter(Boolean))];
+  // A node whose effect maps to NO known bucket still counts once -- we simply cannot weight it.
+  // A node that maps to buckets the user has set to ZERO genuinely contributes nothing, and must
+  // score zero. Collapsing those two cases with `w || 1` silently rewrote the objective: it valued
+  // Cells nodes at weight 1 in a scenario with the Cells slider at 0, and then reported the tool as
+  // up to 99% "worse" for correctly declining them. The tool was right; the reference was measuring
+  // a different function. Exactly the silent-default trap this project bans elsewhere.
+  if (!buckets.length) return 1;
+  return buckets.reduce((sum, b) => sum + (WEIGHTS[b] || 0), 0);
+}
 
 // Every "per X" counter set to a realistic mid-run value, so growth nodes actually participate --
 // the whole point of extending past Cradle. Values are arbitrary but fixed, and shared by both
@@ -103,56 +143,60 @@ function counterOf(shipId, slot) {
 
 function makeObjective(shipId) {
   const slots = Object.keys(CATALOG[shipId]).map(Number);
-  const inc = {};
-  slots.forEach((s) => {
-    const c = coeffOf(shipId, s);
-    inc[s] = c === null ? null : c * counterOf(shipId, s) * CREW;
-  });
+  // Per-level increment, given how many AOTC levels are bought (which raises operations).
+  const incFor = (slot, aotcLevel) => {
+    const c = coeffOf(shipId, slot);
+    if (c === null) return null;
+    const meta = CATALOG[shipId][slot];
+    const opsBoost = (shipId === AOTC_SHIP && meta.gearKey === 'operationsCompleted')
+      ? CREW * aotcLevel : 0;
+    return c * (counterOf(shipId, slot) + opsBoost) * CREW;
+  };
   return {
     slots,
-    increments: inc,
+    incFor,
     // log-space: these products reach 1e30+ on real fixtures and would lose precision as doubles
     logScore(levels) {
+      const aotcLevel = shipId === AOTC_SHIP ? (levels[AOTC_SLOT] || 0) : 0;
       let total = 0;
       slots.forEach((s) => {
-        const i = inc[s];
+        const i = incFor(s, aotcLevel);
         if (!i) return;
-        total += Math.log1p(i * (levels[s] || 0));
+        total += Math.log1p(i * (levels[s] || 0)) * weightOf(shipId, s);
       });
       return total;
     },
   };
 }
 
-// Demeter slot 1 ("Ahead of the Curve") is a POLICY, not a search outcome, and the bench has to
-// hold it constant or it measures the wrong thing. Its payoff -- extra completed operations -- lands
-// at the start of the NEXT loop reset, so it contributes nothing to a within-run product and our
-// allocator cannot score it either; instead it maxes the node outright once the budget is
-// comfortable (>= 15), on the community's reasoning. A reference greedy that only knows the
-// within-run objective will always decline it, so the raw comparison charges us ~5 points and
-// reports a 7-21% "loss" that is really a modelling decision, not a worse search. Giving both sides
-// the identical policy isolates what this bench is actually for: who allocates the REMAINING budget
-// better. Whether the policy itself is right is a separate question this bench deliberately does
-// not answer.
+// Demeter slot 1 ("Ahead of the Curve") GRANTS OPERATIONS rather than multiplying a resource, and
+// operations are the counter 8 of Demeter's 11 nodes scale with. The game states it:
+// LoopModifiers.PerformLoop() adds FleetManager.RUShard1Bonus into the run's operations
+// (MasterManager.NewSMOpsFromAOTCThisRun), and RUShard1Bonus is linear in the node's level at
+// `RU1ShardBaseBonus(1.0) * crew * <mults> * level` -- so one operation per crew member per level.
+//
+// The reference therefore models it too, and enumerates all six possible levels. It used to instead
+// mirror a fixed "max it above budget 15" policy from the tool, which meant the bench could never
+// have judged that policy -- and the policy turned out to be leaving up to 47.5% on the table
+// between budgets 7 and 14. A reference that copies the thing under test cannot test it.
 const AOTC_SHIP = 5;
 const AOTC_SLOT = 1;
-const AOTC_AUTO_MAX_BUDGET = 15;
 
-/** Reference greedy: always spend the next point wherever it multiplies the product most. */
-function referenceGreedy(shipId, budget, obj) {
+/** Reference greedy at a FIXED AOTC level: spend each point where it multiplies the product most. */
+function referenceGreedyPinned(shipId, budget, obj, aotcLevel) {
   const levels = {};
   obj.slots.forEach((s) => { levels[s] = 0; });
   let spent = 0;
-  if (shipId === AOTC_SHIP && budget >= AOTC_AUTO_MAX_BUDGET) {
-    const needed = Math.min(sb.nodeMaxLevel(shipId, AOTC_SLOT), budget);
-    levels[AOTC_SLOT] = needed;
-    spent += needed;
+  if (shipId === AOTC_SHIP && aotcLevel > 0) {
+    levels[AOTC_SLOT] = Math.min(aotcLevel, budget);
+    spent += levels[AOTC_SLOT];
   }
   while (spent < budget) {
     let best = null;
     let bestGain = 0;
     for (const s of obj.slots) {
-      const inc = obj.increments[s];
+      if (shipId === AOTC_SHIP && s === AOTC_SLOT) continue; // pinned above
+      const inc = obj.incFor(s, levels[AOTC_SLOT] || 0);
       if (!inc) continue;
       const meta = CATALOG[shipId][s];
       const level = levels[s];
@@ -160,7 +204,12 @@ function referenceGreedy(shipId, budget, obj) {
       // Same gate semantics the game uses and our allocator enforces: installs on this ship,
       // excluding the node's own levels (a node cannot bootstrap its own prerequisite).
       if (meta.gateAtTotalInstalls && (spent - level) < meta.gateAtTotalInstalls) continue;
-      const gain = Math.log1p(inc * (level + 1)) - Math.log1p(inc * level);
+      // Weight the marginal, not just the final score. Maximising prod(resource ^ weight) means
+      // maximising sum(weight * log(resource)), so the per-point gain a greedy ranks on has to
+      // carry the weight too. Scoring with weights while PICKING without them made this reference
+      // optimise the unweighted product -- a baseline too weak to detect a real weighting
+      // regression in the tool, which is exactly what it failed to do.
+      const gain = (Math.log1p(inc * (level + 1)) - Math.log1p(inc * level)) * weightOf(shipId, s);
       if (gain > bestGain) { bestGain = gain; best = s; }
     }
     if (best === null) break; // everything capped or gated
@@ -174,9 +223,11 @@ let worse = 0;
 let compared = 0;
 const rows = [];
 
+for (const [wName, wSet] of Object.entries(WEIGHT_SETS)) {
 for (const shipId of Object.keys(CATALOG).map(Number).sort((a, b) => a - b)) {
+  WEIGHTS = wSet;
   const obj = makeObjective(shipId);
-  const missing = obj.slots.filter((s) => obj.increments[s] === null);
+  const missing = obj.slots.filter((s) => obj.incFor(s, 0) === null);
   if (missing.length === obj.slots.length) {
     rows.push(`SKIP ship ${shipId}: no authored coefficients`);
     continue;
@@ -184,7 +235,17 @@ for (const shipId of Object.keys(CATALOG).map(Number).sort((a, b) => a - b)) {
   for (const budget of BUDGETS) {
     seed();
     const ours = sb.optimizeShipInstalls(shipId, budget, WEIGHTS, false, 'long').levels;
-    const ref = referenceGreedy(shipId, budget, obj);
+    // Enumerate AOTC levels for Demeter; every other ship has a single pin of 0.
+    const pins = shipId === AOTC_SHIP
+      ? Array.from({ length: Math.min(sb.nodeMaxLevel(shipId, AOTC_SLOT), budget) + 1 }, (_, i) => i)
+      : [0];
+    let ref = null;
+    let refBest = -Infinity;
+    for (const pin of pins) {
+      const cand = referenceGreedyPinned(shipId, budget, obj, pin);
+      const sc = obj.logScore(cand);
+      if (sc > refBest) { refBest = sc; ref = cand; }
+    }
     const oursLog = obj.logScore(ours);
     const refLog = obj.logScore(ref);
     compared++;
@@ -195,15 +256,16 @@ for (const shipId of Object.keys(CATALOG).map(Number).sort((a, b) => a - b)) {
     if (bad) {
       worse++;
       const pct = (Math.expm1(-behind) * 100).toFixed(2);
-      rows.push(`WORSE ship ${shipId} budget ${budget}: ours ${pct}% of reference`);
+      rows.push(`WORSE [${wName}] ship ${shipId} budget ${budget}: ours ${pct}% of reference`);
       rows.push(`        ours: ${JSON.stringify(ours)}`);
       rows.push(`        ref : ${JSON.stringify(ref)}`);
     } else if (verbose) {
-      rows.push(`ok    ship ${shipId} budget ${budget}: log ${oursLog.toFixed(6)} vs ${refLog.toFixed(6)}`);
+      rows.push(`ok    [${wName}] ship ${shipId} budget ${budget}: log ${oursLog.toFixed(6)} vs ${refLog.toFixed(6)}`);
     }
   }
 }
 
+}
 rows.forEach((r) => console.log(r));
 console.log(`\ncompared ${compared} (ship, budget) combination(s) across `
   + `${Object.keys(CATALOG).length} ships, objective from the GAME's authored coefficients`);
