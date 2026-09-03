@@ -704,9 +704,27 @@ think one is wrong, disprove it with a test.
   Points**. That method is a stale UI refresher; the aggregator is the math. `OrangeSetBonus2`
   (3000) appears in neither total because it is a one-off **Diamonds** grant, not a multiplier —
   absence from the aggregator does not mean dead.
-- **Yellow and Black are two more five-piece sets we do not model** (gated at Gem Of Power quality
-  4 and 6). Their names and set-bonus magnitudes are already extracted; their install targets are
-  NOT in `gear-install-map.json`, so they are not half-added.
+- **Yellow and Black are two more five-piece sets (Gem Of Power quality 4 and 6) that this build
+  DISPLAYS but never APPLIES — so they cannot be modelled yet, and that is a finding, not a gap in
+  our extraction.** Their names are in `gear-names.json` (rows 27-36) and their set-bonus values in
+  `gear-set-bonus-map.json`'s `unusedBonuses`, so the data we can have, we have. What is missing is
+  the only thing that would let the optimizer use them: an install target. Three independent checks,
+  because "I could not find it" is not the same as "it is not there":
+  1. `Gear.YellowItem1Bonus1`'s body is byte-for-byte the same shape as `WhiteItem1Bonus1`'s --
+     `Pow(GearBaseBonus1, <Color>Item1Level)`, with the base confirmed as `Gear+0xA8` ->
+     `GearBaseBonus1` (1.01) by `resolve-loads.py`. So these are implemented, not stubs, and all
+     colours share the same x1.01 / x1.02 bases.
+  2. Across the WHOLE decompiled assembly, the only consumers of `Gear.(Yellow|Black)Item<N>Bonus<M>`
+     are `TextHandlerSpaceAcademy`'s label setters (`Yellow1Bonus1Text.text = "x" + ...`). No
+     `RU<Category><n>Bonus` calls them, whereas White's getters are called from `FleetManager` ten
+     times.
+  3. `resolve-loads.py FleetManager` resolves 413 unnamed reads and **none** of them is a `Gear`
+     field -- which is the check that matters, since the evolution-bonus miss proved a name-grep
+     cannot see an unresolved field read.
+  Adding them would mean inventing install targets, which is precisely the failure this file exists
+  to prevent. When a future build wires them, `extract-gear-installs.py` will start emitting Yellow
+  and Black rows and `gear-install-check.js` will print SKIP lines for them -- that is the signal to
+  add the sets.
 - **`getGearSets()` reconciles the stored list against `REAL_GEAR_PIECES` by name; it used to
   return the stored list verbatim.** That meant the store, not the code, was authoritative for
   game-sourced data: **any piece added later never appeared for anyone who had ever opened the Ships
