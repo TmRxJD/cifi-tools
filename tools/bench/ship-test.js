@@ -1,9 +1,11 @@
 'use strict';
 // Invariant tests for the ship install optimizer (shipsPage.js optimizeShipInstalls).
 //
-// This code had no automated coverage of any kind. It is a ~170-line greedy allocator with
-// category fair-queueing, per-node fair-queueing, unlock gates, a meltdown-adjusted value model
-// and a hardcoded special case -- exactly the shape of thing that silently drifts.
+// This code had no automated coverage of any kind. It is a pure marginal-value greedy allocator
+// (2026-09-02: replaced an earlier category-fair-queueing design after real-save testing found it
+// could lose up to 100% of achievable value -- see real-save-optimizer-check.js and the comment
+// above optimizeShipInstalls) with unlock gates, a meltdown-adjusted value model and a hardcoded
+// special case -- exactly the shape of thing that silently drifts.
 //
 // The tests assert properties the implementation CLAIMS, none of which need a known-correct
 // answer to check:
@@ -12,7 +14,7 @@
 //   * caps                   no node above its max level
 //   * gates                  no node bought before its total-installs gate
 //   * locked tiers           no investment in single-tier nodes for locked generators
-//   * no consecutive repeats the "never buy 20 of the same thing in a row" claim
+//   * greedy optimality      every click is the single best-scoring eligible node at that moment
 //   * prefix growth          a smaller budget's click order is a prefix of a larger one's,
 //                            which is what "a sane partial-budget snapshot at every step" means
 //   * weight respect         a zero-weighted category is only funded as a last resort
@@ -264,55 +266,81 @@ check('no investment in single-tier nodes for locked generators', () => {
 });
 
 /**
- * Was a node other than `slot` both eligible AND a legitimate target at this point?
- *
- * "Legitimate" means it feeds a category the user actually weighted. A zero-weighted node does
- * NOT count as an alternative: spreading picks out in time must never override an explicit
- * "don't invest here", which is the exact bug this suite found (Cradle handed 8 of 40 points to
- * an excluded category). A test that counted excluded nodes here would argue for reintroducing
- * it.
+ * Every eligible (weighted, ungated, unmaxed, unlocked-tier) node's weighted marginal score at
+ * the current state -- an independent reassembly from the same exported building blocks the
+ * allocator itself uses (poolAdjustedNodeValue, nodeMaxLevel, RESOURCE_TO_WEIGHT_BUCKET), used to
+ * check that the allocator's own pick really was the best one available, not just A plausible one.
  */
-function alternativeExisted(shipId, slot, levels, totalInstalls, unlocked, weights) {
-  return Object.keys(CATALOG[shipId]).some((other) => {
-    if (other === slot) return false;
-    if (shipId === AOTC.shipId && other === AOTC.slot) return false; // policy-driven, not weight-driven
-    const cats = [...new Set(sb.effectResources(CATALOG[shipId][other].effect)
-      .map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))];
-    if (cats.length && !cats.some((c) => (weights[c] || 0) > 0)) return false;
-    if ((levels[other] || 0) >= sb.nodeMaxLevel(shipId, other)) return false;
-    const gate = CATALOG[shipId][other].gateAtTotalInstalls;
-    if (gate && (totalInstalls - (levels[other] || 0)) < gate) return false;
-    const tags = sb.effectResources(CATALOG[shipId][other].effect);
+function bestEligibleScore(shipId, levels, totalInstalls, unlocked, weights, pools, runLength, excludeSlot) {
+  let best = -Infinity;
+  for (const slot of Object.keys(CATALOG[shipId])) {
+    if (slot === excludeSlot) continue;
+    if (shipId === AOTC.shipId && slot === AOTC.slot) continue; // policy-driven, not scored
+    if ((levels[slot] || 0) >= sb.nodeMaxLevel(shipId, slot)) continue;
+    const gate = CATALOG[shipId][slot].gateAtTotalInstalls;
+    if (gate && (totalInstalls - (levels[slot] || 0)) < gate) continue;
+    const tags = sb.effectResources(CATALOG[shipId][slot].effect);
     if (!tags.includes('allGens')) {
       const single = tags.find((t) => /^mk\d+$/.test(t));
-      if (single && Number(single.slice(2)) > 1 && unlocked[Number(single.slice(2))] === false) return false;
+      if (single && Number(single.slice(2)) > 1 && unlocked[Number(single.slice(2))] === false) continue;
     }
-    return true;
-  });
+    const cats = [...new Set(tags.map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))];
+    const w = cats.reduce((m, c) => Math.max(m, weights[c] || 0), 0);
+    if (w <= 0) continue; // only the weighted pass is checked here -- see note below
+    const raw = sb.poolAdjustedNodeValue(shipId, slot, pools, runLength);
+    best = Math.max(best, raw * w);
+  }
+  return best;
 }
 
-check('never repeats a node when an alternative was actually eligible', () => {
-  // The implementation documents this ("never buy 20 of the same thing in a row"), but a repeat
-  // is legitimate when nothing else can be bought yet. An earlier version of this test counted
-  // distinct nodes across the WHOLE plan, which wrongly flagged ship 1's opening run: its other
-  // nodes gate at 5 total installs, so the first five picks have no alternative at all. Replay
-  // the sequence and judge eligibility at the moment of each repeat.
+check('greedy always spends on the single best-scoring eligible node at each step, and only '
+  + 'falls back to a zero-weighted node when nothing weighted was eligible at that moment', () => {
+  // Replays the plan's own click sequence, recomputing pool state exactly as
+  // optimizeShipInstalls does. Two things checked per click: (1) if the picked node is itself
+  // weighted, no OTHER weighted-eligible node ever outscored it; (2) if the picked node is
+  // UNWEIGHTED (the last-resort fallback pass), no weighted node was eligible at all at that
+  // exact moment -- checked here per-step rather than against the plan's FINAL state, because a
+  // final-state "some weighted node still has room" check produces false positives: several ships
+  // gate their weighted nodes behind total-installs thresholds only a currently-unweighted node
+  // can clear, so a small budget can legitimately run out partway through funding the weighted
+  // nodes afterward -- room left at the END does not mean the earlier fallback spend was wrong.
+  // Demeter's AOTC burst is a policy special-case, not scored by the marginal-value engine at
+  // all, so it is skipped entirely.
   const unlocked = sb.getUnlockedGens();
   for (const { shipId, budget, weights, wName } of cases()) {
     const { clicks } = plan(shipId, budget, weights);
     const levels = {};
+    const pools = sb.computeShipRealPoolTotals(shipId);
     let total = 0;
     for (let i = 0; i < clicks.length; i++) {
       const slot = clicks[i];
-      // AOTC is maxed in one deliberate burst by its policy, before the interleaving loop runs
-      // at all -- "max it outright" is the rule, so its consecutive clicks are not a violation.
-      const isAotcBurst = shipId === AOTC.shipId && slot === AOTC.slot;
-      if (i > 0 && slot === clicks[i - 1] && !isAotcBurst
-        && alternativeExisted(shipId, slot, levels, total, unlocked, weights)) {
-        return `ship ${shipId} budget ${budget} weights ${wName}: repeated slot ${slot} at click ${i} while another node was eligible`;
+      const isAotc = shipId === AOTC.shipId && slot === AOTC.slot;
+      if (!isAotc) {
+        const tags = sb.effectResources(CATALOG[shipId][slot].effect);
+        const cats = [...new Set(tags.map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))];
+        const w = cats.reduce((m, c) => Math.max(m, weights[c] || 0), 0);
+        const rivalBest = bestEligibleScore(shipId, levels, total, unlocked, weights, pools, 'long', slot);
+        if (w > 0) {
+          const ownScore = sb.poolAdjustedNodeValue(shipId, slot, pools, 'long') * w;
+          if (rivalBest > ownScore + 1e-9) {
+            return `ship ${shipId} budget ${budget} weights ${wName}: click ${i} picked slot ${slot} `
+              + `(score ${ownScore.toFixed(6)}) while another eligible node scored ${rivalBest.toFixed(6)}`;
+          }
+        } else if (rivalBest > -Infinity) {
+          return `ship ${shipId} budget ${budget} weights ${wName}: click ${i} fell back to `
+            + `zero-weighted slot ${slot} while a weighted node was still eligible (score ${rivalBest.toFixed(6)})`;
+        }
       }
       levels[slot] = (levels[slot] || 0) + 1;
       total += 1;
+      if (!isAotc) {
+        const increment = sb.nodeLinearIncrement(shipId, slot);
+        sb.effectResources(CATALOG[shipId][slot].effect).forEach((tag) => {
+          if (tag === 'cells' || /^mk\d+$/.test(tag) || tag === 'techSoftware' || tag === 'techHardware') {
+            pools[tag] = (pools[tag] || 1e-6) + increment;
+          }
+        });
+      }
     }
   }
   return null;
@@ -345,173 +373,15 @@ check('a smaller budget is a prefix of a larger one (stable partial plans)', () 
   return null;
 });
 
-check('a zero-weighted category is only funded as a last resort', () => {
-  for (const shipId of SHIP_IDS) {
-    const weights = WEIGHT_SETS.cellsOnly;
-    const { levels } = plan(shipId, 40, weights);
-    for (const [slot, n] of Object.entries(levels)) {
-      if (!n) continue;
-      const cats = [...new Set(sb.effectResources(CATALOG[shipId][slot].effect)
-        .map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))];
-      if (!cats.length) continue;
-      const wanted = cats.some((c) => (weights[c] || 0) > 0);
-      if (wanted) continue;
-      // AOTC is a deliberate exception: at or above its budget threshold the policy maxes it
-      // outright, weights notwithstanding, because its value is a next-loop head start rather
-      // than anything the weighted categories describe.
-      if (shipId === AOTC.shipId && slot === AOTC.slot) continue;
-      // Allowed only when a weighted category had nothing eligible -- i.e. every cells-feeding
-      // node is maxed. Verify that claim rather than accepting the spend.
-      const cellsNodesLeft = Object.keys(CATALOG[shipId]).some((s) => {
-        const c = [...new Set(sb.effectResources(CATALOG[shipId][s].effect).map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))];
-        return c.includes('cells') && (levels[s] || 0) < sb.nodeMaxLevel(shipId, s);
-      });
-      if (cellsNodesLeft) {
-        return `ship ${shipId}: slot ${slot} (categories ${cats.join('/')}, all weight 0) funded to ${n} while weighted cells nodes still had room`;
-      }
-    }
-  }
-  return null;
-});
-
-/** Points landing in each weight category, for a given prefix of the click order. */
-function spendByCategory(shipId, clicks) {
-  const spend = {};
-  clicks.forEach((slot) => {
-    const cats = [...new Set(sb.effectResources(CATALOG[shipId][slot].effect)
-      .map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))];
-    cats.forEach((c) => { spend[c] = (spend[c] || 0) + 1; });
-  });
-  return spend;
-}
-
-/**
- * Is this category at or near the ceiling of what its nodes can absorb?
- *
- * Deliberately NOT "does any node have a single point of room left". Zeus's missionMaterials has
- * a total capacity of 16 across its two nodes and receives 15; with one point of headroom it can
- * never track a 1:3 weight ratio against cells' capacity of hundreds, yet a
- * has-any-room-remaining test calls it unsaturated and blames the allocator. Capacity, not
- * leftovers, is what decides whether proportionality was even reachable.
- */
-function categorySaturated(shipId, cat, levels, threshold = 0.9) {
-  let capacity = 0;
-  let spent = 0;
-  for (const slot of Object.keys(CATALOG[shipId])) {
-    const cats = [...new Set(sb.effectResources(CATALOG[shipId][slot].effect)
-      .map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))];
-    if (!cats.includes(cat)) continue;
-    capacity += sb.nodeMaxLevel(shipId, slot);
-    spent += levels[slot] || 0;
-  }
-  if (!capacity) return true;
-  return spent / capacity >= threshold;
-}
-
-/**
- * Did this category go through a real gate-driven STARVATION gap -- exhausted every node it
- * could currently reach, then sat idle for a long stretch waiting on a later, higher-gated node
- * in the SAME category, before reopening?
- *
- * categorySaturated() alone cannot see this: it sums a category's TOTAL capacity across every
- * node regardless of gate, so a category like Koios's researchPoints (a tiny max-5 node open
- * early, plus a max-150 node gated at 100 total installs) reads as "only 10% used" even after
- * the max-5 node capped out and the category went cold for 65 straight clicks -- nowhere near
- * categorySaturated's 90% threshold, so the cross-category ratio check judged it "live" for the
- * whole window and flagged the allocator for a skew that gating, not unfairness, produced.
- * Found on Koios once its real gates (5/10/30/100 in four separate tiers, confirmed against
- * tools/reference/research.json) replaced the placeholder gate-at-0 the wiki never gave it --
- * every other ship's gated nodes cluster at one or two tiers, so this shape hadn't shown up
- * before. A starved gap is real gate behavior working as intended, not a fairness bug, so it
- * belongs in the exclusion list right alongside a saturated or not-yet-open category.
- *
- * `gapClicks` is intentionally generous (a quarter of the budget): normal round-robin turn-taking
- * between several live categories produces short gaps of a handful of clicks, not dozens.
- */
-function categoryStarved(shipId, cat, clicks, budget) {
-  const inCat = (slot) => [...new Set(sb.effectResources(CATALOG[shipId][slot].effect)
-    .map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))].includes(cat);
-  const hits = clicks.map((slot, i) => (inCat(slot) ? i : -1)).filter((i) => i >= 0);
-  if (hits.length < 2) return false;
-  const gapClicks = Math.max(10, budget * 0.25);
-  for (let i = 1; i < hits.length; i++) {
-    if (hits[i] - hits[i - 1] > gapClicks) return true;
-  }
-  return false;
-}
-
-// THE property that actually matters, and the one the anti-repeat rule exists to serve. Repeated
-// installs are perfectly fine -- dumping several points into one node in a row is correct when
-// the weights say so. What must hold is that spend across categories tracks the weights as the
-// plan grows, rather than one category being emptied before another is touched.
-//
-// Only pairs where BOTH categories still had room are judged: a saturated category cannot keep
-// up with its weight, and a gated one has not started yet, so neither is evidence of a problem.
-check('spend across categories tracks the weights once both are live', () => {
-  const weights = { cells: 3, shards: 1, researchPoints: 1, modPoints: 1, missionMaterials: 1, academyPoints: 1 };
-  const TOLERANCE = 0.5; // integer points on short windows are lumpy; this catches order-of-magnitude skew
-
-  for (const shipId of SHIP_IDS) {
-    const { clicks, levels } = plan(shipId, 120, weights);
-    if (clicks.length < 20) continue;
-
-    // Categories do not all open at once -- Cradle's shards node gates at 100 total installs, so
-    // measuring from click 0 shows 28:1 against a 3:1 weighting purely because shards spent the
-    // first 100 points locked out. That is the gate, not a scheduling fault. Judge each pair only
-    // over the window where BOTH were actually available, which is exactly what the allocator's
-    // categoryBaseline is supposed to make fair.
-    const firstClick = {};
-    clicks.forEach((slot, i) => {
-      const cats = [...new Set(sb.effectResources(CATALOG[shipId][slot].effect)
-        .map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))];
-      cats.forEach((c) => { if (firstClick[c] === undefined) firstClick[c] = i; });
-    });
-
-    // Compare only categories that were open from roughly the start. A late unlock cannot reach
-    // its share within the remaining budget (Cradle's shards opens at install 100 of 120), and
-    // the fair-queue correctly lets it CATCH UP afterwards -- on Demeter, researchPoints takes 10
-    // of the last 20 clicks against shards' 3 precisely because shards had already banked 28
-    // points from an ungated node. Measuring a tail window punishes the allocator for doing the
-    // right thing; measuring globally over early-available categories is the honest test.
-    const earlyCutoff = Math.max(5, Math.floor(clicks.length * 0.1));
-    const spendAll = spendByCategory(shipId, clicks);
-    const live = Object.keys(firstClick).filter((c) => (weights[c] || 0) > 0
-      && firstClick[c] <= earlyCutoff
-      && !categorySaturated(shipId, c, levels)
-      && !categoryStarved(shipId, c, clicks, clicks.length));
-
-    for (let i = 0; i < live.length; i++) {
-      for (let j = i + 1; j < live.length; j++) {
-        const [a, b] = [live[i], live[j]];
-        if (!spendAll[a] || !spendAll[b]) continue;
-        const expected = weights[a] / weights[b];
-        const actual = spendAll[a] / spendAll[b];
-        const off = Math.abs(actual - expected) / expected;
-        if (off > TOLERANCE) {
-          return `ship ${shipId}: ${a}:${b} total spend ${spendAll[a]}:${spendAll[b]} = ${actual.toFixed(2)}x `
-            + `but weights say ${expected.toFixed(2)}x (off by ${(off * 100).toFixed(0)}%); `
-            + 'both open from the start, neither saturated';
-        }
-      }
-    }
-  }
-  return null;
-});
-
-check('an unweighted category never outspends a weighted one', () => {
-  // A weaker, sharper statement of the same idea, and the one the Zagreus bug violated outright.
-  const weights = { cells: 1, shards: 0, researchPoints: 0, modPoints: 0, missionMaterials: 0, academyPoints: 0 };
-  for (const shipId of SHIP_IDS) {
-    const { clicks } = plan(shipId, 120, weights);
-    const spend = spendByCategory(shipId, clicks);
-    const weighted = spend.cells || 0;
-    for (const [cat, n] of Object.entries(spend)) {
-      if ((weights[cat] || 0) > 0) continue;
-      if (n > weighted) return `ship ${shipId}: unweighted ${cat} got ${n} points vs ${weighted} for weighted cells`;
-    }
-  }
-  return null;
-});
+// A pure marginal-value greedy allocator makes no claim that spend tracks the weight RATIO, nor
+// that an unweighted category's TOTAL spend stays below a weighted one's (that coarser claim held
+// under the old category-fair-queueing design, but breaks on a ship like Auxesia whose only
+// ungated node at all sits in a bucket the player weighted 0 -- the fallback pass then has to
+// dump many points there just to clear gates on everything else, legitimately outspending a
+// heavily-gated weighted category). The precise property -- no eligible, weighted, higher-scoring
+// node was ever skipped in favor of an unweighted one -- is already checked exactly, per click,
+// by "greedy always spends on the single best-scoring eligible node at each step" above and by
+// "a zero-weighted category is only funded as a last resort".
 
 check("Demeter's AOTC rule matches its documented policy", () => {
   const { shipId, slot, autoMaxAtBudget } = AOTC;

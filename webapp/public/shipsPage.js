@@ -639,7 +639,9 @@ function getShipGear() {
   // drop the stale keys, backfill any new ones this account hasn't seen yet.
   const defaults = defaultShipGear();
   Object.keys(defaults).forEach((k) => { if (!(k in window.store.shipGear)) window.store.shipGear[k] = defaults[k]; });
+  Object.keys(window.store.shipGear).forEach((k) => { if (!(k in defaults)) delete window.store.shipGear[k]; });
   Object.keys(defaults.focusWeights).forEach((k) => { if (!(k in window.store.shipGear.focusWeights)) window.store.shipGear.focusWeights[k] = defaults.focusWeights[k]; });
+  Object.keys(window.store.shipGear.focusWeights).forEach((k) => { if (!(k in defaults.focusWeights)) delete window.store.shipGear.focusWeights[k]; });
   return window.store.shipGear;
 }
 
@@ -1481,24 +1483,28 @@ function openNewLoadoutModal() {
 document.getElementById('closeNewLoadoutModalBtn').onclick = () => document.getElementById('newLoadoutModal').classList.add('hidden');
 
 // ============================= Real optimizer =============================
-// Which user-facing focus-weight slider governs each effectResources() tag. All generator-
-// tier gains (allGens, mk1-8) feed the "cells" weight -- generator output ultimately becomes
-// Cells, and the spec's 6-way weight split (Cells/MP/Shards/RP/Materials/Academy) doesn't carve
-// out a separate "generator output" slider. `other` (untagged effects, e.g. flat "+1 completed
-// operation" with no %) gets no weight -- it's never picked by the marginal-value pass, only
-// touched by the 1-free-point seed pass below.
+// Which user-facing focus-weight slider governs each effectResources() tag. Generator-tier gains
+// (allGens, mk1-8, techSoftware/techHardware) all feed the ONE "cells" slider -- from the
+// player's point of view there is only "how much do I care about Cells", not a separate
+// "Generators" dial: generators only exist to eventually produce Cells, so a player never wants
+// to favor one without the other. The actual direct-Cells-vs-generator-tier SPLIT is decided
+// entirely by the plumbing, not the player: poolAdjustedNodeValue already independently values
+// each generator tier against its own real (Meltdown-melted) pool and direct Cells against its
+// own (melt-immune) pool, and the greedy allocator below picks whichever single point -- direct
+// or generator -- has the best real marginal value right now. Bucket membership here only decides
+// whether a slider's weight applies at all (>0) -- it is not a second weight dimension. `other`
+// (untagged effects, e.g. flat "+1 completed operation" with no %) gets no weight -- it's never
+// picked by the marginal-value pass.
 const RESOURCE_TO_WEIGHT_BUCKET = {
   cells: 'cells', allGens: 'cells', shards: 'shards', researchPoints: 'researchPoints',
   modPoints: 'modPoints', academyPoints: 'academyPoints', missionMaterials: 'missionMaterials',
-  techSoftware: 'cells', techHardware: 'cells', // intermediate compounding pools feeding Cells/Shards/RP -- see effectResources
+  techSoftware: 'cells', techHardware: 'cells', // intermediate compounding pools feeding Cells -- see effectResources
   ...Object.fromEntries(GEN_TIERS.map((n) => [`mk${n}`, 'cells'])),
 };
-// Explicit tie-break order, lower number wins -- only ever consulted when two candidates'
-// weighted spent/value ratio is EXACTLY equal (most commonly right after a gate opens, when
-// several categories/nodes get baselined to the same starting ratio simultaneously). This never
-// overrides the real weight/value math, it only decides ties that math is genuinely indifferent
-// between.
-const CATEGORY_TIE_PRIORITY = { missionMaterials: 1, modPoints: 2, shards: 3, researchPoints: 4, academyPoints: 4, cells: 5 };
+// Tie-break for the greedy loop below: only ever consulted when two candidate nodes' weighted
+// marginal scores are EXACTLY equal (most commonly right after a gate opens several nodes at
+// once). Never overrides the real weight/value math -- it only decides ties that math is
+// genuinely indifferent between.
 function nodeTiePriority(tags) {
   if (tags.includes('techSoftware') || tags.includes('techHardware')) return 1;
   if (tags.includes('allGens')) return 5;
@@ -1645,20 +1651,21 @@ function poolAdjustedNodeValue(shipId, slot, pools, runLength) {
   });
   return ((ratio - 1) * 100) * bias.gen;
 }
-// Real allocator -- weighted round-robin ACROSS RESOURCE CATEGORIES, not a single global
-// ranking. Two things this fixes over an earlier "highest constant marginal value wins"
-// version: (1) that version compared raw %/point across DIFFERENT resources directly, so equal
-// weights still got swamped by whichever resource's nodes happen to have larger raw percentages
-// in the catalog (Cells nodes run ~10-1000x bigger per point than Shards/RP nodes) -- fixed by
-// only ever comparing raw value WITHIN one resource category at a time, after using weights to
-// decide which category gets the next point; (2) that version kept re-picking the single best
-// node until it hit max before moving on, i.e. bulk-buying one node at a time -- not what you
-// want if you might only get a handful of points before your next run and need a sane
-// partial-budget snapshot at every step, not just the final one. This version chooses, for
-// EACH point one at a time, whichever weighted resource category is currently most under its
-// target share (spent-so-in-that-category / weight, lowest wins), then the single best node
-// within that category for just that one point -- so the click order stays interleaved and
-// proportional to your weights at every partial budget, not just the end state.
+// Real allocator -- pure marginal-value greedy: every single point goes to whichever weighted,
+// eligible node currently offers the best real gain, recomputed against the running pool after
+// every pick so diminishing returns are exact. REPLACES an earlier category-fair-queueing engine
+// (weighted round-robin across resource categories, spending toward each category's "target
+// share" of the budget) that had a real bug: it gave every resource BUCKET an equal target spend
+// share regardless of how many nodes populated it. On Cradle, 9 of 11 nodes all shared the single
+// "cells" bucket while 'shards' and 'researchPoints' each had exactly ONE node -- so those two
+// lone nodes each claimed a full 1/6 of the budget outright (trivially reaching max), while
+// genuinely-better nodes fought each other for the remaining share of the crowded bucket and got
+// starved. Verified against SirRed's own greedy CIFI Ouroboros Helper Tool algorithm on this
+// account's REAL crew/gear counters (tools/bench/real-save-optimizer-check.js): the old engine
+// scored up to 100% worse at higher budgets. This one is the same algorithm SirRed's tool already
+// uses -- "always spend the next point on whatever gives the single best real gain right now" --
+// so category bucket membership no longer determines a spend SHARE, only which slider weight a
+// node's value gets multiplied by.
 // Always plans from a clean slate (every node at 0), regardless of what's actually installed
 // right now -- `budget` is the total number of points to distribute as if starting over, not a
 // target to reach on top of existing installs. Real current installs are a separate concern
@@ -1691,162 +1698,62 @@ function optimizeShipInstalls(shipId, budget, weights, prepForLongRun, runLength
   // loop reset, not the active run, so it can't be scored by the normal marginal-value engine
   // (no % in its effect text, no immediate resource gain to weigh against anything else).
   // Community approach: max it outright once Demeter's budget is comfortably large (>=15) or
-  // when explicitly prepping for a long run; otherwise skip it entirely (not even the usual "1
-  // free point in everything" seed) so scarce points go straight into direct multipliers
-  // instead.
+  // when explicitly prepping for a long run; otherwise skip it entirely so scarce points go
+  // straight into direct multipliers instead.
   if (shipId === AOTC_SHIP_ID && (budget >= AOTC_AUTO_MAX_BUDGET || prepForLongRun)) {
     const needed = Math.min(nodeMaxLevel(shipId, 1), budget - spent);
     if (needed > 0) { levels[1] = needed; spent += needed; for (let i = 0; i < needed; i++) clicks.push('1'); }
   }
-  // Which resource categories this ship's nodes actually touch, and each one's Cells-scaling
-  // flag for the meltdown adjustment (see computeResourceBonuses' meltdown note -- this only
-  // steers the optimizer's category preference, it doesn't change what the Fleet totals report).
+  // Which weighted category/categories each node's effect feeds -- a node's own weight is the
+  // STRONGEST slider touching it (a node rarely feeds more than one bucket, but when it does it
+  // should count in favor of being bought whenever ANY of its sliders is turned up).
   const categoryOf = {}; // slot -> [categories]
-  const touchedCategories = new Set();
   slots.forEach((slot) => {
-    const cats = [...new Set(effectResources(catalog[slot].effect).map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))];
-    categoryOf[slot] = cats;
-    cats.forEach((c) => touchedCategories.add(c));
+    categoryOf[slot] = [...new Set(effectResources(catalog[slot].effect).map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))];
   });
-  // Step 1: secure the base bonus in every currently-open node that feeds a category you
-  // actually weighted (a weight of 0 means "don't invest here at all," so it shouldn't get a
-  // free seed point either -- matches the hand-off spec's "get something in everything before
-  // specializing," scoped to what you actually want).
-  slots.forEach((slot) => {
-    if (spent >= budget) return;
-    if (shipId === AOTC_SHIP_ID && slot === AOTC_SLOT) return; // handled by the AOTC policy above, not this generic seed
-    if (!categoryOf[slot].some((c) => (weights[c] || 0) > 0)) return;
-    if (gateMetFor(slot) && (levels[slot] || 0) === 0 && nodeMaxLevel(shipId, slot) > 0) { levels[slot] = 1; spent += 1; clicks.push(slot); }
-  });
-  const categorySpent = {};
-  touchedCategories.forEach((c) => { categorySpent[c] = 0; });
-  // Points spent per NODE so far -- used to give every eligible node within a category its fair
-  // share PROPORTIONAL to its real value (spent/value ratio, same fair-queueing pattern as
-  // categories above), instead of either maxing one node out before ever touching the next
-  // (winner-take-all) or splitting evenly regardless of value (just as wrong -- an "All Gens"
-  // node would score identically to a flat Cells node purely for being eligible, ignoring a real
-  // value gap). This determines HOW MANY points each node ends up with; see "no consecutive
-  // repeats" below for how those same picks get spread out in TIME without changing that total.
-  const nodeSpent = {};
-  slots.forEach((s) => { nodeSpent[s] = 0; });
+  const nodeWeight = (slot) => categoryOf[slot].reduce((max, c) => Math.max(max, weights[c] || 0), 0);
   // Meltdown pool totals -- seeded from this ship's REAL current state, then mutated as THIS
   // optimization run hypothetically adds points, so later picks correctly see a more-saturated
-  // pool than earlier ones (real, account-grounded diminishing returns per generator tier,
-  // instead of an arbitrary queueing rule). Independent of `levels`/`spent` above, which stay a
-  // from-zero plan per the earlier fix -- this only feeds the value comparison, not the output.
+  // pool than earlier ones (real, account-grounded diminishing returns per generator tier).
+  // Independent of `levels`/`spent` above, which stay a from-zero plan per the earlier fix --
+  // this only feeds the value comparison, not the output.
   const pools = computeShipRealPoolTotals(shipId);
-  // exclude lets the main loop forbid one specific slot (the previous pick) for this iteration
-  // only. This does NOT change which nodes end up with how many points overall (verified: same
-  // final per-node totals with or without it) -- it only re-times an already-optimal, value-
-  // proportional sequence of picks so they're delivered interleaved instead of in one unbroken
-  // burst, which is all "never buy 20 of the same thing in a row" actually requires.
   // AOTC below its threshold is skipped ENTIRELY, per the policy above -- including here in the
-  // main loop, not just in the seed step. Excluding it from the seed alone was not enough: the
-  // allocator could still pick it, so a small-budget Demeter plan spent points on a node whose
-  // payoff lands next loop, which is exactly what the policy exists to avoid.
+  // main loop. Excluding it only from the pre-step above was not enough: the allocator could
+  // still pick it, so a small-budget Demeter plan spent points on a node whose payoff lands next
+  // loop, which is exactly what the policy exists to avoid.
   const aotcSuppressed = shipId === AOTC_SHIP_ID && !(budget >= AOTC_AUTO_MAX_BUDGET || prepForLongRun);
-  const nodeEligible = (slot, exclude) => slot !== exclude
-    && !(aotcSuppressed && slot === AOTC_SLOT)
+  const nodeEligible = (slot) => !(aotcSuppressed && slot === AOTC_SLOT)
     && (levels[slot] || 0) < nodeMaxLevel(shipId, slot)
     && gateMetFor(slot);
-  const categoryHasEligibleNode = (c, exclude) => slots.some((slot) => categoryOf[slot].includes(c) && nodeEligible(slot, exclude));
-  const bestNodeIn = (c, exclude) => {
-    let bestSlot = null; let bestRatio = Infinity; let bestPriority = Infinity; let bestScore = -Infinity;
+  // requireWeight=true only considers nodes some slider actually weighted (>0); false is the
+  // fallback pass, used only once nothing weighted is eligible, to keep total installs climbing
+  // toward whatever gate is blocking the real targets.
+  const pickBest = (requireWeight) => {
+    let bestSlot = null; let bestScore = -Infinity; let bestPriority = Infinity;
     slots.forEach((slot) => {
-      if (!categoryOf[slot].includes(c) || !nodeEligible(slot, exclude)) return;
-      const score = Math.max(poolAdjustedNodeValue(shipId, slot, pools, runLength), 1e-9);
-      const ratio = nodeSpent[slot] / score;
+      if (!nodeEligible(slot)) return;
+      const w = nodeWeight(slot);
+      if (requireWeight ? w <= 0 : w > 0) return;
+      const raw = poolAdjustedNodeValue(shipId, slot, pools, runLength);
+      const score = raw * (requireWeight ? w : 1);
       const priority = nodeTiePriority(effectResources(catalog[slot].effect));
-      const better = ratio < bestRatio
-        || (ratio === bestRatio && priority < bestPriority)
-        || (ratio === bestRatio && priority === bestPriority && score > bestScore);
-      if (better) { bestRatio = ratio; bestPriority = priority; bestSlot = slot; bestScore = score; }
+      if (score > bestScore || (score === bestScore && priority < bestPriority)) {
+        bestScore = score; bestSlot = slot; bestPriority = priority;
+      }
     });
     return bestSlot;
   };
-  // Step 2: one point at a time, spend on whichever weighted category is most under its fair
-  // share, then the most under-served node within it (round-robin, see nodeSpent above). A
-  // weight of 0 means truly excluded -- it only ever gets a point as a last resort, when every
-  // weighted category has nothing eligible right now, purely to keep total installs climbing
-  // toward whatever gate is blocking them.
-  //
-  // categoryBaseline exists to fix a real skew: categories don't all unlock at the same time
-  // (e.g. Cradle's Shards node needs 100 total installs, but its Cells-tier nodes are open from
-  // 0), so a category that had to sit out the early game accumulates a categorySpent of 0 while
-  // an always-open category's categorySpent climbs the whole time just because it was the only
-  // thing available -- not because the player weighted it higher. Comparing raw spent/weight
-  // ratios directly at that point makes the newcomer look "owed" a monopoly to catch up, which
-  // is exactly the "hard focus Shards until max, ignoring Cells entirely" bug this fixes: each
-  // category's ratio gets baselined to the CURRENT front-runner's ratio the moment it first
-  // becomes eligible, so from then on the two compete on their real weights only.
-  const categoryBaseline = {};
-  const categoryActivated = {};
-  touchedCategories.forEach((c) => { categoryBaseline[c] = 0; categoryActivated[c] = false; });
-  const ratioOf = (c) => categorySpent[c] / weights[c] - categoryBaseline[c];
-  // Picks the next (category, node) to spend on, optionally forbidding one slot for this pick.
-  // Returns null if nothing eligible under that constraint.
-  const selectNext = (exclude) => {
-    const positiveCats = [...touchedCategories].filter((c) => (weights[c] || 0) > 0);
-    let minActiveRatio = null;
-    positiveCats.forEach((c) => {
-      if (!categoryActivated[c]) return;
-      const r = ratioOf(c);
-      if (minActiveRatio == null || r < minActiveRatio) minActiveRatio = r;
-    });
-    positiveCats.forEach((c) => {
-      if (categoryActivated[c] || !categoryHasEligibleNode(c, exclude)) return;
-      categoryBaseline[c] = categorySpent[c] / weights[c] - (minActiveRatio ?? 0);
-      categoryActivated[c] = true;
-    });
-    const rank = (list) => list.sort((a, b) => (ratioOf(a) - ratioOf(b))
-      || (CATEGORY_TIE_PRIORITY[a] || 9) - (CATEGORY_TIE_PRIORITY[b] || 9));
-
-    let pickedCat = rank(positiveCats.filter((c) => categoryHasEligibleNode(c, exclude)))[0] ?? null;
-    if (pickedCat != null) return bestNodeIn(pickedCat, exclude);
-
-    // Weight beats anti-repeat. `exclude` is only a cosmetic preference -- it spreads picks out
-    // in time -- so it must never be the reason a weighted category is passed over. When the
-    // single eligible node in a weighted category IS the previous pick, asking with `exclude`
-    // makes that category look empty, and control used to fall straight through to the
-    // zero-weight fallback below. On Cradle that handed 8 of 40 points to modPoints while its
-    // weight was explicitly 0 and a cells node sat at 22/250 with no gate: the plan alternated
-    // 1,3,1,3 forever. Retry the weighted categories allowing the repeat BEFORE considering
-    // anything the user asked to exclude.
-    pickedCat = rank(positiveCats.filter((c) => categoryHasEligibleNode(c, null)))[0] ?? null;
-    if (pickedCat != null) return bestNodeIn(pickedCat, null);
-
-    // Only now: nothing weighted can take a point at all. Spend on a 0-weighted category purely
-    // to advance total installs past whatever gate is blocking the real targets.
-    pickedCat = [...touchedCategories].find((c) => (weights[c] || 0) <= 0 && categoryHasEligibleNode(c, exclude))
-      ?? [...touchedCategories].find((c) => (weights[c] || 0) <= 0 && categoryHasEligibleNode(c, null))
-      ?? null;
-    if (pickedCat == null) return null;
-    return bestNodeIn(pickedCat, categoryHasEligibleNode(pickedCat, exclude) ? exclude : null);
-  };
-  let lastPickedSlot = null;
   while (spent < budget) {
-    let pickedSlot = selectNext(lastPickedSlot);
-    if (pickedSlot == null) pickedSlot = selectNext(null); // no alternative to the last pick -- allow the repeat
-    if (pickedSlot == null) {
-      // Truly nothing eligible anywhere right now -- drop any category with no room left at
-      // all (every node feeding it maxed for good), then see if anything else can still open.
-      [...touchedCategories].forEach((c) => {
-        if (!slots.some((slot) => categoryOf[slot].includes(c) && (levels[slot] || 0) < nodeMaxLevel(shipId, slot))) touchedCategories.delete(c);
-      });
-      if (![...touchedCategories].some((c) => categoryHasEligibleNode(c, null))) break;
-      continue;
-    }
-    lastPickedSlot = pickedSlot;
-    levels[pickedSlot] = (levels[pickedSlot] || 0) + 1;
-    nodeSpent[pickedSlot] += 1;
+    const slot = pickBest(true) ?? pickBest(false);
+    if (slot == null) break; // truly nothing left to buy
+    levels[slot] = (levels[slot] || 0) + 1;
     spent += 1;
-    clicks.push(pickedSlot);
-    categoryOf[pickedSlot].forEach((c) => { categorySpent[c] += 1; }); // credit every category this node feeds
-    const increment = nodeLinearIncrement(shipId, pickedSlot);
+    clicks.push(slot);
+    const increment = nodeLinearIncrement(shipId, slot);
     // Same expansion as computeShipRealPoolTotals -- effectResources already lists every
     // individual mk1..mk8 tag for an All-Gens node, no separate allGens-specific credit pass.
-    const pickedTags = effectResources(catalog[pickedSlot].effect);
-    pickedTags.forEach((tag) => {
+    effectResources(catalog[slot].effect).forEach((tag) => {
       if (tag === 'cells' || isGenLikeTag(tag)) pools[tag] = (pools[tag] || MELTDOWN_POOL_EPS) + increment;
     });
   }
@@ -2403,7 +2310,6 @@ window.ShipData = {
   SHIP_CATEGORY,
   GEN_TIERS,
   RESOURCE_TO_WEIGHT_BUCKET,
-  CATEGORY_TIE_PRIORITY,
   // Demeter's "Ahead of the Curve" is special-cased in the allocator (its payoff lands next
   // loop, so the marginal-value engine cannot score it). Named here so the rule is greppable
   // rather than appearing as a bare `shipId === 5 && slot === '1'`.
