@@ -873,12 +873,32 @@ think one is wrong, disprove it with a test.
   - **Ozzy zaptron 40**: cannot be compared against the site -- see the Ozzy gating note -- but is
     demonstrably live in the clone: 0 -> 40 moves loot 350,414 -> 730,665 (x2.08) and average stage
     +8.4, with materials doubling.
-- **OZZY CANNOT BE VALIDATED AGAINST THE LIVE SITE AT ALL, and that is a standing hole in the
-  evidence, not a passing result.** The site gem-gates the Ozzy page, so a guest session never
-  renders it and `compare_builds` times out waiting for "Main Statistics". Every Ozzy number in this
-  repo is therefore clone-only. `live-eval.mjs` can now seed account state, which is the most likely
-  route to unblocking it (seed the gem levels the page checks), but that has not been made to work
-  yet -- do not read Ozzy's passing CLONE benches as site parity.
+- **OZZY IS VALIDATED AGAINST THE LIVE SITE, and the block was one gem level.** The site gem-gates
+  the Ozzy page, so a guest session never renders it and `compare_builds` timed out waiting for
+  "Main Statistics". Setting **Exodus level 2** in the site's own `gemPlanner_store.gemStates`
+  unlocks the page; `live-eval.mjs` can now seed that state per context, which is what made this
+  reachable at all (each call opens a fresh browser context, so hand-setting it in one tab does not
+  carry).
+  Ozzy 55 with the account's real build then matches to displayed precision: loot 656.54k vs
+  656,542.96, stage 178.5 vs 178.52, time 306m vs 306.04m, mat1 146.67m vs 146.673m, xp 37.36m vs
+  37.359m.
+- **THE SAVE IMPORTER PUT ATTRIBUTE LEVELS IN THE WRONG ATTRIBUTES -- 15 SLOTS ACROSS ALL THREE
+  HUNTERS.** `HUNTER_ATTR_ORDER` mapped `PO?<n>Level` onto our ids positionally from a hand-built
+  list, described in its own comment as "best-effort matched to HUNTER_DEFS order, then
+  live-verified" by eyeballing caps and dependency chains. That caught Borge's two obvious
+  reversals and quietly mis-assigned the rest: **Borge 2 wrong, Ozzy 8, Knox 5.**
+  **A wrong positional mapping is SILENT** -- every value still lands in some attribute and the
+  point total still looks plausible, which is why it survived every internal bench. It surfaced
+  only by pushing the real save's Ozzy build through cifi-tools.com, which rejected it outright
+  ("This Build is invalid. Please check the attributes.") and read the level as **86** with
+  **256/258** attributes, because `POI12Level = 7` had been loaded into `sisters`, cap 1. POI12 is
+  a Cost 2 / MaxLevel 20 slot; the 7 belongs to `scarab`.
+  The order is now DERIVED from the game rather than matched by hand: each `PO?<n>` carries an
+  authored Cost and MaxLevel and the dependency edges are recovered, so the index follows from
+  (tree shape, cost, cap). After the fix the same build reads level **55, 55/55 talents, 165/165
+  attributes** on the site with no warning -- identical to ours.
+  `attr-save-order-check.js` derives the mapping and fails if the shipped list drifts;
+  `--print` regenerates it.
 - **A modal that starts async work must cancel it on close, and `titledModal` fires `modal-close`
   so it can.** Closing used to just `remove()` the overlay, leaving the Effective Path walk
   running: invisible, uncancellable, and still competing for the main thread and for wasm
@@ -1535,6 +1555,7 @@ node tools/bench/talent-attribute-parity.js <live-bundle.js> # talents/attrs/sta
 node tools/bench/attribute-tree-check.js # the attribute DEPENDENCY tree vs the GAME
 node tools/bench/cap-raise-check.js    # every cap the GAME can RAISE is accounted for
 node tools/bench/real-account-optimizer-check.js # optimizer vs the REAL save build
+node tools/bench/attr-save-order-check.js # save slot -> attribute, derived from the GAME
 CIFI_APK=apk-0.7.3.61 python tools/bench/cap-raise-audit.py --write
 CIFI_APK=apk-0.7.3.61 python tools/bench/extract-attribute-tree.py --write
 node tools/bench/relic-tier2-check.js [live-bundle.js]    # tier-2 relic caps vs the GAME

@@ -143,30 +143,33 @@ const HUNTER_TALENT_ORDER = {
 };
 
 // Attribute allocations ARE in the save after all -- stored as 15 positional fields per
-// hunter under an internal codename (POM0..14Level for Borge, POI0..14 for Ozzy, POK0..14
-// for Knox; found via the il2cpp class dump's SaveData fields). Confirmed against a live
-// account by pulling a fresh save and matching POM0-14 exactly to the account's known
-// attribute spread (ares=1,ylith=1,spartan=6,timeless=5,baal=6,sensors=6,htb=4,lfin=10,
-// exp=6,atlas=0,weak=6,...) -- note the save's positional order puts "weak" (Weakspot
-// Analysis) at index 9 and "atlas" (Atlas Protocol) at index 10, the REVERSE of the order
-// they're listed in HUNTER_DEFS.borge.attributes. Ozzy/Knox use the same POI/POK field
-// names and were originally best-effort matched to HUNTER_DEFS order, then live-verified
-// (2026-07) against a real pulled save by checking every value against each attribute's
-// maxLevel cap and its attributeDependencies prerequisite chain in hunterDefs.js. That
-// confirmed TWO reversed pairs for Ozzy, both mirroring Borge's pattern: index 6/7 hold
-// "vect" (Vectid Elixir) then "snek" (Soul Of Snek), and index 8/9 hold "deal" (A Deal With
-// Death, maxLevel 3) then "cycle" (The Cycle Of Death, maxLevel 5) -- the unswapped order
-// put a value of 4 into "deal" (impossible, exceeds its max of 3) and broke the
-// cycle-requires-snek dependency chain; this order satisfies both. Knox's order still isn't
-// verified against a real account (it has no talents/attributes on the account this was
-// checked against).
+// hunter under an internal codename (POM0..14Level for Borge, POI0..14 for Ozzy, POK0..14 for
+// Knox; found via the il2cpp class dump's SaveData fields).
+//
+// THIS ORDER IS DERIVED FROM THE GAME, NOT HAND-MATCHED, and the previous hand-matched version was
+// wrong in FIFTEEN places -- two for Borge, eight for Ozzy, five for Knox. Its own comment
+// described being "best-effort matched to HUNTER_DEFS order, then live-verified" by eyeballing caps
+// and dependency chains; that method got Borge's obvious reversals right and quietly mis-assigned
+// the rest.
+//
+// The symptom, and why this went unnoticed: a positional mapping that is wrong is SILENT. Every
+// value still lands in some attribute, and the point total still looks plausible. It surfaced only
+// when the real save's Ozzy build was pushed through cifi-tools.com, which rejected it outright --
+// "This Build is invalid. Please check the attributes." -- because `POI12Level = 7` had been loaded
+// into `sisters`, whose cap is 1. POI12 is a Cost 2 / MaxLevel 20 slot; 7 belongs to `scarab`.
+//
+// The game pins each slot without guessing: every `PO?<n>` carries an authored Cost and MaxLevel
+// (tools/reference/scene-defs.json) and the dependency edges are recovered in
+// tools/reference/attribute-tree.json, so a node's index follows from (tree shape, cost, cap).
+// `tools/bench/attr-save-order-check.js` derives it that way and fails if this list drifts.
+// Regenerate with `node tools/bench/attr-save-order-check.js --print`.
 const HUNTER_ATTR_SAVE_PREFIX = { borge: 'POM', ozzy: 'POI', knox: 'POK' };
 const HUNTER_ATTR_ORDER = {
-  borge: ['ares', 'ylith', 'spartan', 'timeless', 'baal', 'sensors', 'htb', 'lfin', 'exp', 'weak', 'atlas', 'battle', 'mino', 'hermes', 'athena'],
-  ozzy: ['lotl', 'exo', 'scorp', 'timeless', 'ibu', 'exterm', 'vect', 'snek', 'deal', 'cycle', 'medusa', 'dance', 'sisters', 'scarab', 'cat'],
-  // Knox only has 11 released attributes vs 15 save slots -- mapping the first 11
-  // positionally and leaving the remaining POK11-14 slots unused/unverified.
-  knox: ['kraken', 'soul', 'dead', 'spa', 'pl', 'time', 'sear', 'pct', 'kot', 'fe', 'sop'],
+  borge: ['ares', 'ylith', 'spartan', 'timeless', 'baal', 'sensors', 'htb', 'lfin', 'exp', 'weak', 'atlas', 'battle', 'hermes', 'mino', 'athena'],
+  ozzy: ['lotl', 'exo', 'ibu', 'timeless', 'scorp', 'exterm', 'vect', 'snek', 'cycle', 'dance', 'medusa', 'deal', 'scarab', 'cat', 'sisters'],
+  // Knox has 11 released attributes; the game's POK11 is authored all-zero (unreleased), so there
+  // is nothing to map past index 10.
+  knox: ['kraken', 'spa', 'pl', 'time', 'soul', 'dead', 'sear', 'pct', 'kot', 'fe', 'sop'],
 };
 const HUNTER_SAVE_PREFIX = { borge: 'Borge', ozzy: 'Ozzy', knox: 'Knox' };
 
