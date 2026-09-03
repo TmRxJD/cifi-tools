@@ -10,6 +10,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import { getCodeParams } from './build-code.mjs';
 import { evaluateOnClone } from './clone-eval.mjs';
 import { evaluateOnLiveSite } from './live-eval.mjs';
 import { getHunterDefs } from './build-code.mjs';
@@ -61,7 +62,41 @@ function summarize(hunter, live, clone) {
     const deltaPct = ((f.clone - f.live) / base) * 100;
     return { ...f, deltaPct: Number(deltaPct.toFixed(2)), flagged: Math.abs(deltaPct) > 2 };
   });
-  return { hunter, diffs, anyFlagged: diffs.some((d) => d.flagged), liveBuildCode: live.buildCode };
+  // WHICH OVERRIDES ACTUALLY REACHED THE LIVE SIDE. The only transport to cifi-tools is a build
+  // share code, and a code carries only that hunter's CODE_PARAMS. Anything else is applied to the
+  // CLONE but dropped on the way out, so the comparison stops being like-for-like and every
+  // resulting difference reads as a clone bug.
+  //
+  // Not hypothetical: a real level-49 Borge with `relics.r7: 15` reported the clone's materials as
+  // 98% too high and flagged it, when r7 simply is not in Borge's CODE_PARAMS -- the site evaluated
+  // r7=0 while the clone evaluated r7=15. The tell was the returned build code coming back
+  // byte-identical to the no-override run's.
+  //
+  // Named in the result rather than dropped or rejected: the clone-side number is still useful,
+  // but it must never be read as parity evidence.
+  let notTransported = [];
+  try {
+    const carried = new Set(await getCodeParams(hunter));
+    notTransported = Object.keys(globalUpgrades || {})
+      .filter((k) => (globalUpgrades[k] || 0) !== 0)
+      .filter((k) => !carried.has(k) && !carried.has(`upgrades.${k}`));
+  } catch (err) {
+    notTransported = [`(could not determine: ${err.message})`];
+  }
+
+  return {
+    hunter,
+    diffs,
+    anyFlagged: diffs.some((d) => d.flagged),
+    liveBuildCode: live.buildCode,
+    ...(notTransported.length ? {
+      notTransportedToLive: notTransported,
+      warning: 'These overrides are not carried by the build share code, so the LIVE side evaluated '
+        + 'them as 0 while the clone applied them. Differences below reflect that asymmetry, NOT a '
+        + 'clone-vs-site disagreement. To compare them, set them by hand on the site\'s Overrides '
+        + 'panel.',
+    } : {}),
+  };
 }
 
 const server = new McpServer({ name: 'cifi-compare', version: '1.0.0' });

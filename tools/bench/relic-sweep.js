@@ -60,6 +60,20 @@ const BUILDS_PER_HUNTER = 3;
         if (probe === current) continue;
 
         const r = await evalWith({ ...baseOverrides, [key]: probe });
+        // COMPARE EVERY OUTPUT, not just loot. Comparing lootPerMin/avgStage/bossKillRate alone
+        // is what produced this repo's false "these relics do nothing" claim: Borge r7 leaves loot
+        // bit-identical while MORE THAN DOUBLING mat1/mat2/mat3 and xp, and r19 leaves everything
+        // identical except xp, which it doubles. Materials and XP are what a player actually
+        // spends and levels on, so "no loot change" is not "no effect" -- and the conclusion was
+        // used to tell people never to buy them.
+        const OUTPUTS = ['lootPerMin', 'avgStage', 'bossKillRate', 'mat1', 'mat2', 'mat3', 'xp'];
+        const movedFields = OUTPUTS.filter((k) => {
+          const a = base[k];
+          const b = r[k];
+          if (a == null || b == null) return false;
+          const scale = Math.max(Math.abs(a), Math.abs(b), 1e-12);
+          return Math.abs(b - a) / scale > 1e-9;
+        });
         const dLoot = r.lootPerMin - base.lootPerMin;
         const dStage = r.avgStage - base.avgStage;
         const dKill = (r.bossKillRate || 0) - (base.bossKillRate || 0);
@@ -73,7 +87,8 @@ const BUILDS_PER_HUNTER = 3;
         }
         console.log(
           `    ${moved ? 'moves  ' : 'no-op  '} ${item.id.padEnd(6)} ${current}->${String(probe).padEnd(3)} `
-          + `loot ${pct >= 0 ? '+' : ''}${pct.toFixed(4)}%  stage ${dStage >= 0 ? '+' : ''}${dStage.toFixed(3)}  kill ${dKill >= 0 ? '+' : ''}${dKill.toFixed(1)}`,
+          + `loot ${pct >= 0 ? '+' : ''}${pct.toFixed(4)}%  stage ${dStage >= 0 ? '+' : ''}${dStage.toFixed(3)}  kill ${dKill >= 0 ? '+' : ''}${dKill.toFixed(1)}`
+          + (movedFields.length ? `  moved: ${movedFields.join(',')}` : '  moved: NOTHING'),
         );
       }
     }

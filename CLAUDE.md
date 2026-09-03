@@ -215,15 +215,23 @@ think one is wrong, disprove it with a test.
   different states", not as evidence about which side is wrong.
 - **`upgrades.gems_nodes.attraction_lootKnox` reaches the wasm but changes the returned loot
   score by exactly nothing** (arg 0 vs 150 → bit-identical). Don't chase it as a cause.
-- **Three relics reach the wasm and change nothing: Borge r7 and r19, Ozzy r7, Knox t2r5.**
-  Same shape as `attraction_lootKnox`, and proven to be a real evaluator fact rather than a
-  wiring gap on our side: `tools/bench/relic-arg-probe.js` shows each one moves exactly one
-  argument, at the index `params.json` assigns it, and `tools/bench/relic-sweep.js` then finds
-  every output bit-identical across real high-level fixtures. **Nothing may ever recommend
-  spending fragments on them** — they cost real currency and buy nothing measurable. The relics
-  that DO move the sim: Borge r4/r16/t2r7, Ozzy r4/r17/t2r7, Knox t2r7. Run the sweep against
-  REAL fixtures, never a synthetic build — a build with no hunter stats scores ~20 loot/min and
-  dies around stage 5, where nearly everything reads as "no effect".
+- **THE "THREE RELICS THAT DO NOTHING" CLAIM WAS WRONG, AND IT WAS TELLING PEOPLE NOT TO BUY THEM.**
+  This file used to state that Borge r7/r19, Ozzy r7 and Knox t2r5 "reach the wasm and change
+  nothing", and concluded: "Nothing may ever recommend spending fragments on them -- they cost real
+  currency and buy nothing measurable." Measured at a real level-49 Borge, with every other input
+  held identical:
+  - **r7 = 0 -> 15 leaves lootPerMin BIT-IDENTICAL (46343.035479430124 both ways) and multiplies
+    mat1, mat2, mat3 AND xp by 2.08.** Materials go 2,081,471 -> 4,327,229 per run.
+  - **r19 = 0 -> 1 leaves loot, stage and materials identical and DOUBLES xp** (404,352 ->
+    808,703).
+  **The error was in the measurement, not the game.** `relic-sweep.js` compared `lootPerMin`,
+  `avgStage` and `bossKillRate` and nothing else, so a relic that only moves materials or XP read
+  as inert. It now compares every output the evaluator returns and prints which fields moved.
+  **This still reaches the user.** `hunterStatPathBrowser.js` deliberately keeps no blocklist and
+  ranks by measured marginal effect -- but it scores through `OptimizerObjective` in `loot` mode,
+  which is `lootPerMin`, so a relic that doubles materials still scores exactly 0 and is never
+  recommended. Whether loot/min alone is the right objective for a fragment purchase is a REAL
+  design question and is deliberately left open here rather than silently changed.
 - **Fragments are ACCOUNT-WIDE and the evaluator does not produce them.** There is one Relic #7;
   you buy it once. So the rate lives at `store.fragments`, never `store[hunter]`, and it is a
   user input rather than something the sim can infer (mat1/mat2/mat3 come out of a run;
@@ -805,6 +813,54 @@ think one is wrong, disprove it with a test.
   0.0002699999895412475) while the effect text carries the clean decimal, so they agree to ~1e-8
   and no closer. Demanding more would be demanding the effect text carry float32 rounding error. A
   deliberate 0.5% error -- 5,000x smaller than any real composition bug -- still fails it.
+- **THE TALENT SEED USED FOR SCREENING IS NOT COSMETIC, AND TREATING IT AS COSMETIC COST 16.7% ON A
+  REAL BUILD.** Attribute supports have to be scored against SOME talent allocation, and Stage 0
+  used a canonical round-robin fill -- justified in a comment reading "Stage 2 re-optimizes talents
+  jointly anyway, so this only affects screening order, never the final answer". Screening order is
+  precisely what decides which supports survive into refinement, so the final answer depends on it.
+  Measured on a real level-11 Ozzy build: the round-robin seed spreads 11 points over 8 talents,
+  giving Call Me Lucky Loot **1** where the right answer is **10**. Loot is dominated by that
+  talent, so under the flat seed the support ranking **inverts** -- `{lotl,exo,timeless}` screens at
+  45.0 against the true best's 38.5, while with tuned talents those same two are worth 57.4 and
+  **68.9**. The good support was ranked out of the cut by a talent build nothing like the one it
+  would be used with, and the optimizer returned 57.41 against an import of 68.92 that it was
+  perfectly entitled to reproduce.
+  **The seed is now TUNED once, before any support is screened**, by the same coordinate exchange
+  the rest of the search uses -- no randomness, no new heuristic, one extra block optimization that
+  is cheap beside screening every support. The failing case now returns **69.03**, slightly ahead of
+  the import, and the sampled quality gate improves (`best 3.97%`, `worst 0.00%`).
+  **Tune against a REALIZABLE partner.** The first attempt tuned against `canonicalFill` over every
+  attribute, which looks neutral and returns `null` the moment a tree has tier thresholds the budget
+  cannot reach -- Ozzy's are 90/150/180 against a level-11 budget of 33. It silently fell back to
+  the flat seed and changed nothing; the bench still failed with an identical number, which is what
+  gave it away. The partner is now the incumbent's own attributes when it has any (the most
+  representative build available) and otherwise the widest realizable support's fill.
+- **`underspend-test.js` is the gate that covers this, and NOTHING WAS RUNNING IT.** It was failing
+  on 6 known builds, identically on clean HEAD, and appeared in no hand-picked bench list -- which
+  is why `tools/bench/all.js` now exists and runs everything. Its failure message also says which
+  KIND of failure it is: whether the import is even REACHABLE inside the level-derived budget. A
+  share code does not encode level (it is inferred from spend), so an import can legitimately spend
+  more than the optimizer is allowed to, and "beat the import" would then be asking it to beat an
+  allocation it is forbidden to make. That is an inferred-level problem with a different fix, and
+  conflating the two sends you looking for a search bug that is not there.
+- **A BUILD SHARE CODE CARRIES ONLY `CODE_PARAMS`, AND COMPARING WITH ANYTHING ELSE IS NOT A
+  COMPARISON.** The only transport to cifi-tools is a share code. Borge's carries relics r4, r16,
+  r19 and t2r7 -- NOT r7, and not most inscryptions, trinkets or CMs. `compare_builds` applied the
+  full override map to the CLONE and exported a code that silently dropped the rest, so a real
+  level-49 Borge with `relics.r7: 15` reported the clone's materials as **98% too high** and
+  flagged it as a clone bug. The site had simply evaluated r7 = 0.
+  The tell was the returned `liveBuildCode` coming back BYTE-IDENTICAL to the no-override run's.
+  `compare_builds` now names such keys in `notTransportedToLive` with a warning; `buildCode.js`
+  exports `CODE_PARAMS` so the check reads the encoder's own table instead of a second copy.
+  **What this means for validation: overrides outside CODE_PARAMS cannot be parity-tested this
+  way at all** -- they have to be set by hand on the site's Overrides panel.
+  **What IS confirmed, at the account's real levels rather than synthetic fixtures:** Borge 49 with
+  real talents, attributes and base stats matches the live site on all 13 reported stats within
+  0.37% with no overrides, and again within 0.37% with every override the code can carry
+  (mat1PerRun 51,740,000 live vs 51,740,576 clone). The simulation is in parity; the earlier
+  "discrepancy" was the harness.
+  **Ozzy cannot be compared as a guest at all**: the live site gem-gates the Ozzy page, so a fresh
+  guest session never renders it and the comparison times out waiting for "Main Statistics".
 - **A modal that starts async work must cancel it on close, and `titledModal` fires `modal-close`
   so it can.** Closing used to just `remove()` the overlay, leaving the Effective Path walk
   running: invisible, uncancellable, and still competing for the main thread and for wasm
@@ -1340,7 +1396,8 @@ The structural insight: attribute trees have only **361 / 289 / 145** dependency
 heuristic ever guesses which part of the tree to fund.
 
 1. **Enumerate** every dependency-closed, affordable support set (which nodes get funded at all).
-2. **Screen** each at a canonical fill.
+2. **Screen** each at a canonical fill, against a talent seed that is TUNED first (see below --
+   screening against a flat seed silently decides which supports ever reach refinement).
 3. **Survey** the strongest with a coarse coordinate exchange, then **refine** the survivors to a
    fixpoint: on exit, no transfer of 8/4/2/1 points between any pair of nodes improves the score.
 4. **Decide** among finalists at full fidelity — the same measurement the build card displays.

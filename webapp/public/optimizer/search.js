@@ -314,12 +314,28 @@
 
     try {
       // --- Stage 0: a talent allocation to screen attribute supports against. -------------
-      // Supports must be compared against SOME talent build; a canonical round-robin fill is
-      // the neutral choice (it favours no particular talent), and Stage 2 re-optimizes talents
-      // jointly anyway, so this only affects screening order, never the final answer's
-      // legality or the set of supports considered.
-      const seedTalents = Space.canonicalFill(TALENTS, noDeps, noMin, talentBudget, TALENTS.map((t) => t.id));
-      if (!seedTalents) throw new Error('Could not build a legal starting talent allocation within budget');
+      // Supports must be compared against SOME talent build, and the choice is NOT cosmetic. An
+      // earlier version used a canonical round-robin fill and called it "neutral", reasoning that
+      // Stage 2 re-optimizes talents anyway so the seed "only affects screening order, never the
+      // final answer". Screening order is exactly what decides which supports reach refinement, so
+      // that reasoning was wrong, and measurably so.
+      //
+      // The failure it caused, on a real level-11 Ozzy build: the round-robin seed spreads 11
+      // points over 8 talents, giving Call Me Lucky Loot 1 when the right answer is 10. Loot is
+      // dominated by that talent, so under the flat seed every support scores low and the RANKING
+      // INVERTS -- support {lotl,exo,timeless} screened at 45.0 against the true best's 38.5, while
+      // with tuned talents those same two are worth 57.4 and 68.9. The good support was ranked out
+      // of the refinement cut by a talent build nothing like the one it would be used with, and the
+      // optimizer returned a build 16.7% worse than one it was allowed to make.
+      //
+      // So the seed is TUNED once, against a neutral attribute fill, before any support is scored.
+      // It is one extra block optimization -- cheap next to screening every support -- and it makes
+      // every later comparison a comparison between supports rather than between artefacts of the
+      // seed. It introduces no randomness and no new heuristic: it is the same coordinate exchange
+      // the rest of the search uses, run once up front.
+      const flatTalents = Space.canonicalFill(TALENTS, noDeps, noMin, talentBudget, TALENTS.map((t) => t.id));
+      if (!flatTalents) throw new Error('Could not build a legal starting talent allocation within budget');
+      let seedTalents = flatTalents;
 
       // --- Stage 1: exhaustive support enumeration and screening. -------------------------
       const supports = Space.enumerateSupports(ATTRIBUTES, deps, attrBudget);

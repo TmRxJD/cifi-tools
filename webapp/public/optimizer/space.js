@@ -154,6 +154,38 @@
     // Seed pass: keep sweeping until no member can be opened. Dependency and threshold gates
     // mean a member may only become eligible after an earlier one is funded, so a single pass
     // in declaration order is not enough.
+    //
+    // A THRESHOLD gate cannot be opened by seeding alone, and assuming otherwise silently threw
+    // away whole regions of the search space. Seeding gives every member ONE point, so a support
+    // of ten attributes reaches a spend of ten -- while Borge's `weak` needs 75 points banked in
+    // strictly-lower-threshold nodes before it may be touched at all. `weak` therefore never
+    // opened, the support was declared "not realizable within budget", and the optimizer never
+    // saw it. A real level-38 import proves such allocations exist: it funds that exact support
+    // legally, and the optimizer scored 1.96% below it while never having considered its shape.
+    //
+    // So when a member is blocked ONLY by its threshold, pour points into the members already
+    // open (cheapest first, so the fewest points are committed) until the threshold is met, then
+    // open it. If the budget runs out first the support really is unrealizable -- which is what
+    // this was trying to detect, and now actually does.
+    const openThreshold = (blocked) => {
+      const need = minVal[blocked.id] || 0;
+      if (need <= 0) return false;
+      const growable = members
+        .filter((m) => (alloc[m.id] || 0) > 0 && (minVal[m.id] || 0) < need)
+        .sort((a, b) => (a.cost || 1) - (b.cost || 1));
+      if (!growable.length) return false;
+      let guard = 0;
+      while (pointsBelowThreshold(defs, minVal, alloc, need) < need && guard++ < 100000) {
+        const next = growable.find((m) => isEligible(m, defs, deps, minVal, alloc)
+          && spent + (m.cost || 1) <= budget);
+        if (!next) return false;   // cannot reach the threshold within budget
+        alloc[next.id] += 1;
+        spent += next.cost || 1;
+      }
+      return isEligible(blocked, defs, deps, minVal, alloc)
+        && spent + (blocked.cost || 1) <= budget;
+    };
+
     let opened = true;
     while (opened) {
       opened = false;
@@ -161,14 +193,18 @@
         if ((alloc[d.id] || 0) > 0) continue;
         const cost = d.cost || 1;
         if (spent + cost > budget) continue;
-        if (!isEligible(d, defs, deps, minVal, alloc)) continue;
+        if (!isEligible(d, defs, deps, minVal, alloc)) {
+          // Only a threshold is worth working around here; a missing dependency parent is opened
+          // by the sweep itself, and a maxLevel block means the member is already funded.
+          if (!openThreshold(d)) continue;
+        }
         alloc[d.id] = 1;
         spent += cost;
         opened = true;
       }
     }
     // Any member we could not open means this support set is not actually realizable within
-    // budget (a threshold gate it needs is unreachable). Report that plainly.
+    // budget -- now a real conclusion rather than an artefact of seeding one point at a time.
     if (members.some((d) => (alloc[d.id] || 0) === 0)) return null;
 
     // Distribution pass: round-robin one point at a time.

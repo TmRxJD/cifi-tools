@@ -235,4 +235,8 @@
 
   global.generateBuildCode = generateBuildCode;
   global.parseBuildCode = parseBuildCode;
+  // Exposed so tooling can ask what a share code can actually CARRY, rather than keeping a second
+  // copy of this table. An override outside it is applied locally and dropped on export, which is
+  // invisible unless something checks -- see compare-mcp/server.mjs's notTransportedToLive.
+  global.CODE_PARAMS = CODE_PARAMS;
 })(typeof window !== 'undefined' ? window : globalThis);
