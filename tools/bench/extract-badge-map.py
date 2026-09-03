@@ -30,6 +30,36 @@ PROP = re.compile(r"^\tpublic \w[\w<>]* (RU([A-Za-z]+)(\d+)Bonus)\s*$")
 BADGE = re.compile(r"\bFinal((?:Dark)?Badge\d+)Bonus\d*\b")
 
 
+# The TECH POOLS are a second, differently-shaped place a badge can apply. Badge2/Badge12/
+# DarkBadge1 multiply a SHIP's rank-install bonuses; `TechUpgrades.TotalSoftwareMult` and
+# `TotalHardwareMult` multiply in their own badge, which is not per-ship at all. Missing that
+# distinction is how Badge3 -- a 7.7e14 multiplier on tech output -- went unmodelled: a per-ship
+# scan cannot see it, because it appears in no ship's nodes.
+#
+# Tech output compounds into long-run Ouroboros progression, so this is not a corner case.
+TECH_PROPS = ("TotalSoftwareMult", "TotalHardwareMult")
+TECH_PROP_RE = re.compile(r"^\tpublic \w[\w<>]* (\w+)\s*$")
+
+
+def tech_pool_badges():
+    """{badge: [property, ...]} for the badges the tech-pool chains read."""
+    proc = subprocess.run([sys.executable, CSHARP, "TechUpgrades"], capture_output=True, text=True)
+    if proc.returncode != 0 or not proc.stdout.strip():
+        raise SystemExit(f"could not recover TechUpgrades: {proc.stderr[-400:]}")
+    found, current = {}, None
+    for line in proc.stdout.splitlines():
+        m = TECH_PROP_RE.match(line)
+        if m:
+            current = m.group(1)
+        if current in TECH_PROPS:
+            for badge in BADGE.findall(line):
+                found.setdefault(badge, set()).add(current)
+    if not found:
+        raise SystemExit("no badge found in the tech-pool chains -- the shape changed; do NOT read "
+                         "this as 'no badge applies to tech'")
+    return {b: sorted(v) for b, v in sorted(found.items())}
+
+
 def main():
     proc = subprocess.run([sys.executable, CSHARP, "FleetManager"], capture_output=True, text=True)
     if proc.returncode != 0 or not proc.stdout.strip():
@@ -76,14 +106,18 @@ def main():
         return None
 
     badges = sorted({b for bs in universal.values() for b in bs})
+    tech = tech_pool_badges()
     payload = {
         "_source": "which badge: RU<Category><n>Bonus getter bodies (tools/il2cpp-cli/csharp.py); "
                    "value: the authored Badges MonoBehaviour (tools/il2cpp-cli/typetree.py)",
         "_meaning": "perCategory lists badges read by EVERY node of that category, i.e. genuine "
+                    "per-ship multipliers; techPools lists the badges the TECH POOL chains "
+                    "read, which are not per-ship at all. "
                     "per-ship multipliers. A badge only some nodes read is excluded on purpose.",
         "_game": APK_DIR,
         "perCategory": {c: universal[c] for c in sorted(universal)},
-        "values": {b: value(b) for b in badges},
+        "techPools": tech,
+        "values": {b: value(b) for b in sorted(set(badges) | set(tech))},
     }
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8") as f:

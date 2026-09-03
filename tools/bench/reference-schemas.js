@@ -58,6 +58,15 @@ const schemas = {
     ...meta,
     // category -> the badges EVERY node of that category multiplies in
     perCategory: nonEmptyRecord(z.string(), z.array(z.string().regex(/^(Dark)?Badge\d+$/))),
+    // badge -> the TECH POOL chains that read it. A second, differently-shaped kind of badge:
+    // these multiply Tech Software / Tech Hardware output rather than a ship's rank installs, so
+    // a per-ship scan cannot see them -- which is how Badge3, a 7.7e14 multiplier on tech output,
+    // went unmodelled. Required and non-empty: the game reads one, and an empty section here would
+    // mean the extractor stopped finding it.
+    techPools: nonEmptyRecord(
+      z.string().regex(/^(Dark)?Badge\d+$/),
+      z.array(z.string().min(1)).min(1),
+    ),
     values: nonEmptyRecord(z.string(), z.number().positive()),
   }).strict(),
 
@@ -235,7 +244,19 @@ const schemas = {
     _meaning: z.string().min(1),
     productionConsumers: nonEmptyRecord(
       z.enum(['Gen', 'Tech', 'Loop', 'Auto', 'Shard', 'Research', 'Academy']),
-      nonEmptyRecord(numericKey, z.array(z.string().regex(/Production$/))),
+      nonEmptyRecord(numericKey, z.object({
+        // Empty ONLY for an amplifier; the extractor refuses to emit a node that is neither, so a
+        // node with no resources and amplifier:false cannot reach this file.
+        resources: z.array(z.string().min(1)),
+        amplifier: z.boolean(),
+        // "Class.Member" for each consumer the resource set was derived from. Never empty: a node
+        // with no classified consumer is exactly the unverified state this whole file exists to
+        // rule out.
+        consumers: z.array(z.string().regex(/^[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/)).min(1),
+      }).strict().refine(
+        (v) => v.amplifier || v.resources.length > 0,
+        { message: 'a node must resolve to a resource set or be flagged as an amplifier' },
+      )),
     ),
   }).strict(),
 

@@ -1,139 +1,851 @@
 {
-  "_source": "`RU<Cat><n>Bonus` reads inside *Production properties of GeneratorManager, FleetManager, recovered via tools/il2cpp-cli/csharp.py",
+  "_source": "every read of `RU<Cat><n>Bonus` across the whole decompiled Assembly-CSharp, classified by the member that reads it (see RESOURCE_OWNERS)",
   "_game": "apk-0.7.3.61",
-  "_meaning": "the production pools that actually read each node's bonus -- the node's true resource set. An EMPTY list means no *Production property reads it, which is the normal case for direct resource boosters and amplifiers, not a gap.",
+  "_meaning": "per node: the resource tags the game's own consumers prove it feeds, whether it is an AMPLIFIER granting a counter rather than a pool, and the consumer members it was derived from. Every node resolves to one or the other -- the extractor exits non-zero rather than emitting an unclassified node.",
   "productionConsumers": {
     "Academy": {
-      "1": [],
-      "4": [],
-      "5": [],
-      "7": [
-        "MK10Production",
-        "MK11Production",
-        "MK12Production",
-        "MK1Production",
-        "MK2Production",
-        "MK3Production",
-        "MK4Production",
-        "MK5Production",
-        "MK6Production",
-        "MK7Production",
-        "MK8Production",
-        "MK9Production"
-      ],
-      "8": [],
-      "11": []
+      "1": {
+        "resources": [
+          "cells"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.CellProductionTotalMult"
+        ]
+      },
+      "2": {
+        "resources": [
+          "academyPoints"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "Missions.APTotalMult"
+        ]
+      },
+      "3": {
+        "resources": [
+          "missionMaterials"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "Missions.TotalMaterialBonus"
+        ]
+      },
+      "4": {
+        "resources": [
+          "cells",
+          "shards"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.CellProductionTotalMult",
+          "ShardMining.ShardsTotalMult"
+        ]
+      },
+      "5": {
+        "resources": [
+          "cells",
+          "researchPoints"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.CellProductionTotalMult",
+          "ResearchLaboratory.RPTotalMult"
+        ]
+      },
+      "6": {
+        "resources": [
+          "missionMaterials",
+          "modPoints"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "LoopModifiers.MPTotalMult",
+          "Missions.TotalMaterialBonus"
+        ]
+      },
+      "7": {
+        "resources": [
+          "academyPoints",
+          "mk1",
+          "mk10",
+          "mk11",
+          "mk12",
+          "mk2",
+          "mk3",
+          "mk4",
+          "mk5",
+          "mk6",
+          "mk7",
+          "mk8",
+          "mk9"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK10Production",
+          "GeneratorManager.MK11Production",
+          "GeneratorManager.MK12Production",
+          "GeneratorManager.MK1Production",
+          "GeneratorManager.MK2Production",
+          "GeneratorManager.MK3Production",
+          "GeneratorManager.MK4Production",
+          "GeneratorManager.MK5Production",
+          "GeneratorManager.MK6Production",
+          "GeneratorManager.MK7Production",
+          "GeneratorManager.MK8Production",
+          "GeneratorManager.MK9Production",
+          "Missions.APTotalMult"
+        ]
+      },
+      "8": {
+        "resources": [
+          "mk1",
+          "mk10",
+          "mk11",
+          "mk12",
+          "mk2",
+          "mk3",
+          "mk4",
+          "mk5",
+          "mk6",
+          "mk7",
+          "mk8",
+          "mk9"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "FleetManager.FinalAllGensBonus"
+        ]
+      },
+      "9": {
+        "resources": [
+          "shards"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "ShardMining.ShardsTotalMult"
+        ]
+      },
+      "10": {
+        "resources": [
+          "researchPoints"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "ResearchLaboratory.RPTotalMult"
+        ]
+      },
+      "11": {
+        "resources": [
+          "cells"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.CellProductionTotalMult"
+        ]
+      }
     },
     "Auto": {
-      "1": [
-        "MK1Production",
-        "MK2Production",
-        "MK3Production",
-        "MK4Production"
-      ],
-      "4": [],
-      "5": [],
-      "7": [
-        "MK5Production"
-      ],
-      "8": [],
-      "11": []
+      "1": {
+        "resources": [
+          "mk1",
+          "mk2",
+          "mk3",
+          "mk4"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK1Production",
+          "GeneratorManager.MK2Production",
+          "GeneratorManager.MK3Production",
+          "GeneratorManager.MK4Production"
+        ]
+      },
+      "2": {
+        "resources": [
+          "techHardware",
+          "techSoftware"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "TechUpgrades.TotalHardwareMult",
+          "TechUpgrades.TotalSoftwareMult"
+        ]
+      },
+      "3": {
+        "resources": [
+          "modPoints"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "LoopModifiers.MPTotalMult"
+        ]
+      },
+      "4": {
+        "resources": [
+          "cells"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.CellProductionTotalMult"
+        ]
+      },
+      "5": {
+        "resources": [
+          "cells"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.CellProductionTotalMult"
+        ]
+      },
+      "6": {
+        "resources": [
+          "modPoints"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "LoopModifiers.MPTotalMult"
+        ]
+      },
+      "7": {
+        "resources": [
+          "mk5"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK5Production"
+        ]
+      },
+      "8": {
+        "resources": [
+          "mk1",
+          "mk10",
+          "mk11",
+          "mk12",
+          "mk2",
+          "mk3",
+          "mk4",
+          "mk5",
+          "mk6",
+          "mk7",
+          "mk8",
+          "mk9"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "FleetManager.FinalAllGensBonus"
+        ]
+      },
+      "9": {
+        "resources": [
+          "researchPoints"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "ResearchLaboratory.RPTotalMult"
+        ]
+      },
+      "10": {
+        "resources": [
+          "shards"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "ShardMining.ShardsTotalMult"
+        ]
+      },
+      "11": {
+        "resources": [
+          "cells"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.CellProductionTotalMult"
+        ]
+      }
     },
     "Gen": {
-      "1": [],
-      "2": [
-        "MK1Production"
-      ],
-      "3": [
-        "MK2Production"
-      ],
-      "4": [
-        "MK1Production"
-      ],
-      "5": [
-        "MK3Production"
-      ],
-      "6": [
-        "MK4Production"
-      ],
-      "7": [
-        "MK2Production"
-      ],
-      "8": [],
-      "11": []
+      "1": {
+        "resources": [
+          "cells"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.CellProductionTotalMult"
+        ]
+      },
+      "2": {
+        "resources": [
+          "mk1"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK1Production"
+        ]
+      },
+      "3": {
+        "resources": [
+          "mk2"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK2Production"
+        ]
+      },
+      "4": {
+        "resources": [
+          "mk1"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK1Production"
+        ]
+      },
+      "5": {
+        "resources": [
+          "mk3"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK3Production"
+        ]
+      },
+      "6": {
+        "resources": [
+          "mk4"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK4Production"
+        ]
+      },
+      "7": {
+        "resources": [
+          "mk2"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK2Production"
+        ]
+      },
+      "8": {
+        "resources": [
+          "mk1",
+          "mk10",
+          "mk11",
+          "mk12",
+          "mk2",
+          "mk3",
+          "mk4",
+          "mk5",
+          "mk6",
+          "mk7",
+          "mk8",
+          "mk9"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "FleetManager.FinalAllGensBonus"
+        ]
+      },
+      "9": {
+        "resources": [
+          "researchPoints"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "ResearchLaboratory.RPTotalMult"
+        ]
+      },
+      "10": {
+        "resources": [
+          "shards"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "ShardMining.ShardsTotalMult"
+        ]
+      },
+      "11": {
+        "resources": [
+          "cells"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.CellProductionTotalMult"
+        ]
+      }
     },
     "Loop": {
-      "1": [],
-      "2": [
-        "MK1Production",
-        "MK2Production",
-        "MK3Production"
-      ],
-      "4": [
-        "MK2Production"
-      ],
-      "5": [
-        "MK3Production"
-      ],
-      "6": [
-        "MK4Production"
-      ],
-      "7": [
-        "MK5Production"
-      ],
-      "8": [],
-      "11": []
+      "1": {
+        "resources": [
+          "cells"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.CellProductionTotalMult"
+        ]
+      },
+      "2": {
+        "resources": [
+          "mk1",
+          "mk2",
+          "mk3"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK1Production",
+          "GeneratorManager.MK2Production",
+          "GeneratorManager.MK3Production"
+        ]
+      },
+      "3": {
+        "resources": [
+          "modPoints"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "LoopModifiers.MPTotalMult"
+        ]
+      },
+      "4": {
+        "resources": [
+          "mk2"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK2Production"
+        ]
+      },
+      "5": {
+        "resources": [
+          "mk3"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK3Production"
+        ]
+      },
+      "6": {
+        "resources": [
+          "mk4"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK4Production"
+        ]
+      },
+      "7": {
+        "resources": [
+          "mk5"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK5Production"
+        ]
+      },
+      "8": {
+        "resources": [
+          "mk1",
+          "mk10",
+          "mk11",
+          "mk12",
+          "mk2",
+          "mk3",
+          "mk4",
+          "mk5",
+          "mk6",
+          "mk7",
+          "mk8",
+          "mk9"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "FleetManager.FinalAllGensBonus"
+        ]
+      },
+      "9": {
+        "resources": [
+          "researchPoints"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "ResearchLaboratory.RPTotalMult"
+        ]
+      },
+      "10": {
+        "resources": [
+          "shards"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "ShardMining.ShardsTotalMult"
+        ]
+      },
+      "11": {
+        "resources": [
+          "cells"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.CellProductionTotalMult"
+        ]
+      }
     },
     "Research": {
-      "1": [],
-      "4": [
-        "MK3Production",
-        "MK6Production"
-      ],
-      "7": [
-        "MK1Production",
-        "MK2Production",
-        "MK3Production",
-        "MK4Production",
-        "MK5Production",
-        "MK6Production"
-      ],
-      "8": [],
-      "11": []
+      "1": {
+        "resources": [
+          "cells"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.CellProductionTotalMult"
+        ]
+      },
+      "2": {
+        "resources": [
+          "shards"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "ShardMining.ShardsTotalMult"
+        ]
+      },
+      "3": {
+        "resources": [
+          "modPoints"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "LoopModifiers.MPTotalMult"
+        ]
+      },
+      "4": {
+        "resources": [
+          "mk3",
+          "mk6"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK3Production",
+          "GeneratorManager.MK6Production"
+        ]
+      },
+      "5": {
+        "resources": [
+          "researchPoints"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "ResearchLaboratory.RPTotalMult"
+        ]
+      },
+      "6": {
+        "resources": [
+          "modPoints",
+          "shards"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "LoopModifiers.MPTotalMult",
+          "ShardMining.ShardsTotalMult"
+        ]
+      },
+      "7": {
+        "resources": [
+          "mk1",
+          "mk2",
+          "mk3",
+          "mk4",
+          "mk5",
+          "mk6"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK1Production",
+          "GeneratorManager.MK2Production",
+          "GeneratorManager.MK3Production",
+          "GeneratorManager.MK4Production",
+          "GeneratorManager.MK5Production",
+          "GeneratorManager.MK6Production"
+        ]
+      },
+      "8": {
+        "resources": [
+          "mk1",
+          "mk10",
+          "mk11",
+          "mk12",
+          "mk2",
+          "mk3",
+          "mk4",
+          "mk5",
+          "mk6",
+          "mk7",
+          "mk8",
+          "mk9"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "FleetManager.FinalAllGensBonus"
+        ]
+      },
+      "9": {
+        "resources": [
+          "researchPoints"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "ResearchLaboratory.RPTotalMult"
+        ]
+      },
+      "10": {
+        "resources": [
+          "shards"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "ShardMining.ShardsTotalMult"
+        ]
+      },
+      "11": {
+        "resources": [
+          "cells"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.CellProductionTotalMult"
+        ]
+      }
     },
     "Shard": {
-      "3": [],
-      "4": [
-        "MK1Production",
-        "MK4Production"
-      ],
-      "5": [
-        "MK2Production",
-        "MK5Production"
-      ],
-      "7": [
-        "MK3Production",
-        "MK6Production"
-      ],
-      "8": [],
-      "11": []
+      "1": {
+        "resources": [],
+        "amplifier": true,
+        "consumers": [
+          "LoopModifiers.PerformLoop"
+        ]
+      },
+      "2": {
+        "resources": [
+          "shards"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "ShardMining.ShardsTotalMult"
+        ]
+      },
+      "3": {
+        "resources": [
+          "cells"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.CellProductionTotalMult"
+        ]
+      },
+      "4": {
+        "resources": [
+          "mk1",
+          "mk4"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK1Production",
+          "GeneratorManager.MK4Production"
+        ]
+      },
+      "5": {
+        "resources": [
+          "mk2",
+          "mk5"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK2Production",
+          "GeneratorManager.MK5Production"
+        ]
+      },
+      "6": {
+        "resources": [
+          "modPoints"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "LoopModifiers.MPTotalMult"
+        ]
+      },
+      "7": {
+        "resources": [
+          "mk3",
+          "mk6"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK3Production",
+          "GeneratorManager.MK6Production"
+        ]
+      },
+      "8": {
+        "resources": [
+          "mk1",
+          "mk10",
+          "mk11",
+          "mk12",
+          "mk2",
+          "mk3",
+          "mk4",
+          "mk5",
+          "mk6",
+          "mk7",
+          "mk8",
+          "mk9"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "FleetManager.FinalAllGensBonus"
+        ]
+      },
+      "9": {
+        "resources": [
+          "researchPoints"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "ResearchLaboratory.RPTotalMult"
+        ]
+      },
+      "10": {
+        "resources": [
+          "shards"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "ShardMining.ShardsTotalMult"
+        ]
+      },
+      "11": {
+        "resources": [
+          "cells"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.CellProductionTotalMult"
+        ]
+      }
     },
     "Tech": {
-      "3": [],
-      "4": [
-        "MK1Production"
-      ],
-      "5": [
-        "MK2Production"
-      ],
-      "6": [
-        "MK3Production"
-      ],
-      "7": [
-        "MK4Production"
-      ],
-      "8": [],
-      "11": []
+      "1": {
+        "resources": [
+          "techSoftware"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "TechUpgrades.TotalSoftwareMult"
+        ]
+      },
+      "2": {
+        "resources": [
+          "techHardware"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "TechUpgrades.TotalHardwareMult"
+        ]
+      },
+      "3": {
+        "resources": [
+          "cells"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.CellProductionTotalMult"
+        ]
+      },
+      "4": {
+        "resources": [
+          "mk1"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK1Production"
+        ]
+      },
+      "5": {
+        "resources": [
+          "mk2"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK2Production"
+        ]
+      },
+      "6": {
+        "resources": [
+          "mk3"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK3Production"
+        ]
+      },
+      "7": {
+        "resources": [
+          "mk4"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.MK4Production"
+        ]
+      },
+      "8": {
+        "resources": [
+          "mk1",
+          "mk10",
+          "mk11",
+          "mk12",
+          "mk2",
+          "mk3",
+          "mk4",
+          "mk5",
+          "mk6",
+          "mk7",
+          "mk8",
+          "mk9"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "FleetManager.FinalAllGensBonus"
+        ]
+      },
+      "9": {
+        "resources": [
+          "researchPoints"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "ResearchLaboratory.RPTotalMult"
+        ]
+      },
+      "10": {
+        "resources": [
+          "shards"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "ShardMining.ShardsTotalMult"
+        ]
+      },
+      "11": {
+        "resources": [
+          "cells"
+        ],
+        "amplifier": false,
+        "consumers": [
+          "GeneratorManager.CellProductionTotalMult"
+        ]
+      }
     }
   }
 }

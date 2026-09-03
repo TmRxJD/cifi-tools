@@ -102,6 +102,24 @@ let failures = 0;
         if (tLeft) console.log(`      talents: ${tLeft}`);
         if (aLeft) console.log(`      attributes: ${aLeft}`);
         if (regressed) {
+          // Say whether the target was even REACHABLE. The import is scored at its own full
+          // allocation, but the optimizer is given the LEVEL-derived budget -- and a share code
+          // does not encode level, it is inferred from spend. When the inference lands low, the
+          // import spends more than the optimizer is allowed to, and "beat the import" asks it to
+          // beat an allocation it is forbidden to make. Without this line the failure reads as a
+          // search defect, which is a different bug with a different fix.
+          const impT = Space.costOf(cfg.TALENTS, build.talents);
+          const impA = Space.costOf(cfg.ATTRIBUTES, build.attributes);
+          const overT = impT > cfg.TALENT_BUDGET;
+          const overA = impA > cfg.ATTRIBUTE_BUDGET;
+          if (overT || overA) {
+            console.log(`      NOT REACHABLE: the import spends ${impT}T/${impA}A but the level-`
+              + `derived budget is ${cfg.TALENT_BUDGET}T/${cfg.ATTRIBUTE_BUDGET}A -- the optimizer `
+              + 'cannot legally reproduce it, so this is an inferred-level problem, not a search one');
+          } else {
+            console.log(`      reachable: the import spends ${impT}T/${impA}A within a budget of `
+              + `${cfg.TALENT_BUDGET}T/${cfg.ATTRIBUTE_BUDGET}A, so this IS a search shortfall`);
+          }
           console.log(`      scored ${outScore.toFixed(2)} vs the untouched import's ${importScore.toFixed(2)} `
             + `(${(100 * (outScore - importScore) / importScore).toFixed(2)}%)`);
         }

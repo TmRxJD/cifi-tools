@@ -1420,6 +1420,8 @@ node tools/bench/ship-node-gate-check.js # install prereqs + base caps vs the GA
 node tools/bench/node-counter-check.js  # each node's 'per X' counter vs the GAME (77 nodes)
 node tools/bench/node-name-check.js     # node names vs the game's fleet tooltips (77 nodes)
 node tools/bench/node-effect-probe.js  # every install node actually moves the output
+node tools/bench/all.js                # EVERY gate in one run; SKIP is reported, not hidden
+node tools/bench/all.js --bundle=<live-bundle.js> --strict
 node tools/bench/node-resource-check.js # which RESOURCES each node boosts, vs the GAME
 node tools/bench/fleet-formula-check.js # the per-node bonus COMPOSES as the game does
 CIFI_APK=apk-0.7.3.61 python tools/bench/extract-node-resources.py --write

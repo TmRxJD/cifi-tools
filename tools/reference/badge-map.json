@@ -1,6 +1,6 @@
 {
   "_source": "which badge: RU<Category><n>Bonus getter bodies (tools/il2cpp-cli/csharp.py); value: the authored Badges MonoBehaviour (tools/il2cpp-cli/typetree.py)",
-  "_meaning": "perCategory lists badges read by EVERY node of that category, i.e. genuine per-ship multipliers. A badge only some nodes read is excluded on purpose.",
+  "_meaning": "perCategory lists badges read by EVERY node of that category, i.e. genuine per-ship multipliers; techPools lists the badges the TECH POOL chains read, which are not per-ship at all. per-ship multipliers. A badge only some nodes read is excluded on purpose.",
   "_game": "apk-0.7.3.61",
   "perCategory": {
     "Academy": [
@@ -35,9 +35,16 @@
       "DarkBadge1"
     ]
   },
+  "techPools": {
+    "Badge3": [
+      "TotalHardwareMult",
+      "TotalSoftwareMult"
+    ]
+  },
   "values": {
     "Badge12": 222.00000000000003,
     "Badge2": 7.0,
+    "Badge3": 769999991996416.0,
     "DarkBadge1": 3.0
   }
 }

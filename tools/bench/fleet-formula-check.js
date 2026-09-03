@@ -158,9 +158,8 @@ else pass('every node\'s bonus is exactly linear in its level, as the game\'s fo
 // --- crew multiplies the bonus linearly too -----------------------------------------------------
 // Worth its own check because importing the raw save field understated crew on every ship, and the
 // symptom was a uniformly low total rather than an error.
-const crewA = seed({ ...STATES[1], crew: 100 });
+seed({ ...STATES[1], crew: 100 });
 const beforeCrew = sb.nodeOwnBonusPct(1, '1', 5);
-void crewA;
 seed({ ...STATES[1], crew: 200 });
 const afterCrew = sb.nodeOwnBonusPct(1, '1', 5);
 if (!(Math.abs(afterCrew - beforeCrew * 2) / Math.max(afterCrew, 1e-300) < 1e-9)) {

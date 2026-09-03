@@ -62,9 +62,6 @@ if (!declared.size) {
 }
 
 // A store that has actually been used: import a real build code into it.
-const codes = (() => {
-  try { return require('../../compare-mcp/known-builds.mjs'); } catch { return null; }
-})();
 const used = sb.StoreSchema.freshStore();
 used.borge.builds.push({ name: 'probe', code: 'x', allocation: {} });
 used.gems.exodus.level = 5;
@@ -107,6 +104,5 @@ if (fs.existsSync(fixture)) {
   console.log('skip  bridge sample-save fixture not present');
 }
 
-void codes;
 console.log(failures ? `\n${failures} failure(s)` : '\nevery app data file matches its schema');
 process.exit(failures ? 1 : 0);

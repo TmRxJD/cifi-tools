@@ -139,7 +139,11 @@ const SHIP_NODE_CATALOG = {
     11: { source: 'game', ruId: 9, name: 'Improved Blueprints', max: 85, gateAtTotalInstalls: 100, gearKey: 'ticksThisLoop', effect: '+0.0002% Research Points Gained, per Tick Completed, per crew member' },
   },
   5: { // Demeter -- ranks up by completing Operations. Unlocks Shard Mining.
-    1: { source: 'game', name: 'Ahead of the Curve', max: 5, ruId: 1, effect: '+1 completed operation per crew member on new-run start (no immediate shards)' },
+    // NOT a shards node: it grants OPERATIONS -- the counter eight of Demeter's other nodes
+    // multiply by -- which the game consumes in LoopModifiers.PerformLoop. Its effect text used
+    // to end '(no immediate shards)', and because that field is keyword-parsed the word
+    // 'shards' tagged it as a shards booster: the exact opposite of what the aside said.
+    1: { source: 'game', name: 'Ahead of the Curve', max: 5, ruId: 1, effect: '+1 completed operation per crew member on new-run start' },
     // REVERTED to open-from-start 2026-09-03. A `gateAtTotalInstalls: 1` was added here the day
     // before, from SirRed's CIFI Ouroboros Helper Tool. The GAME's own authored value is
     // `RU2ShardRequirement = 0` and `RU3ShardRequirement = 0` -- both slots ARE open from the
@@ -287,7 +291,47 @@ const FLEET_BADGE_ITEMS = [
   // by 222x for anyone who owns it.
   { key: 'badge_innovation_2', name: 'Innovation Badge #2', source: 'Badge', ships: [5, 6, 7], mult: 222, note: 'Demeter, Koios & Zeus rank installs gain x222 power.' },
   { key: 'badge_dark_innovation', name: 'Dark Innovation Badge', source: 'Badge', ships: [1, 2, 3, 4, 5, 6, 7], mult: 3, note: 'All ship rank installs gain x3 power.' },
+  // Badge3 is a TECH-POOL badge, and it is shaped differently from the three above: they multiply a
+  // ship's rank-install bonuses, while this multiplies the Tech Software / Tech Hardware totals
+  // themselves. The game reads `Badges.FinalBadge3Bonus` in `TechUpgrades.TotalSoftwareMult` AND
+  // `TotalHardwareMult` and nowhere else, and its getter is the same `owned ? value : 1` shape as
+  // the others -- so it is exactly 1 until acquired, and omitting it was exact for an account
+  // without it.
+  //
+  // The magnitude is why it matters: the authored `Badge3Bonus` is 7.7e14. Tech upgrade output
+  // compounds into long-run Ouroboros progression, so for an account that owns this badge the tool
+  // was understating both tech pools by fourteen orders of magnitude. `ships: []` because it is not
+  // a per-ship multiplier; `techPools: true` is what routes it.
+  { key: 'badge_tech', name: 'Tech Badge', source: 'Badge', ships: [], techPools: true, mult: 7.7e14, note: 'Tech Software & Tech Hardware output gain x7.7e14.' },
 ];
+// Auxesia is the TECH ship: the game's tech-pool chains read `AuxesiaEvolutionBonus` regardless
+// of which ship's install node contributed to them.
+const AUXESIA_SHIP_ID = 2;
+
+// The product of every owned badge that multiplies the TECH POOLS (as opposed to a ship's
+// rank-install bonuses). Kept separate from computeFleetBadgeMultipliers, which is keyed by ship.
+function computeTechPoolBadgeMultiplier() {
+  const owned = getFleetBadges().owned || {};
+  return FLEET_BADGE_ITEMS
+    .filter((item) => item.techPools && owned[item.key])
+    .reduce((acc, item) => acc * item.mult, 1);
+}
+
+// Terms the game multiplies into the tech pools that this tool does NOT model. Reported rather than
+// dropped, the same way unmodelledCrewRankTerms() reports the crew/rank gaps: each is exactly 1
+// until the corresponding upgrade is bought, so omitting them is exact for an account without them
+// -- but tech output compounds into long-run Ouroboros progression, so an advanced account's real
+// totals are higher than what is shown here.
+function unmodelledTechPoolTerms() {
+  return [
+    { term: 'DiamondShop.FinalTechSoftwareBonus / FinalTechHardwareBonus', why: 'Diamond Shop tech boosters are not an input this tool takes' },
+    { term: 'GemPerks.FinalTechSoftwareBonus / FinalTechHardwareBonus', why: 'the gem store carries tree levels and node booleans, not per-perk levels' },
+    { term: 'MasterManagerOuro.FinalMech4MainBonus / FinalMech8MainBonus', why: 'the Mech system is not modelled' },
+    { term: 'FleetManager.RUOuro1Bonus', why: 'the Ouroboros ship is outside the 7 ships modelled' },
+    { term: 'LoopModifiers.TotalTechSoftwareBonus / TotalTechHardwareBonus', why: 'per-mod loop bonuses are not modelled' },
+  ];
+}
+
 function defaultFleetBadges() {
   const owned = {};
   FLEET_BADGE_ITEMS.forEach((item) => { owned[item.key] = false; });
@@ -541,13 +585,15 @@ const CODE_TO_GRID = Object.fromEntries(GRID_TO_CODE.map((code, i) => [code, i +
 // save's real MK9UnlockedBool/MK10UnlockedBool fields once you do unlock them (that import path
 // already read up to MK12 -- see mapSaveToUnlockedGens in shipSchema.js -- it just had nothing
 // past MK8 to write into before now).
-const GEN_TIERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-// The highest generator tier THIS TOOL models. The game's production chain runs to MK12 (its
-// `RU7AcademyBonus` is read by MK1Production..MK12Production), so an "All Gens" node really does
-// touch two tiers we do not track. Not modelling MK11/MK12 is a scope decision, not an oversight,
-// and node-resource-check.js REPORTS the shortfall rather than letting the tags quietly disagree
-// with the game.
-const MAX_GEN_TIER = 10;
+// TWELVE generator tiers, not ten. The game's production chain runs MK1Production..MK12Production
+// (its `RUAcademy7Bonus` is read by all twelve), it carries `MK11UnlockedBool`/`MK12UnlockedBool`
+// in the save, and it sells Diamond boosters for them (`DU19MK11`/`DU20MK12`). This tool stopped at
+// ten, which meant an "All Gens" node was credited with ten twelfths of its real reach and the two
+// top tiers could never be shown at all -- while `mapSaveToUnlockedGens` was already importing
+// MK11/MK12 from the save and having the result silently dropped. That is a parity gap, not a
+// scope decision.
+const GEN_TIERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+const MAX_GEN_TIER = GEN_TIERS[GEN_TIERS.length - 1];
 
 // Demeter's "Ahead of the Curve" (ship 5, slot 1). Its payoff lands at the start of the NEXT
 // loop reset rather than the active run, so the marginal-value engine cannot score it: there is
@@ -763,7 +809,20 @@ function computeResourceBonuses(shipId, levels) {
   const evo = shipEvolutionMultiplier(shipId);
   if (evo !== 1) {
     GEN_TIERS.forEach((n) => { const k = `mk${n}`; if (mults[k]) mults[k] *= evo; });
-    TECH_UPGRADE_TAGS.forEach((t) => { if (mults[t]) mults[t] *= evo; });
+  }
+  // TECH POOLS take AUXESIA's evolution, not this ship's. The game's `TotalSoftwareMult` /
+  // `TotalHardwareMult` chains each multiply in `FleetManager.AuxesiaEvolutionBonus` exactly once,
+  // whichever ship's node contributed -- the tech pools are global, and Auxesia is the tech ship.
+  // Applying the CURRENT ship's evolution here (which is what this did) credited Hephaestus's
+  // Delivery Drones with Hephaestus's evolution factor, a number the game never uses for tech.
+  //
+  // The tech badge multiplies the same two pools, and for the same reason it is applied here rather
+  // than per node.
+  const techEvo = shipEvolutionMultiplier(AUXESIA_SHIP_ID);
+  const techBadge = computeTechPoolBadgeMultiplier();
+  const techFactor = techEvo * techBadge;
+  if (techFactor !== 1) {
+    TECH_UPGRADE_TAGS.forEach((t) => { if (mults[t]) mults[t] *= techFactor; });
   }
   // Gear Set piece-owned flat multipliers (x25 Shards etc, see computeGearSetBonusMultipliers)
   // are a multiplier on the FINAL resource total across the whole fleet, not a per-ship
@@ -2865,6 +2924,8 @@ window.ShipData = {
   // and check the result against the gates. Without it that test silently skipped every ship.
   SHIP_CATEGORY,
   GEN_TIERS,
+  computeTechPoolBadgeMultiplier,
+  unmodelledTechPoolTerms,
   RESOURCE_TO_WEIGHT_BUCKET,
   // Demeter's "Ahead of the Curve" is special-cased in the allocator (its payoff lands next
   // loop, so the marginal-value engine cannot score it). Named here so the rule is greppable
