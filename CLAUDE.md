@@ -810,6 +810,41 @@ think one is wrong, disprove it with a test.
     Filter that noise before reading a type diff, or the signal is unfindable.
   - `Gear.gearColor` enumerates only `purple, red, green, orange, blue` — no white despite White
     being fully wired, so that enum is partial/legacy and is NOT evidence about which sets exist.
+- **The "our allocator is worse than SirRed's" gap was never the ALGORITHM — it was one invented
+  constant in the objective.** Both are pure marginal-value greedy. Neutralising
+  `RUN_LENGTH_BIAS.long` makes our allocator reproduce SirRed's greedy **exactly** at every tested
+  budget (`sirred-algorithm-check.js`), and produce **identical plans** at every budget on real
+  account data (`real-save-optimizer-check.js`). That exactness is the proof: a search defect would
+  not vanish to zero difference, it would leave a residue.
+  The old default was `{ cells: 0.7, gen: 1.35 }` — a **1.93x swing** toward generator nodes,
+  described in its own comment as "a modest, clearly-flagged heuristic". It was not modest: it
+  inverted the top of the ranking (Cradle node 1's raw log-gain 0.788 vs node 2's 0.470 became 0.552
+  vs 0.635), so the default allocator systematically underfunded the single best node, costing
+  13.6% / 14.5% / 35.7% / 17.5% at budgets 30 / 75 / 150 / 300.
+  **`long` is now neutral `{1, 1}` and `short` stays the opt-in deviation.** Three reasons beyond
+  the measurement:
+  - The game gives exactly ONE structural reason to prefer generator nodes — the Meltdown exponent,
+    because gen bonuses sit inside `Pow(MK1Production, m)` while Cells bonuses sit outside it — and
+    `nodeMarginalLogGain` already applies that from the binary. A second invented preference
+    double-counts a real effect with a fake number.
+  - It contradicted a decision twenty lines below it in the same function, which refuses to invent a
+    compounding multiplier for All-Gens nodes on "no invented constants" grounds ("undervaluing an
+    All-Gens node is a smaller error than fabricating a factor of 8"). The long-run compounding
+    argument is the SAME argument; it cannot be disqualifying there and load-bearing here.
+  - Functional form: it multiplies a LOG gain, so a factor k ranks by `ratio^k` — it behaves as an
+    exponent, not a value weight. Right for Meltdown (which IS an exponent), wrong for "I expect a
+    long run", which is a statement about value.
+  The tactic still does real work on realistic accounts (Cradle 150 points: node 1 goes 18 -> 26 on
+  short), so this removed a silent default, not the feature.
+- **`GROWTH_VALUE_BOOST = 1.5` is the remaining invented constant, and NOTHING TESTS IT.** It scales
+  nodes whose gear counter grows during a run, and it applies to **5 of 7 ships** — Zagreus 3/11,
+  Hephaestus 4/11, Demeter 8/11, Koios 7/11, Zeus 7/11 — but to **zero Cradle nodes**, and Cradle is
+  the only ship `sirred-algorithm-check.js` and `real-save-optimizer-check.js` cover. So the two
+  benches that just certified the allocator cannot see it at all. The effect it models is real and
+  directional (a counter that climbs during a run does deliver more than its snapshot); the
+  magnitude is a guess, and on Demeter it reorders 8 nodes against 3. **Do not "fix" it by
+  substituting another invented number** — either extend the allocator benches to a growth-heavy
+  ship, or derive the multiplier from run dynamics.
 - **EVERY ship install prereq and base cap is now checked against the GAME, and four were wrong.**
   The game authors both per node: `RU<n><Category>Requirement` and `RU<n><Category>MaxLevel` on
   FleetManager. The semantics are stated by its own buy method rather than inferred --

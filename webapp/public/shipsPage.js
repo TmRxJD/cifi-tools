@@ -1794,14 +1794,37 @@ function nodeScalesWithGrowth(gearKey) {
 // weight bucket (see RESOURCE_TO_WEIGHT_BUCKET -- both direct Cells nodes and all Generator-tier
 // nodes feed that one slider, so there's otherwise no way to prefer one over the other). Direct
 // Cells nodes pay off immediately; Generator nodes pay off by compounding output over time, so
-// they're worth relatively more the longer the run is. Long is the default (most runs are long
-// relative to how fast a Cells-only node saturates) -- Short is an explicit opt-in for players
-// about to reset/traverse soon. These multipliers are a modest, clearly-flagged heuristic (not a
-// measured constant, same spirit as GROWTH_VALUE_BOOST) -- there's no way to know the "true"
-// relative value without knowing your actual run length in advance.
+// they're worth relatively more the longer the run is. Short is an explicit opt-in for players
+// about to reset/traverse soon.
+//
+// LONG IS NEUTRAL, AND THAT IS A CORRECTION. It used to be `{ cells: 0.7, gen: 1.35 }` --
+// described in this comment as "a modest, clearly-flagged heuristic". It was neither modest nor
+// harmless:
+//   * 1.35/0.7 is a 1.93x swing, the largest non-game-derived factor anywhere in the value model,
+//     and it INVERTS rankings rather than nudging them. On the Cradle fixture, node 1 (+10% Cells)
+//     has a raw log-gain of 0.788 against node 2's 0.470, and the bias flipped that to 0.552 vs
+//     0.635 -- so the default allocator systematically underfunded the single best node.
+//   * `sirred-algorithm-check.js` measured the cost: 13.6% / 14.5% / 35.7% / 17.5% worse than a
+//     plain unbiased greedy at budgets 30 / 75 / 150 / 300. Setting long to neutral makes our
+//     allocator reproduce that greedy EXACTLY at every tested budget, which is also the proof
+//     that our search was never the problem -- the objective was.
+//   * It contradicted the decision twenty lines below it in nodeMarginalLogGain, which refuses to
+//     invent a compounding multiplier for All-Gens nodes on "no invented constants" grounds
+//     ("undervaluing an All-Gens node is a smaller error than fabricating a factor of 8"). The
+//     compounding argument for gens over a long run is the SAME argument; it cannot be
+//     disqualifying there and load-bearing here.
+//   * The game gives exactly one structural reason to prefer generator nodes over direct-resource
+//     ones -- the Meltdown exponent, because gen bonuses sit inside the `Pow(MK1Production, m)`
+//     and Cells bonuses sit outside it. nodeMarginalLogGain already applies that, from the binary.
+//     Stacking an invented second preference on top double-counts a real effect with a fake number.
+// Note also the functional form: this multiplies a LOG gain, so a factor k ranks by ratio^k -- it
+// behaves like an exponent, not like a value weight. That is right for Meltdown (which IS an
+// exponent) and wrong for "I expect a long run", which is a statement about value.
+// `short` stays a deliberate, user-selected deviation from the neutral model rather than a silent
+// default, which is the only reason an unmeasurable constant is tolerable here at all.
 const RUN_LENGTH_BIAS = {
   short: { cells: 1.35, gen: 0.7 },
-  long: { cells: 0.7, gen: 1.35 },
+  long: { cells: 1, gen: 1 },
 };
 function runLengthBiasFor(runLength) {
   return RUN_LENGTH_BIAS[runLength] || RUN_LENGTH_BIAS.long;
