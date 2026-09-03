@@ -757,9 +757,14 @@ function setUnlockedGenTier(unlockedGens, n, checked) {
 }
 // Which "per X" counters each ship's OWN nodes reference (see SHIP_NODE_CATALOG's gearKey
 // fields) -- shown as that ship's "Progression Counters" section on its Ship Setup modal.
-// totalManualGens is shared by Cradle+Hephaestus (same underlying save stat, ManualGensAllTime)
-// and operationsCompleted is shared by Demeter+Koios (NewSMOperationsAllTime) -- editing either
-// ship's copy of a shared field updates the same store value.
+// totalManualGens is shared by Cradle+Hephaestus and operationsCompleted by Demeter+Koios --
+// editing either ship's copy of a shared field updates the same store value.
+//
+// CORRECTED: this comment used to name the save fields as `ManualGensAllTime` and
+// `NewSMOperationsAllTime`. Both are wrong -- saveImport actually reads `ManualGensThisLR` and
+// `NewSMOperationsThisLoop` (shipSchema.js), i.e. counters that RESET, not all-time totals. The
+// distinction is not cosmetic: it is exactly what decides whether a counter grows meaningfully
+// within one planning horizon, which is the question GROWTH_GEAR_KEYS below exists to answer.
 const SHIP_GEAR_FIELDS = {
   1: [['manualMK2Gens', 'Manually Purchased MK2 Generators'], ['manualMK3Gens', 'Manually Purchased MK3 Generators'], ['totalManualGens', 'Total Manually Purchased Generators']],
   2: [['techUpgrades', 'Tech Upgrades Purchased (combined)'], ['hardwareUpgrades', 'Hardware Upgrades Purchased'], ['softwareUpgrades', 'Software Upgrades Purchased']],
@@ -769,6 +774,34 @@ const SHIP_GEAR_FIELDS = {
   6: [['operationsCompleted', 'Operations Completed'], ['studiesThisLR', 'Studies This Loop Reset'], ['researchLevels', 'Research Levels'], ['totalCompletedResearch', 'Total Completed Research']],
   7: [['missionsCompleted', 'Missions Completed']],
 };
+// gearKey -> the label the UI already shows for it, so a warning names the field the player has
+// to go and edit rather than an internal key. SHIP_GEAR_FIELDS is the single source of those
+// labels; falls back to the raw key so a newly-added counter can never render as "undefined".
+function gearFieldLabel(key) {
+  for (const fields of Object.values(SHIP_GEAR_FIELDS)) {
+    const hit = fields.find(([k]) => k === key);
+    if (hit) return hit[1];
+  }
+  return key;
+}
+// Which of THIS ship's resetting "per X" counters are currently 0. Shared by the allocator (which
+// returns it as a warning) and by the optimize modal (which shows it before you generate a plan,
+// where you can still fix the input). Same logic in one place so the two cannot disagree.
+function growthCounterWarnings(shipId) {
+  const catalog = SHIP_NODE_CATALOG[shipId] || {};
+  const gear = getShipGear();
+  const zeroed = [...new Set(Object.values(catalog)
+    .flatMap((m) => (Array.isArray(m.gearKey) ? m.gearKey : [m.gearKey]))
+    .filter((k) => k && GROWTH_GEAR_KEYS.has(k) && !(gear[k] > 0)))];
+  if (!zeroed.length) return [];
+  return [{
+    kind: 'zeroGrowthCounter',
+    keys: zeroed,
+    message: `${zeroed.map(gearFieldLabel).join(', ')} ${zeroed.length > 1 ? 'are' : 'is'} 0, so `
+      + 'every node that scales with it is valued at zero and excluded from this plan. Those '
+      + 'counters reset each run -- enter a typical mid-run value for a meaningful allocation.',
+  }];
+}
 function defaultShipGear() {
   return {
     manualMK2Gens: 0, manualMK3Gens: 0, totalManualGens: 0, techUpgrades: 0, hardwareUpgrades: 0, softwareUpgrades: 0,
@@ -1775,17 +1808,36 @@ function nodeLinearIncrement(shipId, slot) {
 // (see effectResources) -- these all compound before feeding a final resource, so they take
 // Meltdown's exponent, unlike a direct final-resource bonus. See nodeMarginalLogGain.
 function isGenLikeTag(tag) { return /^mk\d+$/.test(tag) || TECH_UPGRADE_TAGS.includes(tag); }
-// Gear qualifiers that keep climbing over the course of a single run (ticks/operations/studies/
-// missions/loop-fills all accumulate as you play), vs. ones that are effectively static within a
-// run (loop mods owned, automations unlocked, manually-purchased generators, tech upgrades --
-// these only change through deliberate one-off purchases, not just time passing). A node gated
-// on a GROWING qualifier is worth more than its current snapshot suggests, since by the time
-// you've bought it you'll be benefiting from a higher count for most of the run, not the count
-// at the moment of purchase. GROWTH_VALUE_BOOST is a modest, clearly-flagged heuristic (not a
-// measured constant) -- there's no way to know the "true" average growth without knowing your
-// actual run length, so this errs conservative rather than inventing a precise multiplier.
-const GROWTH_GEAR_KEYS = new Set(['ticksThisLoop', 'operationsCompleted', 'studiesThisLR', 'missionsCompleted', 'loopFillsThisRun']);
-const GROWTH_VALUE_BOOST = 1.5;
+// GROWTH_VALUE_BOOST IS REMOVED (was 1.5, applied to nodes whose "per X" counter climbs during a
+// run). It went the same way as RUN_LENGTH_BIAS's default, for the same reason and two more:
+//
+//   1. **The classification it keyed off was wrong in both directions**, which is fatal for a
+//      multiplier of this kind -- it was not merely imprecise, it was pointed at the wrong nodes.
+//      `missionsCompleted` was IN the growth set but imports from `MissionsCompletedAllTime`, an
+//      all-time total that barely moves within one run (it boosted 7 of Zeus's 11 nodes).
+//      `totalManualGens` was OUT of it but imports from `ManualGensThisLR`, which does reset.
+//      A constant hung on a misclassification is not a conservative approximation of anything.
+//   2. **It cannot fix the failure it looks like it addresses.** The real problem with these
+//      counters is that a resetting counter reads 0 at the start of a run, and 1.5 x 0 is still 0
+//      -- see the zero-counter warning in optimizeShipInstalls.
+//   3. Same "no invented constants" rule that already keeps a compounding multiplier out of the
+//      All-Gens case in nodeMarginalLogGain. Undervaluing a growth node is the smaller error.
+//
+// The underlying effect is REAL and this is a known, deliberate undervaluation: a node paid for
+// early does benefit from a higher counter for most of the run than the snapshot shows. Restoring
+// a boost needs a defensible number -- derived from run dynamics, or from the counter's own
+// growth rate -- not another guess. GROWTH_GEAR_KEYS is kept, with the membership CORRECTED
+// against what saveImport actually reads, because the warning below needs to know which counters
+// reset. Do not reintroduce a multiplier without also fixing what it multiplies.
+//
+// Counters that reset within a planning horizon, by the save field each actually imports from
+// (shipSchema.js): TicksThisLoop, NewSMOperationsThisLoop, StudiesThisLoop, LoopsFilled,
+// ManualGensThisLR. Deliberately NOT here: missionsCompleted (MissionsCompletedAllTime),
+// loopResetsDone (LoopResetsPerformedAllTime), and the one-off purchase counters (tech upgrades,
+// loop mods owned, automations unlocked), which only move when you deliberately buy something.
+const GROWTH_GEAR_KEYS = new Set([
+  'ticksThisLoop', 'operationsCompleted', 'studiesThisLR', 'loopFillsThisRun', 'totalManualGens',
+]);
 function nodeScalesWithGrowth(gearKey) {
   if (!gearKey) return false;
   return Array.isArray(gearKey) ? gearKey.some((k) => GROWTH_GEAR_KEYS.has(k)) : GROWTH_GEAR_KEYS.has(gearKey);
@@ -1878,7 +1930,8 @@ function runLengthBiasFor(runLength) {
 // compounds along the unlocked chain over a run. The exact compounding depends on run length and
 // tier dynamics, which no static formula can settle -- treating it as one factor per UNLOCKED
 // tier (below) is a deliberate approximation of that chain, and is flagged as such rather than
-// presented as proven. GROWTH_VALUE_BOOST and RUN_LENGTH_BIAS remain heuristics too.
+// presented as proven. RUN_LENGTH_BIAS's `short` tactic remains an opt-in heuristic; its `long`
+// default and GROWTH_VALUE_BOOST have both been removed (see their notes).
 
 // Marginal gain from putting ONE more point into `slot`, given the levels this planning run has
 // assigned so far, returned as a LOG gain. Log because the objective is a product of factors
@@ -1892,8 +1945,10 @@ function nodeMarginalLogGain(shipId, slot, levels, runLength) {
   const meta = SHIP_NODE_CATALOG[shipId]?.[slot];
   if (!meta) return 0;
   // nodeLinearIncrement is in PERCENT per level; /100 to get the factor's per-level fraction.
-  const increment = nodeLinearIncrement(shipId, slot)
-    * (nodeScalesWithGrowth(meta.gearKey) ? GROWTH_VALUE_BOOST : 1) / 100;
+  // No growth multiplier: see GROWTH_VALUE_BOOST's removal note. The counter is used exactly as
+  // entered, which undervalues nodes whose counter climbs during the run -- a known, deliberate
+  // approximation rather than a hidden one.
+  const increment = nodeLinearIncrement(shipId, slot) / 100;
   if (increment <= 0) return 0;
   const level = levels[slot] || 0;
   const logRatio = Math.log1p(increment * (level + 1)) - Math.log1p(increment * level);
@@ -2021,7 +2076,14 @@ function optimizeShipInstalls(shipId, budget, weights, prepForLongRun, runLength
     spent += 1;
     clicks.push(slot);
   }
-  return { levels, clicks };
+  // A resetting counter reads 0 at the start of a run, which makes every node that depends on it
+  // score exactly 0 and drop out of the plan entirely -- not merely rank lower. Measured on the
+  // Demeter fixture at budget 150: with counters at 0 the plan collapses to 3 nodes with 140 of
+  // 150 points in ONE, versus a sensible spread across 10 nodes mid-run. That is a wrong answer
+  // delivered confidently, and it happens at exactly the moment a player is most likely to plan:
+  // just after a reset. Report it instead of hiding it. Callers that ignore `warnings` still get
+  // the same plan as before, so this cannot change any existing behaviour.
+  return { levels, clicks, warnings: growthCounterWarnings(shipId) };
 }
 // Per-ship "include in Optimize Loadout" toggle + the Zaglag tactic toggle: while active,
 // Zagreus is skipped by the batch optimizer (as if not yet unlocked, leaving its budget unspent
@@ -2142,6 +2204,22 @@ function openOptimizeShipModal(shipId) {
   document.getElementById('optimizeShipPrepForLongRun').onchange = (e) => { optSettings.prepForLongRun = e.target.checked; window.saveStore(); };
   document.getElementById('optimizeShipShortRun').checked = optSettings.runLength === 'short';
   document.getElementById('optimizeShipShortRun').onchange = (e) => { optSettings.runLength = e.target.checked ? 'short' : 'long'; window.saveStore(); };
+  // Surface zeroed resetting counters BEFORE generating, since this modal is where the player can
+  // still go and fix the input. Without this the plan silently collapses onto whatever nodes do
+  // not depend on that counter (measured: 140 of 150 Demeter points into a single node).
+  const warnHost = (() => {
+    let el = document.getElementById('optimizeShipWarnings');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'optimizeShipWarnings';
+      const weights = document.getElementById('optimizeShipFocusWeights');
+      weights.parentNode.insertBefore(el, weights);
+    }
+    return el;
+  })();
+  const warnings = growthCounterWarnings(shipId);
+  warnHost.className = warnings.length ? 'mb-3 rounded border border-amber-500/60 bg-amber-900/20 p-2' : '';
+  warnHost.innerHTML = warnings.map((w) => `<p class="text-xs text-amber-200">${escapeHtml(w.message)}</p>`).join('');
   renderFocusWeightSliders(document.getElementById('optimizeShipFocusWeights'), gear.focusWeights, document.getElementById('optimizeShipWeightPresetBtn'));
   document.getElementById('optimizeShipModal').classList.remove('hidden');
 }

@@ -836,15 +836,33 @@ think one is wrong, disprove it with a test.
     long run", which is a statement about value.
   The tactic still does real work on realistic accounts (Cradle 150 points: node 1 goes 18 -> 26 on
   short), so this removed a silent default, not the feature.
-- **`GROWTH_VALUE_BOOST = 1.5` is the remaining invented constant, and NOTHING TESTS IT.** It scales
-  nodes whose gear counter grows during a run, and it applies to **5 of 7 ships** — Zagreus 3/11,
-  Hephaestus 4/11, Demeter 8/11, Koios 7/11, Zeus 7/11 — but to **zero Cradle nodes**, and Cradle is
-  the only ship `sirred-algorithm-check.js` and `real-save-optimizer-check.js` cover. So the two
-  benches that just certified the allocator cannot see it at all. The effect it models is real and
-  directional (a counter that climbs during a run does deliver more than its snapshot); the
-  magnitude is a guess, and on Demeter it reorders 8 nodes against 3. **Do not "fix" it by
-  substituting another invented number** — either extend the allocator benches to a growth-heavy
-  ship, or derive the multiplier from run dynamics.
+- **`GROWTH_VALUE_BOOST` (1.5) IS REMOVED, and chasing it turned up a much worse bug.** It scaled
+  nodes whose "per X" counter climbs during a run. Three findings, in increasing order of severity:
+  - **Its classification was wrong in BOTH directions**, which is disqualifying for a multiplier —
+    it was aimed at the wrong nodes, not merely imprecise. `missionsCompleted` was IN the growth set
+    but imports from `MissionsCompletedAllTime` (7 of Zeus's 11 nodes boosted on a counter that
+    barely moves in a run); `totalManualGens` was OUT of it but imports from `ManualGensThisLR`,
+    which resets. The comment documenting these mappings was itself wrong, naming `ManualGensAllTime`
+    and `NewSMOperationsAllTime` — neither is what `saveImport` reads.
+  - **It could not fix the failure it appeared to address**: 1.5 x 0 is still 0.
+  - **THE REAL BUG: a resetting counter reads 0 at the start of a run, and a node whose counter is 0
+    scores EXACTLY zero — so it does not rank lower, it disappears from the plan.** Measured on
+    Demeter at budget 150: counters zeroed gives `{1:5, 2:140, 8:5}` — 140 of 150 points in ONE node
+    — against a spread over 10 nodes mid-run. This is a confidently wrong answer produced at exactly
+    the moment a player is most likely to plan: just after a reset. `optimizeShipInstalls` now
+    returns `warnings`, and the optimize modal shows the notice before you generate, naming the
+    field to fix.
+  The undervaluation of growth nodes is now explicit and deliberate rather than papered over with a
+  guess. Restoring a multiplier needs a defensible number — derived from run dynamics or the
+  counter's own growth rate — AND a correct classification.
+  `growth-counter-check.js` covers all of it: classification parsed from `shipSchema.js`'s actual
+  importer lines (so changing a mapping without revisiting the classification fails), a guard
+  against reintroducing an invented multiplier, the zero-counter warning on all 5 growth ships, and
+  a non-degenerate Demeter plan. Verified with a negative control.
+- **The two allocator benches test CRADLE ONLY.** `sirred-algorithm-check.js` and
+  `real-save-optimizer-check.js` both use Cradle, which has the fewest growth nodes of any ship —
+  which is precisely why the above went unnoticed. Remember this before reading either as
+  "the allocator is verified": they verify the SEARCH, on one ship.
 - **EVERY ship install prereq and base cap is now checked against the GAME, and four were wrong.**
   The game authors both per node: `RU<n><Category>Requirement` and `RU<n><Category>MaxLevel` on
   FleetManager. The semantics are stated by its own buy method rather than inferred --
@@ -994,6 +1012,7 @@ node tools/bench/schema-test.js        # store schema invariants (fast, run alwa
 node tools/bench/relic-cost-test.js    # relic cost table + fragment arithmetic (fast)
 node tools/bench/node-coefficient-check.js # ship node coefficients vs the GAME'S AUTHORED values
 node tools/bench/ship-node-gate-check.js # install prereqs + base caps vs the GAME (77 nodes)
+node tools/bench/growth-counter-check.js # per-run counter classification + zero-counter warning
 python tools/il2cpp-cli/typetree.py --dump FleetManager --grep BaseBonus  # read authored data
 node tools/bench/relic-arg-probe.js    # every declared relic reaches the wasm (fast)
 node tools/bench/path-relic-test.js    # effective path never recommends an inert relic
