@@ -131,16 +131,23 @@ const SHIP_NODE_CATALOG = {
     3: { source: 'confirmed', name: 'Rare Organism Detection', max: 25, ruId: 3, gateAtTotalInstalls: 1, gearKey: 'operationsCompleted', effect: '+0.2% Cells Gained, per Operation Completed, per crew member' },
     4: { source: 'confirmed', name: 'Canned Mineral Water', max: 25, ruId: 4, gateAtTotalInstalls: 10, gearKey: 'operationsCompleted', effect: '+0.02% MK1 & MK4 outputs, per Operation Completed, per crew member' },
     5: { source: 'confirmed', name: 'Bi-Product Goo', max: 25, ruId: 5, gateAtTotalInstalls: 10, gearKey: 'operationsCompleted', effect: '+0.02% MK2 & MK5 outputs, per Operation Completed, per crew member' },
-    // Coefficient corrected 2026-09-02 against SirRed's decompiled formula (0.0001f = 0.01%, not
-    // 0.001% -- a 10x wiki-transcription error).
-    6: { source: 'confirmed', name: 'The Hexagonal Advantage', max: 5, ruId: 6, gateAtTotalInstalls: 25, gearKey: 'operationsCompleted', effect: '+0.01% Mod Points gained, per Operation Completed, per crew member' },
+    // REVERTED to 0.001% 2026-09-02, later the same day. It had just been "corrected" to 0.01%
+    // against a reading of SirRed's decompiled constants; the GAME's own authored value is
+    // RU6ShardBaseBonus = 1e-05, i.e. 0.001% -- so the original wiki figure was right and the
+    // correction was a 10x error. Read straight out of the FleetManager MonoBehaviour via
+    // reconstructed type trees (tools/il2cpp-cli/typetree.py); asserted by
+    // tools/bench/node-coefficient-check.js. Neighbouring nodes confirm the ruId mapping is sound:
+    // RU4Shard/RU5Shard are 0.02% and RU8Shard is 2.5%, all matching this catalog exactly.
+    6: { source: 'confirmed', name: 'The Hexagonal Advantage', max: 5, ruId: 6, gateAtTotalInstalls: 25, gearKey: 'operationsCompleted', effect: '+0.001% Mod Points gained, per Operation Completed, per crew member' },
     7: { source: 'confirmed', name: 'Shardlytics', max: 10, ruId: 7, gateAtTotalInstalls: 25, gearKey: 'operationsCompleted', effect: '+0.1% MK3 & MK6 outputs, per Operation Completed, per crew member' },
     // Node 9/11 ruId swapped (same universal pattern), node 10's cap corrected 2026-07-31,
     // account-confirmed directly: real cap 625 at 5x (base 125, not 15).
     8: { source: 'confirmed', name: 'Liquid Extraction Tech', max: 5, ruId: 8, gateAtTotalInstalls: 100, effect: '+2.5% output of all Generators, per crew member' },
-    // Coefficient corrected 2026-09-02 against SirRed's decompiled formula (0.3f = 30%, not 3% --
-    // another 10x wiki-transcription error, same class as node 6 above).
-    9: { source: 'confirmed', name: 'On-Site Printing Vehicles', max: 25, ruId: 11, gateAtTotalInstalls: 100, gearKey: 'operationsCompleted', effect: '+30% Cells Gained, per Operation Completed, per crew member' },
+    // REVERTED to 3% 2026-09-02, same story as node 6 above and the more damaging of the two: the
+    // GAME's authored RU11ShardBaseBonus = 0.03, i.e. 3%, not the 30% it had just been "corrected"
+    // to. A 10x overstatement on a Cells node is not cosmetic -- it made this the most valuable
+    // node on Demeter by an order of magnitude and skewed every plan for the ship.
+    9: { source: 'confirmed', name: 'On-Site Printing Vehicles', max: 25, ruId: 11, gateAtTotalInstalls: 100, gearKey: 'operationsCompleted', effect: '+3% Cells Gained, per Operation Completed, per crew member' },
     10: { source: 'confirmed', name: 'On-Site GPR Hotspot Scanners', max: 125, ruId: 10, gateAtTotalInstalls: 100, gearKey: 'operationsCompleted', effect: '+0.08% Shards Gained, per Operation Completed, per crew member' },
     11: { source: 'confirmed', name: 'Phylogenetic Analysis', max: 55, ruId: 9, gateAtTotalInstalls: 100, gearKey: 'operationsCompleted', effect: '+0.04% Research Points gained, per Operation Completed, per crew member' },
   },

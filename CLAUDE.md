@@ -33,6 +33,25 @@ point, not decoration.
    carry hard-won empirical findings. Preserve that. When you remove a workaround, say what it
    was compensating for.
 
+### Disassembly answers SHAPE. Type trees answer VALUES. Do not confuse the two.
+
+**IL2CPP strips Unity's type trees.** That is the root cause behind a lot of this repo's archaeology:
+serialized MonoBehaviour data becomes opaque bytes with no field names, so recovering a designer
+number pushes you toward byte-offset scanning, or toward disassembling code to reconstruct a value
+that was never computed — it was *authored*. `tools/il2cpp-cli/typetree.py` reconstructs the type
+trees and the same data reads back as named fields (`FleetManager.RU2GenBaseBonus = 0.05`).
+
+- **A number a designer typed** (coefficients, costs, caps, bonus values) → `typetree.py`. It is
+  the ground truth, above the wiki and above any community tool.
+- **How numbers COMBINE** (is this summed or multiplied, where does the Meltdown `Pow` sit, does
+  this bonus reach that resource) → `decompile.py` / `analyze.py`. Type trees cannot tell you this.
+
+This is not theoretical. The first full run of `tools/bench/node-coefficient-check.js` matched 74
+of 76 ship-node coefficients and caught **two that were 10x wrong** — both introduced hours earlier
+by "correcting" the wiki against a reading of SirRed's decompiled constants. Demeter's On-Site
+Printing Vehicles had been set to 30% against an authored 3%, making it the ship's most valuable
+node by an order of magnitude. Inference lost to authored data, in the same session, twice.
+
 ### Where a value has to come from
 
 **cifi-tools.com was built in collaboration with the game's developers. For anything that site
@@ -106,6 +125,8 @@ There is exactly one place for each of these. **Do not add a second.**
 | Headless IL2CPP dumper (metadata v39) | `tools/il2cpp-cli/` |
 | Method name -> RVA (replaces script.json) | `tools/il2cpp-cli/dumpindex.py` |
 | Decompile named methods to readable C | `tools/il2cpp-cli/decompile.py` (Ghidra + PyGhidra) |
+| **Read AUTHORED serialized data (values)** | `tools/il2cpp-cli/typetree.py` |
+| Authored ship-node coefficients | `tools/reference/ship-node-coefficients.json` |
 | Server-table capture | `tools/capture/` |
 | Per-hunter evaluation fidelity (UI) | `store[hunter].iterations` + `StoreSchema.ITERATIONS` / `clampIterations` |
 | Cancellation of long sim work | `HunterSim.throwIfAborted` / `isAbort` / `ABORTED` |
@@ -584,6 +605,8 @@ cost/param resolution.
 ```bash
 node tools/bench/schema-test.js        # store schema invariants (fast, run always)
 node tools/bench/relic-cost-test.js    # relic cost table + fragment arithmetic (fast)
+node tools/bench/node-coefficient-check.js # ship node coefficients vs the GAME'S AUTHORED values
+python tools/il2cpp-cli/typetree.py --dump FleetManager --grep BaseBonus  # read authored data
 node tools/bench/relic-arg-probe.js    # every declared relic reaches the wasm (fast)
 node tools/bench/path-relic-test.js    # effective path never recommends an inert relic
 node tools/bench/path-abort-test.js    # closing the Effective Path actually stops the work

@@ -115,17 +115,34 @@ def main():
     # and does not terminate usefully on this binary.
     _elf_holder = {}
 
-    def span_to_ret(addr, limit=0x600):
+    def classify_callee(addr, limit=0x600):
+        """(span, returns) for a callee, read from its actual bytes.
+
+        `returns` is the important half, and getting it wrong is what caused the runaway output.
+        IL2CPP getters END with a call to a throw/abort helper (0x1AFA69F here) that never returns:
+        it has no RET at all, just a chain of PLT jumps. An earlier version of this code forced
+        setNoReturn(False) on every callee, so the decompiler believed that helper returned, let
+        flow FALL THROUGH past the end of the function into the next one, and cascaded from there
+        through the binary.
+
+        Classification, entirely from the disassembly:
+          * first instruction is an unconditional JMP  -> PLT thunk; it returns via its target.
+          * a RET is reachable within `limit`          -> returns.
+          * otherwise                                  -> does not return (throw/abort helper).
+        """
         try:
             if "elf" not in _elf_holder:
                 from analyze import Elf
                 _elf_holder["elf"] = Elf(args.so)
-            for insn in _elf_holder["elf"].disasm_function(addr, addr + limit):
+            insns = _elf_holder["elf"].disasm_function(addr, addr + limit)
+            if insns and insns[0].mnemonic == "jmp":
+                return insns[0].size, True          # thunk
+            for insn in insns:
                 if insn.mnemonic == "ret":
-                    return (insn.address - addr) + insn.size
+                    return (insn.address - addr) + insn.size, True
         except Exception:                                              # noqa: BLE001
-            pass
-        return 0x80        # no RET found in range -- fall back, and the warning will say so
+            return 0x80, True       # unknown: assume it returns, the safer error here
+        return 0x80, False          # no RET, not a thunk -> non-returning
 
     if args.list_pattern:
         for rva, _o, name, sig in idx.find(args.list_pattern)[:100]:
@@ -157,8 +174,46 @@ def main():
     from ghidra.program.model.data import (
         BooleanDataType, DoubleDataType, FloatDataType, FunctionDefinitionDataType,
         IntegerDataType, LongDataType, ParameterDefinitionImpl, PointerDataType, VoidDataType)
+    from ghidra.program.model.listing import FlowOverride
     from ghidra.program.model.symbol import SourceType
     from ghidra.util.task import ConsoleTaskMonitor
+
+    def mark_tail_calls(listing, entry, end):
+        """Tell the decompiler that a JMP out of the body is a tail CALL, not a branch.
+
+        THIS is the fix for the runaway-output bug, and it took reading Ghidra's own decompiler
+        source to find. `Funcdata::startProcessing` (funcdata.cc) does:
+
+            Address baddr(baseaddr.getSpace(), 0);
+            Address eaddr(baseaddr.getSpace(), ~((uintb)0));
+            followFlow(baddr, eaddr);
+
+        -- the decompiler follows flow across the ENTIRE address space and never consults the
+        function's body. So `setBody` cannot bound it, which matches the measurement that the body
+        stayed pinned at its exact span while the output ballooned to ~960k chars.
+
+        CALLs are fine: they become call-specs and are not followed. But an unconditional JMP is
+        followed, and IL2CPP getters end in a tail-call JMP (e.g. `jmp BigDouble::op_Addition`).
+        Flow therefore walks into the callee, and then everything IT reaches. `checkContainedCall`
+        (flow.cc) subsequently rewrites every CALL whose target now lies inside the visited range
+        into a BRANCH -- "Possible PIC construction ... Changing call to branch" -- inlining those
+        too. That is the cascade.
+
+        FlowOverride.CALL_RETURN maps BRANCH -> CALL/RETURN, which is exactly a tail call, so flow
+        stops at the jump.
+        """
+        marked = 0
+        insn = listing.getInstructionAt(entry)
+        while insn is not None and insn.getAddress().compareTo(end) <= 0:
+            ft = insn.getFlowType()
+            if ft is not None and ft.isJump() and ft.isUnConditional() and not ft.isComputed():
+                for f in insn.getFlows() or []:
+                    if not (entry.getOffset() <= f.getOffset() <= end.getOffset()):
+                        insn.setFlowOverride(FlowOverride.CALL_RETURN)
+                        marked += 1
+                        break
+            insn = listing.getInstructionAfter(insn.getAddress())
+        return marked
 
     def ret_type(kind):
         return {"double": DoubleDataType(), "float": FloatDataType(), "void": VoidDataType(),
@@ -220,7 +275,6 @@ def main():
                     addr = flat.toAddr(target)
                     existing = fm.getFunctionAt(addr)
                     if existing is not None:
-                        existing.setNoReturn(False)
                         continue
                     hit = idx.name_at(target)
                     # Only name it when the address is EXACTLY a method start; landing mid-body
@@ -254,8 +308,9 @@ def main():
                     if hit and hit[0] == target:
                         c_start, c_end = idx.bounds(hit[2])
                         window = min((c_end - c_start) if c_end else 0x400, 0x4000)
+                        _, callee_returns = classify_callee(target, window)
                     else:
-                        window = span_to_ret(target)
+                        window, callee_returns = classify_callee(target)
                     callee_body = AddressSet(addr, addr.add(max(window, 1) - 1))
                     DisassembleCommand(callee_body, callee_body, True).applyTo(program, monitor)
                     if listing.getInstructionAt(addr) is None:
@@ -275,7 +330,8 @@ def main():
                             if fn is None:
                                 failures.append((target, type(exc).__name__))
                     if fn is not None:
-                        fn.setNoReturn(False)
+                        # Never blanket-assume "returns" -- see classify_callee.
+                        fn.setNoReturn(not callee_returns)
                         try:
                             fn.setInline(False)   # never fold a callee into the caller's body
                         except Exception:                              # noqa: BLE001
@@ -342,6 +398,15 @@ def main():
                     print(f"    WARNING {len(stub_failures)} callee stub(s) not declared: "
                           + ", ".join(f"0x{a:X} ({why})" for a, why in stub_failures[:4]))
 
+                # mark_tail_calls (FlowOverride.CALL_RETURN on a JMP leaving the body) is
+                # DELIBERATELY NOT CALLED. It is the textbook tail-call mechanism and it does work,
+                # but measured here it changed nothing (1 jump marked, call->branch count identical)
+                # while making a single small function take >10 minutes instead of seconds --
+                # setFlowOverride triggers re-disassembly and non-returning propagation inside the
+                # open transaction. The real cause was the callee returns-classification; see
+                # classify_callee. Kept for reference, not on the hot path.
+                tails = 0
+
                 fn = fm.getFunctionAt(entry)
                 if fn is None:
                     fn = fm.createFunction(t["label"], entry, body, SourceType.USER_DEFINED)
@@ -383,7 +448,7 @@ def main():
                         f" ({pic} call->branch) */\n\n{code}")
             results.append((t["label"], status, len(code), path))
             print(f"  {t['label']:48} {status:12} {len(code):>7} chars"
-                  f"  ({dropped} notes hidden, {pic} call->branch)")
+                  f"  ({dropped} notes hidden, {pic} call->branch, {tails} tail-call)")
 
         program.endTransaction(outer_tx, True)
         decomp.dispose()
