@@ -324,10 +324,32 @@ think one is wrong, disprove it with a test.
   the optimizer. **Their unowned case is now modelled exactly** -- `PowerGU1BonusCalc` returns a
   literal 1 when `PowerGU1Level <= 0`, and the research product is 1 at level 0, which is the
   reference account -- and `unmodelledInstallBonusTerms()` reports when an account owns them.
-  Their ACTIVE branches remain uncomputable: PowerGU1 needs `PowerGU1BonusExponentCrew` /
-  `PowerGU1BonusExponentRank`, and GemPerks is one of the classes whose type tree does not match
-  its serialized layout, so those values cannot be read; and we have no RU83/RU96 -> per-level
-  installs mapping.
+  **PowerGU1 is now fully modelled**, because the type-tree enum bug below was fixed and GemPerks
+  became readable: `PowerGU1BonusCalc` = `Pow(Pow(1 + 0.0012*L, FinalCradleCrew) *
+  Pow(1 + 0.02*L, FinalCradleRank), PowerQualityPower)`, using CRADLE's crew and rank even though
+  the result multiplies every ship's nodes. `PowerQualityPower` is 1 below quality level 2. What
+  remains unmodelled and reported: the quality-2+ exponent (an operand Cpp2IL could not resolve),
+  the PowerGU1 LEVEL itself (the gem store carries a tree level, node booleans and named upgrades
+  but not per-GU levels, so it reads 0 today), and any RU83/RU96 -> per-level installs mapping.
+- **THE TYPE-TREE GENERATOR DROPS ENUM-TYPED FIELDS, and `typetree.py` patches them back.** Unity
+  serialises an enum as a plain int, so every omitted enum leaves the reader 4 bytes short and the
+  rest of the object is garbage -- an array length gets read out of the middle of a PPtr and the
+  reader runs off the end thousands of bytes later. The symptom (`read___int64 out of bounds`)
+  looks nothing like the cause, which is why `GemPerks`, `MultiverseMarket` and `Gear` were written
+  off as "type tree does not match the serialized layout".
+  `GemPerks` alone has 38 `GemRequirement` fields (an enum) plus Odin's
+  `SerializationData.SerializedFormat` (enum `DataFormat`). `patch_missing_enums()` re-inserts them
+  from dump.cs, which supplies both halves needed: which types are enums, and each class's fields
+  in declaration order. **GemPerks and MultiverseMarket now read STRICTLY** (883 and 1127 fields,
+  no `--relaxed`), and re-extracting `authored-values.json` afterwards produced ZERO value changes,
+  so it is a pure fix rather than a re-interpretation.
+  It immediately paid twice: `MultiverseMarket.IS48Bonus` = 1.0 and `IS49Bonus` = 8.0 independently
+  confirm the free rank/crew-per-level constants that had been derived from this repo's own older
+  grant table, and `GemPerks.AttractionGU6BonusExponent` = 1.01 completes the evolution exponent.
+  Only enums are re-inserted -- the generator is RIGHT to omit `List<List<T>>` and
+  `List<Dictionary<..>>` (Unity cannot serialise them) and Odin-serialised fields (they live in the
+  `SerializationData` blob, not Unity's field stream). `Gear` still fails, now with a different
+  error, so it has a second unrelated problem.
 - **The loop-mod crew/rank terms ARE modelled.** `LM240Bonus` (crew) and `LM239Bonus1` (rank) are
   linear in the recovered C# -- `LM<n>Level * LM<n>BonusExponent1` -- and `loop-mods.json` already
   carried `BonusExponent1` for every mod, which is that same field. An earlier note in this file

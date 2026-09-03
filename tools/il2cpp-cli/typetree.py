@@ -43,6 +43,7 @@ returns, so no conversion is needed.
 """
 
 import argparse
+import re
 import glob
 import json
 import os
@@ -55,6 +56,121 @@ ASSET_DIR = os.path.join(GAMEFILES, "assets")
 UNITY_VERSION = "6000.3.8f1"
 # level0 is the scene and holds the manager MonoBehaviours; the others are checked as a fallback.
 ASSET_FILES = ("level0", "sharedassets0.assets", "globalgamemanagers.assets")
+
+
+_DUMP = os.path.join(GAMEFILES, "il2cpp-dump", "dump.cs")
+_TYPE_DECL = re.compile(r"^(?:public |private |internal |protected |sealed |abstract |static )*"
+                        r"(class|struct|enum)\s+([A-Za-z0-9_.<>`]+)")
+_FIELD_DECL = re.compile(
+    r"^\s+(?:public|private|protected|internal)\s+(?!static\b)(?:readonly\s+)?"
+    r"(.+?)\s+([\w<>`]+);\s*//\s*0x[0-9A-Fa-f]+\s*$")
+_dump_cache = {}
+
+
+def _dump_types():
+    """(enum_names, {type: [(field_name, field_type), ...] in declaration order}) from dump.cs."""
+    if _dump_cache:
+        return _dump_cache["enums"], _dump_cache["fields"]
+    enums, fields, current = set(), {}, None
+    with open(_DUMP, "r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            if line and line[0] not in " \t":
+                m = _TYPE_DECL.match(line)
+                if m:
+                    current = m.group(2)
+                    if m.group(1) == "enum":
+                        enums.add(current)
+                    else:
+                        fields.setdefault(current, [])
+                continue
+            if current is None or current not in fields:
+                continue
+            m = _FIELD_DECL.match(line.rstrip("\n"))
+            if m:
+                fields[current].append((m.group(2), m.group(1).strip()))
+    _dump_cache["enums"], _dump_cache["fields"] = enums, fields
+    return enums, fields
+
+
+def patch_missing_enums(nodes):
+    """Re-insert the ENUM-typed fields the generator drops.
+
+    THE BUG THIS WORKS AROUND. TypeTreeGeneratorAPI omits enum-typed fields from the tree, but
+    Unity serialises an enum as a plain int. Every omitted enum leaves the reader 4 bytes short,
+    and from that point the object is garbage -- an array length gets read out of the middle of a
+    PPtr and the reader runs off the end thousands of bytes later, which is why the symptom
+    (`read___int64 out of bounds`) looks nothing like the cause.
+
+    That single defect is what made `GemPerks` unreadable: `GemRequirement` is an enum and the
+    class has 38 of them, plus Odin's `SerializationData.SerializedFormat` (enum `DataFormat`).
+
+    dump.cs has both halves of what is needed -- which types are enums, and each class's fields in
+    declaration order -- so the omissions can be put back exactly where they belong. The
+    generator's ordering for the fields it DID emit matches dump order (verified for GemPerks: all
+    840 of them), so aligning on that order is sound.
+
+    Only enums are re-inserted. The other omissions are correct and must stay out: Unity genuinely
+    cannot serialise `List<List<T>>` or `List<Dictionary<..>>`, and Odin-serialised fields live in
+    the SerializationData blob rather than in Unity's field stream.
+    """
+    enums, dump_fields = _dump_types()
+    if not nodes:
+        return nodes
+
+    def build(index, level):
+        """Flat list -> [(node, children)] for everything at `level` starting at `index`."""
+        out = []
+        i = index
+        while i < len(nodes) and nodes[i]["m_Level"] >= level:
+            if nodes[i]["m_Level"] > level:
+                break
+            node = nodes[i]
+            kids, i = build(i + 1, level + 1)
+            out.append((node, kids))
+        return out, i
+
+    def build_at(i, level):
+        kids = []
+        while i < len(nodes) and nodes[i]["m_Level"] == level:
+            node = nodes[i]
+            sub, i = build_at(i + 1, level + 1)
+            kids.append((node, sub))
+        return kids, i
+
+    def patch(node, kids):
+        declared = dump_fields.get(node["m_Type"])
+        if declared and kids:
+            child_level = kids[0][0]["m_Level"]
+            present = {c[0]["m_Name"] for c in kids}
+            missing = [(n, t) for n, t in declared if n not in present and t in enums]
+            if missing:
+                by_name = {c[0]["m_Name"]: c for c in kids}
+                rebuilt, used = [], set()
+                for name, ftype in declared:
+                    if name in by_name:
+                        rebuilt.append(by_name[name]); used.add(name)
+                    elif ftype in enums:
+                        rebuilt.append(({"m_Level": child_level, "m_Type": "int",
+                                         "m_Name": name, "m_MetaFlag": 0}, []))
+                # Anything the generator emitted that dump.cs did not list (Unity's own base
+                # fields: m_GameObject, m_Enabled, m_Script, m_Name, ...) keeps its position at
+                # the front, where Unity writes it.
+                extra = [c for c in kids if c[0]["m_Name"] not in used]
+                kids = extra + rebuilt
+        return [(node, [x for k in kids for x in patch(*k)])]
+
+    roots, _ = build_at(0, nodes[0]["m_Level"])
+    flat = []
+
+    def emit(node, kids):
+        flat.append(node)
+        for k in kids:
+            emit(*k)
+
+    for node, kids in roots:
+        for n, k in patch(node, kids):
+            emit(n, k)
+    return flat
 
 
 class Extractor:
@@ -88,7 +204,8 @@ class Extractor:
                            "Use --list to see what is available.")
         if short_name not in self._nodes:
             asm, full = self.defs[short_name]
-            self._nodes[short_name] = json.loads(self.gen.get_nodes_as_json(asm, full))
+            raw = json.loads(self.gen.get_nodes_as_json(asm, full))
+            self._nodes[short_name] = patch_missing_enums(raw)
         return self._nodes[short_name]
 
     def read_instances(self, short_name, asset_files=ASSET_FILES, relaxed=False):

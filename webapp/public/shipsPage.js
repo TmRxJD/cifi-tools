@@ -387,15 +387,42 @@ function shipEvolutionMultiplier(shipId, evoLevel) {
 // Both are UNIFORM across a ship's nodes, so they scale every candidate equally and cannot reorder
 // the optimizer -- but they do scale the magnitudes.
 //
-// Both are exactly 1 when their source is unowned, and that branch is modelled precisely:
-// `PowerGU1BonusCalc` returns a literal 1 when `PowerGU1Level <= 0`, and the all-ships installs
-// bonus is the product of two research bonuses that are 1 at level 0. When they ARE owned we
-// cannot compute them -- PowerGU1's active branch needs `PowerGU1BonusExponentCrew` /
-// `PowerGU1BonusExponentRank`, and GemPerks is one of the classes whose type tree does not match
-// its serialized layout, so those values are unreadable; and we have no mapping from RU83/RU96 to
-// a per-level installs bonus. So this returns 1 and `unmodelledInstallBonusTerms()` says so.
+// POWER GU1, now fully known. From GemPerks.PowerGU1BonusCalc:
+//
+//   if (PowerGU1Level <= 0) return 1;
+//   a = Pow(1 + PowerGU1BonusExponentCrew * PowerGU1Level, FleetManager.FinalCradleCrew)
+//   b = Pow(1 + PowerGU1BonusExponentRank * PowerGU1Level, FleetManager.FinalCradleRank)
+//   return Pow(a * b, PowerQualityPower)
+//
+// It reads CRADLE's crew and rank specifically, even though the result multiplies every ship's
+// install bonuses. The two coefficients are authored (0.0012 and 0.02) and are only readable
+// because the type-tree enum fix landed -- GemPerks was unreadable before it. PowerQualityPower is
+// 1 unless PowerQualityLevel >= 2, and that branch has an operand Cpp2IL could not resolve, so it
+// is reported rather than guessed.
+const POWER_GU1_CREW_COEFF = 0.0012;   // GemPerks.PowerGU1BonusExponentCrew
+const POWER_GU1_RANK_COEFF = 0.02;     // GemPerks.PowerGU1BonusExponentRank
+
+/** The PowerGU1 level, once it is an input. Not yet in the gem store -- see the note below. */
+function powerGU1Level() {
+  const gems = (window.store && window.store.gems) || {};
+  const power = gems.power || {};
+  return Number((power.upgrades && power.upgrades.gu1) || 0) || 0;
+}
+
+/**
+ * The global multiplier applied to every install node's bonus.
+ * Exactly 1 when its sources are unowned, which is the common case and is what the game returns.
+ * @returns {number}
+ */
 function installBonusGlobalMultiplier() {
-  return 1;
+  const level = powerGU1Level();
+  if (level <= 0) return 1;   // the game returns a literal 1 on this branch
+  const cradle = getShipInput(1);
+  const crew = Number(cradle.crew) || 0;
+  const rank = Number(cradle.rank) || 0;
+  // PowerQualityPower is 1 below quality level 2; the >= 2 branch is unmodelled and reported.
+  return Math.pow(1 + POWER_GU1_CREW_COEFF * level, crew)
+    * Math.pow(1 + POWER_GU1_RANK_COEFF * level, rank);
 }
 
 /** Install-bonus multipliers we cannot compute for this account. Empty when the model is exact. */
@@ -403,9 +430,14 @@ function unmodelledInstallBonusTerms() {
   const gems = (window.store && window.store.gems) || {};
   const research = (window.store && window.store.fleetResearch && window.store.fleetResearch.levels) || {};
   const out = [];
-  const gu1 = Number(gems.powerGU1Level || gems.PowerGU1Level || 0) || 0;
-  if (gu1 > 0) {
-    out.push(`PowerGU1 (level ${gu1}) multiplies every install bonus by an amount this tool cannot compute`);
+  // PowerGU1's own maths is modelled; what is not is (a) the quality-2+ exponent, whose operand
+  // Cpp2IL could not resolve, and (b) the LEVEL itself, which the gem store does not carry yet --
+  // it tracks a tree level, node booleans and named upgrades, but not per-GU levels. Until that
+  // input exists the level reads 0 and the multiplier is 1, which is right for any account
+  // without the upgrade and wrong for one with it. Say so rather than look confident.
+  const quality = Number((gems.power && gems.power.qualityLevel) || 0) || 0;
+  if (quality >= 2) {
+    out.push(`Power quality ${quality} raises the PowerGU1 bonus to an exponent this tool cannot compute`);
   }
   const ru83 = Number(research.ru83 || 0) || 0;
   const ru96 = Number(research.ru96 || 0) || 0;
