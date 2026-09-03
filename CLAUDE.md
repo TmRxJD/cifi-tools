@@ -721,10 +721,30 @@ think one is wrong, disprove it with a test.
   3. `resolve-loads.py FleetManager` resolves 413 unnamed reads and **none** of them is a `Gear`
      field -- which is the check that matters, since the evolution-bonus miss proved a name-grep
      cannot see an unresolved field read.
+  4. **Unresolved CALLS were the real hole in checks 2-3, and they are now closed too.** A gear
+     getter is a call, and `resolve-loads.py` only names field reads -- so "no unresolved Gear
+     field" said nothing about a call Cpp2IL could not resolve. FleetManager has 540 such notes,
+     but only **8 distinct addresses**; resolving them through `dumpindex.py` gives runtime
+     plumbing (`__Il2CppComDelegate$$Finalize`) or addresses that are not method starts at all.
+     None is a gear getter. **When you conclude something is absent from a Cpp2IL body, account
+     for BOTH note kinds** -- "Unmanaged memory load" (fields) and "Method not found" (calls).
+  5. **The authored data agrees, via the exact mechanism the UI uses.** Each piece carries
+     `<Color>Item<N>FleetIcon1/2`, the install-node indicators the gear screen shows. Populated
+     counts: Purple 6/6, Orange 8/8, Red/Green/Blue/White 10/10 -- **54 in total, exactly the 54
+     getters FleetManager calls** -- and **Yellow 0/10, Black 0/10, every reference a null
+     `m_PathID: 0`**. The designers wired icons for precisely the colours whose bonuses are
+     applied. (The icons resolve to a shared `GearBonusActive` indicator, so they mark THAT a
+     piece buffs a node, not WHICH -- useful as presence evidence, not as a mapping.)
   Adding them would mean inventing install targets, which is precisely the failure this file exists
   to prevent. When a future build wires them, `extract-gear-installs.py` will start emitting Yellow
   and Black rows and `gear-install-check.js` will print SKIP lines for them -- that is the signal to
   add the sets.
+  **IMPORTANT CAVEAT, and the most likely reason to revisit this:** all of the above describes the
+  APK in `tools/gamefiles/apk-0.7.3.54`. Gear plainly does buff install nodes -- that is the whole
+  point of the system, and it is confirmed for all 54 mappings we model. **If the live game shows
+  install icons on Yellow or Black pieces, the client is NEWER than our dump and the answer is to
+  re-pull the APK and re-run `extract-gear-installs.py`, not to re-argue this from the old files.**
+  A conclusion about a specific build is not a conclusion about the game.
 - **`getGearSets()` reconciles the stored list against `REAL_GEAR_PIECES` by name; it used to
   return the stored list verbatim.** That meant the store, not the code, was authoritative for
   game-sourced data: **any piece added later never appeared for anyone who had ever opened the Ships
