@@ -78,7 +78,33 @@
     return gemTree(state, 'exodus')?.nodes?.[nodeIndex] || false;
   }
 
+  // TIER-2 RELICS ARE GATED IN THE SIM, NOT JUST IN THE UI, and this is measured rather than
+  // assumed. The live site ignores `relics.t2r7` entirely while Power gem level < 3 -- feeding it
+  // t2r7 at 5, 40, or anything else returns BYTE-IDENTICAL output -- and applies it normally once
+  // Power reaches 3. This tool applied it unconditionally, which is a large gap, not a rounding
+  // one: a level-70 Borge read 55.12m loot here against the site's 16.54m, a 70% overstatement,
+  // and average stage 251.6 against 222.6.
+  //
+  // With Power 3 set on both sides the two agree exactly (loot 55,123,454 vs the site's 55.12m,
+  // stage 251.6202 vs 251.6, mat1 3.74b both), so the RELIC MATH was never wrong -- only the gate.
+  //
+  // Deliberately narrow. Other gated categories are NOT gated here, because the site was measured
+  // NOT to gate them in the sim: a Borge build with `gadgets.wrench: 60` and no gem state at all
+  // matches the site within 0.33%, even though the wrench is nominally Exodus-4 gated. Applying
+  // every UPGRADE_GATES entry would therefore break parity that currently holds. Each additional
+  // category needs the same measurement before being added -- set it on the site's account with
+  // the gem below its gate and see whether the output moves.
+  function tierTwoRelicLocked(name, state) {
+    if (!/^upgrades\.relics\.t2r\d+$/.test(name)) return false;
+    const gate = global.UPGRADE_GATES && global.UPGRADE_GATES[name];
+    if (!gate) return false;
+    const tree = gemTree(state, gate.gem);
+    return !(tree && (tree.level || 0) >= gate.level);
+  }
+
   function resolveParam(name, state) {
+    if (tierTwoRelicLocked(name, state)) return 0;
+
     // exodus_temporalEvolutionCount is the ONE derived count, and this mirrors the live tool's own
     // resolver exactly: gate on exodus_gem1 (an override on the gate speaks for it), then sum the
     // temporal and evolution gem upgrades.

@@ -45,7 +45,25 @@ TWINS.forEach(([a, b]) => { twinOf.set(a, b); twinOf.set(b, a); });
 
   for (const hunter of ['borge', 'ozzy', 'knox']) {
     const names = params[hunter];
-    const base = { hunterStats: {}, talents: {}, attributes: {}, upgrades: {}, overrides: {}, level: 60 };
+    // Probe with every GATE SATISFIED. This bench asks whether a parameter is plumbed through to
+    // its wasm slot, which is a different question from whether the account has unlocked it -- and
+    // the two got conflated the moment tier-2 relics started being gated in the sim (correctly:
+    // the live site ignores them below Power 3). With no gem state those params resolve to 0 and
+    // read as "the resolver silently drops it", which is the gate working, not a plumbing bug.
+    const unlockedGems = {};
+    for (const gate of Object.values(sb.UPGRADE_GATES || {})) {
+      const cur = unlockedGems[gate.gem] || { level: 0, nodes: [], upgrades: {} };
+      cur.level = Math.max(cur.level, gate.level);
+      if (gate.node) {
+        cur.nodes = cur.nodes.slice();
+        cur.nodes[gate.node - 1] = true;
+      }
+      unlockedGems[gate.gem] = cur;
+    }
+    const base = {
+      hunterStats: {}, talents: {}, attributes: {}, upgrades: {}, overrides: {}, level: 60,
+      gemPlannerStore: { gemStates: unlockedGems },
+    };
     const a0 = await sb.HunterSim.buildArgs(hunter, base);
     if (a0.length !== names.length) {
       failures++;
