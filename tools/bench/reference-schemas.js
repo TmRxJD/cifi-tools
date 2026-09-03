@@ -225,6 +225,20 @@ const schemas = {
     }).strict()),
   }).strict(),
 
+  // Which production pools read each install node's bonus -- the node's true resource set.
+  // An EMPTY array is meaningful and must stay allowed: direct Cells/Shards/RP boosters and
+  // amplifiers have no *Production consumer, and node-resource-check.js relies on being able to
+  // tell "no consumer" apart from "not extracted". The whole record must not be empty, though --
+  // that would mean the extractor read nothing and every comparison silently passed.
+  'node-resources.json': z.object({
+    ...meta,
+    _meaning: z.string().min(1),
+    productionConsumers: nonEmptyRecord(
+      z.enum(['Gen', 'Tech', 'Loop', 'Auto', 'Shard', 'Research', 'Academy']),
+      nonEmptyRecord(numericKey, z.array(z.string().regex(/Production$/))),
+    ),
+  }).strict(),
+
   'gem-gates.json': z.object({
     ...generatedMeta,
     entries: z.array(z.object({

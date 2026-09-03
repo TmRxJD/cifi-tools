@@ -151,6 +151,7 @@ There is exactly one place for each of these. **Do not add a second.**
 | Ship install node names | `tools/reference/ship-node-names.json` |
 | Fleet badge -> ships + value | `tools/reference/badge-map.json` |
 | Every factor per install node | `tools/reference/node-factors.json` |
+| Which pools read each node's bonus | `tools/reference/node-resources.json` |
 | Zod schemas for the references | `tools/bench/reference-schemas.js` |
 | Zod schemas for the app's own data | `tools/bench/app-schemas.js` |
 | Authored tier-2 relic caps/costs | `tools/reference/relic-tier2.json` |
@@ -756,6 +757,54 @@ think one is wrong, disprove it with a test.
   real gap. This is the check to look at first after any future APK pull.
   Verified with four negative controls: attribute caps becoming raisable, an unrecognised raise
   operand, install node 12 being authored, and the talent raise disappearing.
+- **THE FLEET SIM CREDITED 11 OF 23 CHECKABLE NODES TO THE WRONG GENERATOR TIERS, and the
+  displayed totals were out by up to ~31,000x in both directions.** A node's RESOURCE was the last
+  field of the install catalog with no game verification -- name, coefficient, counter, cap and gate
+  all had it -- and it was parsed out of the node's ENGLISH EFFECT TEXT by keyword. Four separate
+  bugs, all found by comparing against the game rather than by reading the parser:
+  - **`&` parsed as a RANGE.** `+0.02% MK1 & MK4 outputs` credited mk1,mk2,mk3,mk4. `&` is a list
+    separator; the game reads that node in MK1Production and MK4Production only.
+  - **Comma lists truncated to the first tier.** `+0.1% MK1, MK2, MK3 outputs` credited mk1 alone,
+    because a single `String.match` stops at the first hit -- so three of the highest-percentage
+    nodes in the fleet were credited with a third of what they boost.
+  - **An EDITORIAL ASIDE inside a PARSED field.** Zagreus 7's effect string ended `(wiki text as-is
+    -- possibly meant "all Generators")`. Those words made the tool credit all ten tiers, and
+    because MK3 was also named, MK3 was pushed twice and its factor SQUARED. Two more nodes carried
+    similar asides. **Never put commentary in a field something parses** -- uncertainty belongs in a
+    code comment, where no regex can read it as data. `node-resource-check.js` now fails on any
+    effect string containing one.
+  - **The counter's own tier read as a boosted tier.** `+0.5% MK1 output, per manually purchased
+    MK2 Generator` is MK1 boosted and MK2 counted. This one was INTRODUCED by the first attempt at
+    fixing the others, which is exactly why the bench compares every node rather than the ones that
+    were originally wrong.
+  **The reference is the game's own consumer list**, not the prose: each `RU<Cat><n>Bonus` is read
+  by exactly the `*Production` properties it feeds, so that list IS the node's resource set
+  (`extract-node-resources.py`). Comparing our tags against the same text we parse would test the
+  parser against itself.
+  **Three effect strings were corrected against the game** -- Auxesia 4 to MK1, Hephaestus 7 and
+  Zagreus 7 to MK5. Two of the three asides had guessed right years ago and were never acted on.
+  **Scope of the fix, stated precisely: this changed the DISPLAYED totals, not the allocations.**
+  Measured before/after across all 7 ships at budgets 75/150/300, every optimizer plan is
+  byte-identical, because `nodeWeight` collapses every `mkN` tag into one resource bucket and the
+  count of tiers does not change the weight. The Fleet page's per-tier multipliers, which did use
+  the tags directly, moved a great deal -- Demeter MK4 40,856,318 -> 1,283 and Koios MK3 2,299 ->
+  85,063 on the same fixture.
+  **Known and reported, not silently truncated:** the game's production chain runs to **MK12**
+  (`RU7AcademyBonus` is read by MK1..MK12Production) while `GEN_TIERS` stops at MK10, so an
+  "All Gens" node really does feed two tiers this tool does not track. `node-resource-check.js`
+  prints that rather than letting the tags quietly disagree.
+- **`fleet-formula-check.js` checks the ARITHMETIC, which every other fleet bench takes for
+  granted.** The coefficient, counter, badges, caps and factor-completeness each have their own
+  check; none of them notices if the pieces are COMBINED wrongly. It rebuilds
+  `1 + BaseBonus * crew * counter * level * badge * research * gear` from the AUTHORED coefficient
+  (not the effect text the tool parses, or it would test the tool against itself) and compares
+  against `nodeOwnBonusPct` over 228 node/state combinations, plus asserts the bonus is exactly
+  linear in level and in crew.
+  **Its tolerance is 1e-6 relative and that number is justified, not tuned.** The two sides read the
+  same coefficient from different places: Unity stores it as a float32 (0.027% is held as
+  0.0002699999895412475) while the effect text carries the clean decimal, so they agree to ~1e-8
+  and no closer. Demanding more would be demanding the effect text carry float32 rounding error. A
+  deliberate 0.5% error -- 5,000x smaller than any real composition bug -- still fails it.
 - **A modal that starts async work must cancel it on close, and `titledModal` fires `modal-close`
   so it can.** Closing used to just `remove()` the overlay, leaving the Effective Path walk
   running: invisible, uncancellable, and still competing for the main thread and for wasm
@@ -1371,6 +1420,9 @@ node tools/bench/ship-node-gate-check.js # install prereqs + base caps vs the GA
 node tools/bench/node-counter-check.js  # each node's 'per X' counter vs the GAME (77 nodes)
 node tools/bench/node-name-check.js     # node names vs the game's fleet tooltips (77 nodes)
 node tools/bench/node-effect-probe.js  # every install node actually moves the output
+node tools/bench/node-resource-check.js # which RESOURCES each node boosts, vs the GAME
+node tools/bench/fleet-formula-check.js # the per-node bonus COMPOSES as the game does
+CIFI_APK=apk-0.7.3.61 python tools/bench/extract-node-resources.py --write
 node tools/bench/uniform-term-check.js # omitted per-node terms are provably 1 until bought
 node tools/bench/badge-check.js        # fleet badges: ships + multipliers vs the GAME
 node tools/bench/node-factor-check.js  # EVERY factor in every node getter is accounted for

@@ -1,0 +1,139 @@
+{
+  "_source": "`RU<Cat><n>Bonus` reads inside *Production properties of GeneratorManager, FleetManager, recovered via tools/il2cpp-cli/csharp.py",
+  "_game": "apk-0.7.3.61",
+  "_meaning": "the production pools that actually read each node's bonus -- the node's true resource set. An EMPTY list means no *Production property reads it, which is the normal case for direct resource boosters and amplifiers, not a gap.",
+  "productionConsumers": {
+    "Academy": {
+      "1": [],
+      "4": [],
+      "5": [],
+      "7": [
+        "MK10Production",
+        "MK11Production",
+        "MK12Production",
+        "MK1Production",
+        "MK2Production",
+        "MK3Production",
+        "MK4Production",
+        "MK5Production",
+        "MK6Production",
+        "MK7Production",
+        "MK8Production",
+        "MK9Production"
+      ],
+      "8": [],
+      "11": []
+    },
+    "Auto": {
+      "1": [
+        "MK1Production",
+        "MK2Production",
+        "MK3Production",
+        "MK4Production"
+      ],
+      "4": [],
+      "5": [],
+      "7": [
+        "MK5Production"
+      ],
+      "8": [],
+      "11": []
+    },
+    "Gen": {
+      "1": [],
+      "2": [
+        "MK1Production"
+      ],
+      "3": [
+        "MK2Production"
+      ],
+      "4": [
+        "MK1Production"
+      ],
+      "5": [
+        "MK3Production"
+      ],
+      "6": [
+        "MK4Production"
+      ],
+      "7": [
+        "MK2Production"
+      ],
+      "8": [],
+      "11": []
+    },
+    "Loop": {
+      "1": [],
+      "2": [
+        "MK1Production",
+        "MK2Production",
+        "MK3Production"
+      ],
+      "4": [
+        "MK2Production"
+      ],
+      "5": [
+        "MK3Production"
+      ],
+      "6": [
+        "MK4Production"
+      ],
+      "7": [
+        "MK5Production"
+      ],
+      "8": [],
+      "11": []
+    },
+    "Research": {
+      "1": [],
+      "4": [
+        "MK3Production",
+        "MK6Production"
+      ],
+      "7": [
+        "MK1Production",
+        "MK2Production",
+        "MK3Production",
+        "MK4Production",
+        "MK5Production",
+        "MK6Production"
+      ],
+      "8": [],
+      "11": []
+    },
+    "Shard": {
+      "3": [],
+      "4": [
+        "MK1Production",
+        "MK4Production"
+      ],
+      "5": [
+        "MK2Production",
+        "MK5Production"
+      ],
+      "7": [
+        "MK3Production",
+        "MK6Production"
+      ],
+      "8": [],
+      "11": []
+    },
+    "Tech": {
+      "3": [],
+      "4": [
+        "MK1Production"
+      ],
+      "5": [
+        "MK2Production"
+      ],
+      "6": [
+        "MK3Production"
+      ],
+      "7": [
+        "MK4Production"
+      ],
+      "8": [],
+      "11": []
+    }
+  }
+}

@@ -77,7 +77,7 @@ const SHIP_NODE_CATALOG = {
     1: { source: 'game', ruId: 1, name: 'Improved Tech Software', max: 250, effect: '+1% final output of Tech Software upgrades, per crew member' },
     2: { source: 'game', ruId: 2, name: 'Improved Tech Hardware', max: 15, gateAtTotalInstalls: 5, effect: '+1% final output of Tech Hardware upgrades, per crew member' },
     3: { source: 'game', ruId: 3, name: 'Precise Calculations', max: 15, gateAtTotalInstalls: 5, gearKey: 'techUpgrades', effect: '+0.1% Cells gained, per Tech Upgrade currently purchased, per crew member' },
-    4: { source: 'game', ruId: 4, name: 'Optimized Chipsets', max: 20, gateAtTotalInstalls: 25, gearKey: 'techUpgrades', effect: '+0.1% MK3 output, per Tech Upgrade currently purchased, per crew member (wiki text as-is -- likely meant MK1 given the node order/name)' },
+    4: { source: 'game', ruId: 4, name: 'Optimized Chipsets', max: 20, gateAtTotalInstalls: 25, gearKey: 'techUpgrades', effect: '+0.1% MK1 output, per Tech Upgrade currently purchased, per crew member' },
     5: { source: 'game', ruId: 5, name: 'Optimized Power Supplies', max: 20, gateAtTotalInstalls: 25, gearKey: 'techUpgrades', effect: '+0.1% MK2 output, per Tech Upgrade currently purchased, per crew member' },
     // Nodes 6/7 `max` corrected 2026-09-02 against SirRed's CIFI Ouroboros Helper Tool (its
     // Assembly-CSharp.dll is plain Mono IL, decompiled directly) -- same wiki-understated-cap
@@ -111,7 +111,7 @@ const SHIP_NODE_CATALOG = {
     // (tools/reference/research.json, RU6.Requirement=40) -- the wiki said 20, matching slot
     // 4/5's gate instead of the real value, which actually matches slot 7's 40.
     6: { source: 'game', ruId: 6, name: 'Observation Theory', max: 20, gateAtTotalInstalls: 40, gearKey: 'loopModsOwned', effect: '+0.01% MK4 output, per Loop Mod owned, per crew member' },
-    7: { source: 'game', ruId: 7, name: 'Reflection Theory', max: 20, gateAtTotalInstalls: 40, gearKey: 'loopModsOwned', effect: '+0.01% MK3 output, per Loop Mod owned, per crew member (wiki text as-is -- possibly meant "all Generators")' },
+    7: { source: 'game', ruId: 7, name: 'Reflection Theory', max: 20, gateAtTotalInstalls: 40, gearKey: 'loopModsOwned', effect: '+0.01% MK5 output, per Loop Mod owned, per crew member' },
     // Nodes 8/9/10/11: `max` corrected 2026-07-31 by direct screenshot comparison against a
     // live account (real caps 150/50/125/100 at 5x). Node 9/11 levels also swapped -- same
     // pattern as Cradle/Auxesia/Hephaestus (account-confirmed directly: real has 1 point on
@@ -128,7 +128,7 @@ const SHIP_NODE_CATALOG = {
     4: { source: 'game', ruId: 4, name: 'Heavy Duty Grabbies', max: 15, gateAtTotalInstalls: 20, gearKey: 'automationsUnlocked', effect: '+5% Cells Gained, per Automation purchased, per crew member' },
     5: { source: 'game', ruId: 5, name: 'Manual Overkill', max: 15, gateAtTotalInstalls: 20, gearKey: 'totalManualGens', effect: '+0.1% Cells Gained, per manually purchased generator, per crew member' },
     6: { source: 'game', ruId: 6, name: 'Accumulation Modification', max: 5, gateAtTotalInstalls: 60, gearKey: 'totalManualGens', effect: '+0.001% Mod Points Gained, per manually purchased generator, per crew member' },
-    7: { source: 'game', ruId: 7, name: 'Fiver Connection', max: 20, gateAtTotalInstalls: 60, gearKey: 'automationsUnlocked', effect: '+2% MK3 output, per Automation owned, per crew member (wiki text as-is -- name suggests MK5)' },
+    7: { source: 'game', ruId: 7, name: 'Fiver Connection', max: 20, gateAtTotalInstalls: 60, gearKey: 'automationsUnlocked', effect: '+2% MK5 output, per Automation owned, per crew member' },
     // Nodes 9-11: `max`/`ruId` corrected 2026-07-31 by direct screenshot comparison against a
     // live account -- same node-9/11 level swap as Cradle/Auxesia, plus 9/10/11 all share the
     // same real cap (425 at 5x = base 85), not the smaller/differing wiki values previously
@@ -542,6 +542,12 @@ const CODE_TO_GRID = Object.fromEntries(GRID_TO_CODE.map((code, i) => [code, i +
 // already read up to MK12 -- see mapSaveToUnlockedGens in shipSchema.js -- it just had nothing
 // past MK8 to write into before now).
 const GEN_TIERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+// The highest generator tier THIS TOOL models. The game's production chain runs to MK12 (its
+// `RU7AcademyBonus` is read by MK1Production..MK12Production), so an "All Gens" node really does
+// touch two tiers we do not track. Not modelling MK11/MK12 is a scope decision, not an oversight,
+// and node-resource-check.js REPORTS the shortfall rather than letting the tags quietly disagree
+// with the game.
+const MAX_GEN_TIER = 10;
 
 // Demeter's "Ahead of the Curve" (ship 5, slot 1). Its payoff lands at the start of the NEXT
 // loop reset rather than the active run, so the marginal-value engine cannot score it: there is
@@ -593,12 +599,34 @@ function effectResources(effect) {
     tags.push('allGens');
     GEN_TIERS.forEach((n) => tags.push(`mk${n}`));
   }
-  const mkRange = effect.match(/mk\s?(\d)(?:\s?[-–&](?:\s?mk\s?)?(\d))?/i);
-  if (mkRange) {
-    const start = parseInt(mkRange[1], 10);
-    const end = mkRange[2] ? parseInt(mkRange[2], 10) : start;
-    for (let i = start; i <= end && i <= 12; i++) tags.push(`mk${i}`);
+  // Generator tiers. This used to be ONE regex match treating any separator as a RANGE, and it was
+  // wrong in two ways that a comparison against the game exposed (see node-resource-check.js):
+  //
+  //   * "+0.02% MK1 & MK4 outputs" gave mk1,mk2,mk3,mk4. `&` is a LIST separator, not a range --
+  //     the game reads that node's bonus in MK1Production and MK4Production only, so the tool was
+  //     crediting two tiers that get nothing.
+  //   * "+0.1% MK1, MK2, MK3 outputs" gave mk1 alone, because a single `match` stops at the first
+  //     hit. Three of the highest-percentage nodes in the fleet were being credited with a third
+  //     of what they actually boost.
+  //
+  // Both errors reach the OPTIMIZER, not just the display: nodeMarginalLogGain weights a node by
+  // the resources it is tagged with, so a mis-tagged node is mis-ranked.
+  //
+  // So: collect EVERY `mkN` mentioned, and expand a range only for an explicit dash.
+  //
+  // Scan only the EFFECT clause, never the counter. A node reads as
+  // `+0.5% MK1 Generator output, per manually purchased MK2 Generator, per crew member`: the tier
+  // being boosted is MK1, and the MK2 in the tail is the thing being COUNTED. Collecting every
+  // `mkN` in the whole string credits the counter's tier as if it were boosted -- which is what a
+  // first pass at this fix did, turning two correct nodes into wrong ones.
+  const effectClause = effect.split(/,\s*per\s/i)[0];
+  const mkTiers = new Set();
+  for (const m of effectClause.matchAll(/mk\s?(\d{1,2})(?:\s?[-–]\s?(?:mk\s?)?(\d{1,2}))?/gi)) {
+    const start = parseInt(m[1], 10);
+    const end = m[2] ? parseInt(m[2], 10) : start;
+    for (let i = start; i <= end && i <= MAX_GEN_TIER; i++) mkTiers.add(i);
   }
+  mkTiers.forEach((n) => tags.push(`mk${n}`));
   // Tech Software/Hardware Upgrade OUTPUT nodes (Auxesia 1/2, Hephaestus 2's "Software & Hardware
   // Tech Upgrades" combined wording) aren't a final resource at all -- boosting their "output"
   // means your Tech Upgrade COUNT itself compounds faster over time, which several OTHER
@@ -612,7 +640,11 @@ function effectResources(effect) {
     if (/software/i.test(effect)) tags.push('techSoftware');
   }
   if (!tags.length) tags.push('other');
-  return tags;
+  // UNIQUE. `computeResourceBonuses` multiplies a node's factor in once per tag, so a repeated tag
+  // squares that node's contribution to that one resource. Zagreus 7 did exactly that: its effect
+  // text mentioned MK3 and also (in an editorial aside) "all Generators", so mk3 was pushed twice
+  // and came out squared while nine other tiers were credited for nothing.
+  return [...new Set(tags)];
 }
 const TECH_UPGRADE_TAGS = ['techSoftware', 'techHardware'];
 const RESOURCE_LABELS = {
@@ -658,6 +690,20 @@ function gearMultiplierFor(gearKey, gear) {
 // "(additive)" in its own effect text). This is an inference from those two signals, not a
 // live cross-source diff (the game doesn't expose a combined-total display to diff against) --
 // treat it at the same confidence tier as a `source: 'wiki'` catalog entry, not `'confirmed'`.
+//
+// THREE EFFECT STRINGS WERE CORRECTED AGAINST THE GAME, and the reason matters more than the three
+// values. They read like `+0.1% MK3 output, ... (wiki text as-is -- likely meant MK1 given the
+// node order/name)`: a wiki reading, plus an EDITORIAL ASIDE about how much to trust it. The aside
+// was honest, but it sat inside a field that `effectResources` PARSES -- so the words "all
+// Generators" inside Zagreus 7's parenthetical made the tool credit that node to all ten generator
+// tiers and, because MK3 was also named, count MK3 twice.
+//
+// The game settles all three: a node's true resource set is the list of `*Production` properties
+// that read its `RU<Cat><n>Bonus`, and it says MK1 (Auxesia 4), MK5 (Hephaestus 7) and MK5
+// (Zagreus 7). Two of the three asides had guessed correctly and were never acted on.
+//
+// The rule this leaves behind: NEVER put commentary in a field something parses. Uncertainty about
+// a value belongs in a comment beside it, where no regex can read it as data.
 // A single node's own contribution at a given level, in raw %/100 terms (not yet converted to a
 // multiplier) -- computeResourceBonuses converts THIS to its own (1+pct/100) factor before
 // multiplying it in; factored out separately so the node's OWN tooltip can show its real "Total
