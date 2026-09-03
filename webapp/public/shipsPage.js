@@ -69,8 +69,11 @@ const SHIP_NODE_CATALOG = {
     // Assembly-CSharp.dll is plain Mono IL, decompiled directly) -- same wiki-understated-cap
     // pattern as nodes 8/11 below (real cap 100 at 5x = base 20, not 15), just not caught by the
     // earlier screenshot pass because that only checked nodes 8-11.
-    6: { source: 'confirmed', ruId: 6, name: 'Optimized Hard Drives', max: 20, gateAtTotalInstalls: 50, gearKey: 'techUpgrades', effect: '+0.05% MK3 output, per Tech Upgrade currently purchased, per crew member' },
-    7: { source: 'confirmed', ruId: 7, name: 'Optimized Cell Vacuum', max: 20, gateAtTotalInstalls: 50, gearKey: 'techUpgrades', effect: '+0.05% MK4 output, per Tech Upgrade currently purchased, per crew member' },
+    // max 15, not the wiki's 20: `RU6TechMaxLevel`/`RU7TechMaxLevel` are 15 in the authored
+    // FleetManager data. `source: 'confirmed'` covers name/effect/GATE (save-diffed), never the
+    // cap -- caps were transcribed from the wiki, and these two were stale there.
+    6: { source: 'confirmed', ruId: 6, name: 'Optimized Hard Drives', max: 15, gateAtTotalInstalls: 50, gearKey: 'techUpgrades', effect: '+0.05% MK3 output, per Tech Upgrade currently purchased, per crew member' },
+    7: { source: 'confirmed', ruId: 7, name: 'Optimized Cell Vacuum', max: 15, gateAtTotalInstalls: 50, gearKey: 'techUpgrades', effect: '+0.05% MK4 output, per Tech Upgrade currently purchased, per crew member' },
     // Nodes 8/11: `max`/`ruId` corrected 2026-07-31 by direct screenshot comparison against a
     // live account -- same pattern found on Cradle: node 9 and node 11's real levels were
     // swapped (the account's real level showed up on node 9 in-game but node 11 in this tool),
@@ -123,12 +126,14 @@ const SHIP_NODE_CATALOG = {
   },
   5: { // Demeter -- ranks up by completing Operations. Unlocks Shard Mining.
     1: { source: 'confirmed', name: 'Ahead of the Curve', max: 5, ruId: 1, effect: '+1 completed operation per crew member on new-run start (no immediate shards)' },
-    // gateAtTotalInstalls added 2026-09-02 against SirRed's CIFI Ouroboros Helper Tool (its
-    // Assembly-CSharp.dll is plain Mono IL, decompiled directly): both slots require 1 total
-    // install first (i.e. node 1 must be spent before either unlocks), not open from start as
-    // previously modelled.
-    2: { source: 'confirmed', name: 'Better Mineral Extraction', max: 250, ruId: 2, gateAtTotalInstalls: 1, effect: '+1% Shards Gained, per crew member' },
-    3: { source: 'confirmed', name: 'Rare Organism Detection', max: 25, ruId: 3, gateAtTotalInstalls: 1, gearKey: 'operationsCompleted', effect: '+0.2% Cells Gained, per Operation Completed, per crew member' },
+    // REVERTED to open-from-start 2026-09-03. A `gateAtTotalInstalls: 1` was added here the day
+    // before, from SirRed's CIFI Ouroboros Helper Tool. The GAME's own authored value is
+    // `RU2ShardRequirement = 0` and `RU3ShardRequirement = 0` -- both slots ARE open from the
+    // start, which is what this catalog said originally. Same failure as the Demeter coefficient
+    // incident: a third-party tool overrode a correct value, and inference lost to authored data.
+    // SirRed's tool is a baseline, never the source of truth.
+    2: { source: 'confirmed', name: 'Better Mineral Extraction', max: 250, ruId: 2, effect: '+1% Shards Gained, per crew member' },
+    3: { source: 'confirmed', name: 'Rare Organism Detection', max: 25, ruId: 3, gearKey: 'operationsCompleted', effect: '+0.2% Cells Gained, per Operation Completed, per crew member' },
     4: { source: 'confirmed', name: 'Canned Mineral Water', max: 25, ruId: 4, gateAtTotalInstalls: 10, gearKey: 'operationsCompleted', effect: '+0.02% MK1 & MK4 outputs, per Operation Completed, per crew member' },
     5: { source: 'confirmed', name: 'Bi-Product Goo', max: 25, ruId: 5, gateAtTotalInstalls: 10, gearKey: 'operationsCompleted', effect: '+0.02% MK2 & MK5 outputs, per Operation Completed, per crew member' },
     // REVERTED to 0.001% 2026-09-02, later the same day. It had just been "corrected" to 0.01%

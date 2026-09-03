@@ -146,6 +146,7 @@ There is exactly one place for each of these. **Do not add a second.**
 | **Read method BODIES as C# (logic)** | `tools/il2cpp-cli/csharp.py` (Cpp2IL + ilspycmd) |
 | **Name the field reads Cpp2IL could not resolve** | `tools/il2cpp-cli/resolve-loads.py` |
 | Authored ship-node coefficients | `tools/reference/ship-node-coefficients.json` |
+| Ship install prereqs + base caps | `tools/reference/ship-node-gates.json` |
 | Gear piece names (the game's own) | `tools/reference/gear-names.json` |
 | Gear set bonus -> resource + value | `tools/reference/gear-set-bonus-map.json` |
 | Gear piece -> install node | `tools/reference/gear-install-map.json` |
@@ -809,6 +810,31 @@ think one is wrong, disprove it with a test.
     Filter that noise before reading a type diff, or the signal is unfindable.
   - `Gear.gearColor` enumerates only `purple, red, green, orange, blue` — no white despite White
     being fully wired, so that enum is partial/legacy and is NOT evidence about which sets exist.
+- **EVERY ship install prereq and base cap is now checked against the GAME, and four were wrong.**
+  The game authors both per node: `RU<n><Category>Requirement` and `RU<n><Category>MaxLevel` on
+  FleetManager. The semantics are stated by its own buy method rather than inferred --
+  `BuyRU4Gen()` is `if (TotalInstallsCradle >= RU4GenRequirement) { cap =
+  RL.FinalShipRanksMaxLevelBonus * RU4GenMaxLevel; if (MM.RU4GenLevel < cap && Ship1RankPoints > 0)
+  ... }`. So `gateAtTotalInstalls` is installs spent on THAT ship, a requirement of 0 means open
+  from the start, and `max` is the BASE cap that `nodeMaxLevel()` multiplies. Extract with
+  `extract-ship-node-gates.py`, assert with `ship-node-gate-check.js` (77 nodes).
+  The four corrections:
+  - **Demeter 2 and 3 are OPEN FROM THE START.** A `gateAtTotalInstalls: 1` had been added to both
+    from SirRed's tool; the game says `RU2ShardRequirement = RU3ShardRequirement = 0`, which is what
+    this catalog said before that change. **That is the second time changing our data to match
+    SirRed's tool introduced a wrong value** (the first was the 10x Demeter coefficients). Treat it
+    as a prompt to go look at the authored data, never as the answer.
+  - **Auxesia 6 and 7 cap at 15, not the wiki's 20.** Worth knowing why this survived: the catalog's
+    `source: 'confirmed'` marker covers name/effect/GATE — it has never covered `max`, which was
+    always wiki-transcribed. A "confirmed" node can still carry an unverified cap.
+  This also **retires a long-standing to-do**: caps for the six non-Cradle ships had been flagged as
+  never independently checked, and nodes 8-11 in particular. All 77 now match the game. And it
+  **independently confirms the Cradle ruId swap** — the game caps RU9Gen at 40 and RU11Gen at 50,
+  matching our codes 11 and 9 respectively.
+- **`sirred-ship-check.js` is now a REPORT, not a gate.** It exits 0 even with divergences, because
+  `ship-node-gate-check.js` checks the same two fields against the game itself; failing the SirRed
+  comparison would mean failing for being right. It still earns its place — a divergence the
+  authored data does NOT explain is a real signal — but the tool is a baseline, not an authority.
 - **The AssetRipper scene export is SCRIPTED and build-aware: `tools/bench/export-scene.py`.** It
   restages `<...>_Data` straight out of `base.apk` for `CIFI_APK`, drives AssetRipper's headless web
   API, and reports the exported scene. Three things in it are load-bearing and each fails by
@@ -932,6 +958,7 @@ cost/param resolution.
 node tools/bench/schema-test.js        # store schema invariants (fast, run always)
 node tools/bench/relic-cost-test.js    # relic cost table + fragment arithmetic (fast)
 node tools/bench/node-coefficient-check.js # ship node coefficients vs the GAME'S AUTHORED values
+node tools/bench/ship-node-gate-check.js # install prereqs + base caps vs the GAME (77 nodes)
 python tools/il2cpp-cli/typetree.py --dump FleetManager --grep BaseBonus  # read authored data
 node tools/bench/relic-arg-probe.js    # every declared relic reaches the wasm (fast)
 node tools/bench/path-relic-test.js    # effective path never recommends an inert relic

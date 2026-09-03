@@ -1,0 +1,440 @@
+{
+  "_source": "FleetManager MonoBehaviour (tools/il2cpp-cli/typetree.py), fields RU<n><Category>Requirement and RU<n><Category>MaxLevel",
+  "_meaning": "requirement: the node unlocks once TotalInstalls<Ship> >= this value (0 = open from the start). maxLevel: the BASE cap, which the game multiplies by ResearchLaboratory.FinalShipRanksMaxLevelBonus to get the effective cap.",
+  "_semanticsFrom": "FleetManager.BuyRU<n><Category>() in the recovered C#",
+  "_game": "apk-0.7.3.61",
+  "categories": {
+    "Academy": {
+      "1": {
+        "maxLevel": 250,
+        "requirement": 0.0
+      },
+      "2": {
+        "maxLevel": 1,
+        "requirement": 0.0
+      },
+      "3": {
+        "maxLevel": 1,
+        "requirement": 0.0
+      },
+      "4": {
+        "maxLevel": 15,
+        "requirement": 2.0
+      },
+      "5": {
+        "maxLevel": 20,
+        "requirement": 2.0
+      },
+      "6": {
+        "maxLevel": 15,
+        "requirement": 50.0
+      },
+      "7": {
+        "maxLevel": 50,
+        "requirement": 50.0
+      },
+      "8": {
+        "maxLevel": 50,
+        "requirement": 100.0
+      },
+      "9": {
+        "maxLevel": 50,
+        "requirement": 100.0
+      },
+      "10": {
+        "maxLevel": 50,
+        "requirement": 100.0
+      },
+      "11": {
+        "maxLevel": 50,
+        "requirement": 100.0
+      },
+      "12": {
+        "maxLevel": 0,
+        "requirement": 0.0
+      },
+      "13": {
+        "maxLevel": 0,
+        "requirement": 0.0
+      }
+    },
+    "Auto": {
+      "1": {
+        "maxLevel": 250,
+        "requirement": 0.0
+      },
+      "2": {
+        "maxLevel": 5,
+        "requirement": 5.0
+      },
+      "3": {
+        "maxLevel": 5,
+        "requirement": 5.0
+      },
+      "4": {
+        "maxLevel": 15,
+        "requirement": 20.0
+      },
+      "5": {
+        "maxLevel": 15,
+        "requirement": 20.0
+      },
+      "6": {
+        "maxLevel": 5,
+        "requirement": 60.0
+      },
+      "7": {
+        "maxLevel": 20,
+        "requirement": 60.0
+      },
+      "8": {
+        "maxLevel": 40,
+        "requirement": 100.0
+      },
+      "9": {
+        "maxLevel": 85,
+        "requirement": 100.0
+      },
+      "10": {
+        "maxLevel": 85,
+        "requirement": 100.0
+      },
+      "11": {
+        "maxLevel": 85,
+        "requirement": 100.0
+      },
+      "12": {
+        "maxLevel": 0,
+        "requirement": 60.0
+      },
+      "13": {
+        "maxLevel": 0,
+        "requirement": 70.0
+      }
+    },
+    "Gen": {
+      "1": {
+        "maxLevel": 250,
+        "requirement": 0.0
+      },
+      "2": {
+        "maxLevel": 25,
+        "requirement": 5.0
+      },
+      "3": {
+        "maxLevel": 25,
+        "requirement": 5.0
+      },
+      "4": {
+        "maxLevel": 20,
+        "requirement": 25.0
+      },
+      "5": {
+        "maxLevel": 20,
+        "requirement": 25.0
+      },
+      "6": {
+        "maxLevel": 10,
+        "requirement": 40.0
+      },
+      "7": {
+        "maxLevel": 15,
+        "requirement": 40.0
+      },
+      "8": {
+        "maxLevel": 100,
+        "requirement": 100.0
+      },
+      "9": {
+        "maxLevel": 40,
+        "requirement": 100.0
+      },
+      "10": {
+        "maxLevel": 30,
+        "requirement": 100.0
+      },
+      "11": {
+        "maxLevel": 50,
+        "requirement": 100.0
+      },
+      "12": {
+        "maxLevel": 0,
+        "requirement": 60.0
+      },
+      "13": {
+        "maxLevel": 0,
+        "requirement": 70.0
+      }
+    },
+    "Loop": {
+      "1": {
+        "maxLevel": 250,
+        "requirement": 0.0
+      },
+      "2": {
+        "maxLevel": 10,
+        "requirement": 5.0
+      },
+      "3": {
+        "maxLevel": 10,
+        "requirement": 5.0
+      },
+      "4": {
+        "maxLevel": 20,
+        "requirement": 20.0
+      },
+      "5": {
+        "maxLevel": 20,
+        "requirement": 20.0
+      },
+      "6": {
+        "maxLevel": 20,
+        "requirement": 40.0
+      },
+      "7": {
+        "maxLevel": 20,
+        "requirement": 40.0
+      },
+      "8": {
+        "maxLevel": 30,
+        "requirement": 100.0
+      },
+      "9": {
+        "maxLevel": 20,
+        "requirement": 100.0
+      },
+      "10": {
+        "maxLevel": 25,
+        "requirement": 100.0
+      },
+      "11": {
+        "maxLevel": 10,
+        "requirement": 100.0
+      },
+      "12": {
+        "maxLevel": 0,
+        "requirement": 60.0
+      },
+      "13": {
+        "maxLevel": 0,
+        "requirement": 70.0
+      }
+    },
+    "Ouroboros": {
+      "1": {
+        "maxLevel": 1,
+        "requirement": 0.0
+      },
+      "2": {
+        "maxLevel": 1,
+        "requirement": 1.0
+      },
+      "3": {
+        "maxLevel": 1,
+        "requirement": 4.0
+      },
+      "4": {
+        "maxLevel": 1,
+        "requirement": 10.0
+      },
+      "5": {
+        "maxLevel": 1,
+        "requirement": 3.0
+      },
+      "6": {
+        "maxLevel": 0,
+        "requirement": 10.0
+      },
+      "7": {
+        "maxLevel": 0,
+        "requirement": 0.0
+      },
+      "8": {
+        "maxLevel": 0,
+        "requirement": 0.0
+      },
+      "9": {
+        "maxLevel": 0,
+        "requirement": 0.0
+      },
+      "10": {
+        "maxLevel": 0,
+        "requirement": 0.0
+      },
+      "11": {
+        "maxLevel": 0,
+        "requirement": 0.0
+      },
+      "12": {
+        "maxLevel": 0,
+        "requirement": 0.0
+      },
+      "13": {
+        "maxLevel": 0,
+        "requirement": 0.0
+      }
+    },
+    "Research": {
+      "1": {
+        "maxLevel": 250,
+        "requirement": 0.0
+      },
+      "2": {
+        "maxLevel": 5,
+        "requirement": 5.0
+      },
+      "3": {
+        "maxLevel": 5,
+        "requirement": 5.0
+      },
+      "4": {
+        "maxLevel": 5,
+        "requirement": 10.0
+      },
+      "5": {
+        "maxLevel": 5,
+        "requirement": 10.0
+      },
+      "6": {
+        "maxLevel": 10,
+        "requirement": 30.0
+      },
+      "7": {
+        "maxLevel": 10,
+        "requirement": 30.0
+      },
+      "8": {
+        "maxLevel": 60,
+        "requirement": 100.0
+      },
+      "9": {
+        "maxLevel": 150,
+        "requirement": 100.0
+      },
+      "10": {
+        "maxLevel": 40,
+        "requirement": 100.0
+      },
+      "11": {
+        "maxLevel": 30,
+        "requirement": 100.0
+      },
+      "12": {
+        "maxLevel": 0,
+        "requirement": 0.0
+      },
+      "13": {
+        "maxLevel": 0,
+        "requirement": 0.0
+      }
+    },
+    "Shard": {
+      "1": {
+        "maxLevel": 5,
+        "requirement": 0.0
+      },
+      "2": {
+        "maxLevel": 250,
+        "requirement": 0.0
+      },
+      "3": {
+        "maxLevel": 25,
+        "requirement": 0.0
+      },
+      "4": {
+        "maxLevel": 25,
+        "requirement": 10.0
+      },
+      "5": {
+        "maxLevel": 25,
+        "requirement": 10.0
+      },
+      "6": {
+        "maxLevel": 5,
+        "requirement": 25.0
+      },
+      "7": {
+        "maxLevel": 10,
+        "requirement": 25.0
+      },
+      "8": {
+        "maxLevel": 5,
+        "requirement": 100.0
+      },
+      "9": {
+        "maxLevel": 55,
+        "requirement": 100.0
+      },
+      "10": {
+        "maxLevel": 125,
+        "requirement": 100.0
+      },
+      "11": {
+        "maxLevel": 25,
+        "requirement": 100.0
+      },
+      "12": {
+        "maxLevel": 0,
+        "requirement": 60.0
+      },
+      "13": {
+        "maxLevel": 0,
+        "requirement": 70.0
+      }
+    },
+    "Tech": {
+      "1": {
+        "maxLevel": 250,
+        "requirement": 0.0
+      },
+      "2": {
+        "maxLevel": 15,
+        "requirement": 5.0
+      },
+      "3": {
+        "maxLevel": 15,
+        "requirement": 5.0
+      },
+      "4": {
+        "maxLevel": 20,
+        "requirement": 25.0
+      },
+      "5": {
+        "maxLevel": 20,
+        "requirement": 25.0
+      },
+      "6": {
+        "maxLevel": 15,
+        "requirement": 50.0
+      },
+      "7": {
+        "maxLevel": 15,
+        "requirement": 50.0
+      },
+      "8": {
+        "maxLevel": 25,
+        "requirement": 100.0
+      },
+      "9": {
+        "maxLevel": 30,
+        "requirement": 100.0
+      },
+      "10": {
+        "maxLevel": 10,
+        "requirement": 100.0
+      },
+      "11": {
+        "maxLevel": 30,
+        "requirement": 100.0
+      },
+      "12": {
+        "maxLevel": 0,
+        "requirement": 60.0
+      },
+      "13": {
+        "maxLevel": 0,
+        "requirement": 70.0
+      }
+    }
+  }
+}

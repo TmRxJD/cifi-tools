@@ -81,8 +81,24 @@ for (const [shipId, prefix] of Object.entries(SHIP_PREFIX)) {
 console.log(`\ncompared ${compared} install slots across ${Object.keys(SHIP_PREFIX).length} ships`);
 if (problems === 0) {
   console.log('every cap, gate and coefficient matches SirRed\'s community tool exactly (caps at the documented 5x multiplier)');
-  process.exit(0);
 } else {
-  console.log(`${problems} discrepancy(ies)`);
-  process.exit(1);
+  console.log(`${problems} divergence(s) from SirRed's tool -- see the note above; this is a REPORT`);
 }
+// REPORT, NOT A GATE -- deliberately exits 0 even with divergences.
+//
+// It used to exit 1, which was right when SirRed's decompiled tool was the best independent source
+// we had for install gates and caps. It no longer is: `ship-node-gate-check.js` compares the same
+// two fields against the GAME's own authored `RU<n><Category>Requirement` / `MaxLevel`, with the
+// semantics taken from FleetManager's own buy method. Where the two disagree, the game wins by
+// definition, so failing this bench would mean failing for being right.
+//
+// Every divergence it currently reports is a case where the game overruled this tool, and two of
+// them were regressions this tool CAUSED: Dem02/Dem03's `gateAtTotalInstalls: 1` (the game says 0
+// -- both are open from the start) and, earlier, the Demeter coefficients Dem06/Dem09 that were
+// "corrected" to 10x wrong. That is the pattern to remember: SirRed's tool is a useful baseline and
+// a good way to notice that a number deserves a second look, but it is not authoritative, and
+// changing our data to match it has now produced wrong values twice.
+//
+// Still worth running: a divergence here that ship-node-gate-check.js does NOT explain is a genuine
+// signal that something needs looking at.
+process.exit(0);
