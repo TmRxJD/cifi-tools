@@ -196,6 +196,15 @@ const schemas = {
       ozzy: nonEmptyRecord(numericKey, z.array(z.number().int().nonnegative()).min(1)),
       knox: nonEmptyRecord(numericKey, z.array(z.number().int().nonnegative()).min(1)),
     }).strict(),
+    _thresholdSource: z.string().min(1),
+    // Tier gates: total points spent before a node opens. Knox's is legitimately EMPTY -- it has
+    // no tier gates at all -- so this is a plain record, not a nonEmptyRecord. Every value must be
+    // a positive integer: a 0 threshold is no gate, and recording one would be recording nothing.
+    spendThresholds: z.object({
+      borge: z.record(numericKey, z.number().int().positive()),
+      ozzy: z.record(numericKey, z.number().int().positive()),
+      knox: z.record(numericKey, z.number().int().positive()),
+    }).strict(),
   }).strict(),
 
   'gem-gates.json': z.object({

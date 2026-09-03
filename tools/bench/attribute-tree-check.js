@@ -170,6 +170,27 @@ for (const hunter of ['borge', 'ozzy', 'knox']) {
     }
   }
 
+  // The TIER THRESHOLDS: total points spent on this hunter's attributes before a node opens.
+  // These are the other half of the legality model -- `AllocSpace` treats a node below its
+  // threshold as unfundable -- and like the edges they were never checked against anything. The
+  // game writes them as `<hunter>PointsSpend >= N`, with N a literal for the first tier and an
+  // authored UnlockReq field for the later ones.
+  //
+  // A node with no gate is 0, not missing: our table lists every attribute explicitly, so a node
+  // absent from the game's gate map must read 0 here rather than being skipped -- skipping it
+  // would let a threshold we invented pass unexamined.
+  const gameThresholds = (ref.spendThresholds || {})[hunter] || {};
+  const ourThresholds = defs.attributeMinValue || {};
+  for (const id of ourNodes) {
+    const ours = ourThresholds[id] === undefined ? 0 : ourThresholds[id];
+    const theirs = gameThresholds[String(map.get(id))] === undefined
+      ? 0 : gameThresholds[String(map.get(id))];
+    if (ours !== theirs) {
+      problems.push(`${hunter}.${id} (game node ${map.get(id)}): spend threshold ${ours}, game ${theirs}`);
+    }
+  }
+  const gatedCount = Object.keys(gameThresholds).length;
+
   // Independent confirmation that the structural join is the right one.
   let confirmed = 0;
   for (const attr of defs.attributes || []) {
@@ -186,8 +207,9 @@ for (const hunter of ['borge', 'ozzy', 'knox']) {
 
   if (problems.length) problems.forEach(fail);
   else {
-    pass(`${hunter}: all ${ourNodes.length} attributes map onto the game's tree, every edge agrees, `
-      + `and ${confirmed} authored cost/cap pair(s) confirm the mapping`);
+    pass(`${hunter}: all ${ourNodes.length} attributes map onto the game's tree, every edge and `
+      + `all ${gatedCount} spend threshold(s) agree, and ${confirmed} authored cost/cap pair(s) `
+      + 'confirm the mapping');
   }
 }
 

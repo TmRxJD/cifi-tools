@@ -41,6 +41,14 @@ GUARD_LOCAL = re.compile(r"if \((num\d+)\s*(?:!= 0|> 0)\)")
 LOCAL_ASSIGN = re.compile(r"(num\d+) = \w+\.(POM|POI|POK)(\d+)Level;")
 UNLOCK = re.compile(r"(POM|POI|POK)(\d+)LockedObject\.SetActive\(value: false\)")
 
+# The SPEND THRESHOLD gates. A tier is opened by total points spent on that hunter's attributes,
+# and the game writes the bound two ways: as a literal (`>= 75`) for the first tier, and as an
+# authored field (`>= POM12UnlockReq`) for the later ones. Both forms are captured; the field form
+# is resolved against the authored values read by typetree.py, because a field NAME is not a value
+# and recording the name as if it were one is how an unverified number acquires a verified look.
+SPEND_LITERAL = re.compile(r"<(borge|ozzy|knox)PointsSpend>k__BackingField >= (\d+)\)")
+SPEND_FIELD = re.compile(r"<(borge|ozzy|knox)PointsSpend>k__BackingField >= (POM|POI|POK)(\d+)UnlockReq\)")
+
 
 def recovered_source():
     """The decompiled HuntersAttributes, with Cpp2IL's IL_ notes stripped."""
@@ -53,18 +61,31 @@ def recovered_source():
 
 
 def parse_edges(lines):
-    """child index -> set of parent indices, per hunter."""
+    """(child -> parents, child -> spend threshold), per hunter."""
     edges = {h: {} for h in PREFIX_HUNTER.values()}
+    thresholds = {h: {} for h in PREFIX_HUNTER.values()}
     local_of = {}
     depth = 0
     # stack of (brace_depth_at_which_the_guard_body_opened, prefix, index)
     stack = []
+    spend_stack = []
     pending = None  # a guard seen, whose `{` has not arrived yet
+    pending_spend = None
 
     for ln in lines:
         m = LOCAL_ASSIGN.search(ln)
         if m:
             local_of[m.group(1)] = (m.group(2), int(m.group(3)))
+
+        # A spend gate opens a block whose unlocks belong to that threshold, not to a parent
+        # attribute. Tracked separately so a tier bound is never mistaken for a dependency edge.
+        # NOT cleared when a line does not match: Cpp2IL puts the opening `{` on the line AFTER
+        # the `if`, so clearing here would discard every gate before its block ever opened -- which
+        # yields an empty threshold map that reads as "the game has no tier gates".
+        sf = SPEND_FIELD.search(ln)
+        sl = None if sf else SPEND_LITERAL.search(ln)
+        if sf or sl:
+            pending_spend = ("field", sf.group(2) + sf.group(3) + "UnlockReq") if sf else ("literal", int(sl.group(2)))
 
         g = GUARD_FIELD.search(ln)
         if g:
@@ -85,17 +106,39 @@ def parse_edges(lines):
                 if pending is not None:
                     stack.append((depth, pending[0], pending[1]))
                     pending = None
+                if pending_spend is not None:
+                    spend_stack.append((depth, pending_spend))
+                    pending_spend = None
             elif ch == "}":
                 while stack and stack[-1][0] >= depth:
                     stack.pop()
+                while spend_stack and spend_stack[-1][0] >= depth:
+                    spend_stack.pop()
                 depth -= 1
 
         u = UNLOCK.search(ln)
-        if u and stack:
-            _, pfx, idx = stack[-1]
-            if pfx is not None and u.group(1) == pfx and int(u.group(2)) != idx:
-                edges[PREFIX_HUNTER[pfx]].setdefault(int(u.group(2)), set()).add(idx)
-    return edges
+        if u:
+            hunter = PREFIX_HUNTER[u.group(1)]
+            child = int(u.group(2))
+            if spend_stack:
+                thresholds[hunter][child] = spend_stack[-1][1]
+            if stack:
+                _, pfx, idx = stack[-1]
+                if pfx is not None and u.group(1) == pfx and child != idx:
+                    edges[hunter].setdefault(child, set()).add(idx)
+    return edges, thresholds
+
+
+def authored_unlock_reqs():
+    """`POM12UnlockReq` -> its authored number, straight from the MonoBehaviour."""
+    cmd = [sys.executable, os.path.join(ROOT, "tools", "il2cpp-cli", "typetree.py"),
+           "--dump", "HuntersAttributes", "--grep", "UnlockReq"]
+    env = dict(os.environ, CIFI_APK=APK)
+    res = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    if res.returncode != 0:
+        sys.exit(f"typetree.py failed: {res.stderr[-800:]}")
+    body = res.stdout[res.stdout.index("{"):]
+    return {k: v for k, v in json.loads(body).items()}
 
 
 def main():
@@ -104,7 +147,8 @@ def main():
     args = ap.parse_args()
 
     lines = recovered_source()
-    edges = parse_edges(lines)
+    edges, thresholds = parse_edges(lines)
+    authored = authored_unlock_reqs()
     for hunter, e in edges.items():
         print(f"{hunter}: {len(e)} gated attribute(s)", file=sys.stderr)
         for child in sorted(e):
@@ -113,6 +157,21 @@ def main():
     if not any(edges.values()):
         sys.exit("no dependency edges recovered -- the method shape changed; do NOT treat this as "
                  "'the game has no attribute tree'")
+
+    # Resolve `POM12UnlockReq` style bounds to their authored numbers. An unresolvable field is
+    # fatal rather than recorded by name: a threshold nobody can compare is worse than none.
+    resolved = {}
+    for hunter, per_node in thresholds.items():
+        resolved[hunter] = {}
+        for node, (kind, val) in sorted(per_node.items()):
+            if kind == "literal":
+                resolved[hunter][str(node)] = val
+            elif val in authored:
+                resolved[hunter][str(node)] = authored[val]
+            else:
+                sys.exit(f"{hunter} node {node} gates on {val}, which typetree.py did not report -- "
+                         f"cannot record a threshold without its value")
+        print(f"{hunter} thresholds: {resolved[hunter]}", file=sys.stderr)
 
     payload = {
         "_source": ("HuntersAttributes.CheckPOMUnlcoks() in the recovered C# (tools/il2cpp-cli/"
@@ -126,6 +185,12 @@ def main():
             hunter: {str(child): sorted(parents) for child, parents in sorted(e.items())}
             for hunter, e in edges.items()
         },
+        "_thresholdSource": (
+            "the same method's `<hunter>PointsSpend >= N` gates, where N is a literal for the "
+            "first tier and an authored POM/POI/POK<n>UnlockReq field for the later ones; field "
+            "values read with tools/il2cpp-cli/typetree.py."
+        ),
+        "spendThresholds": resolved,
     }
     text = json.dumps(payload, indent=2) + "\n"
     if args.write:

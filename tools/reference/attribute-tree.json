@@ -126,5 +126,25 @@
         10
       ]
     }
+  },
+  "_thresholdSource": "the same method's `<hunter>PointsSpend >= N` gates, where N is a literal for the first tier and an authored POM/POI/POK<n>UnlockReq field for the later ones; field values read with tools/il2cpp-cli/typetree.py.",
+  "spendThresholds": {
+    "borge": {
+      "9": 75,
+      "10": 75,
+      "11": 75,
+      "12": 150,
+      "13": 150,
+      "14": 180
+    },
+    "ozzy": {
+      "9": 90,
+      "10": 90,
+      "11": 90,
+      "12": 150,
+      "13": 150,
+      "14": 180
+    },
+    "knox": {}
   }
 }
