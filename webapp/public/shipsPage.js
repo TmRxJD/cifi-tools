@@ -817,10 +817,10 @@ const REAL_GEAR_PIECES = [
   { name: 'Diamond Infused Cell', color: 'Orange', setBonus: 'Gain 3000 Diamonds', install1: 'KOI3', install2: 'AUX4', costBase: 4, costScalar: 1.13 },
   { name: 'Ceti-Powered Energy Cell', color: 'Orange', setBonus: 'x7 Research Points Gained', install1: 'KOI6', install2: 'AUX1', costBase: 4, costScalar: 1.14 },
   { name: 'Ixion Infused Cell', color: 'Orange', setBonus: 'x7 Shards Gained', install1: 'KOI2', install2: 'AUX3', costBase: 4, costScalar: 1.11 },
-  { name: 'Cell Based Loop Tank', color: 'Red', setBonus: 'x75 Cells Gained', install1: 'HEPH1', install2: 'ZAG3', costBase: 5, costScalar: 1.12 },
+  { name: 'Cell Based Loop-Tank', color: 'Red', setBonus: 'x75 Cells Gained', install1: 'HEPH1', install2: 'ZAG3', costBase: 5, costScalar: 1.12 },
   { name: 'Field Hard Drive', color: 'Red', setBonus: 'x2 Research Points Gained', install1: 'DEM1', install2: 'ZAG4', costBase: 3, costScalar: 1.1 },
   { name: 'Gravity Bomb', color: 'Red', setBonus: 'x1.5 Academy Points Gained', install1: 'ZAG2', install2: 'ZAG5', costBase: 44, costScalar: 1.11 }, // 44 is the suspicious outlier -- see note above
-  { name: 'Gamma Round', color: 'Red', setBonus: 'x60 Cells Gained', install1: 'ZAG7', install2: 'ZAG1', costBase: 6, costScalar: 1.13 },
+  { name: 'Gamma Rounds', color: 'Red', setBonus: 'x60 Cells Gained', install1: 'ZAG7', install2: 'ZAG1', costBase: 6, costScalar: 1.13 },
   { name: 'Loop Gun', color: 'Red', setBonus: 'x10 Mod Points Gained', install1: 'DEM6', install2: 'ZAG6', costBase: 7, costScalar: 1.14 },
   { name: 'Cell Battery', color: 'Green', setBonus: 'x500 Cells Gained', install1: 'CRA1', install2: 'HEPH5', costBase: 3, costScalar: 1.1 },
   { name: 'Constructor Suit', color: 'Green', setBonus: 'x2.5 Mod Points Gained', install1: 'ZAG2', install2: 'HEPH6', costBase: 7, costScalar: 1.14 },
@@ -829,11 +829,11 @@ const REAL_GEAR_PIECES = [
   { name: 'Drone Shield', color: 'Green', setBonus: 'x750 Cells Gained', install1: 'HEPH4', install2: 'HEPH2', costBase: 6, costScalar: 1.13 },
   { name: 'Scout Droid', color: 'Blue', setBonus: 'x10 Research Points Gained', install1: 'AUX2', install2: 'DEM3', costBase: 5, costScalar: 1.12 },
   { name: 'Mining Drone', color: 'Blue', setBonus: 'x15 Shards Gained', install1: 'DEM2', install2: 'DEM1', costBase: 3, costScalar: 1.1 },
-  { name: 'Chrysis Suit', color: 'Blue', setBonus: 'x320 Cells Gained', install1: 'HEPH5', install2: 'DEM4', costBase: 4, costScalar: 1.11 },
+  { name: 'Crysis Suit', color: 'Blue', setBonus: 'x320 Cells Gained', install1: 'HEPH5', install2: 'DEM4', costBase: 4, costScalar: 1.11 },
   { name: 'Beta-Rounds', color: 'Blue', setBonus: 'x80 Cells Gained', install1: 'HEPH3', install2: 'DEM7', costBase: 6, costScalar: 1.13 },
   { name: 'Shard Gun', color: 'Blue', setBonus: 'x1.5 Academy Points Gained', install1: 'DEM6', install2: 'DEM5', costBase: 7, costScalar: 1.14 },
   // WHITE -- the wiki does not document this set, so unlike every piece above these come from the
-  // GAME, and each field is at a different confidence:
+  // GAME. Every field is now sourced; nothing here is inferred:
   //  * install1/install2 are the STRONGEST data in this whole table: taken from the game's own
   //    `RU<Category><n>Bonus` dispatch (tools/reference/gear-install-map.json), not transcribed.
   //    This is the field the optimizer is actually sensitive to -- gear is our only per-NODE and
@@ -843,25 +843,40 @@ const REAL_GEAR_PIECES = [
   //    pieces above agree on exactly (0->1.10, 1->1.11, 2->1.12, 3->1.13, 4->1.14). Note this
   //    DISPROVES the tempting "scalar = 1.1 + (base-3)*0.01" shortcut -- the Orange pieces all share
   //    base 4 across tiers 0/3/4/1 -- so the tier is what decides, not the base cost.
-  //  * name is UNKNOWN and deliberately not invented. The displayed names are not in the shipped
-  //    files at all: `grep "Cell Battery"` returns 0 hits in level0, sharedassets0.assets,
-  //    globalgamemanagers.assets, global-metadata.dat AND libil2cpp.so, so even the names we DO
-  //    have came from the wiki rather than the game, and White has no wiki page. They are populated
-  //    at runtime from localization data we do not have. Placeholder labels beat plausible fiction.
-  //  * setBonus is UNKNOWN for the same class of reason and is left as '' -- which
-  //    computeGearSetBonusMultipliers already ignores (`if (!m) return`), so it contributes nothing
-  //    rather than contributing something wrong. The game DOES give the five magnitudes
-  //    (WhiteSetBonus1..5 = 1e50, 1e65, 2.5, 150, 10, with WhiteSetBonusRequirement = 5), but not
-  //    which RESOURCE each one multiplies. 2.5/150/10 sit in the same range as the Mod Point / Cell
-  //    / Research bonuses above, which makes a resource assignment guessable -- and guessing which
-  //    resource a x1e65 multiplier lands on is exactly how a wrong number acquires a confident
-  //    comment. Pair the magnitudes to resources from a real account or the localization strings.
-  { name: 'White Piece 1', color: 'White', setBonus: '', install1: 'CRA4', install2: 'HEPH8', costBase: 6, costScalar: 1.14 },
-  { name: 'White Piece 2', color: 'White', setBonus: '', install1: 'CRA8', install2: 'HEPH10', costBase: 6, costScalar: 1.14 },
-  { name: 'White Piece 3', color: 'White', setBonus: '', install1: 'ZEUS2', install2: 'CRA11', costBase: 6, costScalar: 1.14 },
-  { name: 'White Piece 4', color: 'White', setBonus: '', install1: 'CRA6', install2: 'DEM10', costBase: 6, costScalar: 1.14 },
-  { name: 'White Piece 5', color: 'White', setBonus: '', install1: 'CRA10', install2: 'ZAG11', costBase: 6, costScalar: 1.14 },
+  //  * names are the game's own, from the crafting menu's `ItemSelectionLayout/<row>/ReqBox/
+  //    DescText` (tools/reference/gear-names.json). The menu's 37 rows are 3 Purple + 4 Orange +
+  //    5 Red + 5 Green + 5 Blue -- our exact colour sizes, in our exact order, with 19 of those 22
+  //    names matching character for character -- and then 15 gem-gated rows, of which White is the
+  //    first five. That block alignment is what pins these five names to these five pieces.
+  //    (The same check corrected three wiki typos above: Loop-Tank, Gamma Rounds, Crysis Suit.)
+  //  * setBonus resource comes from `Gear.SetGearSetBonuses()`, which multiplies each
+  //    `<Color>SetBonus<N>` into a specific resource total, and the magnitude from the authored
+  //    asset (tools/reference/gear-set-bonus-map.json carries both). Worth knowing this was NOT
+  //    guessable: `CheckWhiteSetBonusTexts()` refreshes the Cells, RP, Shards and AP labels, which
+  //    reads like the answer and is wrong -- White touches Mod Points and NOT Research Points. The
+  //    text refresher is stale; the aggregator is the math. The same extraction reproduces all 22
+  //    wiki-sourced bonuses exactly, which is what licenses trusting it for White.
+  //  * White is gated behind Gem Of Power quality 2 (the row's own GameObject name says so), so an
+  //    account without it cannot own these at all.
+  { name: 'Cell Sprayer', color: 'White', setBonus: 'x1e+50 Cells Gained', install1: 'CRA4', install2: 'HEPH8', costBase: 6, costScalar: 1.14 },
+  { name: 'Cell Miner Machina', color: 'White', setBonus: 'x1e+65 Cells Gained', install1: 'CRA8', install2: 'HEPH10', costBase: 6, costScalar: 1.14 },
+  { name: 'Epsilon Handcannon', color: 'White', setBonus: 'x2.5 Academy Points Gained', install1: 'ZEUS2', install2: 'CRA11', costBase: 6, costScalar: 1.14 },
+  { name: 'Enhanced Mining Suit', color: 'White', setBonus: 'x150 Shards Gained', install1: 'CRA6', install2: 'DEM10', costBase: 6, costScalar: 1.14 },
+  { name: 'On-Site Med Kits', color: 'White', setBonus: 'x10 Mod Points Gained', install1: 'CRA10', install2: 'ZAG11', costBase: 6, costScalar: 1.14 },
 ];
+// Old piece name -> current one, for accounts that saved levels under the wiki's spelling. The
+// first three were transcription errors the game's own crafting-menu labels corrected; the White
+// five were placeholders shipped before those labels were found.
+const GEAR_PIECE_RENAMES = {
+  'Cell Based Loop Tank': 'Cell Based Loop-Tank',
+  'Gamma Round': 'Gamma Rounds',
+  'Chrysis Suit': 'Crysis Suit',
+  'White Piece 1': 'Cell Sprayer',
+  'White Piece 2': 'Cell Miner Machina',
+  'White Piece 3': 'Epsilon Handcannon',
+  'White Piece 4': 'Enhanced Mining Suit',
+  'White Piece 5': 'On-Site Med Kits',
+};
 function defaultGearSets() {
   return { pieces: REAL_GEAR_PIECES.map((p) => ({ ...p, level: 0, owned: false })) };
 }
@@ -880,10 +895,24 @@ function getGearSets() {
   // had ever opened the Ships page, so `getGearSets().pieces.filter(color === 'White')` was empty
   // while the freshly-seeded defaults looked perfectly correct. Same prune-and-merge shape as
   // getShipGear above; keep the two consistent.
+  //
+  // Existing piece objects are UPDATED IN PLACE rather than replaced. Rebuilding the array on every
+  // call detaches any reference a caller is holding, so a `piece.level = n` written after some
+  // unrelated getGearSets() call lands on an orphan and is silently lost. That is not theoretical:
+  // it bit the first test written against this function.
   const byName = new Map(window.store.gearSets.pieces.map((p) => [p.name, p]));
+  // Pieces are matched by NAME, so correcting a name to the game's own spelling would otherwise
+  // orphan that piece's saved level and reset it to 0. These four were renamed once the crafting
+  // menu gave us the real strings; keep the map rather than silently losing a user's levels.
+  Object.entries(GEAR_PIECE_RENAMES).forEach(([oldName, newName]) => {
+    if (byName.has(oldName) && !byName.has(newName)) byName.set(newName, byName.get(oldName));
+  });
   window.store.gearSets.pieces = REAL_GEAR_PIECES.map((real) => {
     const saved = byName.get(real.name);
-    return { ...real, level: saved ? (saved.level || 0) : 0, owned: saved ? !!saved.owned : false };
+    if (!saved) return { ...real, level: 0, owned: false };
+    const level = saved.level || 0;
+    const owned = !!saved.owned;
+    return Object.assign(saved, real, { level, owned });
   });
   return window.store.gearSets;
 }
@@ -920,7 +949,10 @@ function computeGearSetBonusMultipliers() {
   Object.values(byColor).forEach((pieces) => {
     if (!pieces.every((p) => p.owned)) return; // whole color must be complete
     pieces.forEach((p) => {
-      const m = p.setBonus.match(/^x([\d.]+)\s+(.+?)\s+Gained$/i);
+      // Exponent notation is required, not cosmetic: the White set's Cells bonuses are x1e+50 and
+      // x1e+65, and a plain [\d.]+ pattern silently fails to match them, dropping the two largest
+      // multipliers in the whole table.
+      const m = p.setBonus.match(/^x([\d.]+(?:e[+-]?\d+)?)\s+(.+?)\s+Gained$/i);
       if (!m) return;
       const resources = effectResources(m[2]);
       resources.forEach((res) => { mults[res] = (mults[res] || 1) * parseFloat(m[1]); });
@@ -1373,7 +1405,7 @@ function renderGearSetsPage(root) {
     <div class="mb-4 rounded-lg overflow-hidden shadow-lg">
       <div class="bg-gradient-to-r from-blue-900 to-gray-800 px-5 py-4 border-b border-gray-600">
         <h1 class="text-xl font-bold">Gear Sets</h1>
-        <p class="text-xs text-gray-300 mt-0.5">Crafted/leveled with Academy Points (unlocked via Zeus). Data transcribed from cifi.fandom.com/wiki/Gear_Sets, except the White set, which the wiki does not document and whose install targets and costs come from the game itself (its names and set bonuses are not known). Each piece's own level buffs its 2 target installs multiplicatively (x1.01/level, x1.02/level), and each piece's own Set Bonus applies once its whole color is owned -- both feed into the Fleet page's resource totals.</p>
+        <p class="text-xs text-gray-300 mt-0.5">Crafted/leveled with Academy Points (unlocked via Zeus). Data transcribed from cifi.fandom.com/wiki/Gear_Sets, except the White set, which the wiki does not document and which comes from the game itself -- as do all the piece names and set-bonus resources, which is what corrected three names the wiki had wrong. Each piece's own level buffs its 2 target installs multiplicatively (x1.01/level, x1.02/level), and each piece's own Set Bonus applies once its whole color is owned -- both feed into the Fleet page's resource totals.</p>
       </div>
       <div class="bg-gray-800/70 px-4 py-3 border-t border-gray-700">
         <h3 class="text-xs font-semibold text-gray-300 mb-2">Gear Effective Path -- what to buy next, by resource</h3>
@@ -1410,9 +1442,9 @@ function renderGearSetsPage(root) {
         <div><label class="block text-[10px] text-gray-400">Level</label><input type="number" min="0" data-f="level" value="${piece.level || 0}" class="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-white text-xs" /></div>
         <div class="text-xs text-gray-400"><span class="text-gray-500">Set Bonus:</span> ${piece.setBonus
           ? escapeHtml(piece.setBonus)
-          // An empty setBonus means we know the piece exists but not what its bonus multiplies --
-          // say so, rather than rendering a blank that reads as a broken field. See the White
-          // entries in REAL_GEAR_PIECES for why those five are the only ones in this state.
+          // Every shipped piece now has a sourced bonus, so this is a guard rather than a live
+          // case: if one is ever added ahead of its data, say so instead of rendering a blank
+          // that reads as a broken field.
           : '<span class="text-gray-500 italic">not known &mdash; not applied</span>'}</div>
         ${installMultDisplay(piece.install1, 1.01, piece.level)}
         ${installMultDisplay(piece.install2, 1.02, piece.level)}`;

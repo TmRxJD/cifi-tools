@@ -1,0 +1,235 @@
+{
+  "_source": "Gear.SetGearSetBonuses() in the recovered C# (tools/il2cpp-cli/csharp.py); values from the authored Gear MonoBehaviour (tools/il2cpp-cli/typetree.py)",
+  "unusedBonuses": [
+    {
+      "name": "BlackSetBonus1",
+      "value": 0.0
+    },
+    {
+      "name": "BlackSetBonus2",
+      "value": 0.0
+    },
+    {
+      "name": "BlackSetBonus3",
+      "value": 0.0
+    },
+    {
+      "name": "BlackSetBonus4",
+      "value": 0.0
+    },
+    {
+      "name": "BlackSetBonus5",
+      "value": 0.0
+    },
+    {
+      "name": "OrangeSetBonus2",
+      "value": 3000.0
+    },
+    {
+      "name": "YellowSetBonus1",
+      "value": 0.0
+    },
+    {
+      "name": "YellowSetBonus2",
+      "value": 0.0
+    },
+    {
+      "name": "YellowSetBonus3",
+      "value": 0.0
+    },
+    {
+      "name": "YellowSetBonus4",
+      "value": 0.0
+    },
+    {
+      "name": "YellowSetBonus5",
+      "value": 0.0
+    }
+  ],
+  "_meaning": "<color>SetBonus<index> is multiplied into that resource's TotalSet<...>Bonus. The index is the piece's position within its colour.",
+  "_game": "CIFI 0.7.3.54",
+  "mappings": [
+    {
+      "color": "Blue",
+      "index": 1,
+      "resource": "RP",
+      "resourceLabel": "Research Points",
+      "value": 10.0
+    },
+    {
+      "color": "Blue",
+      "index": 2,
+      "resource": "Shard",
+      "resourceLabel": "Shards",
+      "value": 15.0
+    },
+    {
+      "color": "Blue",
+      "index": 3,
+      "resource": "Cell",
+      "resourceLabel": "Cells",
+      "value": 320.0
+    },
+    {
+      "color": "Blue",
+      "index": 4,
+      "resource": "Cell",
+      "resourceLabel": "Cells",
+      "value": 80.0
+    },
+    {
+      "color": "Blue",
+      "index": 5,
+      "resource": "AP",
+      "resourceLabel": "Academy Points",
+      "value": 1.5
+    },
+    {
+      "color": "Green",
+      "index": 1,
+      "resource": "Cell",
+      "resourceLabel": "Cells",
+      "value": 500.0
+    },
+    {
+      "color": "Green",
+      "index": 2,
+      "resource": "MP",
+      "resourceLabel": "Mod Points",
+      "value": 2.5
+    },
+    {
+      "color": "Green",
+      "index": 3,
+      "resource": "RP",
+      "resourceLabel": "Research Points",
+      "value": 8.0
+    },
+    {
+      "color": "Green",
+      "index": 4,
+      "resource": "AP",
+      "resourceLabel": "Academy Points",
+      "value": 1.5
+    },
+    {
+      "color": "Green",
+      "index": 5,
+      "resource": "Cell",
+      "resourceLabel": "Cells",
+      "value": 750.0
+    },
+    {
+      "color": "Orange",
+      "index": 1,
+      "resource": "AP",
+      "resourceLabel": "Academy Points",
+      "value": 1.5
+    },
+    {
+      "color": "Orange",
+      "index": 3,
+      "resource": "RP",
+      "resourceLabel": "Research Points",
+      "value": 7.0
+    },
+    {
+      "color": "Orange",
+      "index": 4,
+      "resource": "Shard",
+      "resourceLabel": "Shards",
+      "value": 7.0
+    },
+    {
+      "color": "Purple",
+      "index": 1,
+      "resource": "Shard",
+      "resourceLabel": "Shards",
+      "value": 25.0
+    },
+    {
+      "color": "Purple",
+      "index": 2,
+      "resource": "Cell",
+      "resourceLabel": "Cells",
+      "value": 999.0
+    },
+    {
+      "color": "Purple",
+      "index": 3,
+      "resource": "RP",
+      "resourceLabel": "Research Points",
+      "value": 25.0
+    },
+    {
+      "color": "Red",
+      "index": 1,
+      "resource": "Cell",
+      "resourceLabel": "Cells",
+      "value": 75.0
+    },
+    {
+      "color": "Red",
+      "index": 2,
+      "resource": "RP",
+      "resourceLabel": "Research Points",
+      "value": 2.0
+    },
+    {
+      "color": "Red",
+      "index": 3,
+      "resource": "AP",
+      "resourceLabel": "Academy Points",
+      "value": 1.5
+    },
+    {
+      "color": "Red",
+      "index": 4,
+      "resource": "Cell",
+      "resourceLabel": "Cells",
+      "value": 60.0
+    },
+    {
+      "color": "Red",
+      "index": 5,
+      "resource": "MP",
+      "resourceLabel": "Mod Points",
+      "value": 10.0
+    },
+    {
+      "color": "White",
+      "index": 1,
+      "resource": "Cell",
+      "resourceLabel": "Cells",
+      "value": 1e+50
+    },
+    {
+      "color": "White",
+      "index": 2,
+      "resource": "Cell",
+      "resourceLabel": "Cells",
+      "value": 1e+65
+    },
+    {
+      "color": "White",
+      "index": 3,
+      "resource": "AP",
+      "resourceLabel": "Academy Points",
+      "value": 2.5
+    },
+    {
+      "color": "White",
+      "index": 4,
+      "resource": "Shard",
+      "resourceLabel": "Shards",
+      "value": 150.0
+    },
+    {
+      "color": "White",
+      "index": 5,
+      "resource": "MP",
+      "resourceLabel": "Mod Points",
+      "value": 10.0
+    }
+  ]
+}

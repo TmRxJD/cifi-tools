@@ -146,6 +146,9 @@ There is exactly one place for each of these. **Do not add a second.**
 | **Read method BODIES as C# (logic)** | `tools/il2cpp-cli/csharp.py` (Cpp2IL + ilspycmd) |
 | **Name the field reads Cpp2IL could not resolve** | `tools/il2cpp-cli/resolve-loads.py` |
 | Authored ship-node coefficients | `tools/reference/ship-node-coefficients.json` |
+| Gear piece names (the game's own) | `tools/reference/gear-names.json` |
+| Gear set bonus -> resource + value | `tools/reference/gear-set-bonus-map.json` |
+| Gear piece -> install node | `tools/reference/gear-install-map.json` |
 | Server-table capture | `tools/capture/` |
 | Per-hunter evaluation fidelity (UI) | `store[hunter].iterations` + `StoreSchema.ITERATIONS` / `clampIterations` |
 | Cancellation of long sim work | `HunterSim.throwIfAborted` / `isAbort` / `ABORTED` |
@@ -394,13 +397,14 @@ think one is wrong, disprove it with a test.
   `Bonus2` its install2. Extracted by `tools/bench/extract-gear-installs.py` into
   `tools/reference/gear-install-map.json` and asserted by `tools/bench/gear-install-check.js`:
   **all 44 mappings we model match the game**, so the wiki was right here.
-  **But the game has a WHITE set we do not model at all.** `WhiteItem1..5` buff ten nodes, and five
-  of them are Cradle: Gen 4, 6, 8, 9 and 10 (the others are Auto 8/10, Loop 9, Shard 10, Academy 2).
-  Our `GEAR_SETS` has 22 pieces across Purple/Orange/Red/Green/Blue and no White, so those ten
-  nodes are missing an exponential per-node multiplier. On the reference account every White item
-  is `Unlocked: false, Level: 0`, so nothing is wrong today -- but an account that unlocks them
-  gets wrong Cradle recommendations, silently. The install targets are known (above); what is not
-  sourced is their names, set bonuses and cost curves, so they are NOT half-added.
+  **The WHITE set the wiki omits is now modelled** (see the White entry below). `WhiteItem1..5`
+  buff ten nodes, five of them Cradle: Gen 4, 6, 8, 9 and 10 (the others are Auto 8/10, Loop 9,
+  Shard 10, Academy 2). Until they were added, those ten nodes were missing an exponential
+  per-node multiplier -- harmless on the reference account, where every White item is
+  `Unlocked: false, Level: 0`, but silently wrong Cradle recommendations for any account that
+  unlocks them. **Yellow and Black (Gem Of Power quality 4 and 6) are still unmodelled**, and
+  deliberately so: their names and set-bonus values are extracted but their install targets are
+  not in `gear-install-map.json`.
 - **GEAR really does buff a specific install node, from inside that node's own factor, and it
   compounds as `base^level`.** Both halves verified in the binary, and both were previously only
   wiki-sourced assumptions:
@@ -659,22 +663,50 @@ think one is wrong, disprove it with a test.
   tempting `scalar = 1.1 + (base-3)*0.01` shortcut** — the Orange pieces all share base 4 while
   spanning tiers 0/3/4/1, so base cost does not determine the scalar and the coincidence only holds
   because the two happen to correlate over most of the table.
-- **The White gear set is now modelled, and its five fields sit at three different confidences —
-  don't flatten them.** Installs are the strongest data in the gear table: taken from the game's own
-  `RU<Category><n>Bonus` dispatch, so `gear-install-check.js` now verifies 54 mappings (was 44).
-  `costBase 6` / `CostTier = Tier5 → 1.14` are read off the authored asset. **Names and set bonuses
-  are NOT sourced and are deliberately left as `White Piece N` / `''`.**
-- **Gear piece NAMES are not in the shipped files at all — not even for the pieces we "have".**
-  `grep "Cell Battery"` returns zero hits in `level0`, `sharedassets0.assets`,
-  `globalgamemanagers.assets`, `global-metadata.dat` **and** `libil2cpp.so`. So every gear name in
-  this repo came from the wiki, never from the game; they are populated at runtime from localization
-  data the APK we have does not carry. White has no wiki page, hence no names. The game DOES give
-  the magnitudes (`WhiteSetBonus1..5` = 1e50, 1e65, 2.5, 150, 10, `WhiteSetBonusRequirement` 5) but
-  not which RESOURCE each multiplies — and 2.5/150/10 sit in the same range as the Mod Point / Cell
-  / Research bonuses, which makes a resource assignment *guessable*. Guessing where a x1e65 lands is
-  exactly how a wrong number acquires a confident comment. An empty `setBonus` contributes nothing
-  (`computeGearSetBonusMultipliers` already does `if (!m) return`) and the UI renders it as
-  "not known — not applied" rather than a blank that reads as a broken field.
+- **The White gear set is fully modelled and every field is sourced from the game** — installs from
+  the `RU<Category><n>Bonus` dispatch (`gear-install-check.js` now verifies 54 mappings, was 44),
+  `costBase 6` / `CostTier = Tier5 → 1.14` from the authored asset, and names and set bonuses as
+  below. White sits behind **Gem Of Power quality 2**, per its own menu row name.
+- **Gear piece NAMES and SET-BONUS RESOURCES are in the game, and finding them corrected three
+  wiki names we had shipped for months.** Names live in the crafting menu at
+  `AcademyCanvas/YourAcademyMenu/GearMenu/CraftingNewGearPiecePanel/ItemSelectionLayout/<row>/ReqBox/DescText`
+  (`tools/reference/gear-names.json`, regenerate with `extract-gear-names.py`). The menu's **37
+  rows** are exactly `Gear.GearIconImagePaths`' length: 22 ungated pieces at colour sizes
+  **3/4/5/5/5** — our exact sizes in our exact order, 19 of 22 names matching character for
+  character — then 15 gem-gated rows, five each for **White (Q2), Yellow (Q4) and Black (Q6)**.
+  That block alignment is what pins a name to a piece. The three corrections: `Gamma Round` →
+  **Gamma Rounds**, `Chrysis Suit` → **Crysis Suit**, `Cell Based Loop Tank` → **Cell Based
+  Loop-Tank**. `GEAR_PIECE_RENAMES` migrates saved levels across the rename, since pieces are
+  keyed by name.
+- **AN EARLIER VERSION OF THIS FILE CLAIMED GEAR NAMES ARE NOT IN THE GAME AT ALL. That was wrong,
+  and the three ways it went wrong are the reusable part.**
+  1. **The names are stored UPPERCASE** ("MINING DRONE"). Every search used the wiki's title case,
+     so `grep` returned a confident zero. One `grep -i` would have found them.
+  2. **The single needle chosen first, "Cell Battery", is the one wiki name that is genuinely
+     absent** (the game's row 12 label is CELL BATTERY, but the search was case-sensitive) — the
+     worst possible probe, whose miss was then generalised to the whole table.
+  3. **A raw `grep` over `level0` is not a search of the scene.** Parts are compressed, so strings
+     plainly readable through UnityPy are invisible to grep. The "control" that seemed to validate
+     the method (`grep Cradle` → 48 hits) only proved that *some* of the file is uncompressed.
+     **Treat a grep miss on a Unity asset as "not proven", never as "not present".**
+  Also note the labels contain NEWLINES ("FIELD\nHARD DRIVE"), so a printable-run scan splits them
+  and picking the longest run yields half-names — "BATTERY", "GRAVITY", "HARD DRIVE". Parse Unity's
+  length-prefixed string instead; `extract-gear-names.py` does.
+- **Which RESOURCE a set bonus multiplies comes from `Gear.SetGearSetBonuses()`, and is NOT
+  guessable from the text-refresh method.** That one aggregator walks the five totals
+  (`TotalSetCellBonus`, `MP`, `Shard`, `RP`, `AP`) and multiplies each `<Color>SetBonus<N>` into
+  one of them; `extract-gear-set-bonuses.py` parses it into `tools/reference/gear-set-bonus-map.json`
+  together with the authored magnitudes, and `gear-name-check.js` asserts both (verified with a
+  negative control). It reproduces all 22 wiki-sourced bonuses exactly, which is what licenses
+  trusting it for White: **Cells x1e50 and x1e65, Academy Points x2.5, Shards x150, Mod Points x10.**
+  **The trap:** `CheckWhiteSetBonusTexts()` refreshes the Cells, RP, Shards and AP labels, which
+  reads exactly like the answer and is wrong — White touches **Mod Points and not Research
+  Points**. That method is a stale UI refresher; the aggregator is the math. `OrangeSetBonus2`
+  (3000) appears in neither total because it is a one-off **Diamonds** grant, not a multiplier —
+  absence from the aggregator does not mean dead.
+- **Yellow and Black are two more five-piece sets we do not model** (gated at Gem Of Power quality
+  4 and 6). Their names and set-bonus magnitudes are already extracted; their install targets are
+  NOT in `gear-install-map.json`, so they are not half-added.
 - **`getGearSets()` reconciles the stored list against `REAL_GEAR_PIECES` by name; it used to
   return the stored list verbatim.** That meant the store, not the code, was authoritative for
   game-sourced data: **any piece added later never appeared for anyone who had ever opened the Ships
@@ -684,6 +716,10 @@ think one is wrong, disprove it with a test.
   defaults looked perfectly correct, so this fails *silently and only for real users*. The rule:
   `REAL_GEAR_PIECES` owns every game-sourced field, the store owns only `level`/`owned`. Same
   prune-and-merge shape as `getShipGear`; keep the two consistent.
+  **The reconcile updates piece objects IN PLACE and must keep doing so.** Rebuilding the array
+  each call detaches any reference a caller holds, so a `piece.level = n` written after some
+  unrelated `getGearSets()` call lands on an orphan and vanishes. That is not hypothetical — the
+  first test written against this function hit it, and read as a bug in the set-bonus math.
 - **Legality is a state predicate, not a path predicate.** A node at level > 0 is legal iff it's
   within `maxLevel`, every dependency parent is > 0, and any `minValue` tier threshold is met by
   points spent in strictly-lower-threshold nodes. Order of purchase never matters. This is what
@@ -782,6 +818,8 @@ node tools/bench/route-test.js         # unknown hash routes normalise instead o
 node tools/bench/relic-sweep.js        # which relics actually move the sim (slow)
 node tools/bench/gem-coverage-test.js  # every gem param is reachable from the Gem Planner
 node tools/bench/gem-tree-test.js      # tree shape + every unlock gate is satisfiable
+node tools/bench/gear-install-check.js  # which install node each gear piece buffs, vs the GAME
+node tools/bench/gear-name-check.js     # gear piece names + set-bonus resources, vs the GAME
 node tools/bench/inscryption-slot-test.js # inscryption slot map vs the game; must be a bijection
 node tools/bench/save-gate-test.js     # caps/gates vs a REAL save (skips if none pulled)
 node tools/save/inspect.js <DATA.text> [regex]            # decode + inspect a real save

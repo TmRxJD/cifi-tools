@@ -1,0 +1,266 @@
+{
+  "_source": "AcademyCanvas/YourAcademyMenu/GearMenu/CraftingNewGearPiecePanel/ItemSelectionLayout/<index>/ReqBox/{DescText,LevelText} in level0",
+  "_meaning": "Displayed gear piece names, in the crafting menu's own order. Rows carrying a gemGate are locked behind that gem at the given quality.",
+  "_game": "CIFI 0.7.3.54",
+  "rows": [
+    {
+      "index": 0,
+      "gemGate": null,
+      "quality": null,
+      "unlockText": "LEVEL 37",
+      "name": "OCEANIC SPECIMEN"
+    },
+    {
+      "index": 1,
+      "gemGate": null,
+      "quality": null,
+      "unlockText": "LEVEL 40",
+      "name": "VENOMOUS SPECIMEN"
+    },
+    {
+      "index": 2,
+      "gemGate": null,
+      "quality": null,
+      "unlockText": "LEVEL 40",
+      "name": "CURIOUS SPECIMEN"
+    },
+    {
+      "index": 3,
+      "gemGate": null,
+      "quality": null,
+      "unlockText": "LEVEL 37",
+      "name": "TERRAN FUEL CELL"
+    },
+    {
+      "index": 4,
+      "gemGate": null,
+      "quality": null,
+      "name": "DIAMOND INFUSED CELL",
+      "unlockText": "LEVEL 37"
+    },
+    {
+      "index": 5,
+      "gemGate": null,
+      "quality": null,
+      "name": "CETI-POWERED ENERGY CELL",
+      "unlockText": "LEVEL 37"
+    },
+    {
+      "index": 6,
+      "gemGate": null,
+      "quality": null,
+      "name": "IXION INFUSED CELL",
+      "unlockText": "LEVEL 37"
+    },
+    {
+      "index": 7,
+      "gemGate": null,
+      "quality": null,
+      "unlockText": "LEVEL 40",
+      "name": "CELL BASED LOOP-TANK"
+    },
+    {
+      "index": 8,
+      "gemGate": null,
+      "quality": null,
+      "name": "FIELD HARD DRIVE",
+      "unlockText": "LEVEL 40"
+    },
+    {
+      "index": 9,
+      "gemGate": null,
+      "quality": null,
+      "name": "GRAVITY BOMB",
+      "unlockText": "LEVEL 40"
+    },
+    {
+      "index": 10,
+      "gemGate": null,
+      "quality": null,
+      "name": "GAMMA ROUNDS",
+      "unlockText": "LEVEL 40"
+    },
+    {
+      "index": 11,
+      "gemGate": null,
+      "quality": null,
+      "name": "LOOP GUN",
+      "unlockText": "LEVEL 40"
+    },
+    {
+      "index": 12,
+      "gemGate": null,
+      "quality": null,
+      "unlockText": "LEVEL 40",
+      "name": "CELL BATTERY"
+    },
+    {
+      "index": 13,
+      "gemGate": null,
+      "quality": null,
+      "name": "CONSTRUCTOR SUIT",
+      "unlockText": "LEVEL 40"
+    },
+    {
+      "index": 14,
+      "gemGate": null,
+      "quality": null,
+      "unlockText": "LEVEL 40",
+      "name": "RESEARCH SUPPLIES"
+    },
+    {
+      "index": 15,
+      "gemGate": null,
+      "quality": null,
+      "name": "CELL GUN",
+      "unlockText": "LEVEL 40"
+    },
+    {
+      "index": 16,
+      "gemGate": null,
+      "quality": null,
+      "name": "DRONE SHIELD",
+      "unlockText": "LEVEL 40"
+    },
+    {
+      "index": 17,
+      "gemGate": null,
+      "quality": null,
+      "name": "SCOUT DROID",
+      "unlockText": "LEVEL 40"
+    },
+    {
+      "index": 18,
+      "gemGate": null,
+      "quality": null,
+      "name": "MINING DRONE",
+      "unlockText": "LEVEL 40"
+    },
+    {
+      "index": 19,
+      "gemGate": null,
+      "quality": null,
+      "unlockText": "LEVEL 40",
+      "name": "CRYSIS SUIT"
+    },
+    {
+      "index": 20,
+      "gemGate": null,
+      "quality": null,
+      "name": "BETA-ROUNDS",
+      "unlockText": "LEVEL 40"
+    },
+    {
+      "index": 21,
+      "gemGate": null,
+      "quality": null,
+      "name": "SHARD GUN",
+      "unlockText": "LEVEL 40"
+    },
+    {
+      "index": 22,
+      "gemGate": "GemOfPower",
+      "quality": 2,
+      "name": "CELL SPRAYER",
+      "unlockText": "LEVEL 40"
+    },
+    {
+      "index": 23,
+      "gemGate": "GemOfPower",
+      "quality": 2,
+      "unlockText": "LEVEL 40",
+      "name": "CELL MINER MACHINA"
+    },
+    {
+      "index": 24,
+      "gemGate": "GemOfPower",
+      "quality": 2,
+      "name": "EPSILON HANDCANNON",
+      "unlockText": "LEVEL 40"
+    },
+    {
+      "index": 25,
+      "gemGate": "GemOfPower",
+      "quality": 2,
+      "name": "ENHANCED MINING SUIT",
+      "unlockText": "LEVEL 40"
+    },
+    {
+      "index": 26,
+      "gemGate": "GemOfPower",
+      "quality": 2,
+      "name": "ON-SITE MED KITS",
+      "unlockText": "LEVEL 40"
+    },
+    {
+      "index": 27,
+      "gemGate": "GemOfPower",
+      "quality": 4,
+      "unlockText": "LEVEL 40",
+      "name": "KINETIC HANDCANNON"
+    },
+    {
+      "index": 28,
+      "gemGate": "GemOfPower",
+      "quality": 4,
+      "name": "GENERATOR UTILITY GUN",
+      "unlockText": "LEVEL 40"
+    },
+    {
+      "index": 29,
+      "gemGate": "GemOfPower",
+      "quality": 4,
+      "unlockText": "LEVEL 40",
+      "name": "EXPANDED DIMENSION BOX"
+    },
+    {
+      "index": 30,
+      "gemGate": "GemOfPower",
+      "quality": 4,
+      "name": "ENGINEERING SUIT",
+      "unlockText": "LEVEL 40"
+    },
+    {
+      "index": 31,
+      "gemGate": "GemOfPower",
+      "quality": 4,
+      "name": "CETI ALLOY AMMUNITION",
+      "unlockText": "LEVEL 40"
+    },
+    {
+      "index": 32,
+      "gemGate": "GemOfPower",
+      "quality": 6,
+      "unlockText": "LEVEL 40",
+      "name": "LIL' VOID"
+    },
+    {
+      "index": 33,
+      "gemGate": "GemOfPower",
+      "quality": 6,
+      "unlockText": "LEVEL 40",
+      "name": "THROTTLE SHELLS"
+    },
+    {
+      "index": 34,
+      "gemGate": "GemOfPower",
+      "quality": 6,
+      "name": "TEMPORAL MISSILE",
+      "unlockText": "LEVEL 40"
+    },
+    {
+      "index": 35,
+      "gemGate": "GemOfPower",
+      "quality": 6,
+      "name": "MOBILE SHIELDING TECH",
+      "unlockText": "LEVEL 40"
+    },
+    {
+      "index": 36,
+      "gemGate": "GemOfPower",
+      "quality": 6,
+      "name": "DUAL IGNITION PACKS",
+      "unlockText": "LEVEL 40"
+    }
+  ]
+}
