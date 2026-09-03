@@ -1998,6 +1998,15 @@ function effectBox(lines) {
       <div class="flex justify-between items-start py-1 gap-2"><span class="text-gray-400 text-sm min-w-0 flex-1 break-words">${l.label}</span><span class="text-white font-medium text-sm flex-shrink-0 whitespace-nowrap">${l.value}</span></div>`).join('')}</div>`;
 }
 
+// The original HIDES a gated upgrade until its gem requirement is met -- it does not show it with
+// a "requires X" note. Its pages filter the item list through isUpgradeUnlocked's predicate
+// (assets/Trinkets-*.js does exactly this), and the sidebar filters links the same way, dropping a
+// whole category once nothing in it is visible. Annotating instead of hiding was a real parity
+// break: you could see, and edit, upgrades the original would not have shown you yet.
+function visibleUpgradeItems(catKey, items) {
+  return (items || []).filter((item) => window.isUpgradeUnlocked(`upgrades.${catKey}.${item.id}`, store.gems));
+}
+
 function renderUpgradeInput(catKey, item) {
   const fullKey = `${catKey}.${item.id}`;
   const isBoolean = item.maxLevel === 1;
@@ -2064,21 +2073,12 @@ function renderUpgradeInput(catKey, item) {
   // someone plan around something their account cannot own yet. The input is NOT hard-disabled:
   // our picture of an account's gem levels comes from the Gem Planner, which the user may
   // simply not have filled in, and refusing their own real number would be worse than a note.
-  const gateKey = `upgrades.${catKey}.${item.id}`;
-  const gateNote = (() => {
-    const label = window.gateLabel(gateKey);
-    if (!label) return '';
-    const unlocked = window.isUpgradeUnlocked(gateKey, store.gems);
-    if (unlocked) return '';
-    return `<div class="flex items-center gap-1.5 text-xs text-amber-400/90 bg-amber-500/10 border border-amber-500/20 rounded-md px-2 py-1 mb-2">${iconSvg('info-circle', 13)}<span>${escapeHtml(label)}</span></div>`;
-  })();
-
   card.innerHTML = `
     <div class="flex items-center justify-between gap-2 mb-3">
       <h3 class="font-semibold text-white truncate min-w-0 flex-1 text-[1.05rem]" title="${item.label}">${item.label}</h3>
       <div class="px-3 py-1 rounded-lg bg-gray-900/70 border border-gray-700/30"><span class="font-bold text-lg text-gray-300" data-level>${level}</span><span class="text-xs text-gray-500">/${cap ?? '∞'}</span></div>
     </div>
-    ${gateNote}${effectBox(lines)}${nextCostLine}
+    ${effectBox(lines)}${nextCostLine}
     <div class="flex items-center justify-between mt-auto pt-2 gap-1.5">
       <button data-min class="ctrl-btn ctrl-btn--gray" ${canDec ? '' : 'disabled style="opacity:.3"'}>${iconSvg('chevron-left', 16)}${iconSvg('chevron-left', 16, '-ml-2.5')}</button>
       <button data-dec class="ctrl-btn ctrl-btn--gray" ${canDec ? '' : 'disabled style="opacity:.3"'}>${iconSvg('chevron-left', 16)}</button>
@@ -2135,7 +2135,7 @@ function renderUpgradesPage(root, catKey) {
     tabs.appendChild(hideBtn);
 
     const grid = document.getElementById('upgradeItemsGrid');
-    cat.items
+    visibleUpgradeItems(catKey, cat.items)
       .filter((item) => {
         const f = window.UPGRADE_FORMULAS[`inscryptions.${item.id}`];
         return f && f.effects[0].hunter === inscriptionsTabHunter;
@@ -2157,8 +2157,9 @@ function renderUpgradesPage(root, catKey) {
   // merge-insertion order.
   const numOf = (item) => parseInt((item.label.match(/#(\d+)/) || [])[1] || '0', 10);
   const byNumber = (a, b) => numOf(a) - numOf(b);
-  const tier1Items = (isRelics ? cat.items.filter((i) => !i.id.startsWith('t2')) : cat.items).slice().sort(isRelics ? byNumber : () => 0);
-  const tier2Items = (isRelics ? cat.items.filter((i) => i.id.startsWith('t2')) : []).slice().sort(byNumber);
+  const shown = visibleUpgradeItems(catKey, cat.items);
+  const tier1Items = (isRelics ? shown.filter((i) => !i.id.startsWith('t2')) : shown).slice().sort(isRelics ? byNumber : () => 0);
+  const tier2Items = (isRelics ? shown.filter((i) => i.id.startsWith('t2')) : []).slice().sort(byNumber);
 
   root.innerHTML = `
     <h1 class="text-2xl font-bold text-white text-center mb-4">${cat.label}</h1>

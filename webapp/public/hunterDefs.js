@@ -379,7 +379,7 @@ window.UPGRADE_GATES = {
   'upgrades.cms.cm58': { gem: 'power', level: 2 }, // CM #58
   'upgrades.cms.cm_ultima': { gem: 'power', level: 3 }, // CM Ultima #2
   'upgrades.cms.cm_ultimas': { gem: 'power', level: 3 }, // CM Ultima Count
-  'upgrades.cms.milestoneCount': { gem: 'exodus', level: 1 }, // Milestones Count
+  'upgrades.cms.milestoneCount': { gem: 'exodus', level: 1, node: 4 }, // Milestones Count
   'upgrades.loopmods.roe': { gem: 'temporal', level: 4 }, // Ultima: Rule of Experience
   'upgrades.researches.res112': { gem: 'innovation', level: 3 }, // Research #112 (Knox)
   // mats_exchange.tysconDrives deliberately has NO gate entry here: unlike roe (a real
@@ -387,9 +387,9 @@ window.UPGRADE_GATES = {
   // finds no such object for tysconDrives itself -- only the "Mats Exchange" NAV PAGE gates at
   // temporal level 4 (a UI-reachability gate, not necessarily the override's own value gate).
   // Adding one here on that weaker basis was wrong; left unmapped rather than guessed.
-  'upgrades.trinkets.last_handbook': { gem: 'creation', level: 4 }, // The Lost Last Manufacturer
-  'upgrades.trinkets.transmission_amplifier': { gem: 'creation', level: 4 }, // The Pocket Directive Transmission Amplifier
-  'upgrades.trinkets.ouro_codex': { gem: 'creation', level: 4 }, // The Ouroboros Recursive Codex
+  'upgrades.trinkets.last_handbook': { gem: 'creation', level: 4, node: 5 }, // The Lost Last Manufacturer
+  'upgrades.trinkets.transmission_amplifier': { gem: 'creation', level: 4, node: 5 }, // The Pocket Directive Transmission Amplifier
+  'upgrades.trinkets.ouro_codex': { gem: 'creation', level: 4, node: 5 }, // The Ouroboros Recursive Codex
 };
 
 /** The gate on an upgrade key, or null if it has none. */
@@ -409,8 +409,21 @@ window.gateFor = function gateFor(key) {
 window.isUpgradeUnlocked = function isUpgradeUnlocked(key, gemStates) {
   const gate = window.UPGRADE_GATES[key];
   if (!gate) return true;
-  const level = (gemStates && gemStates[gate.gem] && gemStates[gate.gem].level) || 0;
-  return level >= gate.level;
+  // The original tool's predicate, verbatim (it reuses one copy of this for nav links, tool
+  // entries, hunters and individual upgrade cards):
+  //   if (!unlock_gem || !unlock_lvl) return true
+  //   const t = getGemState(unlock_gem); if (!t) return false
+  //   if (t.level < unlock_lvl) return false
+  //   if (unlock_node !== undefined && !t.nodes?.[unlock_node - 1]) return false
+  //   return true
+  // The NODE half was missing here: several gates require a specific gem NODE as well as a tree
+  // level (trinkets need Creation 4 *and* node 5; milestoneCount needs Exodus 1 *and* node 4), so
+  // level-only checking unlocked things the original still hides.
+  const tree = gemStates && gemStates[gate.gem];
+  if (!tree) return false;
+  if ((tree.level || 0) < gate.level) return false;
+  if (gate.node !== undefined && !(tree.nodes && tree.nodes[gate.node - 1])) return false;
+  return true;
 };
 
 /** Human-readable requirement, for UI. Returns null when there is no gate. */
@@ -418,7 +431,8 @@ window.gateLabel = function gateLabel(key) {
   const gate = window.UPGRADE_GATES[key];
   if (!gate) return null;
   const tree = gate.gem.charAt(0).toUpperCase() + gate.gem.slice(1);
-  return `Requires ${tree} Gem level ${gate.level}`;
+  const node = gate.node !== undefined ? `, node ${gate.node}` : '';
+  return `Requires ${tree} Gem level ${gate.level}${node}`;
 };
 
 window.resolveMaxLevels = function resolveMaxLevels(defs, ctx) {

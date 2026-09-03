@@ -70,8 +70,14 @@ check('every unlock gate is satisfiable within its tree max level', () => {
 });
 
 check('a maxed gem state unlocks every gated upgrade', () => {
+  // A truly maxed tree owns its NODES as well as its level: several gates require a specific gem
+  // node (trinkets need Creation 4 AND node 5, milestoneCount Exodus 1 AND node 4), matching the
+  // original's own predicate. A level-only "maxed" state is not maxed, and reporting those gates as
+  // stuck would be the test's fault, not the gate's.
   const maxed = {};
-  for (const [name, t] of Object.entries(ref.trees)) maxed[name] = { level: t.maxLevel };
+  for (const [name, t] of Object.entries(ref.trees)) {
+    maxed[name] = { level: t.maxLevel, nodes: new Array(t.nodeCount || 6).fill(true) };
+  }
   for (const key of Object.keys(sb.UPGRADE_GATES)) {
     if (!sb.isUpgradeUnlocked(key, maxed)) return `${key} still locked with every tree at max`;
   }

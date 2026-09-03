@@ -111,19 +111,25 @@ check('relic steps carry a real fragment cost, never zero', async () => {
 // because the wasm has no concept of the gate.
 
 check('a gated upgrade is locked without the gem level and unlocked with it', () => {
+  // The 4th entry is the required NODE, where the gate has one: trinkets need Creation 4 AND
+  // node 5, mirroring the original's predicate. Passing a level-only state for those would leave
+  // them locked and read as a gate bug rather than an incomplete fixture.
   const cases = [
-    ['upgrades.relics.t2r7', 'power', 3],
-    ['upgrades.gadgets.wrench', 'exodus', 4],
-    ['upgrades.cms.cm46', 'power', 2],
-    ['upgrades.researches.res95', 'innovation', 3],
-    ['upgrades.shardmilestones.m0', 'attraction', 3],
-    ['upgrades.trinkets.ouro_codex', 'creation', 4],
+    ['upgrades.relics.t2r7', 'power', 3, undefined],
+    ['upgrades.gadgets.wrench', 'exodus', 4, undefined],
+    ['upgrades.cms.cm46', 'power', 2, undefined],
+    ['upgrades.researches.res95', 'innovation', 3, undefined],
+    ['upgrades.shardmilestones.m0', 'attraction', 3, undefined],
+    ['upgrades.trinkets.ouro_codex', 'creation', 4, 5],
   ];
-  for (const [key, gem, level] of cases) {
+  const state = (gem, level, node) => ({
+    [gem]: { level, nodes: node === undefined ? new Array(6).fill(true) : new Array(6).fill(false).map((_, i) => i === node - 1) },
+  });
+  for (const [key, gem, level, node] of cases) {
     if (sb.isUpgradeUnlocked(key, {})) return `${key} unlocked with no gem state at all`;
-    if (sb.isUpgradeUnlocked(key, { [gem]: { level: level - 1 } })) return `${key} unlocked one level early`;
-    if (!sb.isUpgradeUnlocked(key, { [gem]: { level } })) return `${key} still locked at the required level`;
-    if (!sb.isUpgradeUnlocked(key, { [gem]: { level: level + 5 } })) return `${key} locked above the required level`;
+    if (sb.isUpgradeUnlocked(key, state(gem, level - 1, node))) return `${key} unlocked one level early`;
+    if (!sb.isUpgradeUnlocked(key, state(gem, level, node))) return `${key} still locked at the required level`;
+    if (!sb.isUpgradeUnlocked(key, state(gem, level + 5, node))) return `${key} locked above the required level`;
     if (!/Requires .* Gem level /.test(sb.gateLabel(key) || '')) return `${key} has no readable requirement`;
   }
   // Ungated things must stay available.

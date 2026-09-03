@@ -57,8 +57,14 @@ const idsOf = (name) => {
   return m[1].split(',').map((s) => Number(s.trim())).filter(Number.isFinite);
 };
 const HUNTER_IDS = idsOf('INSCRYPTION_IDS');
-const FLEET_IDS = idsOf('FLEET_INSCRYPTION_IDS');
-const ALL_IDS = [...HUNTER_IDS, ...FLEET_IDS];
+// The FLEET inscryptions no longer go through this resolver at all. shipSchema.js's free
+// crew/rank table addresses them by RAW SAVE SLOT (`IS48Level`, `IS49Level`, ...), taken straight
+// from MultiverseMarket's own field names, so there is no display id to translate. They are still
+// checked below -- that every slot exists in the registry -- because a slot outside it would read
+// as a permanent zero grant rather than as an error.
+const fleetSrc = fs.readFileSync(path.join(__dirname, '../../webapp/public/shipSchema.js'), 'utf8');
+const FLEET_SLOTS = [...fleetSrc.matchAll(/(?:rank|crew)IS:\s*(\d+)/g)].map((m) => Number(m[1]));
+const ALL_IDS = HUNTER_IDS;
 
 check('resolver matches every slot the game data proves', () => {
   const problems = [];
@@ -99,7 +105,8 @@ check('the resolver refuses ids outside the registry instead of inventing a slot
 });
 
 check('every id the importer walks resolves into the registry', () => {
-  const bad = ALL_IDS.map((n) => [n, slotOf(n)]).filter(([, s]) => s < 1 || s > REGISTRY_SIZE);
+  const bad = ALL_IDS.map((n) => [n, slotOf(n)]).filter(([, s]) => s < 1 || s > REGISTRY_SIZE)
+    .concat(FLEET_SLOTS.filter((s) => s < 1 || s > REGISTRY_SIZE).map((s) => [`fleet slot ${s}`, s]));
   return bad.length
     ? `would import nothing: ${bad.map(([n, s]) => `#${n}->IS${s}`).join(', ')}`
     : null;
