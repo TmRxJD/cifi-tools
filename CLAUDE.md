@@ -859,10 +859,29 @@ think one is wrong, disprove it with a test.
   importer lines (so changing a mapping without revisiting the classification fails), a guard
   against reintroducing an invented multiplier, the zero-counter warning on all 5 growth ships, and
   a non-degenerate Demeter plan. Verified with a negative control.
-- **The two allocator benches test CRADLE ONLY.** `sirred-algorithm-check.js` and
-  `real-save-optimizer-check.js` both use Cradle, which has the fewest growth nodes of any ship —
-  which is precisely why the above went unnoticed. Remember this before reading either as
-  "the allocator is verified": they verify the SEARCH, on one ship.
+- **`allocator-check.js` is now the primary allocator gate: all 7 ships, 5 budgets, 35 combinations,
+  scored against the GAME's authored coefficients rather than SirRed's tool.** The two SirRed
+  benches remain but are Cradle-only — which is precisely why the growth-counter collapse went
+  unnoticed — so read them as a community cross-check, not as coverage.
+  Three things this bench had to get right, each of which it got WRONG first and each of which is a
+  reusable lesson about scoring an allocator against a reference:
+  - **Not every authored coefficient is a resource multiplier.** Demeter 1's number is a COUNT of
+    operations, not a percentage, and feeding it into a product objective made it look like the best
+    node on the ship — reporting our allocator as 96.87% behind for correctly declining it. The
+    filter is the same one `node-coefficient-check.js` uses: no `%` in the effect text, not
+    comparable.
+  - **A deliberate POLICY must be held constant on both sides.** Demeter 1 is maxed outright once
+    the budget is >= 15 because its payoff lands at the start of the NEXT loop reset, which no
+    within-run objective can score. A reference that only knows the within-run product always
+    declines it, charging us ~5 points and reporting a 7-21% "loss" that is a modelling decision,
+    not a worse search. Whether that policy is CORRECT is a separate question this bench does not
+    answer.
+  - **Even focus weights only.** With uneven weights our objective stops being the flat product, and
+    a reference would have to replicate our weighting rule to stay comparable — at which point it
+    tests the model against itself. Uneven-weight behaviour remains uncovered, deliberately.
+  Negative control: restoring the old `RUN_LENGTH_BIAS.long` makes it fail on Cradle with exactly
+  the historical 13.59 / 14.50 / 35.70 / 17.53 percentages **and** on Auxesia, which the Cradle-only
+  benches could never have seen.
 - **EVERY ship install prereq and base cap is now checked against the GAME, and four were wrong.**
   The game authors both per node: `RU<n><Category>Requirement` and `RU<n><Category>MaxLevel` on
   FleetManager. The semantics are stated by its own buy method rather than inferred --
@@ -1013,6 +1032,7 @@ node tools/bench/relic-cost-test.js    # relic cost table + fragment arithmetic 
 node tools/bench/node-coefficient-check.js # ship node coefficients vs the GAME'S AUTHORED values
 node tools/bench/ship-node-gate-check.js # install prereqs + base caps vs the GAME (77 nodes)
 node tools/bench/growth-counter-check.js # per-run counter classification + zero-counter warning
+node tools/bench/allocator-check.js     # allocator vs a reference greedy, ALL 7 ships
 python tools/il2cpp-cli/typetree.py --dump FleetManager --grep BaseBonus  # read authored data
 node tools/bench/relic-arg-probe.js    # every declared relic reaches the wasm (fast)
 node tools/bench/path-relic-test.js    # effective path never recommends an inert relic
