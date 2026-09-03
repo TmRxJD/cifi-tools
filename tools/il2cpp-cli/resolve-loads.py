@@ -32,7 +32,12 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DUMP = os.path.join(HERE, "..", "gamefiles", "apk-0.7.3.54", "il2cpp-dump", "dump.cs")
+# Same CIFI_APK switch as the rest of the il2cpp tooling. This one matters more than most:
+# offsets come from a decompiled body of ONE build, and resolving them against another build's
+# dump.cs yields confident nonsense rather than an error -- "+96 into" a 16-byte BigDouble field,
+# or a text field where a bonus should be. Caught exactly that way while diffing 0.7.3.54 vs .61.
+APK_DIR = os.environ.get("CIFI_APK", "apk-0.7.3.54")
+DUMP = os.path.join(HERE, "..", "gamefiles", APK_DIR, "il2cpp-dump", "dump.cs")
 
 NOTE_RE = re.compile(r'NoteDecompilerIssue\("Unmanaged memory load: \[([^\]]*)\]"\)')
 # "v67 @ rcx_v11 (FleetManager)+1C30"  or  "this @ rdi (GemPerks)+1200"

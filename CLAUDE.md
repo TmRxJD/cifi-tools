@@ -784,6 +784,37 @@ think one is wrong, disprove it with a test.
   each call detaches any reference a caller holds, so a `piece.level = n` written after some
   unrelated `getGearSets()` call lands on an orphan and vanishes. That is not hypothetical — the
   first test written against this function hit it, and read as a bug in the set-bonus math.
+- **0.7.3.54 -> 0.7.3.61 build diff: the per-node install math is UNCHANGED, and the new late-game
+  systems are inert.** This is the parity sweep to repeat after any future pull; all of it is now a
+  couple of commands because every il2cpp tool honours `CIFI_APK`.
+  - **All 83 `RU<Category><n>Bonus` getters have identical factor sets** — same named calls, same
+    resolved field reads. The formula our optimizer models per node did not move, so no
+    re-derivation is needed and no allocation can have shifted.
+  - **`MK1Production` / `MK2Production` each gained `Badges.FinalBadge21Bonus` and lost
+    `TraitSpheres.FinalTS17Bonus`.** Both are uniform across a ship's nodes, so neither can reorder
+    the optimizer; they change absolute production, which this tool already does not claim to model
+    (see the evolution note above). `CellProduction` is unchanged.
+  - **New systems: Pulse Reactor / Void Upgrades, Space Academy Automation Center, Planet Missions.**
+    Void Upgrades buff `Materials, MK1, MK2, MP, Shards` — squarely our territory — **but they are
+    NOT live.** `Small_VoidUpgrades_Methods.SetBonuses(BonusType)` is a single `ret` at RVA
+    0x25C222A, verified by disassembly rather than by trusting Cpp2IL's empty body; the cost
+    formula, level array and UI all exist around it. None of `PulseReactor`, `VoidUpgrade` or
+    `SpaceAcademyAutomationCenter` is referenced from `FleetManager` or `GeneratorManager` at all.
+    **This is the thing to re-check on the next pull** — when `SetBonuses` stops being a `ret`, the
+    fleet model gains a real gap, and `PulseReactor.smallMeltdownValues` suggests it will land near
+    Meltdown, which we DO model.
+  - Everything else that moved is a Unity IAP library upgrade and compiler state-machine
+    renumbering — 995 "new types" of which ~420 are game-ish and almost all of those are billing.
+    Filter that noise before reading a type diff, or the signal is unfindable.
+  - `Gear.gearColor` enumerates only `purple, red, green, orange, blue` — no white despite White
+    being fully wired, so that enum is partial/legacy and is NOT evidence about which sets exist.
+- **`resolve-loads.py` offsets MUST come from the same build as the `dump.cs` they resolve against,
+  and getting it wrong produces confident nonsense rather than an error.** Resolving 0.7.3.61
+  offsets against 0.7.3.54's dump returned `ExpansionNextBonusText` where a bonus belonged and
+  "+96 into" a 16-byte BigDouble field. The tell is a non-zero, non-8 "into it" value: BigDouble
+  reads land at +0 or +8, so anything else means the field table does not match the body. It honours
+  `CIFI_APK` now, but the hazard survives any tool that reads offsets from one place and names from
+  another.
 - **Legality is a state predicate, not a path predicate.** A node at level > 0 is legal iff it's
   within `maxLevel`, every dependency parent is > 0, and any `minValue` tier threshold is met by
   points spent in strictly-lower-threshold nodes. Order of purchase never matters. This is what
