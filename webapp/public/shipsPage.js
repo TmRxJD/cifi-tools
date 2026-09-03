@@ -276,6 +276,16 @@ const FLEET_BOOST_ITEMS = [
 // the identical pattern, for whatever that consistency is worth as corroboration.
 const FLEET_BADGE_ITEMS = [
   { key: 'badge_innovation', name: 'Innovation Badge', source: 'Badge', ships: [1, 2, 3, 4], mult: 7, note: 'Cradle, Auxesia, Zagreus & Hephaestus rank installs gain x7 power.' },
+  // Badge12 is the Innovation Badge's counterpart for the three ships Badge2 does not cover, and it
+  // was missing entirely until 2026-09-03. Every check is from the game: `RU<Cat><n>Bonus` reads
+  // FinalBadge2Bonus on Gen/Tech/Loop/Auto and FinalBadge12Bonus on Shard/Research/Academy (all 11
+  // nodes of each), the authored values are Badge2Bonus = 7 and Badge12Bonus1 = 222, and the name
+  // comes from the badge inventory, where AcademyMilestone<N> is Badge<N> -- milestone 2 reads
+  // "INNOVATION BADGE" (matching the name we already shipped) and milestone 12 "INNOVATION BADGE #2".
+  // Uniform across a ship's nodes, so it cannot reorder an allocation and the batch takes per-ship
+  // budgets from the user rather than splitting one -- but it understated Demeter/Koios/Zeus totals
+  // by 222x for anyone who owns it.
+  { key: 'badge_innovation_2', name: 'Innovation Badge #2', source: 'Badge', ships: [5, 6, 7], mult: 222, note: 'Demeter, Koios & Zeus rank installs gain x222 power.' },
   { key: 'badge_dark_innovation', name: 'Dark Innovation Badge', source: 'Badge', ships: [1, 2, 3, 4, 5, 6, 7], mult: 3, note: 'All ship rank installs gain x3 power.' },
 ];
 function defaultFleetBadges() {

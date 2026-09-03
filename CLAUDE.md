@@ -149,6 +149,8 @@ There is exactly one place for each of these. **Do not add a second.**
 | Ship install prereqs + base caps | `tools/reference/ship-node-gates.json` |
 | Ship install node counters | `tools/reference/ship-node-counters.json` |
 | Ship install node names | `tools/reference/ship-node-names.json` |
+| Fleet badge -> ships + value | `tools/reference/badge-map.json` |
+| Omitted uniform per-node terms | `tools/reference/uniform-node-terms.json` |
 | Gear piece names (the game's own) | `tools/reference/gear-names.json` |
 | Gear set bonus -> resource + value | `tools/reference/gear-set-bonus-map.json` |
 | Gear piece -> install node | `tools/reference/gear-install-map.json` |
@@ -928,6 +930,26 @@ think one is wrong, disprove it with a test.
   - `ship-test.js` duplicates the weight rule (nodeWeight is module-private) and was still on `max`
     after the tool moved to `sum`, reporting the allocator as wrong for preferring a dual-resource
     node. Known drift hazard, now flagged in place.
+- **A THIRD fleet badge was missing entirely: `Badge12` ("Innovation Badge #2"), x222 on Demeter,
+  Koios and Zeus.** The tool modelled `Badge2` (x7) and `DarkBadge1` (x3) and stopped there. The
+  game reads `FinalBadge2Bonus` in every Gen/Tech/Loop/Auto node and `FinalBadge12Bonus` in every
+  Shard/Research/Academy node -- the two badges partition the seven ships, so the three the
+  Innovation Badge does not cover had their totals understated by 222x for anyone who owned it.
+  Every part is game-sourced: the ship mapping from the `RU<Cat><n>Bonus` bodies, the values from
+  the authored `Badges` MonoBehaviour (`Badge2Bonus` 7, `Badge12Bonus1` 222, `DarkBadge1Bonus` 3 --
+  the first and last confirming what we already shipped), and the NAME from the badge inventory,
+  where `AcademyMilestone<N>` is `Badge<N>`: milestone 2 reads "INNOVATION BADGE" (matching our
+  existing label) and milestone 12 "INNOVATION BADGE #2".
+  **Why nothing caught it, which is the reusable part:** a badge is a per-SHIP uniform multiplier,
+  so it cannot reorder an allocation, and the batch optimizer takes per-ship budgets from the user
+  rather than splitting one budget across ships. Every allocator bench is therefore blind to it by
+  construction. `badge-check.js` closes that: it derives each badge's ships and multiplier by
+  probing `computeFleetBadgeMultipliers` one badge at a time (behaviour, not declaration) and
+  compares against `badge-map.json`. It fails both ways -- a badge the game applies that we omit,
+  and a badge we apply to a ship the game does not. Verified with two negative controls.
+  `Badge5` is deliberately excluded from that map: only ONE Shard node reads it, so it belongs to
+  that node's own formula rather than being a per-ship multiplier, and counting it would overstate
+  the whole ship.
 - **`allocator-check.js` is now the primary allocator gate: all 7 ships, 5 budgets, 35 combinations,
   scored against the GAME's authored coefficients rather than SirRed's tool.** The two SirRed
   benches remain but are Cradle-only — which is precisely why the growth-counter collapse went
@@ -1153,6 +1175,7 @@ node tools/bench/node-counter-check.js  # each node's 'per X' counter vs the GAM
 node tools/bench/node-name-check.js     # node names vs the game's fleet tooltips (77 nodes)
 node tools/bench/node-effect-probe.js  # every install node actually moves the output
 node tools/bench/uniform-term-check.js # omitted per-node terms are provably 1 until bought
+node tools/bench/badge-check.js        # fleet badges: ships + multipliers vs the GAME
 node tools/bench/growth-counter-check.js # per-run counter classification + zero-counter warning
 node tools/bench/allocator-check.js     # allocator vs a reference greedy, ALL 7 ships
 python tools/il2cpp-cli/typetree.py --dump FleetManager --grep BaseBonus  # read authored data

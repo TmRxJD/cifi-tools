@@ -383,6 +383,9 @@ window.mapCifiSaveToGearLevels = mapSaveToGearLevels;
 function mapSaveToFleetBadges(save) {
   return {
     badge_innovation: !!save.Badge2Acquired,
+    // Badge12Acquired -- "Innovation Badge #2", the Shard/Research/Academy counterpart. Same
+    // Badge<N>Acquired family as Badge2; see FLEET_BADGE_ITEMS for how it was identified.
+    badge_innovation_2: !!save.Badge12Acquired,
     badge_dark_innovation: !!save.DarkBadge1Acquired,
   };
 }
