@@ -17,7 +17,13 @@ these bonuses summed or multiplied"). It is the wrong tool for VALUES. Use this 
     python tools/il2cpp-cli/typetree.py --list                     # classes with serialized data
     python tools/il2cpp-cli/typetree.py --dump FleetManager        # all its fields, as JSON
     python tools/il2cpp-cli/typetree.py --dump FleetManager --grep GenBaseBonus
-    python tools/il2cpp-cli/typetree.py --dump Gear --out tools/reference/gear-fields.json
+    python tools/il2cpp-cli/typetree.py --dump Gear --backend AssetStudio --relaxed
+
+BACKENDS DIFFER, and it matters. `Gear`'s reconstructed tree does not quite match the build's
+layout. The default AssetsTools backend fails MID-read ("read_double out of bounds"), which nothing
+can rescue; AssetStudio reads every field and only trips the trailing total (5984 of 6132 bytes),
+so `--backend AssetStudio --relaxed` gets the values out. If a class refuses to read, try the other
+backend before concluding the data is unreachable.
 
 HOW IT WORKS, and the one thing that does not.
 
@@ -53,7 +59,10 @@ ASSET_FILES = ("level0", "sharedassets0.assets", "globalgamemanagers.assets")
 
 class Extractor:
     def __init__(self, unity_version=UNITY_VERSION, backend="AssetsTools", dummy_dir=DUMMY_DIR):
-        from TypeTreeGeneratorAPI import TypeTreeGenerator
+        # UnityPy's own subclass over TypeTreeGeneratorAPI's: adds a node cache and
+        # load_local_dll_folder. (Its get_nodes_up() only normalises the assembly name to end in
+        # ".dll" -- it is NOT an inheritance walk, despite the name.)
+        from UnityPy.helpers.TypeTreeGenerator import TypeTreeGenerator
         if not os.path.isdir(dummy_dir):
             raise SystemExit(f"DummyDll directory not found: {dummy_dir}\n"
                              "Run tools/il2cpp-cli's dumper first (see its README).")
@@ -82,8 +91,16 @@ class Extractor:
             self._nodes[short_name] = json.loads(self.gen.get_nodes_as_json(asm, full))
         return self._nodes[short_name]
 
-    def read_instances(self, short_name, asset_files=ASSET_FILES):
-        """Every serialized instance of `short_name`, as {field: value} dicts."""
+    def read_instances(self, short_name, asset_files=ASSET_FILES, relaxed=False):
+        """Every serialized instance of `short_name`, as {field: value} dicts.
+
+        `relaxed` passes UnityPy's check_read=False, which skips the trailing "did the tree consume
+        exactly the object's bytes" assertion. Needed for classes whose reconstructed tree does not
+        quite match the build's layout -- `Gear` comes up 148 bytes short. Fields BEFORE the
+        divergence still read correctly (verified: Gear's PPtrs and GearUnlockBaseCost/Exponent all
+        come back sane, and GearBaseBonus1/2 read 1.01/1.02 exactly as the wiki claimed), but a
+        field late in such a class is NOT trustworthy without a second source. Off by default.
+        """
         import UnityPy
         nodes = self.nodes_for(short_name)
         out = []
@@ -92,23 +109,35 @@ class Extractor:
             if not os.path.exists(path):
                 continue
             env = UnityPy.load(path)
+            # level0 holds ~144k MonoBehaviours and most share a handful of MonoScripts, so
+            # resolving the script per object dominated the runtime until this cache. Key on the
+            # PPtr, not the object.
+            script_names = {}
             for obj in env.objects:
                 if obj.type.name != "MonoBehaviour":
                     continue
                 try:
                     base = obj.read(check_read=False)
-                    script = base.m_Script.read() if getattr(base, "m_Script", None) else None
-                    if getattr(script, "m_ClassName", None) != short_name:
+                    ptr = getattr(base, "m_Script", None)
+                    if ptr is None:
+                        continue
+                    key = (ptr.m_FileID, ptr.m_PathID)
+                    if key not in script_names:
+                        script = ptr.read()
+                        script_names[key] = getattr(script, "m_ClassName", None)
+                    if script_names[key] != short_name:
                         continue
                 except Exception:                                      # noqa: BLE001
                     continue
                 try:
-                    out.append(obj.read_typetree(nodes))
+                    out.append(obj.read_typetree(nodes, check_read=not relaxed))
                 except Exception as exc:                               # noqa: BLE001
                     # Loud: a partial read here silently produces wrong NUMBERS, which is the
                     # exact failure mode this whole module exists to eliminate.
                     print(f"  WARNING {short_name} in {asset}: read_typetree failed "
-                          f"({type(exc).__name__}: {exc})", file=sys.stderr)
+                          f"({type(exc).__name__}: {exc})"
+                          + ("" if relaxed else "  -- retry with --relaxed if the fields you need "
+                                                "are early in the class"), file=sys.stderr)
             if out:
                 break
         return out
@@ -123,6 +152,9 @@ def main():
     ap.add_argument("--out", help="Write the dump to this JSON file instead of stdout")
     ap.add_argument("--backend", default="AssetsTools", choices=("AssetsTools", "AssetStudio"))
     ap.add_argument("--unity", default=UNITY_VERSION)
+    ap.add_argument("--relaxed", action="store_true",
+                    help="Skip the trailing size assertion (see read_instances). Only fields "
+                         "before the tree's divergence are trustworthy.")
     args = ap.parse_args()
 
     ex = Extractor(args.unity, args.backend)
@@ -137,7 +169,7 @@ def main():
     if not args.dump:
         ap.error("give --list or --dump CLASS")
 
-    instances = ex.read_instances(args.dump)
+    instances = ex.read_instances(args.dump, relaxed=args.relaxed)
     if not instances:
         print(f"no readable instance of {args.dump} found", file=sys.stderr)
         return 1

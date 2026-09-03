@@ -293,10 +293,18 @@ think one is wrong, disprove it with a test.
     multiplied into that one node's increment, not applied globally.
   - `Gear::get_GreenItem1Bonus1` (0x200B1AD) is nine instructions ending in a TAIL CALL to
     `BigDouble::Pow`: it loads a per-piece BigDouble base (`this+0xA0`) and the piece's LEVEL
-    (`this->[0x20]+0x4488`) and returns `base ^ level`. **Exponential, not linear** — so a level-913
-    piece really is worth ~1.01^913 ≈ 8819x on its target node, which is why one Cradle node can
-    legitimately dwarf its neighbours. (The base itself is a runtime field and cannot be read
-    statically; only the SHAPE is proven. `x1.01/level` remains wiki-sourced.)
+    (`this->[0x20]+0x4488`) and returns `base ^ level`. **Exponential, not linear.**
+  - **And the base is now read, not assumed:** `Gear.GearBaseBonus1` = BigDouble 1.01 and
+    `GearBaseBonus2` = 1.02, straight out of the authored MonoBehaviour (`typetree.py`). So
+    `x1.01/level` on install1 and `x1.02/level` on install2 are confirmed, the wiki was right, and
+    a level-913 piece really is worth 1.01^913 ~= 8819x on its target node — which is why one
+    Cradle node can legitimately dwarf its neighbours. Shape from disassembly, value from authored
+    data: the two halves of the rule at the top of this file, on one number.
+    **Caveat, stated because it matters:** the `Gear` type tree does not fully match its serialized
+    layout (it comes up 148 bytes short, and the AssetsTools backend fails outright), so this was
+    read with UnityPy's `check_read=False`. The fields above are before the divergence and the
+    surrounding ones (`GearUnlockBaseCost` 3.0, `GearUnlockCostExponent` 2.5, the PPtrs) all read
+    sanely, but do NOT trust a late `Gear` field without checking it another way.
   - The full verified factor list for a Cradle node is: base coefficient (`FleetManager+0x57C`),
     crew, its own level (`MasterManager+0x4B08 + 4*(n-1)`), `Badges.FinalBadge2Bonus`,
     `ResearchLaboratory.FinalShip1InstallsBonus`, a `GemPerks` field (+0x22D8),
