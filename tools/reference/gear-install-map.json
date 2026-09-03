@@ -1,0 +1,385 @@
+{
+  "_source": "RU<Category><n>Bonus property bodies in the recovered FleetManager C# (tools/il2cpp-cli/csharp.py)",
+  "_meaning": "Gear.<Color>Item<N>Bonus<M> is multiplied into that node's bonus. M=1 is the piece's install1 target, M=2 its install2.",
+  "_game": "CIFI 0.7.3.54",
+  "mappings": [
+    {
+      "category": "Academy",
+      "node": 2,
+      "color": "White",
+      "item": 3,
+      "bonus": 1
+    },
+    {
+      "category": "Auto",
+      "node": 1,
+      "color": "Green",
+      "item": 3,
+      "bonus": 2
+    },
+    {
+      "category": "Auto",
+      "node": 1,
+      "color": "Red",
+      "item": 1,
+      "bonus": 1
+    },
+    {
+      "category": "Auto",
+      "node": 2,
+      "color": "Green",
+      "item": 5,
+      "bonus": 2
+    },
+    {
+      "category": "Auto",
+      "node": 3,
+      "color": "Blue",
+      "item": 4,
+      "bonus": 1
+    },
+    {
+      "category": "Auto",
+      "node": 3,
+      "color": "Purple",
+      "item": 2,
+      "bonus": 2
+    },
+    {
+      "category": "Auto",
+      "node": 4,
+      "color": "Green",
+      "item": 5,
+      "bonus": 1
+    },
+    {
+      "category": "Auto",
+      "node": 5,
+      "color": "Blue",
+      "item": 3,
+      "bonus": 1
+    },
+    {
+      "category": "Auto",
+      "node": 5,
+      "color": "Green",
+      "item": 1,
+      "bonus": 2
+    },
+    {
+      "category": "Auto",
+      "node": 6,
+      "color": "Green",
+      "item": 2,
+      "bonus": 2
+    },
+    {
+      "category": "Auto",
+      "node": 7,
+      "color": "Green",
+      "item": 4,
+      "bonus": 2
+    },
+    {
+      "category": "Auto",
+      "node": 8,
+      "color": "White",
+      "item": 1,
+      "bonus": 2
+    },
+    {
+      "category": "Auto",
+      "node": 10,
+      "color": "White",
+      "item": 2,
+      "bonus": 2
+    },
+    {
+      "category": "Gen",
+      "node": 1,
+      "color": "Green",
+      "item": 1,
+      "bonus": 1
+    },
+    {
+      "category": "Gen",
+      "node": 4,
+      "color": "White",
+      "item": 1,
+      "bonus": 1
+    },
+    {
+      "category": "Gen",
+      "node": 6,
+      "color": "White",
+      "item": 4,
+      "bonus": 1
+    },
+    {
+      "category": "Gen",
+      "node": 8,
+      "color": "White",
+      "item": 2,
+      "bonus": 1
+    },
+    {
+      "category": "Gen",
+      "node": 9,
+      "color": "White",
+      "item": 3,
+      "bonus": 2
+    },
+    {
+      "category": "Gen",
+      "node": 10,
+      "color": "White",
+      "item": 5,
+      "bonus": 1
+    },
+    {
+      "category": "Loop",
+      "node": 1,
+      "color": "Red",
+      "item": 4,
+      "bonus": 2
+    },
+    {
+      "category": "Loop",
+      "node": 2,
+      "color": "Green",
+      "item": 2,
+      "bonus": 1
+    },
+    {
+      "category": "Loop",
+      "node": 2,
+      "color": "Red",
+      "item": 3,
+      "bonus": 1
+    },
+    {
+      "category": "Loop",
+      "node": 3,
+      "color": "Red",
+      "item": 1,
+      "bonus": 2
+    },
+    {
+      "category": "Loop",
+      "node": 4,
+      "color": "Red",
+      "item": 2,
+      "bonus": 2
+    },
+    {
+      "category": "Loop",
+      "node": 5,
+      "color": "Red",
+      "item": 3,
+      "bonus": 2
+    },
+    {
+      "category": "Loop",
+      "node": 6,
+      "color": "Red",
+      "item": 5,
+      "bonus": 2
+    },
+    {
+      "category": "Loop",
+      "node": 7,
+      "color": "Red",
+      "item": 4,
+      "bonus": 1
+    },
+    {
+      "category": "Loop",
+      "node": 9,
+      "color": "White",
+      "item": 5,
+      "bonus": 2
+    },
+    {
+      "category": "Research",
+      "node": 2,
+      "color": "Orange",
+      "item": 4,
+      "bonus": 1
+    },
+    {
+      "category": "Research",
+      "node": 3,
+      "color": "Orange",
+      "item": 2,
+      "bonus": 1
+    },
+    {
+      "category": "Research",
+      "node": 4,
+      "color": "Purple",
+      "item": 2,
+      "bonus": 1
+    },
+    {
+      "category": "Research",
+      "node": 5,
+      "color": "Green",
+      "item": 3,
+      "bonus": 1
+    },
+    {
+      "category": "Research",
+      "node": 5,
+      "color": "Purple",
+      "item": 3,
+      "bonus": 1
+    },
+    {
+      "category": "Research",
+      "node": 6,
+      "color": "Orange",
+      "item": 3,
+      "bonus": 1
+    },
+    {
+      "category": "Research",
+      "node": 6,
+      "color": "Purple",
+      "item": 1,
+      "bonus": 1
+    },
+    {
+      "category": "Research",
+      "node": 7,
+      "color": "Orange",
+      "item": 1,
+      "bonus": 1
+    },
+    {
+      "category": "Shard",
+      "node": 1,
+      "color": "Blue",
+      "item": 2,
+      "bonus": 2
+    },
+    {
+      "category": "Shard",
+      "node": 1,
+      "color": "Red",
+      "item": 2,
+      "bonus": 1
+    },
+    {
+      "category": "Shard",
+      "node": 2,
+      "color": "Blue",
+      "item": 2,
+      "bonus": 1
+    },
+    {
+      "category": "Shard",
+      "node": 2,
+      "color": "Purple",
+      "item": 1,
+      "bonus": 2
+    },
+    {
+      "category": "Shard",
+      "node": 3,
+      "color": "Blue",
+      "item": 1,
+      "bonus": 2
+    },
+    {
+      "category": "Shard",
+      "node": 4,
+      "color": "Blue",
+      "item": 3,
+      "bonus": 2
+    },
+    {
+      "category": "Shard",
+      "node": 5,
+      "color": "Blue",
+      "item": 5,
+      "bonus": 2
+    },
+    {
+      "category": "Shard",
+      "node": 6,
+      "color": "Blue",
+      "item": 5,
+      "bonus": 1
+    },
+    {
+      "category": "Shard",
+      "node": 6,
+      "color": "Green",
+      "item": 4,
+      "bonus": 1
+    },
+    {
+      "category": "Shard",
+      "node": 6,
+      "color": "Red",
+      "item": 5,
+      "bonus": 1
+    },
+    {
+      "category": "Shard",
+      "node": 7,
+      "color": "Blue",
+      "item": 4,
+      "bonus": 2
+    },
+    {
+      "category": "Shard",
+      "node": 10,
+      "color": "White",
+      "item": 4,
+      "bonus": 2
+    },
+    {
+      "category": "Tech",
+      "node": 1,
+      "color": "Orange",
+      "item": 3,
+      "bonus": 2
+    },
+    {
+      "category": "Tech",
+      "node": 2,
+      "color": "Blue",
+      "item": 1,
+      "bonus": 1
+    },
+    {
+      "category": "Tech",
+      "node": 3,
+      "color": "Orange",
+      "item": 4,
+      "bonus": 2
+    },
+    {
+      "category": "Tech",
+      "node": 4,
+      "color": "Orange",
+      "item": 2,
+      "bonus": 2
+    },
+    {
+      "category": "Tech",
+      "node": 5,
+      "color": "Orange",
+      "item": 1,
+      "bonus": 2
+    },
+    {
+      "category": "Tech",
+      "node": 6,
+      "color": "Purple",
+      "item": 3,
+      "bonus": 2
+    }
+  ]
+}

@@ -383,6 +383,24 @@ think one is wrong, disprove it with a test.
     over a run (each tier feeds the next tier's count, so it is genuinely worth more than one
     application — but the magnitude is a time integral, not a formula). `nodeMarginalLogGain`
     deliberately applies it once and says so, rather than inventing a multiplier.
+- **The gear piece -> install node mapping is CONFIRMED against the game, all 44 of it -- and we
+  are missing an entire colour.** This is the mapping the optimizer is most sensitive to: every
+  other multiplier found so far (badges, Fleet Analysis, PowerGU1, all-ships installs, evolution)
+  is UNIFORM across a ship's nodes and so cannot reorder candidates, whereas gear applies to ONE
+  node and is exponential in the piece's level. Point a piece at the wrong node and the optimizer
+  confidently sends points to the wrong place.
+  The game states the mapping directly -- each `RU<Category><n>Bonus` property multiplies in the
+  specific `Gear.<Color>Item<N>Bonus<M>` that targets it, `Bonus1` being the piece's install1 and
+  `Bonus2` its install2. Extracted by `tools/bench/extract-gear-installs.py` into
+  `tools/reference/gear-install-map.json` and asserted by `tools/bench/gear-install-check.js`:
+  **all 44 mappings we model match the game**, so the wiki was right here.
+  **But the game has a WHITE set we do not model at all.** `WhiteItem1..5` buff ten nodes, and five
+  of them are Cradle: Gen 4, 6, 8, 9 and 10 (the others are Auto 8/10, Loop 9, Shard 10, Academy 2).
+  Our `GEAR_SETS` has 22 pieces across Purple/Orange/Red/Green/Blue and no White, so those ten
+  nodes are missing an exponential per-node multiplier. On the reference account every White item
+  is `Unlocked: false, Level: 0`, so nothing is wrong today -- but an account that unlocks them
+  gets wrong Cradle recommendations, silently. The install targets are known (above); what is not
+  sourced is their names, set bonuses and cost curves, so they are NOT half-added.
 - **GEAR really does buff a specific install node, from inside that node's own factor, and it
   compounds as `base^level`.** Both halves verified in the binary, and both were previously only
   wiki-sourced assumptions:
