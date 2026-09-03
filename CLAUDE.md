@@ -286,12 +286,27 @@ think one is wrong, disprove it with a test.
   `purchasedCrewLevel`/`freeCrew` alongside the total. `unmodelledCrewRankTerms()` reports the two
   terms still missing (LM239/LM240 -- loop-mods.json has their costs but not their per-level
   Bonus -- and `FinalAllShipsRanksBonus`) rather than dropping them silently.
-- **Ship EVOLUTION does not affect install-node bonuses, so it cannot change optimizer ranking.**
-  Checked, not assumed: no `RUGen*Bonus` property references Evo at all. `SetShip<n>EvoBonus`
-  switches over `EvoBonus<Ship>1..7` by evo level and raises the result to
-  `GemPerks.AttractionGU6BonusCalc`, but that product lands on production, not on the install
-  chain. `input.evo` is therefore imported and displayed but deliberately unused in the math --
-  that is correct, not an omission.
+- **Ship EVOLUTION is a HUGE production multiplier and the tool does not model it.** It does not
+  change install-allocation ranking (it is independent of how points are spent), but it dominates
+  any ABSOLUTE number, and `input.evo` is currently imported and displayed while contributing
+  nothing to the math.
+  `SetShip<n>EvoBonus(evoLevel)` switches over the authored `EvoBonus<Ship>1..7` and returns
+  `Pow(thatValue, GemPerks.AttractionGU6BonusCalc)`, stored as `<Ship>EvolutionBonus`. That value
+  is then a plain factor in the `MK1Production`/`MK2Production` multiply chain, sitting between
+  `RUAuto1Bonus` and `RUGen4Bonus`. The authored values are enormous -- Cradle 5 / 50 / 850 /
+  162,000 / 5e15 / 6e30 / 7e60 for evo 1-7 -- and the reference account is at Cradle evo 4, i.e. a
+  x162,000 factor we ignore. Values are in `tools/reference/authored-values.json`.
+  **HOW THIS WAS MISSED TWICE, because the method matters more than the fact.** A first pass
+  concluded evolution was absent from the chain on two bad checks. (1) The original disassembly
+  catalogued named getter CALLS; `<Ship>EvolutionBonus` is read as a raw FIELD, so it appeared only
+  as a bare `op_Multiply` with no preceding call (0x1D727E9 in get_MK1Production) and was filed as
+  noise. (2) The follow-up grepped the recovered C# for the string "Evo" -- but Cpp2IL renders an
+  unresolved field read as `NoteDecompilerIssue("Unmanaged memory load: [... (FleetManager)+1C30]")`
+  with the value replaced by `(BigDouble)0`, so the read is INVISIBLE to a name search. It was
+  found by taking the backing-field offsets from dump.cs (0x1C28 etc.) and grepping for those
+  offsets **+8** -- BigDouble is 16 bytes and the note names the exponent half.
+  **When a Cpp2IL body multiplies by `(BigDouble)0`, that is a missing operand, not a zero.**
+  Grep the offset, do not trust the absence of a name.
 - **Ship install bonuses MULTIPLY as independent factors, and Meltdown exponentiates the whole
   product exactly ONCE.** Read out of `libil2cpp.so` and confirmed twice — by hand from capstone,
   then independently from Ghidra-decompiled C via `tools/il2cpp-cli/decompile.py`:
