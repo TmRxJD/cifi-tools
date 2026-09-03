@@ -1367,6 +1367,7 @@ node tools/bench/extract-scene-defs.js <MainScene.unity> --write  # -> scene-def
 node tools/bench/inscryption-cost-check.js <live-bundle.js> # inscryption costs vs the original
 node tools/bench/gate-coverage.js <live-bundle.js>        # our gates vs the bundle's
 node tools/bench/upgrade-item-parity.js <live-bundle.js>  # every item's cap + control type
+node tools/bench/talent-attribute-parity.js <live-bundle.js> # talents/attrs/stat caps
 node tools/bench/relic-tier2-check.js [live-bundle.js]    # tier-2 relic caps vs the GAME
 CIFI_APK=apk-0.7.3.61 python tools/bench/extract-relic-tier2.py --write  # -> relic-tier2.json
 node tools/bench/live-override-diff.js <live-bundle.js>   # gap check vs the original tool
