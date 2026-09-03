@@ -79,28 +79,42 @@
   }
 
   function resolveParam(name, state) {
+    // Each of these is ONE quantity the wasm reads under TWO argument names -- a gem-node level
+    // and its "count" twin, computed identically. They must therefore always agree: the real game
+    // cannot produce a state where exodus_gem3 and exodus_powerInnovationCount differ.
+    //
+    // They used to be resolved by separate branches where only the Count half consulted
+    // state.overrides. That was wrong in both directions, and a param-plumbing sweep caught both:
+    // overriding the Count moved its own argument while its twin stayed at the derived value, so
+    // the wasm saw an impossible pair; and overriding the gem-node half was silently DROPPED, the
+    // one failure mode this project treats as unacceptable in a resolver. Resolving the pair
+    // through one value fixes both, and an override on EITHER name now sets both.
+    // NOTE the asymmetry, which is real and must be preserved: Borge's exodus_gem1 is NOT paired
+    // with exodus_temporalEvolutionCount. The generic resolver below reads `exodus_gemN` as the
+    // node's 0/1 OWNED FLAG, and gem1 has always taken that path; only gem3 and gem5 carried
+    // explicit branches returning the summed count, which is what makes those two -- and only
+    // those two -- the same quantity as their Count twin. Adding gem1 here silently converts a
+    // boolean into a sum and changes every Borge evaluation; it was in this list for one commit
+    // before that was caught.
+    const EXODUS_PAIRS = [
+      { gem: 'upgrades.gems_nodes.exodus_gem3', count: 'upgrades.gems_nodes.exodus_powerInnovationCount',
+        gate: 'upgrades.gems_nodes.exodus_gem3', gateIdx: 2, trees: ['power', 'innovation'] },
+      { gem: 'upgrades.gems_nodes.exodus_gem5', count: 'upgrades.gems_nodes.exodus_attractionCreationCount',
+        gate: 'upgrades.gems_nodes.exodus_gem5', gateIdx: 4, trees: ['attraction', 'creation'] },
+    ];
     if (name === 'upgrades.gems_nodes.exodus_temporalEvolutionCount') {
       if (state.overrides && name in state.overrides) return state.overrides[name];
       if (!exodusGateUnlocked(state, 'upgrades.gems_nodes.exodus_gem1', 0)) return 0;
       return sumGemUpgrades(state, 'temporal') + sumGemUpgrades(state, 'evolution');
     }
-    if (name === 'upgrades.gems_nodes.exodus_gem3') {
-      if (!exodusGateUnlocked(state, 'upgrades.gems_nodes.exodus_gem3', 2)) return 0;
-      return sumGemUpgrades(state, 'power') + sumGemUpgrades(state, 'innovation');
-    }
-    if (name === 'upgrades.gems_nodes.exodus_powerInnovationCount') {
-      if (state.overrides && name in state.overrides) return state.overrides[name];
-      if (!exodusGateUnlocked(state, 'upgrades.gems_nodes.exodus_gem3', 2)) return 0;
-      return sumGemUpgrades(state, 'power') + sumGemUpgrades(state, 'innovation');
-    }
-    if (name === 'upgrades.gems_nodes.exodus_gem5') {
-      if (!exodusGateUnlocked(state, 'upgrades.gems_nodes.exodus_gem5', 4)) return 0;
-      return sumGemUpgrades(state, 'attraction') + sumGemUpgrades(state, 'creation');
-    }
-    if (name === 'upgrades.gems_nodes.exodus_attractionCreationCount') {
-      if (state.overrides && name in state.overrides) return state.overrides[name];
-      if (!exodusGateUnlocked(state, 'upgrades.gems_nodes.exodus_gem5', 4)) return 0;
-      return sumGemUpgrades(state, 'attraction') + sumGemUpgrades(state, 'creation');
+    const exodusPair = EXODUS_PAIRS.find((p) => p.gem === name || p.count === name);
+    if (exodusPair) {
+      const ov = state.overrides || {};
+      // an override on either name speaks for the pair, so the two can never diverge
+      if (exodusPair.count in ov) return ov[exodusPair.count];
+      if (exodusPair.gem in ov) return ov[exodusPair.gem];
+      if (!exodusGateUnlocked(state, exodusPair.gate, exodusPair.gateIdx)) return 0;
+      return sumGemUpgrades(state, exodusPair.trees[0]) + sumGemUpgrades(state, exodusPair.trees[1]);
     }
     if (name === 'upgrades.cms.milestoneCount') {
       if (state.overrides && name in state.overrides) return state.overrides[name];

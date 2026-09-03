@@ -932,6 +932,28 @@ think one is wrong, disprove it with a test.
   - `ship-test.js` duplicates the weight rule (nodeWeight is module-private) and was still on `max`
     after the tool moved to `sum`, reporting the allocator as wrong for preferring a dual-resource
     node. Known drift hazard, now flagged in place.
+- **The hunter-side equivalent of the factor audit is `param-plumbing-check.js`: every sim parameter
+  must be SETTABLE and must land in its OWN argument slot.** The fleet side asks whether every term
+  in the game's multiply chain is accounted for; here the chain is the wasm's argument vector, and
+  the question is whether `resolveParam` can actually drive each of its 281 slots (101 Borge / 89
+  Ozzy / 91 Knox). `resolveParam` has a generic override path, so nearly everything is settable by
+  name -- which is what makes the exceptions worth finding. It found two, both in the same place:
+  - **`exodus_gem3` (Ozzy) and `exodus_gem5` (Knox) ignored an explicit override entirely.** Their
+    branches never consulted `state.overrides`, while their Count twins did. A silently dropped
+    input is the one resolver failure this project treats as unacceptable.
+  - **Worse: overriding the Count moved only its own slot**, so the wasm received two arguments
+    holding DIFFERENT values for a single quantity -- a state the real game cannot produce.
+  Both are fixed by resolving each pair through one value, so an override on either name sets both.
+  **TWINS ARE DECLARED, NOT INFERRED**, because "these two arguments are the same thing" is a claim
+  about the evaluator rather than something to read off a diff.
+- **Borge's `exodus_gem1` is deliberately NOT twinned with `exodus_temporalEvolutionCount`, and
+  assuming otherwise silently changes every Borge evaluation.** The generic resolver reads
+  `upgrades.gems_nodes.<tree>_gemN` as the node's **0/1 owned flag**; only `gem3` and `gem5` carry
+  explicit branches returning the summed count, which is precisely what makes those two the same
+  quantity as their twin. While fixing the above I put `gem1` in the pair list, which converted a
+  boolean into a sum -- caught by checking what the generic path actually returns rather than
+  reasoning from the names. The symmetry of the naming is a trap: `gem1`/`gem3`/`gem5` look like one
+  family and are not.
 - **`node-factor-check.js` is the general defence against another Badge12: EVERY term in every
   node's multiply chain must be accounted for by name.** `extract-node-factors.py` enumerates the
   whole chain per node -- named reads AND the operands inside Cpp2IL notes, resolved through
@@ -1208,6 +1230,7 @@ node tools/bench/node-effect-probe.js  # every install node actually moves the o
 node tools/bench/uniform-term-check.js # omitted per-node terms are provably 1 until bought
 node tools/bench/badge-check.js        # fleet badges: ships + multipliers vs the GAME
 node tools/bench/node-factor-check.js  # EVERY factor in every node getter is accounted for
+node tools/bench/param-plumbing-check.js # every sim param is settable into its own slot
 node tools/bench/reference-schema-test.js # zod: every reference file matches its schema
 node tools/bench/growth-counter-check.js # per-run counter classification + zero-counter warning
 node tools/bench/allocator-check.js     # allocator vs a reference greedy, ALL 7 ships
