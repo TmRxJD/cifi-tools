@@ -139,7 +139,7 @@ There is exactly one place for each of these. **Do not add a second.**
 | Game's own definition data (17 families) | `tools/reference/scene-defs.json` |
 | Loop-mod definitions + name mapping | `tools/reference/loop-mods.json`, `loopmod-names.json` |
 | Pulled APK / save / IL2CPP / captures | `tools/gamefiles/` (gitignored; see its README) |
-| Headless IL2CPP dumper (metadata v39) | `tools/il2cpp-cli/` |
+| Headless IL2CPP dumper (metadata v39) | `tools/il2cpp-cli/` (build recipe in its README; `CIFI_APK` picks the build) |
 | Method name -> RVA (replaces script.json) | `tools/il2cpp-cli/dumpindex.py` |
 | Decompile named methods to readable C | `tools/il2cpp-cli/decompile.py` (Ghidra + PyGhidra) |
 | **Read AUTHORED serialized data (values)** | `tools/il2cpp-cli/typetree.py` |
@@ -748,10 +748,20 @@ think one is wrong, disprove it with a test.
   **The extractors are now build-switchable via `CIFI_APK`** (`csharp.py`, `extract-gear-names.py`,
   `extract-gear-installs.py`, `extract-gear-set-bonuses.py`), e.g.
   `CIFI_APK=apk-0.7.3.61 python tools/bench/extract-gear-installs.py`. Cpp2IL output is cached
-  per-build so two versions cannot overwrite each other. **`typetree.py` is NOT switchable** -- it
-  needs an Il2CppDumper run (`dump.cs` + `DummyDll`) that exists only for 0.7.3.54, so
-  `gear-set-bonus-map.json` records `_mappingFrom` and `_valuesFrom` separately rather than
-  labelling the whole file with one version it does not have.
+  per-build so two versions cannot overwrite each other. **`typetree.py` and `dumpindex.py` honour
+  it too**, now that the Il2CppDumper CLI has been rebuilt and run for 0.7.3.61 (29.7MB `dump.cs`,
+  115 DummyDlls vs 113 for .54 -- see `tools/il2cpp-cli/README.md` for the build recipe; it takes
+  about five seconds to compile). One variable switches DummyDlls, `dump.cs` and the scene
+  together, which matters because mixing a newer scene with an older DummyDll misreads fields
+  silently. `gear-set-bonus-map.json` still records `_mappingFrom` and `_valuesFrom` separately,
+  and the label is derived from `typetree.py`'s own source, so it stays honest if the two halves
+  ever come from different builds again.
+- **EVERY authored-data reference re-extracted from 0.7.3.61 came back byte-identical to the 0.7.3.54
+  version**: `authored-values.json` (244 values across 3 classes), `relic-caps.json` (20), the 54
+  gear->install mappings, the 26 set-bonus mappings and their magnitudes, and all 37 gear names. The
+  full reference bench suite passes against the regenerated files. That is a genuine cross-version
+  check on the numbers this tool is built from, not a null result -- and it means a future "did this
+  change?" question is now a two-command diff rather than an archaeology session.
   Keep the general rule regardless: **a conclusion about a specific build is not a conclusion about
   the game.** Comparing two builds is what turns "the game does not do this" into a claim you can
   actually support -- and re-pulling is cheap (`adb pull` the two APKs; MuMu's ADB is on port 16384

@@ -50,7 +50,11 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-GAMEFILES = os.path.join(HERE, "..", "gamefiles", "apk-0.7.3.54")
+# Which pulled build to read. Everything here -- DummyDlls, dump.cs and the scene -- must come
+# from the SAME build, so one variable switches all of them together; mixing a newer scene with an
+# older DummyDll silently misreads fields.
+APK_DIR = os.environ.get("CIFI_APK", "apk-0.7.3.54")
+GAMEFILES = os.path.join(HERE, "..", "gamefiles", APK_DIR)
 DUMMY_DIR = os.path.join(GAMEFILES, "il2cpp-dump", "DummyDll")
 ASSET_DIR = os.path.join(GAMEFILES, "assets")
 UNITY_VERSION = "6000.3.8f1"

@@ -61,7 +61,11 @@ def typetree_build():
     """
     tt = os.path.join(HERE, "..", "il2cpp-cli", "typetree.py")
     with open(tt, encoding="utf-8") as f:
-        m = re.search(r'GAMEFILES\s*=\s*os\.path\.join\([^)]*?"(apk-[\d.]+)"', f.read())
+        src = f.read()
+    # Honours CIFI_APK -> it read whatever we asked for. Pinned to a literal -> report that literal.
+    if re.search(r'APK_DIR\s*=\s*os\.environ\.get\("CIFI_APK"', src) and "gamefiles\", APK_DIR" in src:
+        return APK_DIR
+    m = re.search(r'GAMEFILES\s*=\s*os\.path\.join\([^)]*?"(apk-[\d.]+)"', src)
     return m.group(1) if m else "unknown"
 
 

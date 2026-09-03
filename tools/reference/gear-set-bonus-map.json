@@ -48,7 +48,7 @@
   ],
   "_meaning": "<color>SetBonus<index> is multiplied into that resource's TotalSet<...>Bonus. The index is the piece's position within its colour.",
   "_mappingFrom": "apk-0.7.3.61",
-  "_valuesFrom": "apk-0.7.3.54",
+  "_valuesFrom": "apk-0.7.3.61",
   "mappings": [
     {
       "color": "Blue",

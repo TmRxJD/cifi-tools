@@ -34,8 +34,11 @@ import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# Same CIFI_APK switch the rest of the il2cpp tooling uses; the RVA cache is keyed off the dump
+# path, so two builds get two caches rather than one stale one.
+APK_DIR = os.environ.get("CIFI_APK", "apk-0.7.3.54")
 DEFAULT_DUMP = os.path.join(
-    HERE, "..", "gamefiles", "apk-0.7.3.54", "il2cpp-dump", "dump.cs")
+    HERE, "..", "gamefiles", APK_DIR, "il2cpp-dump", "dump.cs")
 
 _RVA_RE = re.compile(r'^\s*// RVA: 0x([0-9A-Fa-f]+) Offset: 0x([0-9A-Fa-f]+)')
 # Type declarations sit at column 0; members are indented. That indentation is the only reliable
