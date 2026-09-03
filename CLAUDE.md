@@ -861,6 +861,24 @@ think one is wrong, disprove it with a test.
   "discrepancy" was the harness.
   **Ozzy cannot be compared as a guest at all**: the live site gem-gates the Ozzy page, so a fresh
   guest session never renders it and the comparison times out waiting for "Main Statistics".
+- **GADGETS ARE THE EASY CASE, AND THEY ARE CONFIRMED.** Each hunter exposes exactly one
+  (Borge `wrench`, Ozzy `zaptron`, Knox `anchor`), every one is in that hunter's `CODE_PARAMS`, and
+  every one has a real `params.json` slot -- so unlike relics they transport in a share code and can
+  be compared against the live site directly.
+  Verified at the account's real levels, each gadget isolated so nothing else could mask it:
+  - **Borge wrench 50**: all 13 stats within **0.33%** of the site, nothing flagged, and clearly
+    live (loot 46,340 -> 114,770 against the no-gadget baseline).
+  - **Knox anchor 10**: all 13 stats within **1.17%** (min/maxStage are the noisy ones), nothing
+    flagged.
+  - **Ozzy zaptron 40**: cannot be compared against the site -- see the Ozzy gating note -- but is
+    demonstrably live in the clone: 0 -> 40 moves loot 350,414 -> 730,665 (x2.08) and average stage
+    +8.4, with materials doubling.
+- **OZZY CANNOT BE VALIDATED AGAINST THE LIVE SITE AT ALL, and that is a standing hole in the
+  evidence, not a passing result.** The site gem-gates the Ozzy page, so a guest session never
+  renders it and `compare_builds` times out waiting for "Main Statistics". Every Ozzy number in this
+  repo is therefore clone-only. `live-eval.mjs` can now seed account state, which is the most likely
+  route to unblocking it (seed the gem levels the page checks), but that has not been made to work
+  yet -- do not read Ozzy's passing CLONE benches as site parity.
 - **A modal that starts async work must cancel it on close, and `titledModal` fires `modal-close`
   so it can.** Closing used to just `remove()` the overlay, leaving the Effective Path walk
   running: invisible, uncancellable, and still competing for the main thread and for wasm
