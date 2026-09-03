@@ -451,11 +451,22 @@ think one is wrong, disprove it with a test.
       SSA store, so **treat RU101 as a real second factor**. It is inert until owned
       (`FinalRU101Bonus1` is `BigDouble result = 1; ... if (RU101Level > 0) {...}`) and costs 1e5850,
       so no realistic account has it yet.
-    A word on method: I wrote an extractor to turn "inert when unowned" into a checked reference
-    file, and deleted it. It reported `inertWhenUnowned: false` for the RU terms while the same
-    regexes, run against the same recovered body, returned true — and I could not explain the
-    difference. Shipping a reference whose values contradict the code it claims to describe is worse
-    than shipping none, so the facts above stand on the getter bodies quoted here.
+    **All 11 of these terms are now asserted by `uniform-term-check.js`** (reference from
+    `extract-uniform-terms.py`), because "the optimizer may omit it" rests entirely on "it is 1
+    until bought", and that is a fact about the game's code which a future build can change.
+    **The extractor disagreed with a hand-check for several rounds, and the cause is worth keeping.**
+    Two separate mistakes stacked:
+    - Its verdict was a bare true/false, so a getter shape it did not recognise came out as "NOT
+      inert" — the opposite of the truth. `FinalRU78Bonus1` ends `return 1.0;` while the check only
+      looked for `= 1;`, and four terms were mislabelled that way. The verdict is now three-state:
+      no level gate found means `null` (undeterminable), never false, and the bench treats `null` as
+      a failure demanding the check be updated.
+    - The runs I was comparing were reading DIFFERENT BUILDS — my hand-check defaulted to 0.7.3.54
+      while the extractor had `CIFI_APK=apk-0.7.3.61`. The tell was in plain sight and ignored:
+      `csharp.py` printed 51,599 lines in one and 53,330 in the other. **When two runs of the same
+      logic disagree, compare the INPUT SIZES before re-reading the logic.**
+    Every term now traces its own per-term verdict to stderr, so a silent disagreement of this kind
+    cannot recur unnoticed.
 - **The APK IS dumped.** CIFI 0.7.3.54 is Unity **6000.3.8f1** with IL2CPP metadata **v39**;
   Perfare's Il2CppDumper caps at v31, but AndnixSH's fork supports v39 and `tools/il2cpp-cli/`
   wraps it in a headless CLI (see its README). Output lives in
@@ -1141,6 +1152,7 @@ node tools/bench/ship-node-gate-check.js # install prereqs + base caps vs the GA
 node tools/bench/node-counter-check.js  # each node's 'per X' counter vs the GAME (77 nodes)
 node tools/bench/node-name-check.js     # node names vs the game's fleet tooltips (77 nodes)
 node tools/bench/node-effect-probe.js  # every install node actually moves the output
+node tools/bench/uniform-term-check.js # omitted per-node terms are provably 1 until bought
 node tools/bench/growth-counter-check.js # per-run counter classification + zero-counter warning
 node tools/bench/allocator-check.js     # allocator vs a reference greedy, ALL 7 ships
 python tools/il2cpp-cli/typetree.py --dump FleetManager --grep BaseBonus  # read authored data

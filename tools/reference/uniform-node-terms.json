@@ -1,0 +1,73 @@
+{
+  "_source": "getter bodies in the recovered C# (tools/il2cpp-cli/csharp.py)",
+  "_meaning": "inertWhenUnowned: true = the getter provably yields 1 while its upgrade level is 0, so omitting the term is EXACT for an account that has not bought it. null = no level gate found, so it cannot be determined -- never read null as false.",
+  "_game": "apk-0.7.3.61",
+  "terms": {
+    "FinalRU101Bonus1": {
+      "type": "ResearchLaboratory",
+      "levelField": "RU101Level",
+      "found": true,
+      "inertWhenUnowned": true
+    },
+    "FinalRU78Bonus1": {
+      "type": "ResearchLaboratory",
+      "levelField": "RU78Level",
+      "found": true,
+      "inertWhenUnowned": true
+    },
+    "FinalRU83InstallsBonus": {
+      "type": "ResearchLaboratory",
+      "levelField": "RU83Level",
+      "found": true,
+      "inertWhenUnowned": true
+    },
+    "FinalRU96InstallsBonus": {
+      "type": "ResearchLaboratory",
+      "levelField": "RU96Level",
+      "found": true,
+      "inertWhenUnowned": true
+    },
+    "PowerGU1BonusCalc": {
+      "type": "GemPerks",
+      "levelField": "PowerGU1Level",
+      "found": true,
+      "inertWhenUnowned": true
+    },
+    "PowerGU2BonusCalc": {
+      "type": "GemPerks",
+      "levelField": "PowerGU2Level",
+      "found": true,
+      "inertWhenUnowned": true
+    },
+    "PowerGU3BonusCalc": {
+      "type": "GemPerks",
+      "levelField": "PowerGU3Level",
+      "found": true,
+      "inertWhenUnowned": true
+    },
+    "PowerGU4BonusCalc": {
+      "type": "GemPerks",
+      "levelField": "PowerGU4Level",
+      "found": true,
+      "inertWhenUnowned": true
+    },
+    "PowerGU5BonusCalc": {
+      "type": "GemPerks",
+      "levelField": "PowerGU5Level",
+      "found": true,
+      "inertWhenUnowned": true
+    },
+    "PowerGU6BonusCalc": {
+      "type": "GemPerks",
+      "levelField": "PowerGU6Level",
+      "found": true,
+      "inertWhenUnowned": true
+    },
+    "PowerGU7BonusCalc": {
+      "type": "GemPerks",
+      "levelField": "PowerGU7Level",
+      "found": true,
+      "inertWhenUnowned": true
+    }
+  }
+}
