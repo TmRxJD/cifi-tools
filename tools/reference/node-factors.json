@@ -1,0 +1,838 @@
+{
+  "_source": "RU<Category><n>Bonus getter bodies (tools/il2cpp-cli/csharp.py), with note operands resolved via resolve-loads.py",
+  "_meaning": "Every term a node's bonus multiplies in. Ownership flags (\u2026Acquired/\u2026Unlocked) and runtime helpers (Pow) are excluded -- they gate a branch, they are not factors.",
+  "_game": "apk-0.7.3.61",
+  "factors": {
+    "Academy": {
+      "1": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU7Bonus",
+        "RU1AcademyLevel",
+        "TotalMissionsThisLoop"
+      ],
+      "2": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU7Bonus",
+        "RU2AcademyBaseBonus",
+        "RU2AcademyLevel",
+        "WhiteItem3Bonus1"
+      ],
+      "3": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU7Bonus",
+        "RU3AcademyBaseBonus",
+        "RU3AcademyLevel"
+      ],
+      "4": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU7Bonus",
+        "RU4AcademyLevel",
+        "TotalMissionsThisLoop"
+      ],
+      "5": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU7Bonus",
+        "RU5AcademyLevel",
+        "TotalMissionsThisLoop"
+      ],
+      "6": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU7Bonus",
+        "RU6AcademyBaseBonus",
+        "RU6AcademyLevel"
+      ],
+      "7": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU7Bonus",
+        "RU7AcademyBaseBonus",
+        "RU7AcademyLevel"
+      ],
+      "8": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU7Bonus",
+        "RU8AcademyLevel",
+        "TotalMissionsThisLoop"
+      ],
+      "9": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU7Bonus",
+        "RU9AcademyLevel",
+        "TotalMissionsThisLoop"
+      ],
+      "10": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU7Bonus",
+        "RU10AcademyLevel",
+        "TotalMissionsThisLoop"
+      ],
+      "11": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU7Bonus",
+        "RU11AcademyLevel",
+        "TotalMissionsThisLoop"
+      ]
+    },
+    "Auto": {
+      "1": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU4Bonus",
+        "FinalShip4InstallsBonus",
+        "GreenItem3Bonus2",
+        "RU1AutoBaseBonus",
+        "RU1AutoLevel",
+        "RedItem1Bonus1"
+      ],
+      "2": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU4Bonus",
+        "FinalShip4InstallsBonus",
+        "GreenItem5Bonus2",
+        "RU2AutoBaseBonus",
+        "RU2AutoLevel",
+        "TicksThisLoop"
+      ],
+      "3": [
+        "BlueItem4Bonus1",
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU4Bonus",
+        "FinalShip4InstallsBonus",
+        "PurpleItem2Bonus2",
+        "RU3AutoBaseBonus",
+        "RU3AutoLevel"
+      ],
+      "4": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU4Bonus",
+        "FinalShip4InstallsBonus",
+        "GreenItem5Bonus1",
+        "RU4AutoBaseBonus",
+        "RU4AutoLevel"
+      ],
+      "5": [
+        "BlueItem3Bonus1",
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU4Bonus",
+        "FinalShip4InstallsBonus",
+        "GreenItem1Bonus2",
+        "ManualGensThisLoop",
+        "RU5AutoBaseBonus",
+        "RU5AutoLevel"
+      ],
+      "6": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU4Bonus",
+        "FinalShip4InstallsBonus",
+        "GreenItem2Bonus2",
+        "ManualGensThisLoop",
+        "RU6AutoBaseBonus",
+        "RU6AutoLevel"
+      ],
+      "7": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU4Bonus",
+        "FinalShip4InstallsBonus",
+        "GreenItem4Bonus2",
+        "RU7AutoBaseBonus",
+        "RU7AutoLevel"
+      ],
+      "8": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU4Bonus",
+        "FinalShip4InstallsBonus",
+        "RU8AutoBaseBonus",
+        "RU8AutoLevel",
+        "WhiteItem1Bonus2"
+      ],
+      "9": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU4Bonus",
+        "FinalShip4InstallsBonus",
+        "RU9AutoBaseBonus",
+        "RU9AutoLevel",
+        "TicksThisLoop"
+      ],
+      "10": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU4Bonus",
+        "FinalShip4InstallsBonus",
+        "RU10AutoBaseBonus",
+        "RU10AutoLevel",
+        "TicksThisLoop",
+        "WhiteItem2Bonus2"
+      ],
+      "11": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU4Bonus",
+        "FinalShip4InstallsBonus",
+        "RU11AutoBaseBonus",
+        "RU11AutoLevel",
+        "TicksThisLoop"
+      ]
+    },
+    "Gen": {
+      "1": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU1Bonus",
+        "FinalShip1InstallsBonus",
+        "GreenItem1Bonus1",
+        "RU1GenBaseBonus",
+        "RU1GenLevel"
+      ],
+      "2": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU1Bonus",
+        "FinalShip1InstallsBonus",
+        "RU2GenBaseBonus",
+        "RU2GenLevel"
+      ],
+      "3": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU1Bonus",
+        "FinalShip1InstallsBonus",
+        "RU3GenBaseBonus",
+        "RU3GenLevel"
+      ],
+      "4": [
+        "CellGeneratorsMK2Manual",
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU1Bonus",
+        "FinalShip1InstallsBonus",
+        "RU4GenLevel",
+        "WhiteItem1Bonus1"
+      ],
+      "5": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU1Bonus",
+        "FinalShip1InstallsBonus",
+        "RU5GenBaseBonus",
+        "RU5GenLevel"
+      ],
+      "6": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU1Bonus",
+        "FinalShip1InstallsBonus",
+        "RU6GenBaseBonus",
+        "RU6GenLevel",
+        "WhiteItem4Bonus1"
+      ],
+      "7": [
+        "CellGeneratorsMK3Manual",
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU1Bonus",
+        "FinalShip1InstallsBonus",
+        "RU7GenLevel"
+      ],
+      "8": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU1Bonus",
+        "FinalShip1InstallsBonus",
+        "ManualGensThisLoop",
+        "RU8GenLevel",
+        "WhiteItem2Bonus1"
+      ],
+      "9": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU1Bonus",
+        "FinalShip1InstallsBonus",
+        "ManualGensThisLoop",
+        "RU9GenLevel",
+        "WhiteItem3Bonus2"
+      ],
+      "10": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU1Bonus",
+        "FinalShip1InstallsBonus",
+        "ManualGensThisLoop",
+        "RU10GenLevel",
+        "WhiteItem5Bonus1"
+      ],
+      "11": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU1Bonus",
+        "FinalShip1InstallsBonus",
+        "ManualGensThisLoop",
+        "RU11GenLevel"
+      ]
+    },
+    "Loop": {
+      "1": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU3Bonus",
+        "FinalShip3InstallsBonus",
+        "LoopModLevelsCount",
+        "RU1LoopBaseBonus",
+        "RU1LoopLevel",
+        "RedItem4Bonus2"
+      ],
+      "2": [
+        "CurrentLoopsDone",
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU3Bonus",
+        "FinalShip3InstallsBonus",
+        "GreenItem2Bonus1",
+        "RU2LoopBaseBonus",
+        "RU2LoopLevel",
+        "RedItem3Bonus1"
+      ],
+      "3": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalLoopResetsPerformedThisConstruction",
+        "FinalPowerGU3Bonus",
+        "FinalShip3InstallsBonus",
+        "RU3LoopBaseBonus",
+        "RU3LoopLevel",
+        "RedItem1Bonus2"
+      ],
+      "4": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU3Bonus",
+        "FinalShip3InstallsBonus",
+        "LoopModLevelsCount",
+        "RU4LoopBaseBonus",
+        "RU4LoopLevel",
+        "RedItem2Bonus2"
+      ],
+      "5": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU3Bonus",
+        "FinalShip3InstallsBonus",
+        "LoopModLevelsCount",
+        "RU5LoopBaseBonus",
+        "RU5LoopLevel",
+        "RedItem3Bonus2"
+      ],
+      "6": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU3Bonus",
+        "FinalShip3InstallsBonus",
+        "LoopModLevelsCount",
+        "RU6LoopBaseBonus",
+        "RU6LoopLevel",
+        "RedItem5Bonus2"
+      ],
+      "7": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU3Bonus",
+        "FinalShip3InstallsBonus",
+        "LoopModLevelsCount",
+        "RU7LoopBaseBonus",
+        "RU7LoopLevel",
+        "RedItem4Bonus1"
+      ],
+      "8": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU3Bonus",
+        "FinalShip3InstallsBonus",
+        "LoopModLevelsCount",
+        "RU8LoopBaseBonus",
+        "RU8LoopLevel"
+      ],
+      "9": [
+        "CurrentLoopsDone",
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU3Bonus",
+        "FinalShip3InstallsBonus",
+        "RU9LoopBaseBonus",
+        "RU9LoopLevel",
+        "WhiteItem5Bonus2"
+      ],
+      "10": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU3Bonus",
+        "FinalShip3InstallsBonus",
+        "LoopModLevelsCount",
+        "RU10LoopBaseBonus",
+        "RU10LoopLevel"
+      ],
+      "11": [
+        "CurrentLoopsDone",
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU3Bonus",
+        "FinalShip3InstallsBonus",
+        "RU11LoopBaseBonus",
+        "RU11LoopLevel"
+      ]
+    },
+    "Ouro": {
+      "1": [
+        "FinalAllShipsInstallsBonus",
+        "FinalDarkBadge1Bonus",
+        "RU1OuroborosLevel",
+        "RU83Level"
+      ],
+      "2": [
+        "FinalAllShipsInstallsBonus",
+        "FinalDarkBadge1Bonus",
+        "RU2OuroborosLevel",
+        "RU83Level"
+      ],
+      "3": [
+        "FinalAllShipsInstallsBonus",
+        "FinalDarkBadge1Bonus",
+        "RU3OuroborosLevel",
+        "RU83Level"
+      ],
+      "4": [
+        "FinalAllShipsInstallsBonus",
+        "FinalDarkBadge1Bonus",
+        "RU4OuroborosLevel",
+        "RU83Level"
+      ],
+      "5": [
+        "FinalAllShipsInstallsBonus",
+        "FinalDarkBadge1Bonus",
+        "RU5OuroborosLevel",
+        "RU83Level"
+      ],
+      "6": [
+        "FinalAllShipsInstallsBonus",
+        "FinalDarkBadge1Bonus",
+        "RU6OuroborosLevel",
+        "RU83Level"
+      ]
+    },
+    "Research": {
+      "1": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU6Bonus",
+        "FinalShip6InstallsBonus",
+        "RU1ResearchBaseBonus",
+        "RU1ResearchLevel",
+        "TotalOperationsThisRun",
+        "TotalStudiesThisLoop"
+      ],
+      "2": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU6Bonus",
+        "FinalShip6InstallsBonus",
+        "OrangeItem4Bonus1",
+        "RU2ResearchBaseBonus",
+        "RU2ResearchLevel",
+        "TotalStudiesThisLoop"
+      ],
+      "3": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU6Bonus",
+        "FinalShip6InstallsBonus",
+        "FullyCompletedResearches",
+        "OrangeItem2Bonus1",
+        "RU3ResearchLevel"
+      ],
+      "4": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU6Bonus",
+        "FinalShip6InstallsBonus",
+        "PurpleItem2Bonus1",
+        "RU4ResearchLevel",
+        "TotalResearchLevels"
+      ],
+      "5": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU6Bonus",
+        "FinalShip6InstallsBonus",
+        "GreenItem3Bonus1",
+        "PurpleItem3Bonus1",
+        "RU5ResearchBaseBonus",
+        "RU5ResearchLevel",
+        "TotalStudiesThisLoop"
+      ],
+      "6": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU6Bonus",
+        "FinalShip6InstallsBonus",
+        "OrangeItem3Bonus1",
+        "PurpleItem1Bonus1",
+        "RU6ResearchBaseBonus",
+        "RU6ResearchLevel"
+      ],
+      "7": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU6Bonus",
+        "FinalShip6InstallsBonus",
+        "OrangeItem1Bonus1",
+        "RU7ResearchBaseBonus",
+        "RU7ResearchLevel",
+        "TotalStudiesThisLoop"
+      ],
+      "8": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU6Bonus",
+        "FinalShip6InstallsBonus",
+        "RU8ResearchBaseBonus",
+        "RU8ResearchLevel"
+      ],
+      "9": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU6Bonus",
+        "FinalShip6InstallsBonus",
+        "RU9ResearchBaseBonus",
+        "RU9ResearchLevel",
+        "TotalStudiesThisLoop"
+      ],
+      "10": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU6Bonus",
+        "FinalShip6InstallsBonus",
+        "RU10ResearchBaseBonus",
+        "RU10ResearchLevel",
+        "TotalStudiesThisLoop"
+      ],
+      "11": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU6Bonus",
+        "FinalShip6InstallsBonus",
+        "RU11ResearchBaseBonus",
+        "RU11ResearchLevel",
+        "TotalStudiesThisLoop"
+      ]
+    },
+    "Shard": {
+      "1": [
+        "BlueItem2Bonus2",
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalBadge5Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalShip5InstallsBonus",
+        "RU1ShardBaseBonus",
+        "RU1ShardLevel",
+        "RedItem2Bonus1"
+      ],
+      "2": [
+        "BlueItem2Bonus1",
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU5Bonus",
+        "FinalShip5InstallsBonus",
+        "PurpleItem1Bonus2",
+        "RU2ShardBaseBonus",
+        "RU2ShardLevel"
+      ],
+      "3": [
+        "BlueItem1Bonus2",
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU5Bonus",
+        "FinalShip5InstallsBonus",
+        "RU3ShardBaseBonus",
+        "RU3ShardLevel",
+        "TotalOperationsThisRun"
+      ],
+      "4": [
+        "BlueItem3Bonus2",
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU5Bonus",
+        "FinalShip5InstallsBonus",
+        "RU4ShardBaseBonus",
+        "RU4ShardLevel",
+        "TotalOperationsThisRun"
+      ],
+      "5": [
+        "BlueItem5Bonus2",
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU5Bonus",
+        "FinalShip5InstallsBonus",
+        "RU5ShardBaseBonus",
+        "RU5ShardLevel",
+        "TotalOperationsThisRun"
+      ],
+      "6": [
+        "BlueItem5Bonus1",
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU5Bonus",
+        "FinalShip5InstallsBonus",
+        "GreenItem4Bonus1",
+        "RU6ShardBaseBonus",
+        "RU6ShardLevel",
+        "RedItem5Bonus1",
+        "TotalOperationsThisRun"
+      ],
+      "7": [
+        "BlueItem4Bonus2",
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU5Bonus",
+        "FinalShip5InstallsBonus",
+        "RU7ShardBaseBonus",
+        "RU7ShardLevel",
+        "TotalOperationsThisRun"
+      ],
+      "8": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU5Bonus",
+        "FinalShip5InstallsBonus",
+        "RU8ShardBaseBonus",
+        "RU8ShardLevel"
+      ],
+      "9": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU5Bonus",
+        "FinalShip5InstallsBonus",
+        "RU9ShardBaseBonus",
+        "RU9ShardLevel",
+        "TotalOperationsThisRun"
+      ],
+      "10": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU5Bonus",
+        "FinalShip5InstallsBonus",
+        "RU10ShardBaseBonus",
+        "RU10ShardLevel",
+        "TotalOperationsThisRun",
+        "WhiteItem4Bonus2"
+      ],
+      "11": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge12Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU5Bonus",
+        "FinalShip5InstallsBonus",
+        "RU11ShardBaseBonus",
+        "RU11ShardLevel",
+        "TotalOperationsThisRun"
+      ]
+    },
+    "Tech": {
+      "1": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU2Bonus",
+        "FinalShip2InstallsBonus",
+        "OrangeItem3Bonus2",
+        "RU1TechBaseBonus",
+        "RU1TechLevel"
+      ],
+      "2": [
+        "BlueItem1Bonus1",
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU2Bonus",
+        "FinalShip2InstallsBonus",
+        "RU2TechBaseBonus",
+        "RU2TechLevel"
+      ],
+      "3": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU2Bonus",
+        "FinalShip2InstallsBonus",
+        "OrangeItem4Bonus2",
+        "RU3TechBaseBonus",
+        "RU3TechLevel",
+        "TotalHardwareLevels",
+        "TotalSoftwareLevels"
+      ],
+      "4": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU2Bonus",
+        "FinalShip2InstallsBonus",
+        "OrangeItem2Bonus2",
+        "RU4TechBaseBonus",
+        "RU4TechLevel",
+        "TotalHardwareLevels",
+        "TotalSoftwareLevels"
+      ],
+      "5": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU2Bonus",
+        "FinalShip2InstallsBonus",
+        "OrangeItem1Bonus2",
+        "RU5TechBaseBonus",
+        "RU5TechLevel",
+        "TotalHardwareLevels",
+        "TotalSoftwareLevels"
+      ],
+      "6": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU2Bonus",
+        "FinalShip2InstallsBonus",
+        "PurpleItem3Bonus2",
+        "RU6TechBaseBonus",
+        "RU6TechLevel",
+        "TotalHardwareLevels",
+        "TotalSoftwareLevels"
+      ],
+      "7": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU2Bonus",
+        "FinalShip2InstallsBonus",
+        "RU7TechBaseBonus",
+        "RU7TechLevel",
+        "TotalHardwareLevels",
+        "TotalSoftwareLevels"
+      ],
+      "8": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU2Bonus",
+        "FinalShip2InstallsBonus",
+        "RU8TechLevel",
+        "TotalHardwareLevels"
+      ],
+      "9": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU2Bonus",
+        "FinalShip2InstallsBonus",
+        "RU9TechLevel",
+        "TotalSoftwareLevels"
+      ],
+      "10": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU2Bonus",
+        "FinalShip2InstallsBonus",
+        "RU10TechLevel",
+        "TotalHardwareLevels"
+      ],
+      "11": [
+        "FinalAllShipsInstallsBonus",
+        "FinalBadge2Bonus",
+        "FinalDarkBadge1Bonus",
+        "FinalPowerGU2Bonus",
+        "FinalShip2InstallsBonus",
+        "RU11TechLevel",
+        "TotalSoftwareLevels"
+      ]
+    }
+  }
+}

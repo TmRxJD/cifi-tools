@@ -150,6 +150,8 @@ There is exactly one place for each of these. **Do not add a second.**
 | Ship install node counters | `tools/reference/ship-node-counters.json` |
 | Ship install node names | `tools/reference/ship-node-names.json` |
 | Fleet badge -> ships + value | `tools/reference/badge-map.json` |
+| Every factor per install node | `tools/reference/node-factors.json` |
+| Zod schemas for the references | `tools/bench/reference-schemas.js` |
 | Omitted uniform per-node terms | `tools/reference/uniform-node-terms.json` |
 | Gear piece names (the game's own) | `tools/reference/gear-names.json` |
 | Gear set bonus -> resource + value | `tools/reference/gear-set-bonus-map.json` |
@@ -930,6 +932,35 @@ think one is wrong, disprove it with a test.
   - `ship-test.js` duplicates the weight rule (nodeWeight is module-private) and was still on `max`
     after the tool moved to `sum`, reporting the allocator as wrong for preferring a dual-resource
     node. Known drift hazard, now flagged in place.
+- **`node-factor-check.js` is the general defence against another Badge12: EVERY term in every
+  node's multiply chain must be accounted for by name.** `extract-node-factors.py` enumerates the
+  whole chain per node -- named reads AND the operands inside Cpp2IL notes, resolved through
+  `resolve-loads.py`, since the gem perks and installs researches are invisible to a name search --
+  and the bench sorts each term into a bucket that says WHY it is safe: modelled (crew, gear, badge,
+  Fleet Analysis 2), provably inert until bought (gem perks), or structurally part of the node (own
+  level, authored coefficient, its counter). **A term matching no bucket FAILS.** Verified by
+  injecting a fake `FinalSecretBoosterBonus`.
+  It is scoped to the 7 modelled ships on purpose. Including Ouroboros WEAKENED it: its nodes read
+  `RU83Level`, which the counter extractor had labelled a "counter", so an unmodelled term was waved
+  through by a sibling reference instead of examined. **A bench that classifies things the tool does
+  not model is not being thorough, it is laundering them.**
+  Two results worth keeping from the first full run: `FinalShip7InstallsBonus` **does not exist** --
+  no Academy node reads a per-ship installs research, which independently confirms
+  `shipOrder: [1..6]` excluding Zeus -- and `Badge5` is read by exactly ONE Shard node, so it
+  belongs to that node's own formula rather than being a ship multiplier.
+- **Reference files are schema-enforced with zod (`reference-schema-test.js`), and zod is a DEV
+  dependency only — the shipped webapp still has no build step.** The failure it prevents is
+  specific: when an extractor changes shape, a consumer reads `undefined`, and a bench comparing it
+  to the other side's `undefined` PASSES. A silently empty reference looks exactly like a clean run.
+  Schemas are `.strict()`, so a NEW key fails too — a new field usually means the extractor learned
+  something no consumer has been taught to read.
+  **The first version of these schemas failed its own negative control**: `z.record()` accepts `{}`,
+  so "silently empty payload" passed. Payload collections now use a `nonEmptyRecord` helper. Three
+  controls are verified: empty payload, wrong type, and an unexpected key.
+  The test also reports when the references come from MORE THAN ONE BUILD. That is allowed — older
+  files stay valid until re-extracted — but it is the early warning for the mixed-build class of
+  error, where resolving one build's offsets against another's `dump.cs` returns confident nonsense
+  rather than failing.
 - **A THIRD fleet badge was missing entirely: `Badge12` ("Innovation Badge #2"), x222 on Demeter,
   Koios and Zeus.** The tool modelled `Badge2` (x7) and `DarkBadge1` (x3) and stopped there. The
   game reads `FinalBadge2Bonus` in every Gen/Tech/Loop/Auto node and `FinalBadge12Bonus` in every
@@ -1176,6 +1207,8 @@ node tools/bench/node-name-check.js     # node names vs the game's fleet tooltip
 node tools/bench/node-effect-probe.js  # every install node actually moves the output
 node tools/bench/uniform-term-check.js # omitted per-node terms are provably 1 until bought
 node tools/bench/badge-check.js        # fleet badges: ships + multipliers vs the GAME
+node tools/bench/node-factor-check.js  # EVERY factor in every node getter is accounted for
+node tools/bench/reference-schema-test.js # zod: every reference file matches its schema
 node tools/bench/growth-counter-check.js # per-run counter classification + zero-counter warning
 node tools/bench/allocator-check.js     # allocator vs a reference greedy, ALL 7 ships
 python tools/il2cpp-cli/typetree.py --dump FleetManager --grep BaseBonus  # read authored data

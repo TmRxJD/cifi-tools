@@ -11,9 +11,11 @@
     "test:optimizer:all": "node tools/bench/run.js --all",
     "bench:show": "node tools/bench/show.js",
     "report:params": "node tools/bench/params-report.js",
-    "report:ts": "node tools/bench/ts-readiness.js"
+    "report:ts": "node tools/bench/ts-readiness.js",
+    "test:references": "node tools/bench/reference-schema-test.js"
   },
   "devDependencies": {
-    "typescript": "^5"
+    "typescript": "^5",
+    "zod": "^4.5.4"
   }
 }
