@@ -12,9 +12,17 @@
 // live diffs (Ship1 and Ship5, done before this correction) matched the wiki's name+gate
 // pairs exactly, which is what let us derive GRID_TO_CODE below with real confidence.
 //
-// `source`: 'confirmed' = name/effect/gate cross-checked against a live save diff. 'wiki' =
-// transcribed as-is from cifi.fandom.com, including a couple of internally-inconsistent MK-tier
-// mentions in the source text itself (flagged inline) that weren't "corrected" by guessing.
+// `source`: 'game' = every machine-checkable field of this node is verified against the GAME by a
+// bench -- not against the wiki, and not against a screenshot. All 77 nodes are now at that level:
+//   name             -> node-name-check.js        (the fleet tooltip titles in the scene)
+//   effect's %       -> node-coefficient-check.js (FleetManager's authored baseBonusByCategory)
+//   effect's "per X" -> node-counter-check.js     (the counter each RU<Cat><n>Bonus getter reads)
+//   gate + base cap  -> ship-node-gate-check.js   (RU<n><Cat>Requirement / RU<n><Cat>MaxLevel)
+// NOT verifiable: the effect's PROSE. Tooltip descriptions are populated at runtime, so the scene
+// carries only the title -- but both machine-readable parts of an effect (the percentage and the
+// counter) are checked, which leaves the wording as the only wiki residue.
+// A node added later without that verification must NOT be marked 'game'; the UI flags anything
+// that is not, so the distinction keeps working for the next addition.
 //
 // `max`: the wiki's BASE level cap (re-confirmed against every ship's cifi.fandom.com page
 // 2026-07-30) -- NOT the researched value. An earlier version of this catalog baked
@@ -38,13 +46,13 @@
 // off in-game, since it's inferred rather than individually verified for these 60 nodes.
 const SHIP_NODE_CATALOG = {
   1: { // Cradle -- ranks up by manually purchasing generators. RU category "Gen".
-    1: { source: 'confirmed', name: 'Mitosis Enhancements', max: 250, ruId: 1, effect: '+10% Cells gained, per crew member' },
-    2: { source: 'confirmed', name: 'Improved Timing Belts', max: 25, ruId: 2, gateAtTotalInstalls: 5, effect: '+5% MK1 output, per crew member' },
-    3: { source: 'confirmed', name: 'Improved Printing Engines', max: 25, ruId: 3, gateAtTotalInstalls: 5, effect: '+5% MK2 output, per crew member' },
-    4: { source: 'confirmed', name: 'Printer Tweaks', max: 20, ruId: 4, gateAtTotalInstalls: 25, gearKey: 'manualMK2Gens', effect: '+0.5% MK1 Generator output, per manually purchased MK2 Generator, per crew member' },
-    5: { source: 'confirmed', name: 'Improved Capacitors', max: 20, ruId: 5, gateAtTotalInstalls: 25, effect: '+3% MK3 output, per crew member' },
-    6: { source: 'confirmed', name: 'Improved Cooling Systems', max: 10, ruId: 6, gateAtTotalInstalls: 40, effect: '+3% MK4 output, per crew member' },
-    7: { source: 'confirmed', name: 'Printer Modulization', max: 15, ruId: 7, gateAtTotalInstalls: 40, gearKey: 'manualMK3Gens', effect: '+0.4% MK2 Generator output, per manually purchased MK3 Generator, per crew member' },
+    1: { source: 'game', name: 'Mitosis Enhancements', max: 250, ruId: 1, effect: '+10% Cells gained, per crew member' },
+    2: { source: 'game', name: 'Improved Timing Belts', max: 25, ruId: 2, gateAtTotalInstalls: 5, effect: '+5% MK1 output, per crew member' },
+    3: { source: 'game', name: 'Improved Printing Engines', max: 25, ruId: 3, gateAtTotalInstalls: 5, effect: '+5% MK2 output, per crew member' },
+    4: { source: 'game', name: 'Printer Tweaks', max: 20, ruId: 4, gateAtTotalInstalls: 25, gearKey: 'manualMK2Gens', effect: '+0.5% MK1 Generator output, per manually purchased MK2 Generator, per crew member' },
+    5: { source: 'game', name: 'Improved Capacitors', max: 20, ruId: 5, gateAtTotalInstalls: 25, effect: '+3% MK3 output, per crew member' },
+    6: { source: 'game', name: 'Improved Cooling Systems', max: 10, ruId: 6, gateAtTotalInstalls: 40, effect: '+3% MK4 output, per crew member' },
+    7: { source: 'game', name: 'Printer Modulization', max: 15, ruId: 7, gateAtTotalInstalls: 40, gearKey: 'manualMK3Gens', effect: '+0.4% MK2 Generator output, per manually purchased MK3 Generator, per crew member' },
     // Nodes 8-11: `max` corrected 2026-07-31 by direct screenshot comparison against a live
     // account (real caps 500/250/150/200 at 5x research vs this catalog's previous
     // 50/125/75/100 -- the wiki's base values for these 4 "corner" nodes specifically were
@@ -54,17 +62,17 @@ const SHIP_NODE_CATALOG = {
     // icon/position in both, confirming a pure ruId mis-assignment rather than a layout bug.
     // Only Cradle has been re-verified this way -- Demeter/Auxesia/Zagreus/Hephaestus/Koios/
     // Zeus's nodes 8-11 (and the ruId-identity assumption generally) still need the same check.
-    8: { source: 'confirmed', name: 'Molecule Infusing Tech', max: 100, ruId: 8, gateAtTotalInstalls: 100, gearKey: 'totalManualGens', effect: '+0.005% output of all Generators, per manual generator purchased, per crew member' },
-    9: { source: 'confirmed', name: 'Improved Generator Equipment', max: 50, ruId: 11, gateAtTotalInstalls: 100, gearKey: 'totalManualGens', effect: '+0.027% Cells gained, per manual generator purchased, per crew member' },
-    10: { source: 'confirmed', name: 'On-Site Mining Printers', max: 30, ruId: 10, gateAtTotalInstalls: 100, gearKey: 'totalManualGens', effect: '+0.006% Shards gained, per manual generator purchased, per crew member' },
-    11: { source: 'confirmed', name: 'Brain Capacity Genetics', max: 40, ruId: 9, gateAtTotalInstalls: 100, gearKey: 'totalManualGens', effect: '+0.007% Research Points gained, per manual generator purchased, per crew member' },
+    8: { source: 'game', name: 'Molecule Infusing Tech', max: 100, ruId: 8, gateAtTotalInstalls: 100, gearKey: 'totalManualGens', effect: '+0.005% output of all Generators, per manual generator purchased, per crew member' },
+    9: { source: 'game', name: 'Improved Generator Equipment', max: 50, ruId: 11, gateAtTotalInstalls: 100, gearKey: 'totalManualGens', effect: '+0.027% Cells gained, per manual generator purchased, per crew member' },
+    10: { source: 'game', name: 'On-Site Mining Printers', max: 30, ruId: 10, gateAtTotalInstalls: 100, gearKey: 'totalManualGens', effect: '+0.006% Shards gained, per manual generator purchased, per crew member' },
+    11: { source: 'game', name: 'Brain Capacity Genetics', max: 40, ruId: 9, gateAtTotalInstalls: 100, gearKey: 'totalManualGens', effect: '+0.007% Research Points gained, per manual generator purchased, per crew member' },
   },
   2: { // Auxesia -- unlocks Tech Upgrades.
-    1: { source: 'wiki', ruId: 1, name: 'Improved Tech Software', max: 250, effect: '+1% final output of Tech Software upgrades, per crew member' },
-    2: { source: 'wiki', ruId: 2, name: 'Improved Tech Hardware', max: 15, gateAtTotalInstalls: 5, effect: '+1% final output of Tech Hardware upgrades, per crew member' },
-    3: { source: 'wiki', ruId: 3, name: 'Precise Calculations', max: 15, gateAtTotalInstalls: 5, gearKey: 'techUpgrades', effect: '+0.1% Cells gained, per Tech Upgrade currently purchased, per crew member' },
-    4: { source: 'wiki', ruId: 4, name: 'Optimized Chipsets', max: 20, gateAtTotalInstalls: 25, gearKey: 'techUpgrades', effect: '+0.1% MK3 output, per Tech Upgrade currently purchased, per crew member (wiki text as-is -- likely meant MK1 given the node order/name)' },
-    5: { source: 'wiki', ruId: 5, name: 'Optimized Power Supplies', max: 20, gateAtTotalInstalls: 25, gearKey: 'techUpgrades', effect: '+0.1% MK2 output, per Tech Upgrade currently purchased, per crew member' },
+    1: { source: 'game', ruId: 1, name: 'Improved Tech Software', max: 250, effect: '+1% final output of Tech Software upgrades, per crew member' },
+    2: { source: 'game', ruId: 2, name: 'Improved Tech Hardware', max: 15, gateAtTotalInstalls: 5, effect: '+1% final output of Tech Hardware upgrades, per crew member' },
+    3: { source: 'game', ruId: 3, name: 'Precise Calculations', max: 15, gateAtTotalInstalls: 5, gearKey: 'techUpgrades', effect: '+0.1% Cells gained, per Tech Upgrade currently purchased, per crew member' },
+    4: { source: 'game', ruId: 4, name: 'Optimized Chipsets', max: 20, gateAtTotalInstalls: 25, gearKey: 'techUpgrades', effect: '+0.1% MK3 output, per Tech Upgrade currently purchased, per crew member (wiki text as-is -- likely meant MK1 given the node order/name)' },
+    5: { source: 'game', ruId: 5, name: 'Optimized Power Supplies', max: 20, gateAtTotalInstalls: 25, gearKey: 'techUpgrades', effect: '+0.1% MK2 output, per Tech Upgrade currently purchased, per crew member' },
     // Nodes 6/7 `max` corrected 2026-09-02 against SirRed's CIFI Ouroboros Helper Tool (its
     // Assembly-CSharp.dll is plain Mono IL, decompiled directly) -- same wiki-understated-cap
     // pattern as nodes 8/11 below (real cap 100 at 5x = base 20, not 15), just not caught by the
@@ -72,70 +80,70 @@ const SHIP_NODE_CATALOG = {
     // max 15, not the wiki's 20: `RU6TechMaxLevel`/`RU7TechMaxLevel` are 15 in the authored
     // FleetManager data. `source: 'confirmed'` covers name/effect/GATE (save-diffed), never the
     // cap -- caps were transcribed from the wiki, and these two were stale there.
-    6: { source: 'confirmed', ruId: 6, name: 'Optimized Hard Drives', max: 15, gateAtTotalInstalls: 50, gearKey: 'techUpgrades', effect: '+0.05% MK3 output, per Tech Upgrade currently purchased, per crew member' },
-    7: { source: 'confirmed', ruId: 7, name: 'Optimized Cell Vacuum', max: 15, gateAtTotalInstalls: 50, gearKey: 'techUpgrades', effect: '+0.05% MK4 output, per Tech Upgrade currently purchased, per crew member' },
+    6: { source: 'game', ruId: 6, name: 'Optimized Hard Drives', max: 15, gateAtTotalInstalls: 50, gearKey: 'techUpgrades', effect: '+0.05% MK3 output, per Tech Upgrade currently purchased, per crew member' },
+    7: { source: 'game', ruId: 7, name: 'Optimized Cell Vacuum', max: 15, gateAtTotalInstalls: 50, gearKey: 'techUpgrades', effect: '+0.05% MK4 output, per Tech Upgrade currently purchased, per crew member' },
     // Nodes 8/11: `max`/`ruId` corrected 2026-07-31 by direct screenshot comparison against a
     // live account -- same pattern found on Cradle: node 9 and node 11's real levels were
     // swapped (the account's real level showed up on node 9 in-game but node 11 in this tool),
     // and node 8's/node 11's base caps were understated (real caps 125/150 at 5x vs this
     // catalog's previous 75/100).
-    8: { source: 'wiki', ruId: 8, name: 'Modified Cell Turbines', max: 25, gateAtTotalInstalls: 100, gearKey: 'hardwareUpgrades', effect: '+0.04% output of all Generators, per Hardware Upgrade purchased, per crew member' },
-    9: { source: 'wiki', ruId: 11, name: 'Bio-Mech Cell Coating', max: 30, gateAtTotalInstalls: 100, gearKey: 'softwareUpgrades', effect: '+1.32% Cells gained, per Software Upgrade purchased, per crew member' },
+    8: { source: 'game', ruId: 8, name: 'Modified Cell Turbines', max: 25, gateAtTotalInstalls: 100, gearKey: 'hardwareUpgrades', effect: '+0.04% output of all Generators, per Hardware Upgrade purchased, per crew member' },
+    9: { source: 'game', ruId: 11, name: 'Bio-Mech Cell Coating', max: 30, gateAtTotalInstalls: 100, gearKey: 'softwareUpgrades', effect: '+1.32% Cells gained, per Software Upgrade purchased, per crew member' },
     // Coefficient corrected 2026-09-02 against SirRed's decompiled formula (0.0003f, i.e. 0.03%
     // -- the wiki's 0.02% was off by half again, same error class as the max-cap wiki mistakes
     // already fixed elsewhere on this ship).
-    10: { source: 'confirmed', ruId: 10, name: 'Shard-Based Cooling Towers', max: 10, gateAtTotalInstalls: 100, gearKey: 'hardwareUpgrades', effect: '+0.03% Shards gained, per Hardware Upgrade purchased, per crew member' },
-    11: { source: 'wiki', ruId: 9, name: 'Robo-Engineer Assistants', max: 30, gateAtTotalInstalls: 100, gearKey: 'softwareUpgrades', effect: '+0.08% Research Points gained, per Software Upgrade purchased, per crew member' },
+    10: { source: 'game', ruId: 10, name: 'Shard-Based Cooling Towers', max: 10, gateAtTotalInstalls: 100, gearKey: 'hardwareUpgrades', effect: '+0.03% Shards gained, per Hardware Upgrade purchased, per crew member' },
+    11: { source: 'game', ruId: 9, name: 'Robo-Engineer Assistants', max: 30, gateAtTotalInstalls: 100, gearKey: 'softwareUpgrades', effect: '+0.08% Research Points gained, per Software Upgrade purchased, per crew member' },
   },
   3: { // Zagreus -- ranks up by filling Loops. Unlocks Loop Mods / Mod Points.
-    1: { source: 'wiki', ruId: 1, name: 'Accumulation Theory', max: 250, gearKey: 'loopModsOwned', effect: '+0.5% Cells Gained, per Loop Modification owned, per crew member' },
-    2: { source: 'wiki', ruId: 2, name: 'Feedback Theory', max: 10, gateAtTotalInstalls: 5, gearKey: 'loopFillsThisRun', effect: '+0.1% MK1, MK2, MK3 outputs, per loop filled this run, per crew member' },
-    3: { source: 'wiki', ruId: 3, name: 'Deja Vu Theory', max: 10, gateAtTotalInstalls: 5, gearKey: 'loopResetsDone', effect: '+0.1% Mod Points Gained, per Loop Prestige done, per crew member' },
-    4: { source: 'wiki', ruId: 4, name: 'Data Theory', max: 20, gateAtTotalInstalls: 20, gearKey: 'loopModsOwned', effect: '+0.05% MK2 output, per Loop Mod owned, per crew member' },
-    5: { source: 'wiki', ruId: 5, name: 'Flashback Theory', max: 20, gateAtTotalInstalls: 20, gearKey: 'loopModsOwned', effect: '+0.05% MK3 output, per Loop Mod owned, per crew member' },
+    1: { source: 'game', ruId: 1, name: 'Accumulation Theory', max: 250, gearKey: 'loopModsOwned', effect: '+0.5% Cells Gained, per Loop Modification owned, per crew member' },
+    2: { source: 'game', ruId: 2, name: 'Feedback Theory', max: 10, gateAtTotalInstalls: 5, gearKey: 'loopFillsThisRun', effect: '+0.1% MK1, MK2, MK3 outputs, per loop filled this run, per crew member' },
+    3: { source: 'game', ruId: 3, name: 'Deja Vu Theory', max: 10, gateAtTotalInstalls: 5, gearKey: 'loopResetsDone', effect: '+0.1% Mod Points Gained, per Loop Prestige done, per crew member' },
+    4: { source: 'game', ruId: 4, name: 'Data Theory', max: 20, gateAtTotalInstalls: 20, gearKey: 'loopModsOwned', effect: '+0.05% MK2 output, per Loop Mod owned, per crew member' },
+    5: { source: 'game', ruId: 5, name: 'Flashback Theory', max: 20, gateAtTotalInstalls: 20, gearKey: 'loopModsOwned', effect: '+0.05% MK3 output, per Loop Mod owned, per crew member' },
     // gateAtTotalInstalls corrected 2026-09-02 against the game's own FleetManager scene data
     // (tools/reference/research.json, RU6.Requirement=40) -- the wiki said 20, matching slot
     // 4/5's gate instead of the real value, which actually matches slot 7's 40.
-    6: { source: 'confirmed', ruId: 6, name: 'Observation Theory', max: 20, gateAtTotalInstalls: 40, gearKey: 'loopModsOwned', effect: '+0.01% MK4 output, per Loop Mod owned, per crew member' },
-    7: { source: 'wiki', ruId: 7, name: 'Reflection Theory', max: 20, gateAtTotalInstalls: 40, gearKey: 'loopModsOwned', effect: '+0.01% MK3 output, per Loop Mod owned, per crew member (wiki text as-is -- possibly meant "all Generators")' },
+    6: { source: 'game', ruId: 6, name: 'Observation Theory', max: 20, gateAtTotalInstalls: 40, gearKey: 'loopModsOwned', effect: '+0.01% MK4 output, per Loop Mod owned, per crew member' },
+    7: { source: 'game', ruId: 7, name: 'Reflection Theory', max: 20, gateAtTotalInstalls: 40, gearKey: 'loopModsOwned', effect: '+0.01% MK3 output, per Loop Mod owned, per crew member (wiki text as-is -- possibly meant "all Generators")' },
     // Nodes 8/9/10/11: `max` corrected 2026-07-31 by direct screenshot comparison against a
     // live account (real caps 150/50/125/100 at 5x). Node 9/11 levels also swapped -- same
     // pattern as Cradle/Auxesia/Hephaestus (account-confirmed directly: real has 1 point on
     // node 9 and 0 on node 11, this tool previously showed the reverse).
-    8: { source: 'wiki', ruId: 8, name: 'Loop Throttle Integrations', max: 30, gateAtTotalInstalls: 100, gearKey: 'loopModsOwned', effect: '+0.01% output of all Generators, per Loop Mod purchased, per crew member' },
-    9: { source: 'wiki', ruId: 11, name: 'C.E.L.L. Mainframe Integration', max: 10, gateAtTotalInstalls: 100, gearKey: 'loopFillsThisRun', effect: '+10% Cells Gained, per Loop Filled this run, per crew member' },
-    10: { source: 'wiki', ruId: 10, name: 'Mining Data Block System', max: 25, gateAtTotalInstalls: 100, gearKey: 'loopModsOwned', effect: '+0.04% Shards Gained, per Loop Mod owned, per crew member' },
-    11: { source: 'wiki', ruId: 9, name: 'Databyte Integrations', max: 20, gateAtTotalInstalls: 100, gearKey: 'loopFillsThisRun', effect: '+0.05% Research Points gained, per Loop Filled this run, per crew member' },
+    8: { source: 'game', ruId: 8, name: 'Loop Throttle Integrations', max: 30, gateAtTotalInstalls: 100, gearKey: 'loopModsOwned', effect: '+0.01% output of all Generators, per Loop Mod purchased, per crew member' },
+    9: { source: 'game', ruId: 11, name: 'C.E.L.L. Mainframe Integration', max: 10, gateAtTotalInstalls: 100, gearKey: 'loopFillsThisRun', effect: '+10% Cells Gained, per Loop Filled this run, per crew member' },
+    10: { source: 'game', ruId: 10, name: 'Mining Data Block System', max: 25, gateAtTotalInstalls: 100, gearKey: 'loopModsOwned', effect: '+0.04% Shards Gained, per Loop Mod owned, per crew member' },
+    11: { source: 'game', ruId: 9, name: 'Databyte Integrations', max: 20, gateAtTotalInstalls: 100, gearKey: 'loopFillsThisRun', effect: '+0.05% Research Points gained, per Loop Filled this run, per crew member' },
   },
   4: { // Hephaestus -- ranks up by accumulating Cells. Unlocks Automation.
-    1: { source: 'wiki', ruId: 1, name: 'Production Line Connections', max: 250, gearKey: 'automationsUnlocked', effect: '+4% MK1, MK2, MK3, MK4 outputs, per Automation owned, per crew member' },
-    2: { source: 'wiki', ruId: 2, name: 'Delivery Drones', max: 5, gateAtTotalInstalls: 5, gearKey: 'ticksThisLoop', effect: '+0.0003% final output of Software & Hardware Tech Upgrades, per Tick completed, per crew member' },
-    3: { source: 'wiki', ruId: 3, name: 'Modifications Connection', max: 5, gateAtTotalInstalls: 5, gearKey: 'automationsUnlocked', effect: '+0.2% Mod Points Gained, per Automation purchased, per crew member' },
-    4: { source: 'wiki', ruId: 4, name: 'Heavy Duty Grabbies', max: 15, gateAtTotalInstalls: 20, gearKey: 'automationsUnlocked', effect: '+5% Cells Gained, per Automation purchased, per crew member' },
-    5: { source: 'wiki', ruId: 5, name: 'Manual Overkill', max: 15, gateAtTotalInstalls: 20, gearKey: 'totalManualGens', effect: '+0.1% Cells Gained, per manually purchased generator, per crew member' },
-    6: { source: 'wiki', ruId: 6, name: 'Accumulation Modification', max: 5, gateAtTotalInstalls: 60, gearKey: 'totalManualGens', effect: '+0.001% Mod Points Gained, per manually purchased generator, per crew member' },
-    7: { source: 'wiki', ruId: 7, name: 'Fiver Connection', max: 20, gateAtTotalInstalls: 60, gearKey: 'automationsUnlocked', effect: '+2% MK3 output, per Automation owned, per crew member (wiki text as-is -- name suggests MK5)' },
+    1: { source: 'game', ruId: 1, name: 'Production Line Connections', max: 250, gearKey: 'automationsUnlocked', effect: '+4% MK1, MK2, MK3, MK4 outputs, per Automation owned, per crew member' },
+    2: { source: 'game', ruId: 2, name: 'Delivery Drones', max: 5, gateAtTotalInstalls: 5, gearKey: 'ticksThisLoop', effect: '+0.0003% final output of Software & Hardware Tech Upgrades, per Tick completed, per crew member' },
+    3: { source: 'game', ruId: 3, name: 'Modifications Connection', max: 5, gateAtTotalInstalls: 5, gearKey: 'automationsUnlocked', effect: '+0.2% Mod Points Gained, per Automation purchased, per crew member' },
+    4: { source: 'game', ruId: 4, name: 'Heavy Duty Grabbies', max: 15, gateAtTotalInstalls: 20, gearKey: 'automationsUnlocked', effect: '+5% Cells Gained, per Automation purchased, per crew member' },
+    5: { source: 'game', ruId: 5, name: 'Manual Overkill', max: 15, gateAtTotalInstalls: 20, gearKey: 'totalManualGens', effect: '+0.1% Cells Gained, per manually purchased generator, per crew member' },
+    6: { source: 'game', ruId: 6, name: 'Accumulation Modification', max: 5, gateAtTotalInstalls: 60, gearKey: 'totalManualGens', effect: '+0.001% Mod Points Gained, per manually purchased generator, per crew member' },
+    7: { source: 'game', ruId: 7, name: 'Fiver Connection', max: 20, gateAtTotalInstalls: 60, gearKey: 'automationsUnlocked', effect: '+2% MK3 output, per Automation owned, per crew member (wiki text as-is -- name suggests MK5)' },
     // Nodes 9-11: `max`/`ruId` corrected 2026-07-31 by direct screenshot comparison against a
     // live account -- same node-9/11 level swap as Cradle/Auxesia, plus 9/10/11 all share the
     // same real cap (425 at 5x = base 85), not the smaller/differing wiki values previously
     // stored. Node 8 already matched (base 40 -> 200 at 5x) and is unchanged.
-    8: { source: 'wiki', ruId: 8, name: 'Faster Transportation', max: 40, gateAtTotalInstalls: 100, effect: '+1% output of all Generators, per crew member (wiki notes: shows as 0.01% in-game)' },
-    9: { source: 'wiki', ruId: 11, name: 'Factory Maintaining Drone', max: 85, gateAtTotalInstalls: 100, gearKey: 'ticksThisLoop', effect: '+0.001% Cells Gained, per Tick Completed, per crew member' },
-    10: { source: 'wiki', ruId: 10, name: 'Auto-Mining Machina', max: 85, gateAtTotalInstalls: 100, gearKey: 'ticksThisLoop', effect: '+0.0001% Shards Gained, per Tick Completed, per crew member' },
-    11: { source: 'wiki', ruId: 9, name: 'Improved Blueprints', max: 85, gateAtTotalInstalls: 100, gearKey: 'ticksThisLoop', effect: '+0.0002% Research Points Gained, per Tick Completed, per crew member' },
+    8: { source: 'game', ruId: 8, name: 'Faster Transportation', max: 40, gateAtTotalInstalls: 100, effect: '+1% output of all Generators, per crew member (wiki notes: shows as 0.01% in-game)' },
+    9: { source: 'game', ruId: 11, name: 'Factory Maintainer Drone', max: 85, gateAtTotalInstalls: 100, gearKey: 'ticksThisLoop', effect: '+0.001% Cells Gained, per Tick Completed, per crew member' },
+    10: { source: 'game', ruId: 10, name: 'Auto-Mining Machina', max: 85, gateAtTotalInstalls: 100, gearKey: 'ticksThisLoop', effect: '+0.0001% Shards Gained, per Tick Completed, per crew member' },
+    11: { source: 'game', ruId: 9, name: 'Improved Blueprints', max: 85, gateAtTotalInstalls: 100, gearKey: 'ticksThisLoop', effect: '+0.0002% Research Points Gained, per Tick Completed, per crew member' },
   },
   5: { // Demeter -- ranks up by completing Operations. Unlocks Shard Mining.
-    1: { source: 'confirmed', name: 'Ahead of the Curve', max: 5, ruId: 1, effect: '+1 completed operation per crew member on new-run start (no immediate shards)' },
+    1: { source: 'game', name: 'Ahead of the Curve', max: 5, ruId: 1, effect: '+1 completed operation per crew member on new-run start (no immediate shards)' },
     // REVERTED to open-from-start 2026-09-03. A `gateAtTotalInstalls: 1` was added here the day
     // before, from SirRed's CIFI Ouroboros Helper Tool. The GAME's own authored value is
     // `RU2ShardRequirement = 0` and `RU3ShardRequirement = 0` -- both slots ARE open from the
     // start, which is what this catalog said originally. Same failure as the Demeter coefficient
     // incident: a third-party tool overrode a correct value, and inference lost to authored data.
     // SirRed's tool is a baseline, never the source of truth.
-    2: { source: 'confirmed', name: 'Better Mineral Extraction', max: 250, ruId: 2, effect: '+1% Shards Gained, per crew member' },
-    3: { source: 'confirmed', name: 'Rare Organism Detection', max: 25, ruId: 3, gearKey: 'operationsCompleted', effect: '+0.2% Cells Gained, per Operation Completed, per crew member' },
-    4: { source: 'confirmed', name: 'Canned Mineral Water', max: 25, ruId: 4, gateAtTotalInstalls: 10, gearKey: 'operationsCompleted', effect: '+0.02% MK1 & MK4 outputs, per Operation Completed, per crew member' },
-    5: { source: 'confirmed', name: 'Bi-Product Goo', max: 25, ruId: 5, gateAtTotalInstalls: 10, gearKey: 'operationsCompleted', effect: '+0.02% MK2 & MK5 outputs, per Operation Completed, per crew member' },
+    2: { source: 'game', name: 'Better Mineral Extraction', max: 250, ruId: 2, effect: '+1% Shards Gained, per crew member' },
+    3: { source: 'game', name: 'Rare Organism Detection', max: 25, ruId: 3, gearKey: 'operationsCompleted', effect: '+0.2% Cells Gained, per Operation Completed, per crew member' },
+    4: { source: 'game', name: 'Canned Mineral Water', max: 25, ruId: 4, gateAtTotalInstalls: 10, gearKey: 'operationsCompleted', effect: '+0.02% MK1 & MK4 outputs, per Operation Completed, per crew member' },
+    5: { source: 'game', name: 'Bi-Product Goo', max: 25, ruId: 5, gateAtTotalInstalls: 10, gearKey: 'operationsCompleted', effect: '+0.02% MK2 & MK5 outputs, per Operation Completed, per crew member' },
     // REVERTED to 0.001% 2026-09-02, later the same day. It had just been "corrected" to 0.01%
     // against a reading of SirRed's decompiled constants; the GAME's own authored value is
     // RU6ShardBaseBonus = 1e-05, i.e. 0.001% -- so the original wiki figure was right and the
@@ -143,18 +151,18 @@ const SHIP_NODE_CATALOG = {
     // reconstructed type trees (tools/il2cpp-cli/typetree.py); asserted by
     // tools/bench/node-coefficient-check.js. Neighbouring nodes confirm the ruId mapping is sound:
     // RU4Shard/RU5Shard are 0.02% and RU8Shard is 2.5%, all matching this catalog exactly.
-    6: { source: 'confirmed', name: 'The Hexagonal Advantage', max: 5, ruId: 6, gateAtTotalInstalls: 25, gearKey: 'operationsCompleted', effect: '+0.001% Mod Points gained, per Operation Completed, per crew member' },
-    7: { source: 'confirmed', name: 'Shardlytics', max: 10, ruId: 7, gateAtTotalInstalls: 25, gearKey: 'operationsCompleted', effect: '+0.1% MK3 & MK6 outputs, per Operation Completed, per crew member' },
+    6: { source: 'game', name: 'The Hexagonal Advantage', max: 5, ruId: 6, gateAtTotalInstalls: 25, gearKey: 'operationsCompleted', effect: '+0.001% Mod Points gained, per Operation Completed, per crew member' },
+    7: { source: 'game', name: 'Shardlytics', max: 10, ruId: 7, gateAtTotalInstalls: 25, gearKey: 'operationsCompleted', effect: '+0.1% MK3 & MK6 outputs, per Operation Completed, per crew member' },
     // Node 9/11 ruId swapped (same universal pattern), node 10's cap corrected 2026-07-31,
     // account-confirmed directly: real cap 625 at 5x (base 125, not 15).
-    8: { source: 'confirmed', name: 'Liquid Extraction Tech', max: 5, ruId: 8, gateAtTotalInstalls: 100, effect: '+2.5% output of all Generators, per crew member' },
+    8: { source: 'game', name: 'Liquid Extraction Tech', max: 5, ruId: 8, gateAtTotalInstalls: 100, effect: '+2.5% output of all Generators, per crew member' },
     // REVERTED to 3% 2026-09-02, same story as node 6 above and the more damaging of the two: the
     // GAME's authored RU11ShardBaseBonus = 0.03, i.e. 3%, not the 30% it had just been "corrected"
     // to. A 10x overstatement on a Cells node is not cosmetic -- it made this the most valuable
     // node on Demeter by an order of magnitude and skewed every plan for the ship.
-    9: { source: 'confirmed', name: 'On-Site Printing Vehicles', max: 25, ruId: 11, gateAtTotalInstalls: 100, gearKey: 'operationsCompleted', effect: '+3% Cells Gained, per Operation Completed, per crew member' },
-    10: { source: 'confirmed', name: 'On-Site GPR Hotspot Scanners', max: 125, ruId: 10, gateAtTotalInstalls: 100, gearKey: 'operationsCompleted', effect: '+0.08% Shards Gained, per Operation Completed, per crew member' },
-    11: { source: 'confirmed', name: 'Phylogenetic Analysis', max: 55, ruId: 9, gateAtTotalInstalls: 100, gearKey: 'operationsCompleted', effect: '+0.04% Research Points gained, per Operation Completed, per crew member' },
+    9: { source: 'game', name: 'On-Site Printing Vehicles', max: 25, ruId: 11, gateAtTotalInstalls: 100, gearKey: 'operationsCompleted', effect: '+3% Cells Gained, per Operation Completed, per crew member' },
+    10: { source: 'game', name: 'On-Site GPR Hotspot Scanners', max: 125, ruId: 10, gateAtTotalInstalls: 100, gearKey: 'operationsCompleted', effect: '+0.08% Shards Gained, per Operation Completed, per crew member' },
+    11: { source: 'game', name: 'Phylogenetic Analysis', max: 55, ruId: 9, gateAtTotalInstalls: 100, gearKey: 'operationsCompleted', effect: '+0.04% Research Points gained, per Operation Completed, per crew member' },
   },
   6: { // Koios -- ranks up by completing Studies. Unlocks Research Points. Wiki page had no
     // explicit unlock-requirement numbers (different page format from the others), so every
@@ -163,38 +171,38 @@ const SHIP_NODE_CATALOG = {
     // node's own ruId) -- ALL 10 of this ship's gated slots were simply missing a gate
     // entirely, not just wrong, so the optimizer/effective-path could offer any of them before
     // its real prerequisite was met. `max` values are the wiki's BASE cap (see nodeMaxLevel).
-    1: { source: 'wiki', ruId: 1, name: 'The Venn Hypothesis', max: 250, gearKey: ['studiesThisLR', 'operationsCompleted'], effect: '+0.25% Cells gained, per completed Study & Operation, per crew member' },
-    2: { source: 'confirmed', ruId: 2, name: 'Unobtanium Drills', max: 5, gateAtTotalInstalls: 5, gearKey: 'studiesThisLR', effect: '+0.003% Shards gained, per Study completed, per crew member' },
-    3: { source: 'confirmed', ruId: 3, name: 'Modification Thesis', max: 5, gateAtTotalInstalls: 5, gearKey: 'totalCompletedResearch', effect: '+2.5% Mod Points gained, per fully completed Research, per crew member' },
-    4: { source: 'confirmed', ruId: 4, name: 'The Study of Threesium', max: 5, gateAtTotalInstalls: 10, gearKey: 'researchLevels', effect: '+0.5% MK3 & MK6 outputs, per level in Researches (a maxed Research counts as 3), per crew member' },
-    5: { source: 'confirmed', ruId: 5, name: 'The Big Brainium Thesis', max: 5, gateAtTotalInstalls: 10, gearKey: 'studiesThisLR', effect: '+0.001% Research Points gained, per Study completed, per crew member' },
-    6: { source: 'confirmed', ruId: 6, name: 'The Connectivity Thesis', max: 10, gateAtTotalInstalls: 30, effect: '+1% Mod Points & Shards gained, per crew member' },
-    7: { source: 'confirmed', ruId: 7, name: 'The Overclocking Thesis', max: 10, gateAtTotalInstalls: 30, gearKey: 'studiesThisLR', effect: '+0.1% MK1, MK2, MK3, MK4, MK5, MK6 outputs, per Study completed, per crew member' },
+    1: { source: 'game', ruId: 1, name: 'The Venn Hypothesis', max: 250, gearKey: ['studiesThisLR', 'operationsCompleted'], effect: '+0.25% Cells gained, per completed Study & Operation, per crew member' },
+    2: { source: 'game', ruId: 2, name: 'Unobtanium Drills', max: 5, gateAtTotalInstalls: 5, gearKey: 'studiesThisLR', effect: '+0.003% Shards gained, per Study completed, per crew member' },
+    3: { source: 'game', ruId: 3, name: 'Modification Thesis', max: 5, gateAtTotalInstalls: 5, gearKey: 'totalCompletedResearch', effect: '+2.5% Mod Points gained, per fully completed Research, per crew member' },
+    4: { source: 'game', ruId: 4, name: 'The Study of Threesium', max: 5, gateAtTotalInstalls: 10, gearKey: 'researchLevels', effect: '+0.5% MK3 & MK6 outputs, per level in Researches (a maxed Research counts as 3), per crew member' },
+    5: { source: 'game', ruId: 5, name: 'The Big Brainium Thesis', max: 5, gateAtTotalInstalls: 10, gearKey: 'studiesThisLR', effect: '+0.001% Research Points gained, per Study completed, per crew member' },
+    6: { source: 'game', ruId: 6, name: 'The Connectivity Thesis', max: 10, gateAtTotalInstalls: 30, effect: '+1% Mod Points & Shards gained, per crew member' },
+    7: { source: 'game', ruId: 7, name: 'The Overclocking Thesis', max: 10, gateAtTotalInstalls: 30, gearKey: 'studiesThisLR', effect: '+0.1% MK1, MK2, MK3, MK4, MK5, MK6 outputs, per Study completed, per crew member' },
     // Nodes 8-11: `max` corrected 2026-07-31, account-confirmed directly (real caps
     // 300/150/200/750 at 5x). Node 9/11 ruId swapped -- same universal pattern.
-    8: { source: 'confirmed', ruId: 8, name: 'Modified Portable Arcade', max: 60, gateAtTotalInstalls: 100, effect: '+3% output of all Generators, per crew member' },
-    9: { source: 'confirmed', ruId: 11, name: 'Improved Mk1 Printing Fuel', max: 30, gateAtTotalInstalls: 100, gearKey: 'studiesThisLR', effect: '+1% Cells gained, per Study completed, per crew member' },
-    10: { source: 'confirmed', ruId: 10, name: 'Shard Scanning Breakthrough', max: 40, gateAtTotalInstalls: 100, gearKey: 'studiesThisLR', effect: '+0.01% Shards gained, per Study completed, per crew member' },
-    11: { source: 'confirmed', ruId: 9, name: 'Robo-Research Assistants', max: 150, gateAtTotalInstalls: 100, gearKey: 'studiesThisLR', effect: '+0.02% Research Points gained, per Study completed, per crew member' },
+    8: { source: 'game', ruId: 8, name: 'Modified Portable Arcade', max: 60, gateAtTotalInstalls: 100, effect: '+3% output of all Generators, per crew member' },
+    9: { source: 'game', ruId: 11, name: 'Improved Mk1 Printing Fuel', max: 30, gateAtTotalInstalls: 100, gearKey: 'studiesThisLR', effect: '+1% Cells gained, per Study completed, per crew member' },
+    10: { source: 'game', ruId: 10, name: 'Shard Scanning Breakthrough', max: 40, gateAtTotalInstalls: 100, gearKey: 'studiesThisLR', effect: '+0.01% Shards gained, per Study completed, per crew member' },
+    11: { source: 'game', ruId: 9, name: 'Robo-Research Assistants', max: 150, gateAtTotalInstalls: 100, gearKey: 'studiesThisLR', effect: '+0.02% Research Points gained, per Study completed, per crew member' },
   },
   7: { // Zeus -- ranks up by completing Missions. Unlocks Academy Points / Gear Sets. Wiki page
     // had no explicit unlock-requirement numbers -- gates below are user-confirmed directly
     // (not wiki-sourced): Z1/2/3 open at start, Z4/5 at 2 total installs, Z6/7 at 50, Z8-11 at
     // 100. `max` values are the wiki's BASE cap (see nodeMaxLevel).
-    1: { source: 'wiki', ruId: 1, name: 'Academy Janitor Bots', max: 250, gearKey: 'missionsCompleted', effect: '+50% Cells gained, per Mission Completed, per crew member' },
-    2: { source: 'confirmed', ruId: 2, name: 'Perfect Student Blueprint', max: 1, effect: '+10% Academy Points gained, per crew member' },
-    3: { source: 'confirmed', ruId: 3, name: 'Material Scavenger Vehicles', max: 1, effect: '+25% Mission Materials gained, per crew member' },
+    1: { source: 'game', ruId: 1, name: 'Academy Janitor Bots', max: 250, gearKey: 'missionsCompleted', effect: '+50% Cells gained, per Mission Completed, per crew member' },
+    2: { source: 'game', ruId: 2, name: 'Perfect Student Blueprint', max: 1, effect: '+10% Academy Points gained, per crew member' },
+    3: { source: 'game', ruId: 3, name: 'Material Scavenger Vehicles', max: 1, effect: '+25% Mission Materials gained, per crew member' },
     // Node 4/7 `max` corrected 2026-07-31, account-confirmed directly (real caps 75/250 at 5x).
-    4: { source: 'confirmed', ruId: 4, name: 'Academy Mining Bots', max: 15, gateAtTotalInstalls: 2, gearKey: 'missionsCompleted', effect: '+0.5% Cells & Shards gained, per Mission Completed, per crew member' },
-    5: { source: 'confirmed', ruId: 5, name: 'Database Brain-Link Integration', max: 20, gateAtTotalInstalls: 2, gearKey: 'missionsCompleted', effect: '+0.5% Cells & Research Points gained, per Mission Completed, per crew member' },
-    6: { source: 'confirmed', ruId: 6, name: 'Academy Auto-Scrappers', max: 15, gateAtTotalInstalls: 50, effect: '+10% Mission Materials & Mod Points gained, per crew member' },
-    7: { source: 'confirmed', ruId: 7, name: 'On-Site Auto Construction', max: 50, gateAtTotalInstalls: 50, effect: '+1% Academy Points gained & All Gens output, per crew member' },
+    4: { source: 'game', ruId: 4, name: 'Academy Mining Bots', max: 15, gateAtTotalInstalls: 2, gearKey: 'missionsCompleted', effect: '+0.5% Cells & Shards gained, per Mission Completed, per crew member' },
+    5: { source: 'game', ruId: 5, name: 'Database Brain-Link Integration', max: 20, gateAtTotalInstalls: 2, gearKey: 'missionsCompleted', effect: '+0.5% Cells & Research Points gained, per Mission Completed, per crew member' },
+    6: { source: 'game', ruId: 6, name: 'Academy Auto-Scrappers', max: 15, gateAtTotalInstalls: 50, effect: '+10% Mission Materials & Mod Points gained, per crew member' },
+    7: { source: 'game', ruId: 7, name: 'On-Site Auto Construction', max: 50, gateAtTotalInstalls: 50, effect: '+1% Academy Points gained & All Gens output, per crew member' },
     // Nodes 8-11: `max` corrected 2026-07-31, account-confirmed directly (all four corners cap
     // at 250 at 5x = base 50). Node 9/11 ruId swapped -- same universal pattern.
-    8: { source: 'confirmed', ruId: 8, name: 'Remote Printing Facilities', max: 50, gateAtTotalInstalls: 100, gearKey: 'missionsCompleted', effect: '+1% All Gens output, per Mission Completed, per crew member' },
-    9: { source: 'confirmed', ruId: 11, name: 'Academy Flight-Kicks', max: 50, gateAtTotalInstalls: 100, gearKey: 'missionsCompleted', effect: '+5% Cells gained, per Mission Completed, per crew member' },
-    10: { source: 'confirmed', ruId: 10, name: 'Orbital Hotspot Scanner', max: 50, gateAtTotalInstalls: 100, gearKey: 'missionsCompleted', effect: '+1% Shards gained, per Mission Completed, per crew member' },
-    11: { source: 'confirmed', ruId: 9, name: 'Cluster Scans', max: 50, gateAtTotalInstalls: 100, gearKey: 'missionsCompleted', effect: '+1% Research Points gained, per Mission Completed, per crew member' },
+    8: { source: 'game', ruId: 8, name: 'Remote Printing Facilities', max: 50, gateAtTotalInstalls: 100, gearKey: 'missionsCompleted', effect: '+1% All Gens output, per Mission Completed, per crew member' },
+    9: { source: 'game', ruId: 11, name: 'Academy Flight-Kicks', max: 50, gateAtTotalInstalls: 100, gearKey: 'missionsCompleted', effect: '+5% Cells gained, per Mission Completed, per crew member' },
+    10: { source: 'game', ruId: 9, name: 'Orbital Hotspot Scanner', max: 50, gateAtTotalInstalls: 100, gearKey: 'missionsCompleted', effect: '+1% Shards gained, per Mission Completed, per crew member' },
+    11: { source: 'game', ruId: 10, name: 'Cluster Scans', max: 50, gateAtTotalInstalls: 100, gearKey: 'missionsCompleted', effect: '+1% Research Points gained, per Mission Completed, per crew member' },
   },
 };
 
@@ -1352,14 +1360,12 @@ function renderHexGrid(container, catalog, levels, options = {}) {
       const bonusLine = options.shipId
         ? `\nTotal Bonus: x${formatMult(additiveToMultiplier(nodeOwnBonusPct(options.shipId, slot, level)))}`
         : '';
-      // meta.source is either 'confirmed' (the base %/level was directly verified against a real
-      // account's displayed values, e.g. via the Total Bonus cross-check above) or 'wiki' (taken
-      // from the community wiki table, never independently verified -- see the koi1/Venn
-      // Hypothesis bug, which was exactly this: a wiki-sourced node whose real behavior turned
-      // out to depend on a save field this tool was reading wrong). Surfaced here so unconfirmed
-      // nodes are visibly distinguishable instead of silently trusted the same as confirmed ones.
-      const unconfirmed = meta.source === 'wiki';
-      const sourceLine = unconfirmed ? '\n⚠ Unconfirmed (wiki-sourced, not verified against a real account)' : '';
+      // 'game' means every machine-checkable field of this node is bench-verified against the game
+      // itself -- see SHIP_NODE_CATALOG's header for which bench covers which field. Anything else
+      // is still wiki-sourced and gets flagged, so a node added later without that verification
+      // cannot quietly inherit the same trust as a checked one.
+      const unconfirmed = meta.source !== 'game';
+      const sourceLine = unconfirmed ? '\n⚠ Unconfirmed (wiki-sourced, not verified against the game)' : '';
       wrap.title = `${codeLabel}${meta.name}\n${meta.effect.replace(/^\+/, '')}${bonusLine}${sourceLine}${locked ? `\nLocked -- needs ${meta.gateAtTotalInstalls}+ total points spent first` : ''}${options.readOnly ? '' : '\nClick: +1  Right-click: -1'}`;
       // The icon deliberately overflows the hex frame slightly instead of being clipped to it
       // -- that's how it looks in the real game. So the clip-path hex (`hexBg`) and the icon

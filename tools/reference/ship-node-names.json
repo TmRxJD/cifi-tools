@@ -1,0 +1,314 @@
+{
+  "_source": "Canvas/FleetView.Canvas/UI/UpgradePanel-<Ship>/Tooltips/Tooltip<ruId>/Title in level0",
+  "_meaning": "Displayed install-node names. The tooltip index is the node's ruId, NOT the community install-code number SHIP_NODE_CATALOG is keyed by.",
+  "_game": "apk-0.7.3.61",
+  "panels": {
+    "TheAuxesia": {
+      "1": {
+        "Title": "IMPROVED TECH SOFTWARE"
+      },
+      "2": {
+        "Title": "IMPROVED TECH HARDWARE"
+      },
+      "3": {
+        "Title": "PRECISE CALCULATIONS"
+      },
+      "4": {
+        "Title": "OPTIMIZED CHIPSETS"
+      },
+      "5": {
+        "Title": "OPTIMIZED POWER SUPPLIES"
+      },
+      "6": {
+        "Title": "OPTIMIZED HARD DRIVES"
+      },
+      "7": {
+        "Title": "OPTIMIZED CELL VACUUM"
+      },
+      "8": {
+        "Title": "MODIFIED CELL TURBINES"
+      },
+      "9": {
+        "Title": "ROBO-ENGINEER ASSISTANTS"
+      },
+      "10": {
+        "Title": "SHARD-BASED COOLING TOWERS"
+      },
+      "11": {
+        "Title": "BIO-MECH CELL COATING"
+      },
+      "12": {
+        "Title": "IMPROVED TECH SOFTWARE"
+      },
+      "13": {
+        "Title": "IMPROVED TECH SOFTWARE"
+      }
+    },
+    "TheCradle": {
+      "1": {
+        "Title": "MITOSIS ENHANCEMENTS"
+      },
+      "2": {
+        "Title": "IMPROVED TIMING BELTS"
+      },
+      "3": {
+        "Title": "IMPROVED PRINTING ENGINES"
+      },
+      "4": {
+        "Title": "PRINTER TWEAKS"
+      },
+      "5": {
+        "Title": "IMPROVED CAPACITORS"
+      },
+      "6": {
+        "Title": "IMPROVED COOLING SYSTEMS"
+      },
+      "7": {
+        "Title": "PRINTER MODULIZATION"
+      },
+      "8": {
+        "Title": "MOLECULE INFUSING TECH"
+      },
+      "9": {
+        "Title": "BRAIN CAPACITY GENETICS"
+      },
+      "10": {
+        "Title": "ON-SITE MINING PRINTERS"
+      },
+      "11": {
+        "Title": "IMPROVED GENERATOR EQUIPMENT"
+      },
+      "12": {
+        "Title": "IMPROVED TECH SOFTWARE"
+      },
+      "13": {
+        "Title": "IMPROVED TECH SOFTWARE"
+      }
+    },
+    "TheDemeter": {
+      "1": {
+        "Title": "AHEAD OF THE CURVE"
+      },
+      "2": {
+        "Title": "BETTER MINERAL EXTRACTION"
+      },
+      "3": {
+        "Title": "RARE ORGANISM DETECTION"
+      },
+      "4": {
+        "Title": "CANNED MINERAL WATER"
+      },
+      "5": {
+        "Title": "BI-PRODUCT GOO"
+      },
+      "6": {
+        "Title": "THE HEXAGONAL ADVANTAGE"
+      },
+      "7": {
+        "Title": "SHARDLYTICS"
+      },
+      "8": {
+        "Title": "LIQUID EXTRACTION TECH"
+      },
+      "9": {
+        "Title": "PHYLOGENETIC ANALYSIS"
+      },
+      "10": {
+        "Title": "ON-SITE GPR HOTSPOT SCANNERS"
+      },
+      "11": {
+        "Title": "ON-SITE PRINTING VEHICLES"
+      },
+      "12": {
+        "Title": "IMPROVED TECH SOFTWARE"
+      },
+      "13": {
+        "Title": "IMPROVED TECH SOFTWARE"
+      }
+    },
+    "TheHephaestus": {
+      "1": {
+        "Title": "PRODUCTION LINE CONNECTIONS"
+      },
+      "2": {
+        "Title": "DELIVERY DRONES"
+      },
+      "3": {
+        "Title": "MODIFICATIONS CONNECTION"
+      },
+      "4": {
+        "Title": "HEAVY DUTY GRABBIES"
+      },
+      "5": {
+        "Title": "MANUAL OVERKILL"
+      },
+      "6": {
+        "Title": "ACCUMULATION MODIFICATION"
+      },
+      "7": {
+        "Title": "FIVER CONNECTION"
+      },
+      "8": {
+        "Title": "FASTER TRANSPORTATION"
+      },
+      "9": {
+        "Title": "IMPROVED BLUEPRINTS"
+      },
+      "10": {
+        "Title": "AUTO-MINING MACHINA"
+      },
+      "11": {
+        "Title": "FACTORY MAINTAINER DRONE"
+      },
+      "12": {
+        "Title": "IMPROVED TECH SOFTWARE"
+      },
+      "13": {
+        "Title": "IMPROVED TECH SOFTWARE"
+      }
+    },
+    "TheKoios": {
+      "1": {
+        "Title": "THE VENN HYPOTHESIS"
+      },
+      "2": {
+        "Title": "UNOBTANIUM DRILLS"
+      },
+      "3": {
+        "Title": "MODIFICATION THESIS"
+      },
+      "4": {
+        "Title": "THE STUDY OF THREESIUM"
+      },
+      "5": {
+        "Title": "THE BIG BRAINIUM THESIS"
+      },
+      "6": {
+        "Title": "THE CONNECTIVITY THESIS"
+      },
+      "7": {
+        "Title": "THE OVERCLOCKING THESIS"
+      },
+      "8": {
+        "Title": "MODIFIED PORTABLE ARCADE"
+      },
+      "9": {
+        "Title": "ROBO-RESEARCH ASSISTANTS"
+      },
+      "10": {
+        "Title": "SHARD SCANNING BREAKTHROUGH"
+      },
+      "11": {
+        "Title": "IMPROVED MK1 PRINTING FUEL"
+      },
+      "12": {
+        "Title": "IMPROVED TECH SOFTWARE"
+      },
+      "13": {
+        "Title": "IMPROVED TECH SOFTWARE"
+      }
+    },
+    "TheOuroboros": {
+      "1": {
+        "Title": "QUANTUM PARTICLE TECH"
+      },
+      "2": {
+        "Title": "SINGULARITY CUBE INTEGRATION"
+      },
+      "3": {
+        "Title": "MULTIVERSAL RESEARCH DIVISION"
+      },
+      "4": {
+        "Title": "BIO-MATERIAL DUPLICATION TECH"
+      },
+      "5": {
+        "Title": "MULTIVERSAL OBSERVATION DRONE"
+      },
+      "6": {
+        "Title": "QUANTUM AIM-ASSIST GLOVES"
+      }
+    },
+    "TheZagreus": {
+      "1": {
+        "Title": "ACCUMULATION THEORY"
+      },
+      "2": {
+        "Title": "FEEDBACK THEORY"
+      },
+      "3": {
+        "Title": "DEJA VU THEORY"
+      },
+      "4": {
+        "Title": "DATA THEORY"
+      },
+      "5": {
+        "Title": "FLASHBACK THEORY"
+      },
+      "6": {
+        "Title": "OBSERVATION THEORY"
+      },
+      "7": {
+        "Title": "REFLECTION THEORY"
+      },
+      "8": {
+        "Title": "LOOP THROTTLE INTEGRATIONS"
+      },
+      "9": {
+        "Title": "DATABYTE INTEGRATIONS"
+      },
+      "10": {
+        "Title": "MINING DATA BLOCK SYSTEM"
+      },
+      "11": {
+        "Title": "C.E.L.L. MAINFRAME INTEGRATION"
+      },
+      "12": {
+        "Title": "IMPROVED TECH SOFTWARE"
+      },
+      "13": {
+        "Title": "IMPROVED TECH SOFTWARE"
+      }
+    },
+    "TheZeus": {
+      "1": {
+        "Title": "ACADEMY JANITOR BOTS"
+      },
+      "2": {
+        "Title": "PERFECT STUDENT BLUEPRINT"
+      },
+      "3": {
+        "Title": "MATERIAL SCAVENGER VEHICLES"
+      },
+      "4": {
+        "Title": "ACADEMY MINING BOTS"
+      },
+      "5": {
+        "Title": "DATABASE BRAIN-LINK INTEGRATION"
+      },
+      "6": {
+        "Title": "ACADEMY AUTO-SCRAPPERS"
+      },
+      "7": {
+        "Title": "ON-SITE AUTO CONSTRUCTION"
+      },
+      "8": {
+        "Title": "REMOTE PRINTING FACILITIES"
+      },
+      "9": {
+        "Title": "ORBITAL HOTSPOT SCANNER"
+      },
+      "10": {
+        "Title": "CLUSTER SCANS"
+      },
+      "11": {
+        "Title": "ACADEMY FLIGHT-KICKS"
+      },
+      "12": {
+        "Title": "IMPROVED TECH SOFTWARE"
+      },
+      "13": {
+        "Title": "IMPROVED TECH SOFTWARE"
+      }
+    }
+  }
+}

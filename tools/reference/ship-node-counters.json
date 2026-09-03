@@ -1,0 +1,256 @@
+{
+  "_source": "RU<Category><n>Bonus getter bodies in the recovered FleetManager C# (tools/il2cpp-cli/csharp.py), with note operands resolved via resolve-loads.py",
+  "_meaning": "The 'per X' quantities a node's bonus multiplies by. An empty list means the node is flat (no counter). Our catalog calls this `gearKey`.",
+  "_game": "apk-0.7.3.61",
+  "counters": {
+    "Academy": {
+      "1": [
+        "TotalMissionsThisLoop"
+      ],
+      "2": [],
+      "3": [],
+      "4": [
+        "TotalMissionsThisLoop"
+      ],
+      "5": [
+        "TotalMissionsThisLoop"
+      ],
+      "6": [],
+      "7": [],
+      "8": [
+        "TotalMissionsThisLoop"
+      ],
+      "9": [
+        "TotalMissionsThisLoop"
+      ],
+      "10": [
+        "TotalMissionsThisLoop"
+      ],
+      "11": [
+        "TotalMissionsThisLoop"
+      ]
+    },
+    "Auto": {
+      "1": [
+        "AutomationsAcquired"
+      ],
+      "2": [
+        "TicksThisLoop"
+      ],
+      "3": [
+        "AutomationsAcquired"
+      ],
+      "4": [
+        "AutomationsAcquired"
+      ],
+      "5": [
+        "ManualGensThisLoop"
+      ],
+      "6": [
+        "ManualGensThisLoop"
+      ],
+      "7": [
+        "AutomationsAcquired"
+      ],
+      "8": [],
+      "9": [
+        "TicksThisLoop"
+      ],
+      "10": [
+        "TicksThisLoop"
+      ],
+      "11": [
+        "TicksThisLoop"
+      ]
+    },
+    "Gen": {
+      "1": [],
+      "2": [],
+      "3": [],
+      "4": [
+        "CellGeneratorsMK2Manual"
+      ],
+      "5": [],
+      "6": [],
+      "7": [
+        "CellGeneratorsMK3Manual"
+      ],
+      "8": [
+        "ManualGensThisLoop"
+      ],
+      "9": [
+        "ManualGensThisLoop"
+      ],
+      "10": [
+        "ManualGensThisLoop"
+      ],
+      "11": [
+        "ManualGensThisLoop"
+      ]
+    },
+    "Loop": {
+      "1": [
+        "LoopModLevelsCount"
+      ],
+      "2": [
+        "CurrentLoopsDone"
+      ],
+      "3": [
+        "FinalLoopResetsPerformedThisConstruction"
+      ],
+      "4": [
+        "LoopModLevelsCount"
+      ],
+      "5": [
+        "LoopModLevelsCount"
+      ],
+      "6": [
+        "LoopModLevelsCount"
+      ],
+      "7": [
+        "LoopModLevelsCount"
+      ],
+      "8": [
+        "LoopModLevelsCount"
+      ],
+      "9": [
+        "CurrentLoopsDone"
+      ],
+      "10": [
+        "LoopModLevelsCount"
+      ],
+      "11": [
+        "CurrentLoopsDone"
+      ]
+    },
+    "Ouro": {
+      "1": [
+        "DarkBadge1Acquired",
+        "Pow",
+        "RU83Level"
+      ],
+      "2": [
+        "DarkBadge1Acquired",
+        "Pow",
+        "RU83Level"
+      ],
+      "3": [
+        "DarkBadge1Acquired",
+        "Pow",
+        "RU83Level"
+      ],
+      "4": [
+        "DarkBadge1Acquired",
+        "Pow",
+        "RU83Level"
+      ],
+      "5": [
+        "DarkBadge1Acquired",
+        "Pow",
+        "RU83Level"
+      ],
+      "6": [
+        "DarkBadge1Acquired",
+        "Pow",
+        "RU83Level"
+      ]
+    },
+    "Research": {
+      "1": [
+        "TotalOperationsThisRun",
+        "TotalStudiesThisLoop"
+      ],
+      "2": [
+        "TotalStudiesThisLoop"
+      ],
+      "3": [
+        "FullyCompletedResearches"
+      ],
+      "4": [
+        "TotalResearchLevels"
+      ],
+      "5": [
+        "TotalStudiesThisLoop"
+      ],
+      "6": [],
+      "7": [
+        "TotalStudiesThisLoop"
+      ],
+      "8": [],
+      "9": [
+        "TotalStudiesThisLoop"
+      ],
+      "10": [
+        "TotalStudiesThisLoop"
+      ],
+      "11": [
+        "TotalStudiesThisLoop"
+      ]
+    },
+    "Shard": {
+      "1": [],
+      "2": [],
+      "3": [
+        "TotalOperationsThisRun"
+      ],
+      "4": [
+        "TotalOperationsThisRun"
+      ],
+      "5": [
+        "TotalOperationsThisRun"
+      ],
+      "6": [
+        "TotalOperationsThisRun"
+      ],
+      "7": [
+        "TotalOperationsThisRun"
+      ],
+      "8": [],
+      "9": [
+        "TotalOperationsThisRun"
+      ],
+      "10": [
+        "TotalOperationsThisRun"
+      ],
+      "11": [
+        "TotalOperationsThisRun"
+      ]
+    },
+    "Tech": {
+      "1": [],
+      "2": [],
+      "3": [
+        "TotalHardwareLevels",
+        "TotalSoftwareLevels"
+      ],
+      "4": [
+        "TotalHardwareLevels",
+        "TotalSoftwareLevels"
+      ],
+      "5": [
+        "TotalHardwareLevels",
+        "TotalSoftwareLevels"
+      ],
+      "6": [
+        "TotalHardwareLevels",
+        "TotalSoftwareLevels"
+      ],
+      "7": [
+        "TotalHardwareLevels",
+        "TotalSoftwareLevels"
+      ],
+      "8": [
+        "TotalHardwareLevels"
+      ],
+      "9": [
+        "TotalSoftwareLevels"
+      ],
+      "10": [
+        "TotalHardwareLevels"
+      ],
+      "11": [
+        "TotalSoftwareLevels"
+      ]
+    }
+  }
+}

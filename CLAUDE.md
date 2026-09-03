@@ -147,6 +147,8 @@ There is exactly one place for each of these. **Do not add a second.**
 | **Name the field reads Cpp2IL could not resolve** | `tools/il2cpp-cli/resolve-loads.py` |
 | Authored ship-node coefficients | `tools/reference/ship-node-coefficients.json` |
 | Ship install prereqs + base caps | `tools/reference/ship-node-gates.json` |
+| Ship install node counters | `tools/reference/ship-node-counters.json` |
+| Ship install node names | `tools/reference/ship-node-names.json` |
 | Gear piece names (the game's own) | `tools/reference/gear-names.json` |
 | Gear set bonus -> resource + value | `tools/reference/gear-set-bonus-map.json` |
 | Gear piece -> install node | `tools/reference/gear-install-map.json` |
@@ -922,6 +924,43 @@ think one is wrong, disprove it with a test.
   Negative control: restoring the old `RUN_LENGTH_BIAS.long` makes it fail on Cradle with exactly
   the historical 13.59 / 14.50 / 35.70 / 17.53 percentages **and** on Auxesia, which the Cradle-only
   benches could never have seen.
+- **EVERY ship install node is now GAME-VERIFIED on every machine-checkable field, and all 77 are
+  marked `source: 'game'`.** The marker used to be `'confirmed'` (save-diffed) vs `'wiki'`, with 31
+  nodes still on the wiki. Four benches now cover every node:
+  `node-name-check.js` (fleet tooltip titles), `node-coefficient-check.js` (authored
+  `baseBonusByCategory`), `node-counter-check.js` (the counter each getter reads) and
+  `ship-node-gate-check.js` (requirement + base cap). **The only wiki residue left is the effect's
+  PROSE** -- tooltip descriptions are populated at runtime, so the scene carries only the title,
+  but both machine-readable parts of an effect (the percentage and the "per X" counter) are checked.
+  The UI still flags anything not marked `'game'`, so a node added later cannot inherit that trust.
+- **Node names live at `UpgradePanel-<Ship>/Tooltips/Tooltip<N>/Title`, and N is the ruId, NOT the
+  install code.** Indexing by our slot reports 15 false mismatches -- every ship whose code->ruId
+  mapping is not the identity. The key is proven, not assumed: Cradle's ruIds 9/10/11 carry three
+  distinct authored coefficients, which pins each node independently of any name, and the titles
+  agree with that pinning. Keyed correctly, 74 of 77 matched immediately; the three that did not
+  were real:
+  - Hephaestus 9 was `Factory Maintaining Drone`; the game says **Factory Maintainer Drone**.
+  - **Zeus slots 10 and 11 carried each other's ruId.** Their ruIds (9 and 10) share a coefficient,
+    a gate, a cap AND a counter, so no numeric bench can tell them apart -- the name mapping is the
+    only evidence, and it is the game's own. The swap is numerically inert by construction; it was
+    made so the catalog agrees with the game rather than leaving a known-wrong pairing in place.
+- **The node COUNTER (`gearKey`) is extracted by ELIMINATION, and a keyword scan is not good
+  enough.** `extract-node-counters.py` takes every member a `RU<Cat><n>Bonus` getter reads and
+  removes the structural terms (own level, authored base bonus, crew, gear, badges, research/gem
+  multipliers); whatever is left is the counter. Three traps, all of which produced confident wrong
+  answers first:
+  - A keyword list MISSES counters, and a miss looks exactly like "this node is flat".
+    `LMAssist.LoopModLevelsCount` was missed because the list had "Mods" and not "Mod", making five
+    Zagreus nodes look like catalog errors.
+  - Operands hide in BOTH Cpp2IL note kinds. Koios 3's counter is inside a "Not implemented
+    instruction" (`cvtsi2ss xmm0, dword ptr [rax+1B68h]` -> `FullyCompletedResearches`), not an
+    "Unmanaged memory load", so parsing only the latter hid it -- and the body reads
+    `0f * RU3ResearchBaseBonus`, which is the "a multiply by zero is a MISSING OPERAND" rule again.
+  - A bare `dword ptr [reg+OFFSET]` does not say which object `reg` is, and resolving against the
+    wrong type returns a real-looking field name rather than an error. Taking every dword read
+    invented ten counters (`CellGeneratorsMK8`, `MK5FirstUnlockStat`, ...). **The conversion opcode
+    disambiguates it:** a counter is an int (`cvtsi2ss`), while a node's authored base bonus is
+    already a float (`cvtss2sd`). All 77 counters match once that filter is applied.
 - **EVERY ship install prereq and base cap is now checked against the GAME, and four were wrong.**
   The game authors both per node: `RU<n><Category>Requirement` and `RU<n><Category>MaxLevel` on
   FleetManager. The semantics are stated by its own buy method rather than inferred --
@@ -1071,6 +1110,8 @@ node tools/bench/schema-test.js        # store schema invariants (fast, run alwa
 node tools/bench/relic-cost-test.js    # relic cost table + fragment arithmetic (fast)
 node tools/bench/node-coefficient-check.js # ship node coefficients vs the GAME'S AUTHORED values
 node tools/bench/ship-node-gate-check.js # install prereqs + base caps vs the GAME (77 nodes)
+node tools/bench/node-counter-check.js  # each node's 'per X' counter vs the GAME (77 nodes)
+node tools/bench/node-name-check.js     # node names vs the game's fleet tooltips (77 nodes)
 node tools/bench/growth-counter-check.js # per-run counter classification + zero-counter warning
 node tools/bench/allocator-check.js     # allocator vs a reference greedy, ALL 7 ships
 python tools/il2cpp-cli/typetree.py --dump FleetManager --grep BaseBonus  # read authored data
