@@ -12,6 +12,15 @@
 //   node tools/bench/authored-value-check.js
 //   node tools/bench/authored-value-check.js --verbose
 //
+// Overlap, stated honestly: tools/bench/scene-defs-test.js ALREADY compares the 20 relic start
+// costs against the game, via scene-defs.json. This is not new coverage for those -- it is a
+// SECOND, INDEPENDENT extraction path (reconstructed type trees vs the scene dump) reaching the
+// same numbers, which is the agreement standard this project asks for. The gear bases below are
+// new. Attribute and talent caps are likewise already covered by scene-defs-test and are
+// deliberately not duplicated here; note that the POM/POI/POK cost fields carry no NAMES, so
+// matching them to hunterDefs entries would mean assuming the index order, which is exactly the
+// kind of assumption that has produced wrong "confirmations" in this repo before.
+//
 // Scope note: this covers RELIC COST CURVES and the GEAR per-level bases. Ship node coefficients
 // have their own check (node-coefficient-check.js) because they need the ruId mapping. Relic CAPS
 // are deliberately NOT here -- OuroRelics carries no MaxLevel field, so the build cannot arbitrate
