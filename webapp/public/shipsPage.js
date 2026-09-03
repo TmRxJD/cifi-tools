@@ -2279,6 +2279,14 @@ window.renderFleetBoostItemsInto = renderFleetBoostItemsInto;
 // (#68, #78); the other ~78 aren't ship-specific. Each research's levels are treated as
 // CUMULATIVE (reaching level N keeps every tier 1..N's effect) -- this is an assumption (the
 // wiki doesn't state it explicitly), flagged here rather than silently guessed.
+//
+// Both nodes' per-tier values are independently confirmed against the game's own scene data
+// (tools/reference/research.json, extracted via AssetRipper -- see extract-research.js), not
+// just the wiki: research[68] = {Bonus1:5, Bonus2:20, Bonus3:30, Bonus4:40, Bonus5:50,
+// Bonus6:60} matches fleetAnalysis1's six tiers exactly (5/20/30/40/50/60). research[78] =
+// {Bonus1:5} -- a single stored value, not six -- consistent with fleetAnalysis2's own tiers
+// all being the same "x5" uniformly (each tier just adds one more ship to the x5 list, rather
+// than the bonus itself growing per tier the way #68's does).
 const FLEET_RESEARCH_ITEMS = [
   {
     key: 'fleetAnalysis1', name: 'Fleet Analysis 1 (Research #68)', max: 6,
@@ -2301,6 +2309,11 @@ const FLEET_RESEARCH_ITEMS = [
       'Cradle Installs Bonus x5', 'Auxesia Installs Bonus x5', 'Zagreus Installs Bonus x5',
       'Hephaestus Installs Bonus x5', 'Demeter Installs Bonus x5', 'Koios Installs Bonus x5',
     ],
+    // shipOrder further corroborated 2026-09-02: ResearchLaboratory declares
+    // get_FinalShip{N}InstallsBonus for N=1..6 ONLY (Ship7/Ship8 don't exist at all), matching
+    // this tier count and ship range exactly. These are cached auto-property accessors, not live
+    // formulas (the real per-tier computation writes to them from elsewhere, not chased further
+    // here) -- so this confirms the SHIP SET and COUNT, not the tier-to-ship ORDER within it.
     shipOrder: [1, 2, 3, 4, 5, 6], // which ship each tier's x5 applies to, cumulative
   },
 ];
