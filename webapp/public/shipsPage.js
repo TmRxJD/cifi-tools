@@ -332,6 +332,60 @@ function computeFleetPctBonuses(shipId) {
 // are the wiki's canonical names, used as the default label, not a guarantee of what a given
 // account currently shows.
 const SHIP_NAMES = { 1: 'Cradle', 2: 'Auxesia', 3: 'Zagreus', 4: 'Hephaestus', 5: 'Demeter', 6: 'Koios', 7: 'Zeus', 8: 'Ouroboros' };
+
+// Ship EVOLUTION: a per-ship production multiplier, and by far the largest single factor in the
+// fleet. Authored values, read as serialized data (tools/reference/authored-values.json,
+// FleetManager.EvoBonus<Ship><level>) -- these are not percentages, they ARE the multiplier.
+//
+// The game computes it in SetShip<n>EvoBonus(evoLevel): switch on the level to pick
+// EvoBonus<Ship><level>, then `Pow(thatValue, GemPerks.AttractionGU6BonusCalc)`. The result is
+// stored as <Ship>EvolutionBonus and multiplied straight into MK1Production/MK2Production,
+// between RUAuto1Bonus and RUGen4Bonus.
+//
+// AttractionGU6BonusCalc is 1 whenever `AttractionGU6Level == 0` -- the game returns a literal 1
+// on that branch -- so for any account without that gem upgrade the multiplier is exactly the
+// authored value. When it IS owned the exponent becomes
+// Pow(Pow(GemPerks.AttractionGU6BonusExponent, AttractionGU6Level), AttractionQualityPower), whose
+// two inputs are not in our data, so `shipEvolutionMultiplier` reports rather than guesses.
+//
+// This does NOT affect install-allocation ranking: it is the same factor whatever you spend
+// points on, so it cannot reorder candidates. It matters for any ABSOLUTE number.
+const EVO_BONUS_BY_SHIP = {
+  1: { 1: 5, 2: 50, 3: 850, 4: 162000, 5: 5.000000136282112e15, 6: 6e30, 7: 7e60 },  // Cradle
+  2: { 1: 2, 2: 8, 3: 36, 4: 850000 },                                               // Auxesia
+  3: { 1: 4, 2: 22, 3: 4800, 4: 75000000 },                                          // Zagreus
+  4: { 1: 125, 2: 150000000, 3: 3.799999906064644e30, 4: 1e100, 5: 1e500 },          // Hephaestus
+  5: { 1: 13, 2: 1300, 3: 130000000 },                                               // Demeter
+  6: { 1: 25, 2: 900, 3: 15000000, 4: 2.8000000421329054e30 },                       // Koios
+  7: { 1: 2, 2: 4, 3: 12, 4: 48, 5: 240, 6: 2440 },                                  // Zeus
+};
+
+/**
+ * The production multiplier this ship's evolution level grants. 1 when un-evolved.
+ * @param {number} shipId
+ * @param {number} [evoLevel] defaults to the ship's own stored evo level
+ * @returns {number}
+ */
+function shipEvolutionMultiplier(shipId, evoLevel) {
+  const level = Number(evoLevel != null ? evoLevel : getShipInput(shipId).evo) || 0;
+  if (level <= 0) return 1;
+  const table = EVO_BONUS_BY_SHIP[shipId];
+  if (!table) return 1;
+  // Levels above the highest authored one hold at the top value rather than silently reverting to
+  // 1 -- a missing entry means our table is behind the game, not that the bonus vanished.
+  const levels = Object.keys(table).map(Number).sort((a, b) => a - b);
+  const use = table[level] != null ? table[level] : table[levels[levels.length - 1]];
+  return use;
+}
+
+/** Evolution factors we cannot compute for this account, for honest reporting. Empty when fine. */
+function unmodelledEvolutionTerms() {
+  const gems = (window.store && window.store.gems) || {};
+  const gu6 = Number(gems.attractionGU6Level || gems.AttractionGU6Level || 0) || 0;
+  return gu6 > 0
+    ? [`AttractionGU6 (level ${gu6}) raises every evolution bonus to a power this tool cannot compute`]
+    : [];
+}
 const SHIP_PORTRAITS = { 1: 'cradle', 2: 'auxesia', 3: 'zagreus', 4: 'hephaestus', 5: 'demeter', 6: 'koios', 7: 'zeus', 8: 'ouroboros' };
 // What each ship actually ranks up by, per cifi.fandom.com's ship pages -- drives the Ship
 // Setup page's "progress toward next rank" field label.
@@ -548,6 +602,17 @@ function computeResourceBonuses(shipId, levels) {
   // Cradle) grant a flat % to one specific resource, independent of install levels -- each
   // item's own factor multiplies into the same per-resource totals as the nodes above.
   mergeResourceTotals(mults, computeFleetPctBonuses(shipId));
+  // Ship EVOLUTION multiplies the ship's generator output directly -- it is a plain factor in the
+  // game's MK1Production/MK2Production chain (see shipEvolutionMultiplier). It applies to the
+  // GENERATOR tiers, not to direct Cells/Shards/RP, which is why it is merged per gen-like tag
+  // rather than across everything. Independent of install levels, so it never reorders the
+  // optimizer's candidates -- but leaving it out understated these totals by a factor of 162,000
+  // on the reference account's Cradle alone.
+  const evo = shipEvolutionMultiplier(shipId);
+  if (evo !== 1) {
+    GEN_TIERS.forEach((n) => { const k = `mk${n}`; if (mults[k]) mults[k] *= evo; });
+    TECH_UPGRADE_TAGS.forEach((t) => { if (mults[t]) mults[t] *= evo; });
+  }
   // Gear Set piece-owned flat multipliers (x25 Shards etc, see computeGearSetBonusMultipliers)
   // are a multiplier on the FINAL resource total across the whole fleet, not a per-ship
   // contribution -- applied once at the Fleet page's grand-total display instead of per-ship

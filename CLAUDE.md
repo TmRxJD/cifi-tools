@@ -144,6 +144,7 @@ There is exactly one place for each of these. **Do not add a second.**
 | Decompile named methods to readable C | `tools/il2cpp-cli/decompile.py` (Ghidra + PyGhidra) |
 | **Read AUTHORED serialized data (values)** | `tools/il2cpp-cli/typetree.py` |
 | **Read method BODIES as C# (logic)** | `tools/il2cpp-cli/csharp.py` (Cpp2IL + ilspycmd) |
+| **Name the field reads Cpp2IL could not resolve** | `tools/il2cpp-cli/resolve-loads.py` |
 | Authored ship-node coefficients | `tools/reference/ship-node-coefficients.json` |
 | Server-table capture | `tools/capture/` |
 | Per-hunter evaluation fidelity (UI) | `store[hunter].iterations` + `StoreSchema.ITERATIONS` / `clampIterations` |
@@ -306,7 +307,21 @@ think one is wrong, disprove it with a test.
   found by taking the backing-field offsets from dump.cs (0x1C28 etc.) and grepping for those
   offsets **+8** -- BigDouble is 16 bytes and the note names the exponent half.
   **When a Cpp2IL body multiplies by `(BigDouble)0`, that is a missing operand, not a zero.**
-  Grep the offset, do not trust the absence of a name.
+  Grep the offset, do not trust the absence of a name. `tools/il2cpp-cli/resolve-loads.py` now does
+  that automatically -- it parses `(Type)+OFFSET` out of every note and resolves it against
+  dump.cs's field offsets, handling the +8 case. **Run it over any method before concluding
+  something is absent.**
+  Running it over the chain the fleet tool models turned up the rest of what a name-grep had
+  hidden. `MK1Production` alone carries 23 such reads, including `ShardMining.FinalMK1Bonus`,
+  `TraitSpheres.FinalTS17/24/30/31Bonus`, `ConstructionProjects.FinalAllGensBonus`,
+  `Inventory.TechSampleAllGensBonusBonus`, `GemPerks.FinalAllGensBonus` and
+  `MultiverseMarket.FinalISAllGensBonus` -- so the tool's per-ship resource totals are one slice of
+  a much longer multiply chain, and should never be read as absolute production.
+  In the per-node bonus itself, `RUGen2Bonus` has exactly three, and two of them are NOT modelled:
+  `GemPerks.FinalPowerGU1Bonus` and `ResearchLaboratory.FinalAllShipsInstallsBonus` (the third,
+  `FinalShip1InstallsBonus`, is our Fleet Analysis 2 term). Both are uniform across a ship's nodes,
+  so they cannot reorder the optimizer -- and both are level 0 on the reference account -- but they
+  scale every install bonus and are a real gap for magnitudes.
 - **Ship install bonuses MULTIPLY as independent factors, and Meltdown exponentiates the whole
   product exactly ONCE.** Read out of `libil2cpp.so` and confirmed twice — by hand from capstone,
   then independently from Ghidra-decompiled C via `tools/il2cpp-cli/decompile.py`:
