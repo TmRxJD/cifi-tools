@@ -24,11 +24,14 @@ if (!fs.existsSync(savePath)) {
 const save = JSON.parse(fs.readFileSync(savePath, 'utf8'));
 const sb = H.browserSandbox();
 
-// saveImport.js is standalone (crypto + the mapping); load it into the sandbox.
-vm.runInContext(
-  fs.readFileSync(path.join(__dirname, '../../webapp/public/saveImport.js'), 'utf8'),
-  sb, { filename: 'saveImport.js' },
-);
+// saveImport.js is loaded by harness.js itself now, so this must NOT load it a second time --
+// re-running the file in the same context throws "Identifier 'DotNetRandom' has already been
+// declared" and takes the whole report down. Asserted rather than assumed: if the harness ever
+// stops providing it, fail with the reason instead of a bare TypeError at the call site.
+if (typeof sb.mapSaveToStore !== 'function') {
+  console.log('FAIL: harness.js no longer loads saveImport.js, so mapSaveToStore is unavailable');
+  process.exit(1);
+}
 
 const mapped = sb.mapSaveToStore(save);
 const filledUpgrades = new Set(Object.keys(mapped.globalUpgrades || {}));
