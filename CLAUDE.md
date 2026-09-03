@@ -152,6 +152,7 @@ There is exactly one place for each of these. **Do not add a second.**
 | Fleet badge -> ships + value | `tools/reference/badge-map.json` |
 | Every factor per install node | `tools/reference/node-factors.json` |
 | Zod schemas for the references | `tools/bench/reference-schemas.js` |
+| Authored tier-2 relic caps/costs | `tools/reference/relic-tier2.json` |
 | Omitted uniform per-node terms | `tools/reference/uniform-node-terms.json` |
 | Gear piece names (the game's own) | `tools/reference/gear-names.json` |
 | Gear set bonus -> resource + value | `tools/reference/gear-set-bonus-map.json` |
@@ -668,6 +669,57 @@ think one is wrong, disprove it with a test.
   and r5/r6/r14 additionally add `GemNodes.FinalPower1Bonus4`. Ryther was describing the Power
   raise on High-band relics; the fragment planner was describing the Exodus raise. Not modelling
   them is now a deliberate choice about a KNOWN mechanism rather than an unresolved disagreement.
+- **TIER-2 RELIC CAPS ARE AUTHORED AFTER ALL, and the live site contradicts ITSELF on t2r7.** An
+  earlier note here said tier-2 caps were not in the extracted dataset, so `relicMaxLevel` throws
+  for them rather than guess. They were simply being looked for in the wrong place:
+  `OuroRelics.CheckRelicMaxLevel()` compares the player's level against `Relic+0x50`, which dump.cs
+  names as the exponent half of `Relic.baseMaxLevel` (the BigDouble +8 case again), and those
+  `Relic` objects are SCRIPTABLEOBJECTS in `sharedassets0.assets` -- so `typetree.py --list` never
+  showed them, because it lists MonoBehaviours. All ten are now in
+  `tools/reference/relic-tier2.json`: t2r1 10, t2r2 100, t2r3 80, t2r4 25, t2r5 100, t2r6 40,
+  t2r7 40, t2r8 21, t2r9 100, t2r10 5.
+  **The bundle declares t2r7 twice with different caps** -- `maxLevel:40` in its relic planner,
+  `maxLevel:100` in its Overrides panel -- and t2r7 is one of the few relics that genuinely moves
+  the sim, so it is 60 levels of a real upgrade either offered or withheld. The standing
+  "cifi-tools is authoritative" rule cannot arbitrate a source disagreeing with itself; the game
+  can, and it says 40. **We keep 40 and deliberately do not mirror the panel's bug.** Every other
+  tier-2 relic agrees across all three sources.
+  **The offset parse is cross-validated, and that is the part worth copying**: the adjacent
+  `bonusPerLevel1` reads 1.02 for T2_07 and 1.08 for T2_05, matching the bundle's own `value:` for
+  those relics exactly. A BigDouble read at the wrong offset returns a real-looking number rather
+  than an error, so a neighbouring field agreeing with an independent source is what tells you the
+  offsets are right. Its zod schema bounds the cap for the same reason.
+- **`unlock_node` is the SECOND HALF of every gate, and both the predicate and the bench used to
+  ignore it.** The live bundle's own unlock predicate requires a specific gem NODE as well as a
+  tree level on four entries (the three trinkets at creation/4/node5, `cms.milestoneCount` at
+  exodus/1/node4). `isUpgradeUnlocked` now enforces it and `gate-coverage.js` now compares it.
+  Related: the original HIDES a gated upgrade until it is unlocked rather than annotating it with
+  its requirement, and ours now does the same -- `visibleUpgradeItems()` filters every list and the
+  old amber "Requires X" note is gone. `gate-visibility-check.js` pins that behaviour.
+  **A "maxed" gem fixture must set NODES as well as levels.** Two benches built one with levels
+  only and started failing when the node half began to be enforced; that is an incomplete fixture,
+  not a gate defect, and the fix belongs in the fixture.
+- **TWO BENCHES SILENTLY PASSED ON NOTHING because a `` was written into them as a literal 0x08
+  BACKSPACE byte.** The regex could then never match. `gate-coverage.js` reported our CORRECT node
+  gates as WRONG (a broken bench failing good data -- the more dangerous direction, since the
+  tempting fix is to change the data), and `inscryption-slot-test.js` parsed ZERO fleet slots, so
+  its range check ran over an empty list and passed regardless of what it was given. Both fixed;
+  all sources are now scanned for stray control bytes and these were the only two. **When a bench
+  passes, confirm it actually compared something** -- print the count, and treat an empty
+  comparison set as a failure.
+- **`upgrade-item-parity.js` checks what each override IS, not just that it exists.**
+  `live-override-diff.js` compares the KEY SETS; this compares each item's `maxLevel` and whether
+  it is a boolean (checkbox) or a level (number input). Neither a wrong cap nor a wrong control
+  type changes the key set, so neither was visible to the existing bench -- which is how the t2r7
+  cap shipped. Verified with three negative controls (wrong cap, boolean-as-level, capping an
+  uncapped item).
+  **It only compares ids we expose, on purpose.** The same id can appear twice in the bundle
+  describing two different surfaces, and `mats_exchange` is the trap: its PAGE lists three EDC
+  items while the OVERRIDES panel offers the single key `upgrades.mats_exchange.tysconDrives`,
+  which is what we mirror. Comparing our panel against its page reports three missing items and one
+  invented one, all false -- the same code-split mistake that once produced a bogus "we expose 6
+  extras" report. **Fetch the whole bundle (main + every `./Name-hash.js` chunk it references)
+  before running any bundle comparison.**
 - **A modal that starts async work must cancel it on close, and `titledModal` fires `modal-close`
   so it can.** Closing used to just `remove()` the overlay, leaving the Effective Path walk
   running: invisible, uncancellable, and still competing for the main thread and for wasm
@@ -1280,6 +1332,9 @@ CIFI_APK=apk-0.7.3.61 python tools/bench/export-scene.py  # AssetRipper scene ex
 node tools/bench/extract-scene-defs.js <MainScene.unity> --write  # -> scene-defs.json
 node tools/bench/inscryption-cost-check.js <live-bundle.js> # inscryption costs vs the original
 node tools/bench/gate-coverage.js <live-bundle.js>        # our gates vs the bundle's
+node tools/bench/upgrade-item-parity.js <live-bundle.js>  # every item's cap + control type
+node tools/bench/relic-tier2-check.js [live-bundle.js]    # tier-2 relic caps vs the GAME
+CIFI_APK=apk-0.7.3.61 python tools/bench/extract-relic-tier2.py --write  # -> relic-tier2.json
 node tools/bench/live-override-diff.js <live-bundle.js>   # gap check vs the original tool
 node tools/bench/run.js --sample=12    # THE EVERYDAY GATE: stratified handful, ~minutes
 node tools/bench/run.js --sample=12 --seed=1234   # replay one exactly
