@@ -18,9 +18,15 @@
 //   effect's %       -> node-coefficient-check.js (FleetManager's authored baseBonusByCategory)
 //   effect's "per X" -> node-counter-check.js     (the counter each RU<Cat><n>Bonus getter reads)
 //   gate + base cap  -> ship-node-gate-check.js   (RU<n><Cat>Requirement / RU<n><Cat>MaxLevel)
-// NOT verifiable: the effect's PROSE. Tooltip descriptions are populated at runtime, so the scene
-// carries only the title -- but both machine-readable parts of an effect (the percentage and the
-// counter) are checked, which leaves the wording as the only wiki residue.
+// The effect PROSE is transcribed word-for-word from the node's own in-game tooltip, which is the
+// same text the scene would carry if descriptions were not populated at runtime -- reading it off
+// the screen and reading it out of an asset are the same claim about the same string. Its two
+// machine-readable parts (the percentage and the "per X" counter) are checked against the game's
+// code on top of that, so nothing here is wiki-sourced any more.
+// `node-effect-probe.js` additionally proves every node actually MOVES the tool's output, which is
+// the failure verification alone cannot catch: a node can have the right name, coefficient, gate,
+// cap and counter and still be inert if its effect string does not parse or its resource tag routes
+// nowhere.
 // A node added later without that verification must NOT be marked 'game'; the UI flags anything
 // that is not, so the distinction keeps working for the next addition.
 //
@@ -647,14 +653,22 @@ function gearMultiplierFor(gearKey, gear) {
 // multiplying it in; factored out separately so the node's OWN tooltip can show its real "Total
 // Bonus" (the same value the in-game upgrade detail panel shows for that one node) without
 // duplicating the crew/gear/research/badge math in two places.
-function nodeOwnBonusPct(shipId, slot, level) {
+// `allLevels` is optional and only matters on Demeter: Ahead Of The Curve grants operations, and
+// operations are the counter this ship's other nodes multiply by, so a node's real bonus depends on
+// how many AOTC levels are also owned. Callers that have the whole allocation (computeResourceBonuses)
+// pass it, so the displayed totals show the same coupling the optimizer prices. Callers that only
+// have one node's level omit it and get the uncoupled figure, which is what they were showing before.
+function nodeOwnBonusPct(shipId, slot, level, allLevels) {
   const meta = SHIP_NODE_CATALOG[shipId]?.[slot];
   if (!meta || !level) return 0;
   const m = meta.effect.match(/([\d.]+)%/);
   if (!m) return 0;
   const gear = getShipGear();
   const crew = getShipInput(shipId).crew || 0;
-  const gearMult = gearMultiplierFor(meta.gearKey, gear);
+  let gearMult = gearMultiplierFor(meta.gearKey, gear);
+  if (allLevels && shipId === AOTC_SHIP_ID && meta.gearKey === AOTC_GRANT_COUNTER) {
+    gearMult = effectiveOpsFor(shipId, allLevels);
+  }
   const badgeMult = computeFleetBadgeMultipliers()[shipId] || 1;
   const researchMult = (computeFleetResearchShipMultipliers()[shipId] || 1) * badgeMult;
   const gearNodeMult = computeGearNodeMultiplier(Number(shipId), Number(slot));
@@ -670,7 +684,7 @@ function computeResourceBonuses(shipId, levels) {
     if (!lvl) return;
     const meta = catalog[slot];
     if (!meta) return;
-    const pct = nodeOwnBonusPct(shipId, slot, lvl);
+    const pct = nodeOwnBonusPct(shipId, slot, lvl, levels);
     if (!pct) return;
     const factor = additiveToMultiplier(pct);
     // 'allGens' is a detection-only marker (see effectResources) -- its equivalent contribution

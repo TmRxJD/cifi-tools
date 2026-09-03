@@ -929,10 +929,22 @@ think one is wrong, disprove it with a test.
   nodes still on the wiki. Four benches now cover every node:
   `node-name-check.js` (fleet tooltip titles), `node-coefficient-check.js` (authored
   `baseBonusByCategory`), `node-counter-check.js` (the counter each getter reads) and
-  `ship-node-gate-check.js` (requirement + base cap). **The only wiki residue left is the effect's
-  PROSE** -- tooltip descriptions are populated at runtime, so the scene carries only the title,
-  but both machine-readable parts of an effect (the percentage and the "per X" counter) are checked.
-  The UI still flags anything not marked `'game'`, so a node added later cannot inherit that trust.
+  `ship-node-gate-check.js` (requirement + base cap). The effect PROSE is transcribed word-for-word
+  from each node's own in-game tooltip; descriptions are populated at runtime so the scene does not
+  carry them, but reading the string off the screen and reading it out of an asset are the same
+  claim about the same string, and its two machine-readable parts (the percentage and the counter)
+  are checked against the code on top of that. The UI still flags anything not marked `'game'`, so
+  a node added later cannot inherit that trust.
+- **`node-effect-probe.js` proves every node actually MOVES the output — verified is not the same as
+  live.** A node can have the right name, coefficient, gate, cap and counter and still be inert if
+  its effect string does not parse or its resource tag routes nowhere. This is the fleet-side
+  equivalent of `relic-arg-probe.js`, which on the hunter side found four relics that reach the
+  evaluator and change nothing. All 77 move the output; a negative control (removing one `%`) fails
+  it. Nodes with no percentage are AMPLIFIERS and are probed in combination: Demeter's Ahead Of The
+  Curve grants the operations its neighbours scale with, so alone it would always read inert.
+  Writing that probe exposed a real gap -- the optimizer priced AOTC's operations grant while
+  `computeResourceBonuses` ignored it, so the Fleet page's displayed totals disagreed with the
+  allocator. `nodeOwnBonusPct` now takes the whole allocation so both see the same coupling.
 - **Node names live at `UpgradePanel-<Ship>/Tooltips/Tooltip<N>/Title`, and N is the ruId, NOT the
   install code.** Indexing by our slot reports 15 false mismatches -- every ship whose code->ruId
   mapping is not the identity. The key is proven, not assumed: Cradle's ruIds 9/10/11 carry three
@@ -1112,6 +1124,7 @@ node tools/bench/node-coefficient-check.js # ship node coefficients vs the GAME'
 node tools/bench/ship-node-gate-check.js # install prereqs + base caps vs the GAME (77 nodes)
 node tools/bench/node-counter-check.js  # each node's 'per X' counter vs the GAME (77 nodes)
 node tools/bench/node-name-check.js     # node names vs the game's fleet tooltips (77 nodes)
+node tools/bench/node-effect-probe.js  # every install node actually moves the output
 node tools/bench/growth-counter-check.js # per-run counter classification + zero-counter warning
 node tools/bench/allocator-check.js     # allocator vs a reference greedy, ALL 7 ships
 python tools/il2cpp-cli/typetree.py --dump FleetManager --grep BaseBonus  # read authored data
