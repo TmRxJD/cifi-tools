@@ -139,7 +139,18 @@ const GEM_TREE_SAVE_PREFIX = {
 const HUNTER_TALENT_ORDER = {
   borge: ['revival', 'loth', 'ua', 'impeccable', 'omen', 'll', 'pog', 'ultima', 'tfow'],
   ozzy: ['revival', 'boon', 'ua', 'needles', 'omen', 'll', 'crip', 'ultima', 'echo'],
-  knox: ['revival', 'calyp', 'ua', 'ghost', 'omen', 'll', 'pog', 'finish'],
+  // `null` marks a save slot the GAME has but this tool does not model, so the positions after it
+  // keep lining up. Knox's slot 8 is its Ultima signature talent (authored cap 50), which is
+  // deliberately unmodelled -- params.json exposes no `ultima` argument for Knox, so an input there
+  // would reach nothing. Omitting it from this list entirely, as an earlier version did, shifted
+  // `finish` down onto the Ultima slot: it read KnoxSkill8Level (Ultima) instead of
+  // KnoxSkill9Level. Harmless on the current save, where both read 0, and silently wrong on any
+  // account that has bought either.
+  //
+  // The Skill families are 1-INDEXED in the game (BorgeSkill1..9), which is why `Skill${i + 1}Level`
+  // is the right field for our index i -- Borge and Ozzy match the game's authored caps 9/9 that
+  // way. tools/bench/attr-save-order-check.js asserts it.
+  knox: ['revival', 'calyp', 'ua', 'ghost', 'omen', 'll', 'pog', null, 'finish'],
 };
 
 // Attribute allocations ARE in the save after all -- stored as 15 positional fields per
@@ -424,6 +435,7 @@ function mapSaveToStore(save) {
     const highestStage = save[`${prefix}HighestStage`];
     const talents = {};
     (HUNTER_TALENT_ORDER[hunterKey] || []).forEach((talentId, i) => {
+      if (!talentId) return;   // a game slot this tool does not model; see the note above
       const v = save[`${prefix}Skill${i + 1}Level`];
       if (v !== undefined) talents[talentId] = realNum(v);
     });

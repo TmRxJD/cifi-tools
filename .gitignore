@@ -30,3 +30,4 @@ bridge/installer/*/.build/
 # Python bytecode from the il2cpp tooling
 __pycache__/
 *.pyc
+tools/bench/_realstate.json

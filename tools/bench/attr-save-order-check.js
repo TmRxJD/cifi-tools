@@ -127,6 +127,61 @@ for (const hunter of ['borge', 'ozzy', 'knox']) {
   else pass(`${hunter}: all ${derived.map.size} save slots load the attribute the game puts there`);
 }
 
+// --- TALENTS: the same positional scheme, checked against the game's authored caps -------------
+// The Skill families are ONE-indexed in the game (BorgeSkill1..9), so our list index i maps to
+// game index i+1. Getting that backwards makes every talent look mis-mapped; it was worth
+// resolving rather than "fixing", since Borge and Ozzy match 9/9 under the correct offset.
+//
+// Knox is the real case: the game's slot 8 is its Ultima signature talent, which this tool
+// deliberately does not model (no `ultima` argument exists for Knox in params.json). Leaving it out
+// of the order list shifted `finish` onto that slot, so it read KnoxSkill8Level instead of
+// KnoxSkill9Level. A `null` placeholder keeps the positions honest.
+const SKILL_FAMILY = { borge: 'BorgeSkill', ozzy: 'OzzySkill', knox: 'KnoxSkill' };
+
+function talentOrder() {
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, '../../webapp/public/saveImport.js'), 'utf8');
+  const block = /const HUNTER_TALENT_ORDER = \{([\s\S]*?)\n\};/.exec(src);
+  if (!block) throw new Error('HUNTER_TALENT_ORDER not found in saveImport.js');
+  const out = {};
+  for (const m of block[1].matchAll(/(\w+):\s*\[([^\]]*)\]/g)) {
+    out[m[1]] = [...m[2].matchAll(/'([^']+)'|(null)/g)].map((x) => x[1] || null);
+  }
+  return out;
+}
+
+const tOrder = talentOrder();
+for (const hunter of ['borge', 'ozzy', 'knox']) {
+  const fam = scene[SKILL_FAMILY[hunter]] || {};
+  const talents = sb.HUNTER_DEFS[hunter].talents || [];
+  const list = tOrder[hunter] || [];
+  const problems = [];
+  let compared = 0;
+
+  list.forEach((id, i) => {
+    const entry = fam[String(i + 1)];   // the family is 1-indexed
+    if (!entry || entry.MaxLevel === undefined) return;
+    if (!id) return;                    // a slot we deliberately do not model
+    const t = talents.find((x) => x.id === id);
+    if (!t) { problems.push(`${hunter}: "${id}" is imported but is not a talent in HUNTER_DEFS`); return; }
+    compared++;
+    if (t.maxLevel !== entry.MaxLevel) {
+      problems.push(`${SKILL_FAMILY[hunter]}${i + 1}Level -> "${id}" (cap ${t.maxLevel}) but the `
+        + `game's slot ${i + 1} caps at ${entry.MaxLevel}`);
+    }
+  });
+
+  // Every modelled talent must be claimed by exactly one slot.
+  const claimed = list.filter(Boolean);
+  const missing = talents.map((t) => t.id).filter((id) => !claimed.includes(id));
+  if (missing.length) problems.push(`${hunter}: talents never loaded from the save: ${missing.join(', ')}`);
+
+  if (!compared) fail(`${hunter}: no talent slots were comparable`);
+  else if (problems.length) problems.forEach(fail);
+  else pass(`${hunter}: all ${compared} talent slot(s) load the talent the game caps that way`);
+}
+
 console.log(failures
   ? `\n${failures} failure(s) -- a positional import that is wrong is SILENT; every value still `
     + 'lands somewhere and the totals still look plausible'

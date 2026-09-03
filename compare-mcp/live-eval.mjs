@@ -22,13 +22,29 @@ async function getBrowser() {
 // "137" (no suffix/hours needed), a high-stage one showed the k-suffixed/hour-containing
 // forms above, so all three must be parsed generically rather than assuming the small-number
 // shapes seen first.
+// The site formats big numbers with the GAME's own suffix ladder, which `costFormulas.js` already
+// ports verbatim as `SUFFIXES` -- ['', k, m, b, t, qa, qu, sx, sp, oc, n, d]. This parser only knew
+// k/m/b, so anything at a trillion or beyond came back NULL: a real level-55 Ozzy produces 3.25t
+// XP per run, and every material stat silently dropped out of the comparison while loot and stage
+// still matched, which reads as "the site did not report materials" rather than "the parser cannot
+// read them".
+//
+// Longest-match first, because 'qa'/'qu' both start with 'q' and 'sx'/'sp' with 's'.
+const BIG_SUFFIXES = ['', 'k', 'm', 'b', 't', 'qa', 'qu', 'sx', 'sp', 'oc', 'n', 'd'];
+const SUFFIX_MULT = Object.fromEntries(
+  BIG_SUFFIXES.map((sfx, i) => [sfx, 10 ** (3 * i)]).filter(([sfx]) => sfx),
+);
+const SUFFIX_RE = new RegExp(
+  `^([\\d.]+)\\s*(${Object.keys(SUFFIX_MULT).sort((a, b) => b.length - a.length).join('|')})?$`,
+  'i',
+);
+
 function parseSuffixedNumber(str) {
   if (str == null) return null;
-  const m = String(str).trim().match(/^([\d.]+)\s*([kmb])?$/i);
+  const m = String(str).trim().match(SUFFIX_RE);
   if (!m) return null;
   const n = Number.parseFloat(m[1]);
-  const mult = { k: 1e3, m: 1e6, b: 1e9 }[m[2]?.toLowerCase()] || 1;
-  return n * mult;
+  return n * (m[2] ? SUFFIX_MULT[m[2].toLowerCase()] : 1);
 }
 
 // "3h 21m", "10.5m", or "45s" -> minutes.
@@ -53,7 +69,7 @@ function parseLootMaterials(block) {
   const idx = block.search(/\nLoot\n/);
   const lootBlock = idx === -1 ? null : block.slice(idx);
   if (!lootBlock) return null;
-  const re = /([\d.]+\s*[kmb]?)\s*\n?\s*per run\s*\n?\s*([\d.]+\s*[kmb]?)\s*\n?\s*per day/gi;
+  const re = /([\d.]+\s*[a-z]{0,2})\s*\n?\s*per run\s*\n?\s*([\d.]+\s*[a-z]{0,2})\s*\n?\s*per day/gi;
   const materials = [];
   let m;
   while ((m = re.exec(lootBlock)) && materials.length < 4) {
@@ -72,7 +88,7 @@ function parseMainStatistics(text) {
   const rangeMatch = block.match(/Ø Stage\s*\n?\s*([\d.]+)\s*\n?\s*(\d+)-(\d+)/);
   const materials = parseLootMaterials(block);
   return {
-    lootScore: parseSuffixedNumber(grab(/Loot Score\s*\n?\s*([\d.]+\s*[kmb]?)\b/i)),
+    lootScore: parseSuffixedNumber(grab(/Loot Score\s*\n?\s*([\d.]+\s*[a-z]{0,2})\b/i)),
     avgTimeMinutes: parseDurationToMinutes(grab(/Ø Time\s*\n?\s*((?:[\d.]+\s*[hms]\s*)+)/i)),
     avgStage: rangeMatch ? Number.parseFloat(rangeMatch[1]) : Number.parseFloat(grab(/Ø Stage\s*\n?\s*([\d.]+)/)),
     minStage: rangeMatch ? Number.parseInt(rangeMatch[2], 10) : null,
@@ -125,7 +141,24 @@ export async function evaluateOnLiveSite(hunter, testBuild) {
  * resolution path rather than a test hook. Only the keys given are touched; the rest of
  * `hunter-data` is left exactly as found.
  */
-async function seedAccountUpgrades(page, accountUpgrades, hunterStats, hunter) {
+async function seedAccountUpgrades(page, accountUpgrades, hunterStats, hunter, gemStates) {
+  if (!accountUpgrades && !hunterStats && !gemStates) return;
+  // Gems live in their OWN key (`gemPlanner_store`), not in `hunter-data`, and they are not
+  // cosmetic: the site gem-gates the Ozzy page, so without Exodus >= 2 a guest session never
+  // renders it and every Ozzy comparison times out waiting for "Main Statistics". Several sim
+  // parameters are gem-gated too, so a comparison run with different gem state on the two sides is
+  // not a comparison at all.
+  if (gemStates) {
+    await page.evaluate((gs) => {
+      const raw = localStorage.getItem('gemPlanner_store');
+      const store = raw ? JSON.parse(raw) : {};
+      store.gemStates = store.gemStates || {};
+      for (const [tree, state] of Object.entries(gs)) {
+        store.gemStates[tree] = { ...(store.gemStates[tree] || {}), ...state };
+      }
+      localStorage.setItem('gemPlanner_store', JSON.stringify(store));
+    }, gemStates);
+  }
   if (!accountUpgrades && !hunterStats) return;
   await page.evaluate(({ ups, stats, h }) => {
     const raw = localStorage.getItem('hunter-data');
@@ -159,8 +192,8 @@ export async function importCodeAndReadStats(hunter, code, opts = {}) {
     // itself isn't actually gated server-side though -- navigating directly to it works.
     await page.goto(`${LIVE_URL}${HUNTER_NAV_HREF[hunter]}`, { waitUntil: 'domcontentloaded' });
     // Account state must exist BEFORE the app reads it, so seed then reload.
-    if (opts.accountUpgrades || opts.hunterStats) {
-      await seedAccountUpgrades(page, opts.accountUpgrades, opts.hunterStats, hunter);
+    if (opts.accountUpgrades || opts.hunterStats || opts.gemStates) {
+      await seedAccountUpgrades(page, opts.accountUpgrades, opts.hunterStats, hunter, opts.gemStates);
       await page.goto(`${LIVE_URL}${HUNTER_NAV_HREF[hunter]}`, { waitUntil: 'domcontentloaded' });
     }
     await page.getByRole('button', { name: 'Import', exact: true }).click();
