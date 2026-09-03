@@ -123,6 +123,36 @@ function compare(hunter, live, clone) {
   });
 }
 
+/**
+ * A SYSTEMATIC bias is evidence even when every individual delta is inside tolerance.
+ *
+ * Both evaluators are deterministic for a given input -- re-running an identical comparison returns
+ * byte-identical numbers on both sides -- so a spread across stats is not sampling noise the way it
+ * would be for two independent Monte Carlo runs. When every loot-derived stat leans the same way by
+ * a similar amount while stage and time match, that is a multiplier difference, not variance.
+ *
+ * This is not hypothetical: Knox at level 35 with `relics.t2r7: 20` is -0.85% on all seven
+ * loot/material/XP stats, reproducibly, while avgStage matches to 0.01%. Every one of those is
+ * inside the 2% Monte Carlo threshold, so the per-stat check passes and the real difference walks
+ * straight through. Raising the threshold would only trade this miss for false alarms; looking at
+ * the SHAPE of the deltas is what separates them.
+ */
+function systematicBias(diffs) {
+  const loot = diffs.filter((d) => d.deltaPct != null
+    && /loot|mat\d|xp/i.test(d.key));
+  if (loot.length < 4) return null;
+  const signs = loot.map((d) => Math.sign(d.deltaPct));
+  const allSame = signs.every((x) => x === signs[0] && x !== 0);
+  const mean = loot.reduce((n, d) => n + Math.abs(d.deltaPct), 0) / loot.length;
+  // Stage and time agreeing is what rules out "the whole run just went further".
+  const structural = diffs.filter((d) => /stage|time/i.test(d.key) && d.deltaPct != null);
+  const structuralOk = structural.every((d) => Math.abs(d.deltaPct) < 0.5);
+  if (allSame && mean > 0.5 && structuralOk) {
+    return { direction: signs[0] > 0 ? 'high' : 'low', meanPct: Number(mean.toFixed(3)), n: loot.length };
+  }
+  return null;
+}
+
 const hunters = onlyHunter ? [onlyHunter] : ['borge', 'ozzy', 'knox'];
 const report = [];
 let failures = 0;
@@ -154,6 +184,13 @@ for (const hunter of hunters) {
   const diffs = compare(hunter, live, clone);
   const bad = diffs.filter((d) => d.flagged);
   failures += bad.length;
+  const bias = systematicBias(diffs);
+  if (bias) {
+    failures++;
+    console.log(`\nFAIL ${hunter}: every one of ${bias.n} loot/material/XP stats reads ${bias.meanPct}% `
+      + `${bias.direction} while stage and time match -- both evaluators are deterministic, so a `
+      + 'consistent one-way lean is a multiplier difference, not sampling noise');
+  }
   report.push({ hunter, level: real.level, upgradeCount: Object.keys(upgrades).length, diffs });
 
   console.log(`\n=== ${hunter} lvl${real.level} — ${Object.keys(upgrades).length} account upgrades seeded ===`);
