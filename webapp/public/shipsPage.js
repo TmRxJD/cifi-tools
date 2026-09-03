@@ -832,6 +832,35 @@ const REAL_GEAR_PIECES = [
   { name: 'Chrysis Suit', color: 'Blue', setBonus: 'x320 Cells Gained', install1: 'HEPH5', install2: 'DEM4', costBase: 4, costScalar: 1.11 },
   { name: 'Beta-Rounds', color: 'Blue', setBonus: 'x80 Cells Gained', install1: 'HEPH3', install2: 'DEM7', costBase: 6, costScalar: 1.13 },
   { name: 'Shard Gun', color: 'Blue', setBonus: 'x1.5 Academy Points Gained', install1: 'DEM6', install2: 'DEM5', costBase: 7, costScalar: 1.14 },
+  // WHITE -- the wiki does not document this set, so unlike every piece above these come from the
+  // GAME, and each field is at a different confidence:
+  //  * install1/install2 are the STRONGEST data in this whole table: taken from the game's own
+  //    `RU<Category><n>Bonus` dispatch (tools/reference/gear-install-map.json), not transcribed.
+  //    This is the field the optimizer is actually sensitive to -- gear is our only per-NODE and
+  //    exponential multiplier -- so getting these five pieces in at all is the point of the entry.
+  //  * costBase 6 is `WhiteItem<N>.BaseCost` read straight off the authored asset (all five are 6).
+  //  * costScalar 1.14 is `CostTier = Tier5`, resolved through the tier->scalar table that all 22
+  //    pieces above agree on exactly (0->1.10, 1->1.11, 2->1.12, 3->1.13, 4->1.14). Note this
+  //    DISPROVES the tempting "scalar = 1.1 + (base-3)*0.01" shortcut -- the Orange pieces all share
+  //    base 4 across tiers 0/3/4/1 -- so the tier is what decides, not the base cost.
+  //  * name is UNKNOWN and deliberately not invented. The displayed names are not in the shipped
+  //    files at all: `grep "Cell Battery"` returns 0 hits in level0, sharedassets0.assets,
+  //    globalgamemanagers.assets, global-metadata.dat AND libil2cpp.so, so even the names we DO
+  //    have came from the wiki rather than the game, and White has no wiki page. They are populated
+  //    at runtime from localization data we do not have. Placeholder labels beat plausible fiction.
+  //  * setBonus is UNKNOWN for the same class of reason and is left as '' -- which
+  //    computeGearSetBonusMultipliers already ignores (`if (!m) return`), so it contributes nothing
+  //    rather than contributing something wrong. The game DOES give the five magnitudes
+  //    (WhiteSetBonus1..5 = 1e50, 1e65, 2.5, 150, 10, with WhiteSetBonusRequirement = 5), but not
+  //    which RESOURCE each one multiplies. 2.5/150/10 sit in the same range as the Mod Point / Cell
+  //    / Research bonuses above, which makes a resource assignment guessable -- and guessing which
+  //    resource a x1e65 multiplier lands on is exactly how a wrong number acquires a confident
+  //    comment. Pair the magnitudes to resources from a real account or the localization strings.
+  { name: 'White Piece 1', color: 'White', setBonus: '', install1: 'CRA4', install2: 'HEPH8', costBase: 6, costScalar: 1.14 },
+  { name: 'White Piece 2', color: 'White', setBonus: '', install1: 'CRA8', install2: 'HEPH10', costBase: 6, costScalar: 1.14 },
+  { name: 'White Piece 3', color: 'White', setBonus: '', install1: 'ZEUS2', install2: 'CRA11', costBase: 6, costScalar: 1.14 },
+  { name: 'White Piece 4', color: 'White', setBonus: '', install1: 'CRA6', install2: 'DEM10', costBase: 6, costScalar: 1.14 },
+  { name: 'White Piece 5', color: 'White', setBonus: '', install1: 'CRA10', install2: 'ZAG11', costBase: 6, costScalar: 1.14 },
 ];
 function defaultGearSets() {
   return { pieces: REAL_GEAR_PIECES.map((p) => ({ ...p, level: 0, owned: false })) };
@@ -839,13 +868,22 @@ function defaultGearSets() {
 function getGearSets() {
   if (!window.store) return defaultGearSets();
   if (!window.store.gearSets || !('pieces' in window.store.gearSets)) window.store.gearSets = defaultGearSets();
-  // Backfill costBase/costScalar onto any piece saved before the Gear Effective Path feature
-  // added them -- without this, an existing account's stored pieces silently lack cost data and
-  // gearPieceCostAtLevel falls through to its Infinity guard.
-  window.store.gearSets.pieces.forEach((p) => {
-    if (p.costBase != null && p.costScalar != null) return;
-    const real = REAL_GEAR_PIECES.find((r) => r.name === p.name);
-    if (real) { p.costBase = real.costBase; p.costScalar = real.costScalar; }
+  // Reconcile the stored list against REAL_GEAR_PIECES, keyed by name: REAL_GEAR_PIECES owns every
+  // game-sourced field (color, installs, set bonus, cost curve) and the store owns only the user's
+  // own state (level, owned). So a piece we have since ADDED appears, a piece we have since removed
+  // or renamed disappears, and a corrected install target or cost reaches an existing account
+  // instead of being frozen at whatever was saved.
+  //
+  // This replaces a narrower costBase/costScalar backfill that sat here. That patch treated one
+  // symptom of this same root cause -- the stored list being authoritative -- and adding the White
+  // set proved the general case was still broken: the five new pieces never appeared for anyone who
+  // had ever opened the Ships page, so `getGearSets().pieces.filter(color === 'White')` was empty
+  // while the freshly-seeded defaults looked perfectly correct. Same prune-and-merge shape as
+  // getShipGear above; keep the two consistent.
+  const byName = new Map(window.store.gearSets.pieces.map((p) => [p.name, p]));
+  window.store.gearSets.pieces = REAL_GEAR_PIECES.map((real) => {
+    const saved = byName.get(real.name);
+    return { ...real, level: saved ? (saved.level || 0) : 0, owned: saved ? !!saved.owned : false };
   });
   return window.store.gearSets;
 }
@@ -1307,6 +1345,7 @@ function renderHexGrid(container, catalog, levels, options = {}) {
 const GEAR_COLOR_STYLES = {
   Purple: 'border-purple-500 bg-purple-900/20', Orange: 'border-orange-500 bg-orange-900/20',
   Red: 'border-red-500 bg-red-900/20', Green: 'border-green-500 bg-green-900/20', Blue: 'border-blue-500 bg-blue-900/20',
+  White: 'border-slate-200 bg-slate-100/10',
 };
 function installLabel(code) {
   const parsed = parseInstallCode(code);
@@ -1334,7 +1373,7 @@ function renderGearSetsPage(root) {
     <div class="mb-4 rounded-lg overflow-hidden shadow-lg">
       <div class="bg-gradient-to-r from-blue-900 to-gray-800 px-5 py-4 border-b border-gray-600">
         <h1 class="text-xl font-bold">Gear Sets</h1>
-        <p class="text-xs text-gray-300 mt-0.5">Crafted/leveled with Academy Points (unlocked via Zeus). Data transcribed from cifi.fandom.com/wiki/Gear_Sets. Each piece's own level buffs its 2 target installs multiplicatively (x1.01/level, x1.02/level), and each piece's own Set Bonus applies once its whole color is owned -- both feed into the Fleet page's resource totals.</p>
+        <p class="text-xs text-gray-300 mt-0.5">Crafted/leveled with Academy Points (unlocked via Zeus). Data transcribed from cifi.fandom.com/wiki/Gear_Sets, except the White set, which the wiki does not document and whose install targets and costs come from the game itself (its names and set bonuses are not known). Each piece's own level buffs its 2 target installs multiplicatively (x1.01/level, x1.02/level), and each piece's own Set Bonus applies once its whole color is owned -- both feed into the Fleet page's resource totals.</p>
       </div>
       <div class="bg-gray-800/70 px-4 py-3 border-t border-gray-700">
         <h3 class="text-xs font-semibold text-gray-300 mb-2">Gear Effective Path -- what to buy next, by resource</h3>
@@ -1369,7 +1408,12 @@ function renderGearSetsPage(root) {
       row.innerHTML = `
         <div class="flex items-center gap-1.5"><input type="checkbox" data-f="owned" ${piece.owned ? 'checked' : ''} class="accent-blue-500" /><span class="text-sm text-white">${escapeHtml(piece.name)}</span></div>
         <div><label class="block text-[10px] text-gray-400">Level</label><input type="number" min="0" data-f="level" value="${piece.level || 0}" class="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-white text-xs" /></div>
-        <div class="text-xs text-gray-400"><span class="text-gray-500">Set Bonus:</span> ${escapeHtml(piece.setBonus)}</div>
+        <div class="text-xs text-gray-400"><span class="text-gray-500">Set Bonus:</span> ${piece.setBonus
+          ? escapeHtml(piece.setBonus)
+          // An empty setBonus means we know the piece exists but not what its bonus multiplies --
+          // say so, rather than rendering a blank that reads as a broken field. See the White
+          // entries in REAL_GEAR_PIECES for why those five are the only ones in this state.
+          : '<span class="text-gray-500 italic">not known &mdash; not applied</span>'}</div>
         ${installMultDisplay(piece.install1, 1.01, piece.level)}
         ${installMultDisplay(piece.install2, 1.02, piece.level)}`;
       row.querySelectorAll('[data-f]').forEach((el) => {

@@ -652,6 +652,38 @@ think one is wrong, disprove it with a test.
   which is the same two-sources-of-truth bug wearing a different hat. `route-test.js` pins both
   directions: unknown routes normalise, AND every route `render()` dispatches on survives (a
   whitelist that is too aggressive would silently send real pages to the sim page).
+- **Gear cost tier is a small enum, and the tier — not the base cost — picks the scalar.**
+  `Gear.CostTier` is `Tier1..Tier6` (0..5), and every one of the 22 wiki-sourced pieces agrees
+  exactly with `0→1.10, 1→1.11, 2→1.12, 3→1.13, 4→1.14`, with each piece's `costBase` equal to the
+  game's own `BaseCost` (including the RedItem3 = 44 outlier, which is real). This **disproves the
+  tempting `scalar = 1.1 + (base-3)*0.01` shortcut** — the Orange pieces all share base 4 while
+  spanning tiers 0/3/4/1, so base cost does not determine the scalar and the coincidence only holds
+  because the two happen to correlate over most of the table.
+- **The White gear set is now modelled, and its five fields sit at three different confidences —
+  don't flatten them.** Installs are the strongest data in the gear table: taken from the game's own
+  `RU<Category><n>Bonus` dispatch, so `gear-install-check.js` now verifies 54 mappings (was 44).
+  `costBase 6` / `CostTier = Tier5 → 1.14` are read off the authored asset. **Names and set bonuses
+  are NOT sourced and are deliberately left as `White Piece N` / `''`.**
+- **Gear piece NAMES are not in the shipped files at all — not even for the pieces we "have".**
+  `grep "Cell Battery"` returns zero hits in `level0`, `sharedassets0.assets`,
+  `globalgamemanagers.assets`, `global-metadata.dat` **and** `libil2cpp.so`. So every gear name in
+  this repo came from the wiki, never from the game; they are populated at runtime from localization
+  data the APK we have does not carry. White has no wiki page, hence no names. The game DOES give
+  the magnitudes (`WhiteSetBonus1..5` = 1e50, 1e65, 2.5, 150, 10, `WhiteSetBonusRequirement` 5) but
+  not which RESOURCE each multiplies — and 2.5/150/10 sit in the same range as the Mod Point / Cell
+  / Research bonuses, which makes a resource assignment *guessable*. Guessing where a x1e65 lands is
+  exactly how a wrong number acquires a confident comment. An empty `setBonus` contributes nothing
+  (`computeGearSetBonusMultipliers` already does `if (!m) return`) and the UI renders it as
+  "not known — not applied" rather than a blank that reads as a broken field.
+- **`getGearSets()` reconciles the stored list against `REAL_GEAR_PIECES` by name; it used to
+  return the stored list verbatim.** That meant the store, not the code, was authoritative for
+  game-sourced data: **any piece added later never appeared for anyone who had ever opened the Ships
+  page**, and a corrected install target or cost stayed frozen at whatever was saved. It had already
+  been patched once for the narrow case (a costBase/costScalar backfill), which treated the symptom.
+  Adding White exposed the general case — the five pieces were invisible while freshly-seeded
+  defaults looked perfectly correct, so this fails *silently and only for real users*. The rule:
+  `REAL_GEAR_PIECES` owns every game-sourced field, the store owns only `level`/`owned`. Same
+  prune-and-merge shape as `getShipGear`; keep the two consistent.
 - **Legality is a state predicate, not a path predicate.** A node at level > 0 is legal iff it's
   within `maxLevel`, every dependency parent is > 0, and any `minValue` tier threshold is met by
   points spent in strictly-lower-threshold nodes. Order of purchase never matters. This is what
