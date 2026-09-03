@@ -32,12 +32,34 @@ const numericKey = z.string().regex(/^\d+$/, 'expected a numeric id as the key')
 const nonEmptyRecord = (key, value) => z.record(key, value)
   .refine((o) => Object.keys(o).length > 0, { message: 'is empty -- the extractor produced nothing' });
 
+// A BigDouble as the game serialises it: 16 bytes, a double mantissa then an int64 exponent.
+const bigDouble = z.object({ mantissa: z.number(), exponent: z.number().int() }).strict();
+
 const schemas = {
   'badge-map.json': z.object({
     ...meta,
     // category -> the badges EVERY node of that category multiplies in
     perCategory: nonEmptyRecord(z.string(), z.array(z.string().regex(/^(Dark)?Badge\d+$/))),
     values: nonEmptyRecord(z.string(), z.number().positive()),
+  }).strict(),
+
+  // Tier-2 relic caps come from ScriptableObjects, not from a MonoBehaviour field, so this file is
+  // parsed by a bespoke offset reader rather than typetree.py. That makes a silent shape drift more
+  // likely here than anywhere else -- a BigDouble read at the wrong offset yields a real-looking
+  // number, never an error -- so the value bounds below are part of the check, not decoration.
+  'relic-tier2.json': z.object({
+    ...meta,
+    _crossCheck: z.string().min(1),
+    relics: nonEmptyRecord(z.string().regex(/^t2r\d+$/), z.object({
+      startCost: bigDouble,
+      additiveCostIncrease: bigDouble,
+      costExponent: bigDouble,
+      baseMaxLevel: bigDouble,
+      bonusPerLevel1: bigDouble,
+      bonusPerLevel2: bigDouble,
+      // the cap CheckRelicMaxLevel() enforces; a 0 or a fraction means the parse drifted
+      maxLevel: z.number().int().min(1).max(1000),
+    }).strict()),
   }).strict(),
 
   'node-factors.json': z.object({

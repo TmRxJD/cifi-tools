@@ -1,0 +1,277 @@
+{
+  "_source": "OuroRelics.T2RelicValues -> Relic ScriptableObjects in sharedassets0.assets; field order and offsets from dump.cs's `public class Relic : ScriptableObject`. The cap is the field CheckRelicMaxLevel() compares against (Relic+0x50 = baseMaxLevel's exponent half, the BigDouble +8 case).",
+  "_game": "apk-0.7.3.61",
+  "_crossCheck": "bonusPerLevel1 matches the live cifi-tools bundle's `value:` for the same relic (t2r5 1.08, t2r7 1.02), which is what confirms the field offsets.",
+  "relics": {
+    "t2r1": {
+      "startCost": {
+        "mantissa": 1.2,
+        "exponent": 5
+      },
+      "additiveCostIncrease": {
+        "mantissa": 2.5,
+        "exponent": 5
+      },
+      "costExponent": {
+        "mantissa": 1.1,
+        "exponent": 1
+      },
+      "baseMaxLevel": {
+        "mantissa": 1.0,
+        "exponent": 1
+      },
+      "bonusPerLevel1": {
+        "mantissa": 1.0,
+        "exponent": 0
+      },
+      "bonusPerLevel2": {
+        "mantissa": 0.0,
+        "exponent": 0
+      },
+      "maxLevel": 10
+    },
+    "t2r2": {
+      "startCost": {
+        "mantissa": 1.2,
+        "exponent": 5
+      },
+      "additiveCostIncrease": {
+        "mantissa": 1.0,
+        "exponent": 5
+      },
+      "costExponent": {
+        "mantissa": 1.085,
+        "exponent": 0
+      },
+      "baseMaxLevel": {
+        "mantissa": 1.0,
+        "exponent": 2
+      },
+      "bonusPerLevel1": {
+        "mantissa": 1.8,
+        "exponent": 0
+      },
+      "bonusPerLevel2": {
+        "mantissa": 0.0,
+        "exponent": 0
+      },
+      "maxLevel": 100
+    },
+    "t2r3": {
+      "startCost": {
+        "mantissa": 5.5,
+        "exponent": 5
+      },
+      "additiveCostIncrease": {
+        "mantissa": 8.0,
+        "exponent": 4
+      },
+      "costExponent": {
+        "mantissa": 1.7,
+        "exponent": 0
+      },
+      "baseMaxLevel": {
+        "mantissa": 8.0,
+        "exponent": 1
+      },
+      "bonusPerLevel1": {
+        "mantissa": 1.0,
+        "exponent": 0
+      },
+      "bonusPerLevel2": {
+        "mantissa": 0.0,
+        "exponent": 0
+      },
+      "maxLevel": 80
+    },
+    "t2r4": {
+      "startCost": {
+        "mantissa": 3.0,
+        "exponent": 6
+      },
+      "additiveCostIncrease": {
+        "mantissa": 5.0,
+        "exponent": 4
+      },
+      "costExponent": {
+        "mantissa": 1.2,
+        "exponent": 0
+      },
+      "baseMaxLevel": {
+        "mantissa": 2.5,
+        "exponent": 1
+      },
+      "bonusPerLevel1": {
+        "mantissa": 2.0,
+        "exponent": -2
+      },
+      "bonusPerLevel2": {
+        "mantissa": 0.0,
+        "exponent": 0
+      },
+      "maxLevel": 25
+    },
+    "t2r5": {
+      "startCost": {
+        "mantissa": 1.3,
+        "exponent": 6
+      },
+      "additiveCostIncrease": {
+        "mantissa": 3.0,
+        "exponent": 5
+      },
+      "costExponent": {
+        "mantissa": 1.35,
+        "exponent": 0
+      },
+      "baseMaxLevel": {
+        "mantissa": 1.0,
+        "exponent": 2
+      },
+      "bonusPerLevel1": {
+        "mantissa": 1.08,
+        "exponent": 0
+      },
+      "bonusPerLevel2": {
+        "mantissa": 0.0,
+        "exponent": 0
+      },
+      "maxLevel": 100
+    },
+    "t2r6": {
+      "startCost": {
+        "mantissa": 1.0,
+        "exponent": 6
+      },
+      "additiveCostIncrease": {
+        "mantissa": 2.0,
+        "exponent": 6
+      },
+      "costExponent": {
+        "mantissa": 1.11,
+        "exponent": 0
+      },
+      "baseMaxLevel": {
+        "mantissa": 4.0,
+        "exponent": 1
+      },
+      "bonusPerLevel1": {
+        "mantissa": 2.0,
+        "exponent": -2
+      },
+      "bonusPerLevel2": {
+        "mantissa": 0.0,
+        "exponent": 0
+      },
+      "maxLevel": 40
+    },
+    "t2r7": {
+      "startCost": {
+        "mantissa": 3.0,
+        "exponent": 5
+      },
+      "additiveCostIncrease": {
+        "mantissa": 8.5,
+        "exponent": 5
+      },
+      "costExponent": {
+        "mantissa": 1.71,
+        "exponent": 0
+      },
+      "baseMaxLevel": {
+        "mantissa": 4.0,
+        "exponent": 1
+      },
+      "bonusPerLevel1": {
+        "mantissa": 1.02,
+        "exponent": 0
+      },
+      "bonusPerLevel2": {
+        "mantissa": 0.0,
+        "exponent": 0
+      },
+      "maxLevel": 40
+    },
+    "t2r8": {
+      "startCost": {
+        "mantissa": 2.1,
+        "exponent": 6
+      },
+      "additiveCostIncrease": {
+        "mantissa": 8.4,
+        "exponent": 5
+      },
+      "costExponent": {
+        "mantissa": 1.42,
+        "exponent": 0
+      },
+      "baseMaxLevel": {
+        "mantissa": 2.1,
+        "exponent": 1
+      },
+      "bonusPerLevel1": {
+        "mantissa": 2.1,
+        "exponent": -2
+      },
+      "bonusPerLevel2": {
+        "mantissa": 0.0,
+        "exponent": 0
+      },
+      "maxLevel": 21
+    },
+    "t2r9": {
+      "startCost": {
+        "mantissa": 8.0,
+        "exponent": 5
+      },
+      "additiveCostIncrease": {
+        "mantissa": 8.0,
+        "exponent": 4
+      },
+      "costExponent": {
+        "mantissa": 1.45,
+        "exponent": 0
+      },
+      "baseMaxLevel": {
+        "mantissa": 1.0,
+        "exponent": 2
+      },
+      "bonusPerLevel1": {
+        "mantissa": 1.0,
+        "exponent": 2
+      },
+      "bonusPerLevel2": {
+        "mantissa": 0.0,
+        "exponent": 0
+      },
+      "maxLevel": 100
+    },
+    "t2r10": {
+      "startCost": {
+        "mantissa": 6.0,
+        "exponent": 6
+      },
+      "additiveCostIncrease": {
+        "mantissa": 8.0,
+        "exponent": 4
+      },
+      "costExponent": {
+        "mantissa": 1.5,
+        "exponent": 1
+      },
+      "baseMaxLevel": {
+        "mantissa": 5.0,
+        "exponent": 0
+      },
+      "bonusPerLevel1": {
+        "mantissa": 5.0,
+        "exponent": -4
+      },
+      "bonusPerLevel2": {
+        "mantissa": 0.0,
+        "exponent": 0
+      },
+      "maxLevel": 5
+    }
+  }
+}
