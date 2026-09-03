@@ -274,6 +274,24 @@ think one is wrong, disprove it with a test.
   - **Knox has a 9th talent in the game (cap 50, the Ultima signature) that we correctly do NOT
     model** — `params.json` exposes no `ultima` argument for Knox, so the evaluator has nowhere to
     put it. Adding it would be an input that reaches nothing. Do not "fix" this.
+- **Crew and Rank are NOT the save's `Ship{n}CrewLevel` / `Ship{n}Rank`.** Those are only what the
+  player bought. From the recovered C# (FleetManager):
+  `FinalCradleCrew = LM.LM240Bonus + MM.Ship1CrewLevel + Market.FinalISFreeCradleCrew`, and
+  `FinalCradleRank = LM.LM239Bonus1 + MM.Ship1Rank + Market.FinalISFreeCradleRanks +
+  RL.FinalAllShipsRanksBonus`; MultiverseMarket sets `FinalISFreeCradleCrew = IS49Bonus *
+  IS49Level` (8 crew per level; 1 rank per level via IS48), same shape per ship.
+  **Crew multiplies every install node's bonus linearly, so importing the raw field understated
+  every fleet number** -- on the reference save Cradle crew 600 -> 680 (~13% on all its install
+  bonuses) and rank 106 -> 114. `shipSchema.js` now adds the free grants and records
+  `purchasedCrewLevel`/`freeCrew` alongside the total. `unmodelledCrewRankTerms()` reports the two
+  terms still missing (LM239/LM240 -- loop-mods.json has their costs but not their per-level
+  Bonus -- and `FinalAllShipsRanksBonus`) rather than dropping them silently.
+- **Ship EVOLUTION does not affect install-node bonuses, so it cannot change optimizer ranking.**
+  Checked, not assumed: no `RUGen*Bonus` property references Evo at all. `SetShip<n>EvoBonus`
+  switches over `EvoBonus<Ship>1..7` by evo level and raises the result to
+  `GemPerks.AttractionGU6BonusCalc`, but that product lands on production, not on the install
+  chain. `input.evo` is therefore imported and displayed but deliberately unused in the math --
+  that is correct, not an omission.
 - **Ship install bonuses MULTIPLY as independent factors, and Meltdown exponentiates the whole
   product exactly ONCE.** Read out of `libil2cpp.so` and confirmed twice — by hand from capstone,
   then independently from Ghidra-decompiled C via `tools/il2cpp-cli/decompile.py`:
