@@ -186,77 +186,51 @@ const SHIP_NODE_CATALOG = {
   },
 };
 
-// Fleet Boosts: Inscryptions and Loop Mods that directly grant Ship Rank Points and/or Crew
-// (or a flat % bonus per rank-up/crew, via `pctEffect`, folded into computeResourceBonuses
-// below). Transcribed from cifi.fandom.com/wiki/Inscryptions and /wiki/Loop_Modifications --
-// re-surveyed in full (49 Inscryptions, 281 Loop Mods) to confirm every ship/fleet-flavored
-// entry is captured, including Cost Modification / Automation Module items which don't affect
-// any resource total (no cost/currency model exists in this tool) but are still listed for
-// visibility via `note`.
+// Fleet Boosts: Loop Mods with a flat % bonus per rank-up/crew, via `pctEffect`, folded into
+// computeResourceBonuses below. Transcribed from cifi.fandom.com/wiki/Loop_Modifications.
+//
+// Crew/Rank-Up/Rank-Point GRANTING items (the "Free Crew"/"Free Rank-Up" inscriptions, and every
+// Loop Mod whose only effect was +sp/+crew) are deliberately NOT modeled here -- removed
+// 2026-09-02. The game already stores Crew and Rank Points as single account-wide numbers per
+// ship (Ship{n}CrewLevel, Ship{n}RankPoints -- see Ship Setup's rank/crew/rank-point fields,
+// which already include the effect of every one of those grants), so re-deriving that same total
+// by summing a dozen individual inscription/loop-mod levels was redundant complexity: it can
+// only ever match what the account already displays, never add information the typed-in number
+// doesn't already have. Removing the sources doesn't remove any real capability -- just type the
+// real Crew/Rank Points into Ship Setup directly (or import a save, which fills them in exactly
+// the same way). Only items with a REAL, separate effect (a %-bonus that merely scales BY crew
+// or rank count, not a source OF it) remain below.
 const FLEET_BOOST_ITEMS = [
-  // `saveId` = the shared inscryptions.i{n} globalUpgrades key that saveImport.js's
-  // FLEET_INSCRYPTION_IDS sweep populates from the save's real `IS{n}Level` field -- Inscription
-  // items read/write there (see getBoostLevel/setBoostLevel) instead of the custom
-  // fleetBoosts.levels store, so importing a save autofills them exactly like every hunter
-  // inscription already does.
-  // "Free X Rank-Up" grants a RANK directly (already-applied, permanent) -- distinct from `sp`
-  // (an unspent rank POINT still waiting to be spent). Modeled as `rank: 1` per level so it adds
-  // straight onto the imported save's Rank the same way `crew` grants add onto Crew, instead of
-  // being folded into the "Points available to spend" total where it doesn't belong.
-  { key: 'insc48', saveId: 'i48', name: 'Inscryption #48: Free Cradle Rank-Up', source: 'Inscryption', max: 8, ship: 1, grants: [{ ships: [1], rank: 1 }] },
-  { key: 'insc49', saveId: 'i49', name: 'Inscryption #49: Free Cradle Crew', source: 'Inscryption', max: 10, ship: 1, grants: [{ ships: [1], crew: 8 }] },
-  // #50-68: same max/grant pattern as Cradle's #48/#49, confirmed by the user directly (the
-  // wiki's Inscryptions table only documents up to #49 -- it's missing every other ship's pair).
-  { key: 'insc50', saveId: 'i50', name: 'Inscryption #50: Free Auxesia Rank-Up', source: 'Inscryption', max: 8, ship: 2, grants: [{ ships: [2], rank: 1 }] },
-  { key: 'insc51', saveId: 'i51', name: 'Inscryption #51: Free Auxesia Crew', source: 'Inscryption', max: 10, ship: 2, grants: [{ ships: [2], crew: 8 }] },
-  { key: 'insc53', saveId: 'i53', name: 'Inscryption #53: Free Zagreus Rank-Up', source: 'Inscryption', max: 8, ship: 3, grants: [{ ships: [3], rank: 1 }] },
-  { key: 'insc54', saveId: 'i54', name: 'Inscryption #54: Free Zagreus Crew', source: 'Inscryption', max: 10, ship: 3, grants: [{ ships: [3], crew: 8 }] },
-  { key: 'insc55', saveId: 'i55', name: 'Inscryption #55: Free Hephaestus Rank-Up', source: 'Inscryption', max: 8, ship: 4, grants: [{ ships: [4], rank: 1 }] },
-  { key: 'insc56', saveId: 'i56', name: 'Inscryption #56: Free Hephaestus Crew', source: 'Inscryption', max: 10, ship: 4, grants: [{ ships: [4], crew: 8 }] },
-  { key: 'insc64', saveId: 'i64', name: 'Inscryption #64: Free Demeter Rank-Up', source: 'Inscryption', max: 8, ship: 5, grants: [{ ships: [5], rank: 1 }] },
-  { key: 'insc65', saveId: 'i65', name: 'Inscryption #65: Free Demeter Crew', source: 'Inscryption', max: 10, ship: 5, grants: [{ ships: [5], crew: 8 }] },
-  { key: 'insc67', saveId: 'i67', name: 'Inscryption #67: Free Koios Rank-Up', source: 'Inscryption', max: 8, ship: 6, grants: [{ ships: [6], rank: 1 }] },
-  { key: 'insc68', saveId: 'i68', name: 'Inscryption #68: Free Koios Crew', source: 'Inscryption', max: 10, ship: 6, grants: [{ ships: [6], crew: 8 }] },
-  { key: 'lm_cra_sp', name: 'Cradle Rank Point Transmission', source: 'Loop Mod', max: 50, ship: 1, grants: [{ ships: [1], sp: 1 }] },
-  { key: 'lm_aux_sp', name: 'Auxesia Rank Point Transmission', source: 'Loop Mod', max: 50, ship: 2, grants: [{ ships: [2], sp: 1 }] },
-  { key: 'lm_zag_sp', name: 'Zagreus Rank Point Transmission', source: 'Loop Mod', max: 50, ship: 3, grants: [{ ships: [3], sp: 1 }] },
-  { key: 'lm_hep_sp', name: 'Hephaestus Rank Point Transmission', source: 'Loop Mod', max: 50, ship: 4, grants: [{ ships: [4], sp: 1 }] },
-  { key: 'lm_dem_sp', name: 'Demeter Rank Point Transmission', source: 'Loop Mod', max: 50, ship: 5, grants: [{ ships: [5], sp: 1 }] },
-  { key: 'lm_koi_sp', name: 'Koios Rank Point Transmission', source: 'Loop Mod', max: 25, ship: 6, grants: [{ ships: [6], sp: 1 }] },
-  { key: 'lm_zeus_sp', name: 'Zeus Rank Point Transmission', source: 'Loop Mod', max: 25, ship: 7, grants: [{ ships: [7], sp: 1 }] },
-  { key: 'lm_fleet_sp', name: 'Fleet Rank Point Transmissions', source: 'Loop Mod', max: 25, grants: [{ ships: [1, 2, 3, 4, 5, 6, 7], sp: 1 }] },
-  { key: 'lm_rule_cradle', name: 'Ultima Loop Mod: Rule of the Cradle', source: 'Loop Mod', max: 7, ship: 1, grants: [{ ships: [1], sp: 8 }], pctEffect: { ships: [1], resource: 'allGens', perLevel: 8, per: 'rank' }, note: "Doesn't count toward rank-up requirement. Also grants +8% All Gens output per Cradle rank-up." },
-  { key: 'lm_rule_loyalty', name: 'Ultima Loop Mod: Rule of Loyalty', source: 'Loop Mod', max: 999, grants: [{ ships: [1, 2, 3, 4, 5, 6, 7], sp: 1, crew: 1 }], note: 'Ouroboros excluded. No level cap in-game; neither grant counts toward rank-up requirement.' },
-  { key: 'lm_rule_destruction', name: 'Ultima Loop Mod: Rule of Destruction', source: 'Loop Mod', max: 10, grants: [{ ships: [1, 2, 3, 4, 5, 6, 7], sp: 3 }], note: 'Also 2% MP per Player Level, crew costs -1e20, x50 Shards, x3 AP.' },
-  { key: 'lm_algd_delta', name: 'Accumulative Level Growth Module Delta', source: 'Loop Mod', max: 10, grants: [{ ships: [1, 2, 5], sp: 3 }], note: 'Also +12%/Player-Level to Cells and +6 flat LP.' },
-  { key: 'lm_algd_fenix', name: 'Accumulative Level Growth Module Fenix', source: 'Loop Mod', max: 5, grants: [{ ships: [1, 2, 5], sp: 6 }, { ships: [3, 4, 6], sp: 4 }] },
+  // Rule of the Cradle kept its pctEffect (a real, separate +8% All Gens/rank-up bonus); its old
+  // `sp: 8` grant (the ONLY thing removed here) is gone for the reason above.
+  { key: 'lm_rule_cradle', name: 'Ultima Loop Mod: Rule of the Cradle', source: 'Loop Mod', max: 7, ship: 1, pctEffect: { ships: [1], resource: 'allGens', perLevel: 8, per: 'rank' }, note: 'Grants +8% All Gens output per Cradle rank-up (its own separate +8 Rank Points/level grant is not modeled -- see the note above this list).' },
   // Rank Benefits Modules -- % increase to a specific resource per rank-up, multiplicative.
-  { key: 'lm_rb_cra', name: 'Cradle Rank Benefits Module', source: 'Loop Mod', max: 10, ship: 1, grants: [], pctEffect: { ships: [1], resource: 'cells', perLevel: 2.5, per: 'rank' } },
-  { key: 'lm_rb_aux', name: 'Auxesia Rank Benefits Module', source: 'Loop Mod', max: 10, ship: 2, grants: [], pctEffect: { ships: [2], resource: 'mk1', perLevel: 0.7, per: 'rank' }, note: 'Applies to MK1, MK2, MK3 & MK4 outputs collectively.' },
-  { key: 'lm_rb_zag', name: 'Zagreus Rank Benefits Module', source: 'Loop Mod', max: 10, ship: 3, grants: [], pctEffect: { ships: [3], resource: 'modPoints', perLevel: 2, per: 'rank' } },
-  { key: 'lm_rb_hep', name: 'Hephaestus Rank Benefits Module', source: 'Loop Mod', max: 10, ship: 4, grants: [], pctEffect: { ships: [4], resource: 'mk5', perLevel: 3, per: 'rank' } },
-  { key: 'lm_rb_dem', name: 'Demeter Rank Benefits Module', source: 'Loop Mod', max: 10, ship: 5, grants: [], pctEffect: { ships: [5], resource: 'shards', perLevel: 2, per: 'rank' } },
-  { key: 'lm_rb_koi', name: 'Koios Rank Benefits Module', source: 'Loop Mod', max: 10, ship: 6, grants: [], pctEffect: { ships: [6], resource: 'researchPoints', perLevel: 1, per: 'rank' } },
-  { key: 'lm_rb_zeus', name: 'Zeus Rank Benefits Module', source: 'Loop Mod', max: 10, ship: 7, grants: [], pctEffect: { ships: [7], resource: 'missionMaterials', perLevel: 1, per: 'rank' } },
+  { key: 'lm_rb_cra', name: 'Cradle Rank Benefits Module', source: 'Loop Mod', max: 10, ship: 1, pctEffect: { ships: [1], resource: 'cells', perLevel: 2.5, per: 'rank' } },
+  { key: 'lm_rb_aux', name: 'Auxesia Rank Benefits Module', source: 'Loop Mod', max: 10, ship: 2, pctEffect: { ships: [2], resource: 'mk1', perLevel: 0.7, per: 'rank' }, note: 'Applies to MK1, MK2, MK3 & MK4 outputs collectively.' },
+  { key: 'lm_rb_zag', name: 'Zagreus Rank Benefits Module', source: 'Loop Mod', max: 10, ship: 3, pctEffect: { ships: [3], resource: 'modPoints', perLevel: 2, per: 'rank' } },
+  { key: 'lm_rb_hep', name: 'Hephaestus Rank Benefits Module', source: 'Loop Mod', max: 10, ship: 4, pctEffect: { ships: [4], resource: 'mk5', perLevel: 3, per: 'rank' } },
+  { key: 'lm_rb_dem', name: 'Demeter Rank Benefits Module', source: 'Loop Mod', max: 10, ship: 5, pctEffect: { ships: [5], resource: 'shards', perLevel: 2, per: 'rank' } },
+  { key: 'lm_rb_koi', name: 'Koios Rank Benefits Module', source: 'Loop Mod', max: 10, ship: 6, pctEffect: { ships: [6], resource: 'researchPoints', perLevel: 1, per: 'rank' } },
+  { key: 'lm_rb_zeus', name: 'Zeus Rank Benefits Module', source: 'Loop Mod', max: 10, ship: 7, pctEffect: { ships: [7], resource: 'missionMaterials', perLevel: 1, per: 'rank' } },
   // Crew Motivation Modules -- % increase to a specific resource per crew member, multiplicative.
-  { key: 'lm_cm_cra', name: 'Cradle Crew Motivation Module', source: 'Loop Mod', max: 20, ship: 1, grants: [], pctEffect: { ships: [1], resource: 'mk1', perLevel: 0.5, per: 'crew' } },
-  { key: 'lm_cm_aux', name: 'Auxesia Crew Motivation Module', source: 'Loop Mod', max: 20, ship: 2, grants: [], pctEffect: { ships: [2], resource: 'mk2', perLevel: 0.5, per: 'crew' } },
-  { key: 'lm_cm_zag', name: 'Zagreus Crew Motivation Module', source: 'Loop Mod', max: 20, ship: 3, grants: [], pctEffect: { ships: [3], resource: 'mk3', perLevel: 0.5, per: 'crew' } },
-  { key: 'lm_cm_hep', name: 'Hephaestus Crew Motivation Module', source: 'Loop Mod', max: 20, ship: 4, grants: [], pctEffect: { ships: [4], resource: 'mk4', perLevel: 0.5, per: 'crew' } },
-  { key: 'lm_cm_dem', name: 'Demeter Crew Motivation Module', source: 'Loop Mod', max: 20, ship: 5, grants: [], pctEffect: { ships: [5], resource: 'mk5', perLevel: 0.5, per: 'crew' } },
-  { key: 'lm_cm_koi', name: 'Koios Crew Motivation Module', source: 'Loop Mod', max: 20, ship: 6, grants: [], pctEffect: { ships: [6], resource: 'researchPoints', perLevel: 2, per: 'crew' } },
-  { key: 'lm_cm_zeus', name: 'Zeus Crew Motivation Module', source: 'Loop Mod', max: 10, ship: 7, grants: [], pctEffect: { ships: [7], resource: 'academyPoints', perLevel: 0.5, per: 'crew' } },
+  { key: 'lm_cm_cra', name: 'Cradle Crew Motivation Module', source: 'Loop Mod', max: 20, ship: 1, pctEffect: { ships: [1], resource: 'mk1', perLevel: 0.5, per: 'crew' } },
+  { key: 'lm_cm_aux', name: 'Auxesia Crew Motivation Module', source: 'Loop Mod', max: 20, ship: 2, pctEffect: { ships: [2], resource: 'mk2', perLevel: 0.5, per: 'crew' } },
+  { key: 'lm_cm_zag', name: 'Zagreus Crew Motivation Module', source: 'Loop Mod', max: 20, ship: 3, pctEffect: { ships: [3], resource: 'mk3', perLevel: 0.5, per: 'crew' } },
+  { key: 'lm_cm_hep', name: 'Hephaestus Crew Motivation Module', source: 'Loop Mod', max: 20, ship: 4, pctEffect: { ships: [4], resource: 'mk4', perLevel: 0.5, per: 'crew' } },
+  { key: 'lm_cm_dem', name: 'Demeter Crew Motivation Module', source: 'Loop Mod', max: 20, ship: 5, pctEffect: { ships: [5], resource: 'mk5', perLevel: 0.5, per: 'crew' } },
+  { key: 'lm_cm_koi', name: 'Koios Crew Motivation Module', source: 'Loop Mod', max: 20, ship: 6, pctEffect: { ships: [6], resource: 'researchPoints', perLevel: 2, per: 'crew' } },
+  { key: 'lm_cm_zeus', name: 'Zeus Crew Motivation Module', source: 'Loop Mod', max: 10, ship: 7, pctEffect: { ships: [7], resource: 'academyPoints', perLevel: 0.5, per: 'crew' } },
   // Cost Modification Modules -- divide crew/evolution/generator costs. No cost model exists
   // in this tool (it works off install budgets, not currency), so these are listed for
   // tracking only, not wired into any calculation.
-  { key: 'lm_cost_cra', name: 'Cradle Cost Modification Module', source: 'Loop Mod', max: 200, ship: 1, grants: [], note: 'Divides cost of Cradle crew, evolution, and MK1 generators by 10.' },
-  { key: 'lm_cost_aux', name: 'Auxesia Cost Modification Module', source: 'Loop Mod', max: 200, ship: 2, grants: [], note: 'Divides cost of Auxesia crew, evolution, and MK2 generators by 10.' },
-  { key: 'lm_cost_zag', name: 'Zagreus Cost Modification Module', source: 'Loop Mod', max: 200, ship: 3, grants: [], note: 'Divides cost of Zagreus crew, evolution, and MK3 generators by 10.' },
-  { key: 'lm_cost_hep', name: 'Hephaestus Cost Modification Module', source: 'Loop Mod', max: 200, ship: 4, grants: [], note: 'Divides cost of Hephaestus crew, evolution, and MK4 generators by 10.' },
-  { key: 'lm_cost_dem', name: 'Demeter Cost Modification Module', source: 'Loop Mod', max: 200, ship: 5, grants: [], note: 'Divides cost of Demeter crew, evolution, and MK5 generators by 10.' },
-  { key: 'lm_cost_koi', name: 'Koios Cost Modification Module', source: 'Loop Mod', max: 200, ship: 6, grants: [], note: 'Divides cost of Koios crew, evolution, and MK6 generators by 10.' },
-  { key: 'lm_cost_zeus', name: 'Zeus Cost Modification Module', source: 'Loop Mod', max: 200, ship: 7, grants: [], note: 'Divides cost of Zeus crew, evolution, and MK7 generators by 10.' },
-  { key: 'lm_cost_fleet', name: 'Fleet Cost Modification Module', source: 'Loop Mod', max: 200, grants: [], note: 'Divides cost of all ships crew, evolutions, and MK1-7 generators by 100000.' },
+  { key: 'lm_cost_cra', name: 'Cradle Cost Modification Module', source: 'Loop Mod', max: 200, ship: 1, note: 'Divides cost of Cradle crew, evolution, and MK1 generators by 10.' },
+  { key: 'lm_cost_aux', name: 'Auxesia Cost Modification Module', source: 'Loop Mod', max: 200, ship: 2, note: 'Divides cost of Auxesia crew, evolution, and MK2 generators by 10.' },
+  { key: 'lm_cost_zag', name: 'Zagreus Cost Modification Module', source: 'Loop Mod', max: 200, ship: 3, note: 'Divides cost of Zagreus crew, evolution, and MK3 generators by 10.' },
+  { key: 'lm_cost_hep', name: 'Hephaestus Cost Modification Module', source: 'Loop Mod', max: 200, ship: 4, note: 'Divides cost of Hephaestus crew, evolution, and MK4 generators by 10.' },
+  { key: 'lm_cost_dem', name: 'Demeter Cost Modification Module', source: 'Loop Mod', max: 200, ship: 5, note: 'Divides cost of Demeter crew, evolution, and MK5 generators by 10.' },
+  { key: 'lm_cost_koi', name: 'Koios Cost Modification Module', source: 'Loop Mod', max: 200, ship: 6, note: 'Divides cost of Koios crew, evolution, and MK6 generators by 10.' },
+  { key: 'lm_cost_zeus', name: 'Zeus Cost Modification Module', source: 'Loop Mod', max: 200, ship: 7, note: 'Divides cost of Zeus crew, evolution, and MK7 generators by 10.' },
+  { key: 'lm_cost_fleet', name: 'Fleet Cost Modification Module', source: 'Loop Mod', max: 200, note: 'Divides cost of all ships crew, evolutions, and MK1-7 generators by 100000.' },
 ];
 // Academy Badges / Dark Academy Badges (traded for Innovation/Dark Cores) -- binary
 // purchased-or-not toggles that multiply ship rank-install power directly, folded into
@@ -308,53 +282,25 @@ function getFleetBoosts() {
   if (!window.store.fleetBoosts || !window.store.fleetBoosts.levels) window.store.fleetBoosts = defaultFleetBoosts();
   return window.store.fleetBoosts;
 }
-// Inscription items store their level under the SAME globalUpgrades key the real save's
-// generic inscryptions.i{n} import already populates (see FLEET_INSCRYPTION_IDS in
-// saveImport.js) -- so importing a save autofills them exactly like every hunter inscription.
-// Loop Mod items have no confirmed save field for loop-mod levels yet, so they still fall back
-// to the tool's own custom fleetBoosts.levels store (manual entry only).
+// Every remaining Fleet Boost item is a Loop Mod with no confirmed save field for its level yet,
+// so all of them fall back to the tool's own custom fleetBoosts.levels store (manual entry only).
 function getBoostLevel(item) {
-  if (item.source === 'Inscryption' && item.saveId && window.store) {
-    return window.store.globalUpgrades?.[`inscryptions.${item.saveId}`] || 0;
-  }
   return getFleetBoosts().levels[item.key] || 0;
 }
 function setBoostLevel(item, v) {
   const clamped = Math.max(0, Math.min(item.max, v));
-  if (item.source === 'Inscryption' && item.saveId && window.store) {
-    if (!window.store.globalUpgrades) window.store.globalUpgrades = {};
-    window.store.globalUpgrades[`inscryptions.${item.saveId}`] = clamped;
-  } else {
-    getFleetBoosts().levels[item.key] = clamped;
-  }
-}
-// Sums every Fleet Boost item's grants at its current level -> { [shipId]: { sp, crew, rank } }.
-function computeFleetBoostTotals() {
-  const totals = {};
-  FLEET_BOOST_ITEMS.forEach((item) => {
-    const level = getBoostLevel(item);
-    if (!level) return;
-    item.grants.forEach((grant) => {
-      grant.ships.forEach((shipId) => {
-        if (!totals[shipId]) totals[shipId] = { sp: 0, crew: 0, rank: 0 };
-        totals[shipId].sp += (grant.sp || 0) * level;
-        totals[shipId].crew += (grant.crew || 0) * level;
-        totals[shipId].rank += (grant.rank || 0) * level;
-      });
-    });
-  });
-  return totals;
+  getFleetBoosts().levels[item.key] = clamped;
 }
 // Every Fleet Boost item's pctEffect at its current level for one ship -> { [resource]: multiplier }
-// `per: 'rank'` scales by that ship's rank-up count (input.rank); `per: 'crew'` by its crew
-// count (base + boost grants). Each item's own % converts to its own (1 + pct/100) multiplier and
-// multiplies into the resource's running total -- see computeResourceBonuses for why (matches how
-// node effects now combine too).
+// `per: 'rank'` scales by that ship's rank-up count; `per: 'crew'` by its crew count -- both
+// typed directly into Ship Setup (or save-imported), no separate grant aggregation on top (see
+// FLEET_BOOST_ITEMS' own header comment for why that layer was removed). Each item's own % converts
+// to its own (1 + pct/100) multiplier and multiplies into the resource's running total -- see
+// computeResourceBonuses for why (matches how node effects now combine too).
 function computeFleetPctBonuses(shipId) {
   const input = getShipInput(shipId);
-  const boostTotals = computeFleetBoostTotals()[shipId];
-  const crew = (input.crew || 0) + (boostTotals?.crew || 0);
-  const rank = (input.rank || 0) + (boostTotals?.rank || 0);
+  const crew = input.crew || 0;
+  const rank = input.rank || 0;
   const mults = {};
   FLEET_BOOST_ITEMS.forEach((item) => {
     if (!item.pctEffect) return;
@@ -565,7 +511,7 @@ function nodeOwnBonusPct(shipId, slot, level) {
   const m = meta.effect.match(/([\d.]+)%/);
   if (!m) return 0;
   const gear = getShipGear();
-  const crew = (getShipInput(shipId).crew || 0) + (computeFleetBoostTotals()[shipId]?.crew || 0);
+  const crew = getShipInput(shipId).crew || 0;
   const gearMult = gearMultiplierFor(meta.gearKey, gear);
   const badgeMult = computeFleetBadgeMultipliers()[shipId] || 1;
   const researchMult = (computeFleetResearchShipMultipliers()[shipId] || 1) * badgeMult;
@@ -1033,21 +979,21 @@ function renderShipSetupPage(root) {
     });
   });
 
-  const boostTotals = computeFleetBoostTotals();
   const listEl = document.getElementById('shipSetupList');
   for (let n = 1; n <= 8; n++) {
     const rec = ships[n];
     const input = getShipInput(n);
     const portrait = SHIP_PORTRAITS[n];
     const spent = Object.values(input.installs).reduce((a, b) => a + b, 0);
-    const boost = boostTotals[n];
+    // Rank/Crew/Rank Points are typed in directly (or save-imported) as the account's real,
+    // already-inclusive totals -- no separate grant aggregation on top (see FLEET_BOOST_ITEMS'
+    // header comment). Fleet Analysis 1's SP bonus is a distinct, structured mechanic (a
+    // Research Center level, not an inscription/loop-mod grant), so it's still added here.
     const researchSp = computeFleetResearchSp();
-    const totalSp = input.rankPoints + (boost?.sp || 0) + researchSp;
-    const totalCrew = input.crew + (boost?.crew || 0);
-    const totalRank = input.rank + (boost?.rank || 0);
+    const totalSp = input.rankPoints + researchSp;
     const pointsLabel = totalSp !== input.rankPoints ? `${totalSp} <span class="text-gray-500">(${input.rankPoints})</span>` : input.rankPoints;
-    const crewLabel = totalCrew !== input.crew ? `${totalCrew} <span class="text-gray-500">(${input.crew})</span>` : input.crew;
-    const rankLabel = totalRank !== input.rank ? `${totalRank} <span class="text-gray-500">(${input.rank})</span>` : input.rank;
+    const crewLabel = input.crew;
+    const rankLabel = input.rank;
     const card = document.createElement('div');
     card.className = `bg-gray-800 rounded-lg border border-gray-700 p-3 ${!rec ? 'opacity-50' : ''}`;
     card.innerHTML = `
@@ -1057,7 +1003,7 @@ function renderShipSetupPage(root) {
       </div>
       <div class="grid grid-cols-2 gap-1 text-xs text-gray-400 mb-2">
         <div>Rank <span class="text-white font-medium">${rankLabel}</span></div>
-        <div>Points <span class="text-blue-400 font-medium">${pointsLabel}</span></div>
+        <div>Install Points <span class="text-blue-400 font-medium">${pointsLabel}</span></div>
         <div>Crew <span class="text-white font-medium">${crewLabel}</span></div>
         <div>Evo <span class="text-white font-medium">${input.evo}</span></div>
         <div>Installed <span class="text-white font-medium">${spent}</span></div>
@@ -1406,6 +1352,23 @@ function renderFleetPage(root) {
     tabsRow.appendChild(addBtn);
   }
 
+  // Meltdown: account-wide state (applies to every generator tier's output -- confirmed
+  // directly against the game's own code, see this file's own Meltdown comment), not per-loadout,
+  // so it lives in this persistent toolbar rather than inside the Optimize Loadout modal.
+  // Appended last (not part of the static template above) so `ml-auto` pushes it to the row's
+  // right edge, after every tab pill/button.
+  const meltdownWrap = document.createElement('div');
+  meltdownWrap.className = 'flex items-center gap-1.5 ml-auto flex-shrink-0';
+  meltdownWrap.title = 'Applies to every generator tier\'s output.';
+  meltdownWrap.innerHTML = `
+    <label for="fleetMeltdownInput" class="text-xs text-gray-400">Meltdown</label>
+    <input id="fleetMeltdownInput" type="number" step="0.001" class="w-20 bg-gray-700 border border-gray-600 rounded-md px-2 py-1 text-white text-xs" />`;
+  tabsRow.appendChild(meltdownWrap);
+  const gearForMeltdown = getShipGear();
+  const meltdownInput = document.getElementById('fleetMeltdownInput');
+  meltdownInput.value = gearForMeltdown.meltdown;
+  meltdownInput.onchange = (e) => { gearForMeltdown.meltdown = Number(e.target.value) || 0; window.saveStore(); };
+
   const canvas = document.getElementById('fleetCanvas');
   for (let n = 1; n <= 7; n++) {
     const catalog = SHIP_NODE_CATALOG[n];
@@ -1481,7 +1444,6 @@ function renderFocusWeightSliders(container, weightsObj, presetBtn, onChange) {
 function openNewLoadoutModal() {
   const grid = document.getElementById('newLoadoutShipPoints');
   grid.innerHTML = '';
-  const boostTotals = computeFleetBoostTotals();
   const optSettings = getOptimizerSettings();
   for (let n = 1; n <= 8; n++) {
     if (!SHIP_NODE_CATALOG[n]) continue;
@@ -1493,7 +1455,7 @@ function openNewLoadoutModal() {
     const wrap = document.createElement('div');
     wrap.innerHTML = `<label class="flex items-center gap-1.5 text-xs text-gray-400 mb-1">
         <input type="checkbox" data-ship-enabled="${n}" ${optSettings.shipEnabled[n] !== false ? 'checked' : ''} class="accent-purple-500" />
-        ${shipDisplayName(n)}${boostTotals[n]?.sp ? ` <span class="text-green-500">(${boostTotals[n].sp} from boosts)</span>` : ''}
+        ${shipDisplayName(n)}
       </label>
       <input type="number" min="0" data-ship-points="${n}" value="${prefill}" class="w-full bg-gray-700 border border-gray-600 rounded-md px-2 py-1.5 text-white text-sm" />`;
     grid.appendChild(wrap);
@@ -1508,11 +1470,11 @@ function openNewLoadoutModal() {
   document.getElementById('newLoadoutShortRun').checked = optSettings.runLength === 'short';
   document.getElementById('newLoadoutShortRun').addEventListener('change', (e) => { optSettings.runLength = e.target.checked ? 'short' : 'long'; window.saveStore(); });
   // Focus weights live here (not the Fleet Stats page) -- they're an input to THIS solve, not
-  // a persistent fleet-wide account stat. Meltdown lives here too now (moved off the Fleet page
-  // header -- it's a per-run input to planning, not a fleet-wide display value).
+  // a persistent fleet-wide account stat. Meltdown moved OUT of this modal (2026-09-02) to the
+  // Fleet Optimizer page's own toolbar, next to the loadout tab selectors -- see renderFleetPage
+  // -- since it's account-wide state you check once per session, not something worth reopening
+  // this modal to change.
   const gear = getShipGear();
-  document.getElementById('newLoadoutMeltdown').value = gear.meltdown;
-  document.getElementById('newLoadoutMeltdown').onchange = (e) => { gear.meltdown = Number(e.target.value) || 0; window.saveStore(); };
   renderFocusWeightSliders(document.getElementById('newLoadoutFocusWeights'), gear.focusWeights, document.getElementById('newLoadoutWeightPresetBtn'));
   document.getElementById('newLoadoutModal').classList.remove('hidden');
 }
@@ -1576,7 +1538,7 @@ function nodeLinearIncrement(shipId, slot) {
   const m = meta.effect.match(/([\d.]+)%/);
   if (!m) return 0;
   const gear = getShipGear();
-  const crew = (getShipInput(shipId).crew || 0) + (computeFleetBoostTotals()[shipId]?.crew || 0);
+  const crew = getShipInput(shipId).crew || 0;
   const gearMult = gearMultiplierFor(meta.gearKey, gear);
   const researchMult = (computeFleetResearchShipMultipliers()[shipId] || 1) * (computeFleetBadgeMultipliers()[shipId] || 1);
   const gearNodeMult = computeGearNodeMultiplier(Number(shipId), Number(slot));
@@ -2163,10 +2125,6 @@ document.getElementById('closeLoadoutDetailModalBtn').onclick = () => document.g
 // Builds the effectBox lines describing what one Fleet Boost item does per level.
 function fleetBoostEffectLines(item) {
   const lines = [];
-  item.grants.forEach((g) => {
-    if (g.sp) lines.push({ label: `${g.ships.map(shipDisplayName).join('/')} SP`, value: `${g.sp}` });
-    if (g.crew) lines.push({ label: `${g.ships.map(shipDisplayName).join('/')} Crew`, value: `${g.crew}` });
-  });
   if (item.pctEffect) {
     const pe = item.pctEffect;
     const perLabel = pe.per === 'crew' ? 'crew member' : 'rank-up';
@@ -2189,10 +2147,10 @@ function renderFleetBoostCard(item, rerender) {
   card.innerHTML = `
     <div class="flex items-center justify-between gap-2 mb-3">
       <h3 class="font-semibold text-white truncate min-w-0 flex-1 text-[1.05rem]" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</h3>
-      <div class="px-3 py-1 rounded-lg bg-gray-900/70 border border-gray-700/30"><span class="font-bold text-lg text-gray-300">${level}</span><span class="text-xs text-gray-500">/${cap}</span></div>
+      <div class="px-3 py-1 rounded-lg bg-gray-900/70 border border-gray-700/30"><span class="font-bold text-lg text-gray-300" data-level>${level}</span><span class="text-xs text-gray-500">/${cap}</span></div>
     </div>
     ${effectBox(lines)}
-    ${item.note ? `<div class="text-xs text-amber-500/90 mb-3">${escapeHtml(item.note)}</div>` : ''}
+    ${item.note ? `<div class="flex items-center gap-1.5 text-xs text-amber-400/90 bg-amber-500/10 border border-amber-500/20 rounded-md px-2 py-1 mb-2">${iconSvg('info-circle', 13)}<span>${escapeHtml(item.note)}</span></div>` : ''}
     <div class="flex items-center justify-between mt-auto pt-2 gap-1.5">
       <button data-min class="ctrl-btn ctrl-btn--gray" ${canDec ? '' : 'disabled style="opacity:.3"'}>${iconSvg('chevron-left', 16)}${iconSvg('chevron-left', 16, '-ml-2.5')}</button>
       <button data-dec class="ctrl-btn ctrl-btn--gray" ${canDec ? '' : 'disabled style="opacity:.3"'}>${iconSvg('chevron-left', 16)}</button>

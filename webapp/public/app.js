@@ -2122,7 +2122,7 @@ function renderUpgradesPage(root, catKey) {
       <div class="flex items-center justify-center gap-2 mb-4 flex-wrap" id="inscTabs"></div>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="upgradeItemsGrid"></div>`;
     const tabs = document.getElementById('inscTabs');
-    ['Borge', 'Ozzy', 'Knox', 'Fleet'].forEach((h) => {
+    ['Borge', 'Ozzy', 'Knox'].forEach((h) => {
       const btn = document.createElement('button');
       btn.textContent = h;
       btn.className = `px-4 py-1.5 rounded-full text-sm font-semibold ${inscriptionsTabHunter === h ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`;
@@ -2136,10 +2136,6 @@ function renderUpgradesPage(root, catKey) {
     tabs.appendChild(hideBtn);
 
     const grid = document.getElementById('upgradeItemsGrid');
-    if (inscriptionsTabHunter === 'Fleet') {
-      window.renderFleetBoostItemsInto(grid, 'Inscryption');
-      return;
-    }
     cat.items
       .filter((item) => {
         const f = window.UPGRADE_FORMULAS[`inscryptions.${item.id}`];
