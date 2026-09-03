@@ -113,12 +113,34 @@ for (const hunter of ['borge', 'ozzy', 'knox']) {
   // Planner state. Do not soften this filter while that test is failing.
   const missing = missingAll.filter((k) => !k.startsWith('upgrades.gems_nodes.'));
   const viaGemPlanner = missingAll.length - missing.length;
-  const extra = [...ours].filter((k) => !liveKeys.has(k));
+  // The live table is only the ORIGINAL'S OVERRIDES PANEL. cifi-tools is code-split, and several
+  // upgrade families live on their own lazily-loaded pages instead -- assets/Trinkets-*.js
+  // (`const $="trinkets"`, one card per trinket), IAP-*.js (`const U="iap"`), Ultima-*.js and
+  // DiamondSpecials-*.js. Keys from those pages are absent from the Overrides table while being
+  // fully present on the site, so counting them as "extra" says the opposite of the truth.
+  //
+  // That is not hypothetical: this line reporting "we additionally expose 6" was read as our tool
+  // having six controls the original lacks, and nearly led to deleting six controls that ARE on
+  // the original -- just on a different page. Anything here is a genuine extra only once you have
+  // checked the per-page chunks too.
+  const LIVE_OWN_PAGE_PREFIXES = [
+    'upgrades.trinkets.',          // assets/Trinkets-*.js
+    'upgrades.iap.',               // assets/IAP-*.js
+    'upgrades.ultima.',            // assets/Ultima-*.js
+    'upgrades.diamondspecials.',   // assets/DiamondSpecials-*.js
+  ];
+  const extraAll = [...ours].filter((k) => !liveKeys.has(k));
+  const extra = extraAll.filter((k) => !LIVE_OWN_PAGE_PREFIXES.some((pre) => k.startsWith(pre)));
+  const viaOwnPage = extraAll.length - extra.length;
 
   if (missing.length) note(`MISSING ${missing.length} override(s) the live tool exposes:\n      ${missing.join('\n      ')}`);
   else console.log(`  no missing overrides (${viaGemPlanner} gem node(s) handled by the Gem Planner)`);
-  // Extras are not failures: several are real sim params the live tool simply doesn't expose,
-  // and our per-trinket inputs feed the summed count it exposes instead. Listed, not counted.
+  if (viaOwnPage) {
+    console.log(`  ${viaOwnPage} key(s) the live tool exposes on their own page rather than in its `
+      + 'Overrides panel (Trinkets / IAP / Ultima / DiamondSpecials) -- in parity, different location');
+  }
+  // A genuine extra is a control the original does not offer ANYWHERE, which would be a parity
+  // break rather than a feature. None currently.
   if (extra.length) console.log(`  we additionally expose ${extra.length}: ${extra.join(', ')}`);
 
   // Caps, for whatever both sides declare.

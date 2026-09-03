@@ -938,43 +938,23 @@ think one is wrong, disprove it with a test.
   `resolveParam` has a generic override path almost everything is settable, which is what makes the
   exceptions worth finding -- it flagged `exodus_gem3` (Ozzy) and `exodus_gem5` (Knox), whose
   branches ignored an explicit override entirely.
-- **The 6 overrides we expose beyond the live tool are now decided, and they split cleanly in two.**
-  `live-override-diff.js` reports them as "additionally exposed", which is a statement about UI
-  surface, not about whether they work -- so each was probed for whether it reaches the evaluator:
-  - **`diamondspecials.hunterloot`, `iap.travpack`, `ultima.ulti` are REAL parameters** with their
-    own slot in `params.json` (which comes from the live bundle), each moving exactly one argument.
-    The evaluator reads them; the original simply does not surface them in its Overrides panel.
-    Exposing them is a genuine enhancement -- KEEP.
-  - **The 3 trinket overrides were DEAD.** The live tool exposes the summed
-    `creation_galvTrinketsCount`; we expose the three trinkets individually, which is friendlier,
-    but the resolver summed only `state.upgrades.trinkets` and ignored per-trinket overrides. A
-    value typed into our Overrides panel was silently discarded. Fixed: per-trinket overrides now
-    take precedence over the stored level, trinket by trinket, so both routes express the same
-    account. KEEP, now that they work.
-- **`override-liveness-check.js` makes "the panel offers it" and "it does something" the same
-  claim.** Every control in `globalUpgrades` must move at least one argument, probed with every gem
-  tree maxed so gated inputs (trinkets need Creation 5) are not reported dead. The live-vs-clone
-  diff could never have caught this: it compares which KEYS each tool exposes, not whether ours do
-  anything.
-  **18 controls are allow-listed as inert IN THE ORIGINAL TOO** -- `loopmods.roe`, `cms.cm58`,
-  `cms.cm_ultima`, `cms.cm_ultimas`, `mats_exchange.tysconDrives`, `inscryptions.i114/i115`,
-  `researches.res112` -- keys the live bundle's own table exposes and its evaluator declares no
-  parameter for. They are listed individually rather than covered by a rule like "no own parameter
-  means it may be dead", because that rule would have excused the trinket bug: those have no
-  parameter of their own either, they feed a derived one.
-- **THERE IS NO HIDDEN PARAMETER SLOT, so those eight cannot be wired -- and that is a measured
-  fact, not a shrug.** Parsing `release.wasm`'s own type section gives the real arity of each
-  evaluator export: `EVALBORGE_WASM` 101, `EVALOZZY_WASM` 89, `EVALKNOX_WASM` 91 -- **exactly** the
-  lengths of the `params.json` lists. Every argument the evaluator accepts is already named, so
-  there is no unclaimed slot for an emulator or a deeper trace to find, and making these controls
-  affect a result would mean inventing an input the evaluator does not read.
-  `wasm-arity-check.js` asserts it, which also catches the case that would CHANGE this answer: if a
-  future `release.wasm` gains an argument -- precisely how those controls would become live -- the
-  mismatch is reported instead of being silently absorbed by a params list one entry short.
-  What was fixed instead is the silence. The Overrides panel now labels them **"Not simulated -- the
-  evaluator has no parameter for this"**, driven by `overrideReachesSim()` (params.json membership
-  plus the derived-feeder prefixes, so trinkets stay unmarked). A control that quietly swallows what
-  you type is worse than one that admits it does nothing.
+- **THE SITE IS CODE-SPLIT, AND `live-override-diff.js`'s "we additionally expose N" LINE WAS
+  LYING.** It compares our upgrade tables against the live bundle's OVERRIDES panel table only.
+  cifi-tools lazily loads several upgrade families as their own pages -- `assets/Trinkets-*.js`
+  (`const $="trinkets"`, one card per trinket), `IAP-*.js` (`const U="iap"`), `Ultima-*.js`,
+  `DiamondSpecials-*.js` -- whose keys are absent from that table while being fully present on the
+  site. All six "extras" (`diamondspecials.hunterloot`, `iap.travpack`, `ultima.ulti` and the three
+  trinkets) are in that category: **we are in parity, the controls just live on a different page.**
+  The report now says so instead of listing them as extras. **A genuine extra would be a control the
+  original offers NOWHERE, and there are none.**
+  Read the chunk list before concluding the original lacks something: `grep -oE '"assets/[A-Za-z0-9_-]+\.js"'`
+  over the main bundle prints every page it can load.
+- **One real bug did come out of that detour: the three per-trinket overrides reached nothing.** The
+  original's Trinkets page sets each trinket individually and they feed the summed
+  `creation_galvTrinketsCount`; ours only summed `state.upgrades.trinkets`, so a value typed into
+  our trinket control was silently discarded. Fixed, and `override-liveness-check.js` now asserts
+  that every control the UI offers moves at least one wasm argument, with the 18 controls that are
+  inert in the ORIGINAL too allow-listed by name.
 - **THE HUNTER SIDE IS VALIDATED AGAINST THE LIVE cifi-tools BUNDLE, NOT THE APK, AND THAT
   DISTINCTION FOUND A REAL BUG THAT TWO ROUNDS OF INTERNAL REASONING MISSED.** The site was built
   with the game's devs, so for anything it models its bundle IS the verification -- fetch it from

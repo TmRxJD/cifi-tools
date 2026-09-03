@@ -1998,39 +1998,6 @@ function effectBox(lines) {
       <div class="flex justify-between items-start py-1 gap-2"><span class="text-gray-400 text-sm min-w-0 flex-1 break-words">${l.label}</span><span class="text-white font-medium text-sm flex-shrink-0 whitespace-nowrap">${l.value}</span></div>`).join('')}</div>`;
 }
 
-// Which override keys the EVALUATOR can actually receive.
-//
-// The wasm's argument arity is exactly the length of its params.json list -- 101 Borge / 89 Ozzy /
-// 91 Knox, verified by parsing the module's own type section -- so a control whose key is not in
-// that list has no slot to be passed in. It cannot be wired without inventing an argument the
-// evaluator does not read, and no amount of emulation creates one.
-//
-// Eight such controls exist (loopmods.roe, cms.cm58, cms.cm_ultima, cms.cm_ultimas,
-// mats_exchange.tysconDrives, inscryptions.i114/i115, researches.res112). They are inert in the
-// ORIGINAL tool too -- its own Overrides table offers them and its evaluator declares no parameter
-// for them, most likely newer content the wasm has not been taught. We mirror the original
-// deliberately, but a control that silently swallows what you type is worse than one that says it
-// does nothing, so they are labelled instead of left as no-ops.
-//
-// TRINKETS ARE NOT IN THIS SET even though they have no parameter of their own: they feed the
-// derived creation_galvTrinketsCount. "Has no own parameter" is not the same question as "reaches
-// nothing", which is exactly why override-liveness-check.js probes behaviour rather than lists.
-let simParamKeys = null;
-const DERIVED_FEEDER_PREFIXES = ['upgrades.trinkets.'];
-function overrideReachesSim(fullKey) {
-  if (!simParamKeys) return true; // params not loaded yet -- never label something we cannot judge
-  const key = `upgrades.${fullKey}`;
-  if (simParamKeys.has(key)) return true;
-  return DERIVED_FEEDER_PREFIXES.some((pre) => key.startsWith(pre));
-}
-if (window.HunterSim && window.HunterSim.loadParams) {
-  window.HunterSim.loadParams().then((params) => {
-    simParamKeys = new Set(Object.values(params).flat());
-    // the upgrades pages render before this resolves; repaint so the labels appear
-    if (typeof currentRoute === 'function' && String(currentRoute()).startsWith('upgrades/')) render();
-  }).catch(() => {});
-}
-
 function renderUpgradeInput(catKey, item) {
   const fullKey = `${catKey}.${item.id}`;
   const isBoolean = item.maxLevel === 1;
@@ -2038,12 +2005,6 @@ function renderUpgradeInput(catKey, item) {
   const cap = item.maxLevel === Infinity ? null : item.maxLevel;
   const card = document.createElement('div');
   card.className = 'relative rounded-xl overflow-hidden border border-gray-700/50 bg-gradient-to-br from-gray-800/80 via-gray-800/60 to-gray-900/80 p-4 flex flex-col';
-  if (!overrideReachesSim(fullKey)) {
-    card.dataset.notSimulated = '1';
-    card.title = 'Not simulated: the evaluator takes no parameter for this upgrade, so changing it '
-      + 'cannot affect any result. The original tool behaves the same way.';
-  }
-
   if (fullKey === 'ultima.ulti') {
     // Confirmed real (live Ultima.vue): this isn't a leveled upgrade at all -- the stored
     // value itself IS the loot multiplier, set directly via a 1.0000-3.4476 slider (a number
@@ -2141,14 +2102,6 @@ function renderUpgradeInput(catKey, item) {
   card.querySelector('[data-dec]').onclick = () => setLevel(level - 1);
   card.querySelector('[data-max]').onclick = () => setLevel(level + 10);
   card.querySelector('[data-min]').onclick = () => setLevel(level - 10);
-  // Visible, not just a tooltip: an inert control that looks identical to a working one is the
-  // problem being fixed here.
-  if (card.dataset.notSimulated) {
-    const badge = document.createElement('div');
-    badge.className = 'mt-2 text-[11px] text-amber-300/90 border border-amber-500/40 bg-amber-900/20 rounded px-2 py-1';
-    badge.textContent = 'Not simulated — the evaluator has no parameter for this';
-    card.appendChild(badge);
-  }
   return card;
 }
 
