@@ -961,8 +961,20 @@ think one is wrong, disprove it with a test.
   `researches.res112` -- keys the live bundle's own table exposes and its evaluator declares no
   parameter for. They are listed individually rather than covered by a rule like "no own parameter
   means it may be dead", because that rule would have excused the trinket bug: those have no
-  parameter of their own either, they feed a derived one. Mirroring the original is deliberate here,
-  but it does mean a user can type into eight controls that change nothing in either tool.
+  parameter of their own either, they feed a derived one.
+- **THERE IS NO HIDDEN PARAMETER SLOT, so those eight cannot be wired -- and that is a measured
+  fact, not a shrug.** Parsing `release.wasm`'s own type section gives the real arity of each
+  evaluator export: `EVALBORGE_WASM` 101, `EVALOZZY_WASM` 89, `EVALKNOX_WASM` 91 -- **exactly** the
+  lengths of the `params.json` lists. Every argument the evaluator accepts is already named, so
+  there is no unclaimed slot for an emulator or a deeper trace to find, and making these controls
+  affect a result would mean inventing an input the evaluator does not read.
+  `wasm-arity-check.js` asserts it, which also catches the case that would CHANGE this answer: if a
+  future `release.wasm` gains an argument -- precisely how those controls would become live -- the
+  mismatch is reported instead of being silently absorbed by a params list one entry short.
+  What was fixed instead is the silence. The Overrides panel now labels them **"Not simulated -- the
+  evaluator has no parameter for this"**, driven by `overrideReachesSim()` (params.json membership
+  plus the derived-feeder prefixes, so trinkets stay unmarked). A control that quietly swallows what
+  you type is worse than one that admits it does nothing.
 - **THE HUNTER SIDE IS VALIDATED AGAINST THE LIVE cifi-tools BUNDLE, NOT THE APK, AND THAT
   DISTINCTION FOUND A REAL BUG THAT TWO ROUNDS OF INTERNAL REASONING MISSED.** The site was built
   with the game's devs, so for anything it models its bundle IS the verification -- fetch it from
@@ -1264,6 +1276,7 @@ node tools/bench/badge-check.js        # fleet badges: ships + multipliers vs th
 node tools/bench/node-factor-check.js  # EVERY factor in every node getter is accounted for
 node tools/bench/param-plumbing-check.js # every sim param is settable into its own slot
 node tools/bench/override-liveness-check.js # every override the UI offers reaches the evaluator
+node tools/bench/wasm-arity-check.js   # wasm argument count == params.json, per hunter
 node tools/bench/reference-schema-test.js # zod: every reference file matches its schema
 node tools/bench/growth-counter-check.js # per-run counter classification + zero-counter warning
 node tools/bench/allocator-check.js     # allocator vs a reference greedy, ALL 7 ships
