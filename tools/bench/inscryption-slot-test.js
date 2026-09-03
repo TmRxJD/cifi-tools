@@ -63,7 +63,7 @@ const HUNTER_IDS = idsOf('INSCRYPTION_IDS');
 // checked below -- that every slot exists in the registry -- because a slot outside it would read
 // as a permanent zero grant rather than as an error.
 const fleetSrc = fs.readFileSync(path.join(__dirname, '../../webapp/public/shipSchema.js'), 'utf8');
-const FLEET_SLOTS = [...fleetSrc.matchAll(/(?:rank|crew)IS:\s*(\d+)/g)].map((m) => Number(m[1]));
+const FLEET_SLOTS = [...fleetSrc.matchAll(/\b(?:rank|crew)IS:\s*(\d+)/g)].map((m) => Number(m[1]));
 const ALL_IDS = HUNTER_IDS;
 
 check('resolver matches every slot the game data proves', () => {

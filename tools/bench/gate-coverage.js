@@ -39,7 +39,15 @@ function enclosing(at) {
   return null;
 }
 
-/** id -> { gem, level } for every gated entry the bundle declares. */
+/**
+ * id -> { gem, level, node } for every gated entry the bundle declares.
+ *
+ * `unlock_node` is the second half of the gate and is REQUIRED, not decorative: the bundle's own
+ * predicate demands the specific gem node as well as the tree level, so Trinkets need Creation 4
+ * AND node 5 and `milestoneCount` needs Exodus 1 AND node 4. This bench checked only the level for
+ * a long time, which meant a node value could be wrong -- or silently dropped -- without anything
+ * noticing. An absent node is a real state ("level alone unlocks it"), so it is compared too.
+ */
 function extractGates() {
   const out = new Map();
   for (const field of ['unlock_gem:', 'unlock_lvl:', 'unlock:', 'unlock_level:']) {
@@ -54,9 +62,12 @@ function extractGates() {
       if (!id) continue;
       const gem = /\bunlock(?:_gem)?:\s*["']([a-z]+)["']/.exec(obj);
       const lvl = /\bunlock_(?:lvl|level):\s*(\d+)/.exec(obj);
+      const node = /\bunlock_node:\s*(\d+)/.exec(obj);
       if (!gem || !lvl) continue;
       const key = id[1];
-      if (!out.has(key)) out.set(key, { gem: gem[1], level: Number(lvl[1]) });
+      if (!out.has(key)) {
+        out.set(key, { gem: gem[1], level: Number(lvl[1]), node: node ? Number(node[1]) : undefined });
+      }
     }
   }
   return out;
@@ -81,8 +92,9 @@ for (const hunter of ['borge', 'ozzy', 'knox']) {
       const ours = modelled[key];
       if (!live) { if (ours) { rows.push(`  EXTRA    ${key} — we gate it, the bundle does not`); wrong++; } continue; }
       if (!ours) { rows.push(`  MISSING  ${key.padEnd(40)} needs ${live.gem} gem level ${live.level}`); missing++; continue; }
-      if (ours.gem !== live.gem || ours.level !== live.level) {
-        rows.push(`  WRONG    ${key.padEnd(40)} ours ${ours.gem}/${ours.level}, live ${live.gem}/${live.level}`);
+      const show = (g) => `${g.gem}/${g.level}${g.node === undefined ? '' : `/node${g.node}`}`;
+      if (ours.gem !== live.gem || ours.level !== live.level || ours.node !== live.node) {
+        rows.push(`  WRONG    ${key.padEnd(40)} ours ${show(ours)}, live ${show(live)}`);
         wrong++;
         continue;
       }
