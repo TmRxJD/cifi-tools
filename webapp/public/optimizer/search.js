@@ -157,7 +157,19 @@
   // The winner's final polish, run at FINAL_ITERATIONS. Small steps only: the coarse descent has
   // already happened at screening fidelity, and this pass exists to correct the last few points
   // where the screen and the judge disagree.
-  const POLISH_STEP_SIZES = [4, 2, 1];
+  // EVERY small amount, not a ladder. The polish is the only stage that measures at
+  // FINAL_ITERATIONS, so it is the only one that can resolve a fine ridge -- and a ladder of
+  // 4/2/1 cannot express the move the ridge needs.
+  //
+  // MEASURED on a real level-62 Ozzy. The polish converges at exo 79 / lotl 15 / timeless 1 and a
+  // deeper cap changes nothing (40 rounds is byte-identical to 4), yet exo 74 / lotl 17 /
+  // timeless 2 scores 3.9% higher. Getting there is ONE transfer of FIVE units out of exo:
+  // timeless +1 costs 3, lotl +2 costs 2, and Space.transfer's fillLeftover distributes the
+  // remainder by itself. Five is simply not on the ladder.
+  //
+  // Enumerating 1..8 is a complete set of small moves rather than a hand-picked few, and it is
+  // affordable precisely because the polish only ever touches the winner.
+  const POLISH_STEP_SIZES = [8, 7, 6, 5, 4, 3, 2, 1];
 
   // How many candidate moves are scored before a block settles for the best one found so far.
   // Sized to keep the worker pool (MAX_POOL_SIZE is 6) busy while bounding what one accepted move
@@ -949,8 +961,9 @@
         const champion = ranked[0];
         const polished = await optimizeJointly(
           ctx, budgets, champion.talentAlloc, champion.attrAlloc, champion.score,
-          POLISH_STEP_SIZES, 1, pinnedAttrs, (f) => report('final', f, 1), FINAL_ITERATIONS,
-          POLISH_MAX_ROUNDS,
+          POLISH_STEP_SIZES, effortSpec.polishSweeps || 1, pinnedAttrs,
+          (f) => report('final', f, 1), FINAL_ITERATIONS,
+          effortSpec.polishMaxRounds || POLISH_MAX_ROUNDS,
         );
         if (polished.score > champion.score) {
           ranked.unshift({

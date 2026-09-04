@@ -22,6 +22,10 @@
   // residency stays bounded regardless of how many cores the machine reports.
   const MAX_POOL_SIZE = 6;
 
+  // The live pool, reused across runs. Module-scoped rather than per-call, which is the whole
+  // point: rebuilding it every run is what exhausted wasm memory.
+  let cachedPool = null;
+
   class ScoringPool {
     constructor(cfg, mode, size, scoreCtxOverride) {
       this.scoreCtxOverride = scoreCtxOverride || null;
@@ -123,10 +127,29 @@
    */
   async function runOptimizer(cfg, { mode = 'loot', effort, onProgress = () => {}, shouldCancel = () => false, poolSize } = {}) {
     const size = poolSize || Math.max(2, Math.min(MAX_POOL_SIZE, (navigator.hardwareConcurrency || 4) - 1));
-    const pool = new ScoringPool(cfg, mode, size);
+    // POOLS ARE REUSED ACROSS RUNS, not built and thrown away each time.
+    //
+    // Every run used to allocate a fresh set of workers, each compiling its own WASM instance, and
+    // terminate them at the end. The browser reclaims that memory lazily, so back-to-back runs
+    // raced it: two consecutive level-62 Ozzy optimizes died with "Cannot allocate Wasm memory for
+    // new instance". Pressing Optimize twice is not an unusual thing to do.
+    //
+    // Keyed by the serialized cfg and mode, because that is exactly what a worker is initialised
+    // with -- if either changes the old pool cannot answer for the new account and is replaced.
+    const poolKey = `${mode}|${JSON.stringify(serializeCfg(cfg))}`;
+    if (cachedPool && cachedPool.key !== poolKey) {
+      cachedPool.pool.terminate();
+      for (const p of cachedPool.crossPools.values()) p.terminate();
+      cachedPool = null;
+    }
+    if (!cachedPool) {
+      cachedPool = { key: poolKey, pool: new ScoringPool(cfg, mode, size), crossPools: new Map() };
+    }
+    const pool = cachedPool.pool;
     // Cross-seed pools, keyed by (mode, context). A pool is bound to ONE objective at init, so a
     // second objective needs its own; built lazily, so a mode that does not cross-seed never pays.
-    const crossPools = new Map();
+    // Cached alongside the main pool for the same reason.
+    const crossPools = cachedPool.crossPools;
     try {
       const initError = await pool.ready();
       if (initError) {
@@ -172,14 +195,21 @@
         shouldCancel,
       });
     } finally {
-      pool.terminate();
-      for (const p of crossPools.values()) p.terminate();
-      crossPools.clear();
-      // Yield a macrotask before returning, so termination settles before a caller starts another
-      // run. Without it, back-to-back optimizes race the browser's reclamation.
+      // The pools are NOT terminated here -- they are reused by the next run with the same account
+      // and mode (see the cache above). They are released when the key changes, or by
+      // releaseScoringPools() when the app knows no further run is coming.
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
   }
 
+  /** Release the cached workers -- for when the app knows no further run is coming. */
+  function releaseScoringPools() {
+    if (!cachedPool) return;
+    cachedPool.pool.terminate();
+    for (const p of cachedPool.crossPools.values()) p.terminate();
+    cachedPool = null;
+  }
+
   global.runOptimizer = runOptimizer;
+  global.releaseScoringPools = releaseScoringPools;
 })(window);
