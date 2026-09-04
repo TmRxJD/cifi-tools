@@ -1846,11 +1846,36 @@ fixed traversal order give identical output for identical input.
 
 ### Known open defects
 
-- **knox@26 returns -0.48%**, above the ~0.2% comparison noise, and its archive fills only 29
-  cells. None of the coverage levers moved it, which points at refinement depth rather than
-  coverage. Unsolved.
-- **The ~7-point seed variance is unfixed**, so the same account optimized twice with identical
-  settings can return builds 7% apart. Recorded rather than papered over.
+- **THE OZZY OUTCOME IS BIMODAL AND FAILS ABOUT A THIRD OF THE TIME. This is the top defect.**
+  Measured on the full pipeline, level-62 Ozzy account, three seeds per arm:
+
+  | selection  | seed 9e37 | seed 1234 | seed a5a5 |
+  |---|---|---|---|
+  | random     | +8.24%    | -66.27%   | -66.27%   |
+  | curiosity  | +15.34%   | +4.77%    | -66.27%   |
+
+  Every failure is EXACTLY -66.27% (11,854,311) -- the same non-boss-killing local optimum, not a
+  spread. An earlier note in this file called this a "~7 point seed variance"; that was two lucky
+  seeds being compared. **The +15.34% headline is the best of three seeds, not a typical result.**
+
+  **ROOT CAUSE, ISOLATED: archive REACHABILITY, not refinement.** Archive-only at 4800 variations:
+      seed a5a5   93 cells   1 kill band   best kill 0   -> final -66.27%
+      seed 1234   95 cells   3 kill bands  best kill 7   -> final  +4.77%
+  The correlation is perfect: if illumination lands ONE build in a kill>0 cell the run succeeds,
+  otherwise it returns the local optimum. And almost no progress is needed -- an archive whose best
+  is kill 7 refines into a build killing at 58. **Refinement is reliable; it just needs a foothold.**
+
+  The next thing to try, and it stays inside the boss-as-descriptor rule: bosses stand every 100
+  stages, so an elite at maxStage 99 is one step from engaging one. Selecting parents on a STAGE
+  BOUNDARY is navigation in descriptor space -- frontier-pushing toward an unoccupied cell -- and
+  scores nothing on boss performance. NOT yet implemented.
+
+- **knox@26 returns -0.48%**, above the ~0.2% comparison noise. Its archive is STABLE across seeds
+  (2.5% spread, 26-28 cells every time), so unlike Ozzy this is systematic rather than luck, and
+  points at refinement depth rather than coverage. Unsolved, and correctly a separate problem.
+
+- **Selection strategy is `curiosity` by default because it is strictly better, not because it
+  works.** 2 of 3 seeds against random's 1 of 3, and higher on both seeds where both succeed.
 
 ### Things the optimizer deliberately does NOT do any more
 Removed because each was compensating for the previous one: random-mutation beam search, greedy
