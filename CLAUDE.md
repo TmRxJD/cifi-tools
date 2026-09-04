@@ -1771,57 +1771,86 @@ think one is wrong, disprove it with a test.
 
 ## How the optimizer works
 
-The structural insight: attribute trees have only **361 / 289 / 145** dependency-closed subsets
-(Borge / Ozzy / Knox — measured, not estimated). Small enough to enumerate exhaustively, so no
-heuristic ever guesses which part of the tree to fund.
+**THE STAGED-FILTER SEARCH IS GONE. It is now a quality-diversity archive (MAP-Elites).** If you
+are reading a comment or a note that mentions a survey tier, a rung schedule, `SURVEY_SUPPORTS`,
+or a cross-seed pass as live machinery, it is describing the old design.
 
-1. **Enumerate** every dependency-closed, affordable support set (which nodes get funded at all).
-2. **Screen** each at a canonical fill, against a talent seed that is TUNED first (see below --
-   screening against a flat seed silently decides which supports ever reach refinement).
-3. **Survey** the strongest with a coarse coordinate exchange, then **refine** the survivors to a
-   fixpoint: on exit, no transfer of 8/4/2/1 points between any pair of nodes improves the score.
-4. **Decide** among finalists at full fidelity — the same measurement the build card displays.
+The old pipeline enumerated supports, screened them at a canonical fill, tuned a few and refined
+fewer -- and **every stage cut candidates permanently on a 100-iteration proxy**. That single
+decision failed four ways: a level-62 Ozzy's best support screened 147th of 234 and was never
+tuned; a 0.32% ridge ranks BACKWARDS by 1.7% at screening fidelity; boss capability is invisible
+to screening because refinement is what CREATES it; and borge@54 came back 88% short at a level
+that was never in the test set. Each patch fitted to one of those broke another hunter.
 
-The user's current build competes as a finalist on identical terms, which is why the optimizer
-cannot return a downgrade. Allocations leaving more than one point idle are never evaluated
-(respeccing to spend them is essentially always better).
+1. **Enumerate** every dependency-closed, affordable support set (unchanged, exact, cheap).
+2. **Screen** each at a canonical fill -- now only to SEED the archive, not to cut anything.
+3. **Illuminate**: vary from the archive under a seeded PRNG, keeping the best build PER BEHAVIOUR
+   CELL. Cells are (boss-kill band, maxStage/5, concentration band). Nothing is ever discarded for
+   scoring badly, so a build that farms poorly but has begun to engage a boss survives as a
+   stepping stone.
+4. **Refine** the strongest elites, stratified across kill bands so the archive's diversity is not
+   thrown away at the selection step.
+5. **Decide** among finalists at full fidelity, then polish the winner.
 
-**What "evaluate every combination" honestly means:** the full space cannot be enumerated (two
-attributes per hunter are uncapped). The *structural* choice is exhaustive; the *depth* choice is
-a coordinate-exchange fixpoint. Say it that way — don't claim more.
+The objective is UNCHANGED -- `MODES.loot.score` is still exactly `lootPerMin`. Boss progress is a
+DESCRIPTOR, never a target. That is what lets one search find boss-crossing builds without a
+second objective, and it is why the cross-seed pass could be deleted rather than replaced.
 
-### Objectives (`optimizer/objective.js`)
+**Determinism is preserved.** The ban is on `Math.random`, not on sampling: a fixed seed and a
+fixed traversal order give identical output for identical input.
 
-Four modes, all defined in one table that the search, the browser workers, the benchmark **and
-the UI dropdown** read. Adding a mode is a one-file change; the dropdown cannot offer a mode the
-optimizer does not implement, and a mode cannot ship without a label and help text (asserted).
+### Validated invariants of the new search
 
-| Mode | Maximizes |
-|---|---|
-| `loot` | loot per minute |
-| `push` | average stage |
-| `boss` | boss kill rate, then loot as a tiebreak |
-| `bossTimeless` | same, with Timeless Mastery pinned to max |
+- **Variation must be DAG-NATIVE; point transfers cannot navigate a threshold tree.** From the
+  same 4800 variations the archive filled **571 cells for Borge and 50 for Ozzy**. `Space.transfer`
+  legalises by ZEROING stranded descendants, so a random transfer out of a structured build either
+  fails or demolishes it and the child returns indistinguishable from its parent. Adding structural
+  resampling (adopt an enumerated support, fill it with `gatePayingFill`) took ozzy@62 from
+  **-66.27% to +15.34%** -- above the best build ANY previous method found, cross-seed included.
+- **Stranding is caused by DEPENDENCY EDGES, not tier thresholds.** Knox has zero thresholds and
+  strands MORE (6.6%) than Ozzy (4.8%). Thresholds amplify it; they are not the cause.
+- **THE SEARCH VARIES ~7 PERCENTAGE POINTS ACROSS SEEDS, AND THIS IS THE MOST IMPORTANT THING TO
+  KNOW BEFORE TRUSTING ANY COMPARISON.** It is deterministic -- one seed, one answer -- but that is
+  ONE SAMPLE. Adding a single `rng()` call shifted the stream and the IDENTICAL configuration
+  returned +15.34% and +8.24%. **Any single-run A/B narrower than ~7 points is noise.** Several of
+  this file's own earlier conclusions were drawn that way before it was noticed; the tell had
+  already appeared and been explained away (cell counts going 82 -> 94 -> 83 as a share rose
+  monotonically are not measuring the share).
+- **A flag that is off must be inert IN THE RANDOM STREAM.** A draw taken for a check that can
+  never pass still shifts every later draw. That, and nothing else, was the +15.34%/+8.24% gap.
+- **Use `effort.archiveOnly` to compare move sets. Full fidelity is for the winner only.**
+  Refinement and polish are ~90% of wall clock and are identical across variation operators, so
+  running the whole pipeline to compare two of them measures mostly the part that did not change:
+  24s against 131s.
+- **THINGS MEASURED AND REJECTED. Do not retry these without reading the numbers.**
+  - *A boss-directed emitter* (draw parents from the elites nearest a kill). Made coverage WORSE
+    on ozzy@62 (2 kill bands -> 1) and reached kill 0 across 4800 variations. When every elite has
+    kill 0 and full boss HP, "nearest a kill" is not an ordering -- biasing parent selection cannot
+    create a gradient the population does not contain.
+  - *Replacing flat transfers with DAG-native depth moves.* Four seeds per arm, archive-only:
+    ds 0.0 -> 81.8 cells / 9.384M; ds 0.3 -> 87.8 / 9.271M; ds 0.6 -> 92.5 / 9.170M; ds 1.0 ->
+    84.7 / 9.015M. Coverage rises and survives averaging; champion quality does not, and the fully
+    DAG-native arm is the WORST. `depthMove` is kept (proven non-stranding, 81.7% acceptance
+    against 28%) but ships OFF. The hypothesis that flat transfers become harmful once structure is
+    right is NOT supported.
+  - *Merging several seeds into one archive* to kill the variance. At constant budget it is worse
+    than two of three single streams and has the FEWEST cells: splitting 2400 variations three ways
+    gives each 800 and none explores deep enough. It also destroyed the best boss reach measured
+    (seed a5a5 alone hit 3 kill bands / kill 7). **Per-stream depth beats stream diversity**, and
+    the variance costs 3x the archive budget to remove, not a redistribution of it.
+- **Structure is verified against the GAME, so a search failure is not a data failure.**
+  `attribute-tree-check.js` confirms every dependency edge and all 6 spend thresholds per hunter
+  (Knox: 0), with 41 authored cost/cap pairs corroborating the mapping; `param-plumbing-check.js`
+  confirms all 281 sim parameters land in their own slot; `wasm-arity-check.js` confirms 101/89/91
+  arguments are all named. The DAG the move algebra reasons about is the game's own.
 
-The boss objectives are **lexicographic, not a weighted blend**, in three tiers: not killing yet
-→ score on how little boss HP remains (loot deliberately contributes nothing, or the search would
-trade kill progress for farm); killing → `1e6 + killRate * 1000`; equal kill rates → a
-`log10(loot) * 5` tiebreak. Kill rate has 0.1 resolution, so one step is 100 units while the
-whole loot term caps around 60 — **loot can never buy back even a tenth of a percent of kill
-rate.** That ordering is what puts overflow points into Call Me Lucky Loot *only* once they cost
-nothing in boss capability, with no special-casing of that talent.
+### Known open defects
 
-`pinnedAttrs` is how `bossTimeless` differs from `boss`: the search holds those attributes at
-maximum and optimizes the rest around them.
-
-**The Effective Path scores through the same table.** `hunterStatPath.js`'s `marginalValue`
-takes a mode and defers to `OptimizerObjective.scoreFor`, so "what should I buy to kill the
-boss" and "what should Optimize allocate to kill the boss" cannot mean different things. In
-`loot` it is still exactly a `lootPerMin` difference, so nothing about the existing path
-changed. The path offers only `Objective.pathModes()` -- modes with `pinnedAttrs` are excluded
-because the path never reallocates attributes, so `bossTimeless` there would be a choice that
-silently does nothing; passing it throws. Measured divergence on a real level-79 Borge build:
-loot buys `hp>atk>atk>hp`, boss buys `hp>hp>hp>atk` and takes evade over effect.
+- **knox@26 returns -0.48%**, above the ~0.2% comparison noise, and its archive fills only 29
+  cells. None of the coverage levers moved it, which points at refinement depth rather than
+  coverage. Unsolved.
+- **The ~7-point seed variance is unfixed**, so the same account optimized twice with identical
+  settings can return builds 7% apart. Recorded rather than papered over.
 
 ### Things the optimizer deliberately does NOT do any more
 Removed because each was compensating for the previous one: random-mutation beam search, greedy
