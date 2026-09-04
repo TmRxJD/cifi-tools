@@ -182,7 +182,7 @@
             // The pass is a single extra search whose answer is then judged like any other
             // candidate, so halving its parallelism costs some wall clock on the builds that need
             // it and nothing at all on the builds that skip it.
-            const crossSize = Math.max(2, Math.floor(size / 2));
+            const crossSize = 2;   // secondary search: minimum viable parallelism
             const crossPool = new ScoringPool(cfg, crossMode, crossSize, ctxOverride);
             crossPools.set(key, crossPool);
             const err = await crossPool.ready();
@@ -195,9 +195,15 @@
         shouldCancel,
       });
     } finally {
-      // The pools are NOT terminated here -- they are reused by the next run with the same account
-      // and mode (see the cache above). They are released when the key changes, or by
-      // releaseScoringPools() when the app knows no further run is coming.
+      // THE MAIN POOL IS KEPT, THE CROSS-SEED POOL IS NOT.
+      //
+      // The main pool is used throughout every run, so rebuilding it each time is what exhausted
+      // wasm memory in the first place. The cross-seed pool is used for ONE pass, and holding it
+      // afterwards means two pools' worth of WASM instances alive between runs -- which brought
+      // the OOM straight back on a level-62 Ozzy (6 main + 3 cross workers, each with its own
+      // instance). Freed here; rebuilt on demand by the next run that actually cross-seeds.
+      for (const p of cachedPool.crossPools.values()) p.terminate();
+      cachedPool.crossPools.clear();
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
   }

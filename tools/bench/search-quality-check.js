@@ -105,7 +105,7 @@ function stratify(fixtures, n, rand) {
   }
 
   console.log(`seed ${SEED} -- replay with --seed=${SEED}`);
-  console.log(`${picks.length} build(s): ${picks.map((p) => `${p.fx.uid}/lvl${p.level}`).join(' ')}`);
+  console.log(`${picks.length} build(s): ${picks.map((p) => p.fx.name).join(' ')}`);
   if (LIST) return;
   console.log('');
 
@@ -132,7 +132,7 @@ function stratify(fixtures, n, rand) {
     const delta = 100 * (found - importScore) / importScore;
     rows.push({ ...p, importScore, found, delta, evals: res.evals });
     const tag = delta >= -0.5 ? 'ok  ' : (delta >= -10 ? 'near' : 'MISS');
-    console.log(`${tag} ${p.fx.uid.padEnd(34)} lvl${String(p.level).padEnd(3)} `
+    console.log(`${tag} ${p.fx.name.padEnd(14)} lvl${String(p.level).padEnd(3)} `
       + `found ${found.toFixed(2).padStart(12)}  import ${importScore.toFixed(2).padStart(12)}  `
       + `${delta >= 0 ? '+' : ''}${delta.toFixed(2)}%   ${res.evals} evals`);
   }
@@ -151,8 +151,8 @@ function stratify(fixtures, n, rand) {
   if (badly.length) {
     console.log(`\n${badly.length} build(s) more than 10% short WITHOUT the incumbent:`);
     for (const b of badly) {
-      console.log(`  ${b.fx.uid} lvl${b.level}  ${b.delta.toFixed(2)}%`
-        + `  -- diagnose with: node tools/bench/underspend-diagnose.js ${b.fx.uid}`);
+      console.log(`  ${b.fx.name} lvl${b.level}  ${b.delta.toFixed(2)}%`
+        + `  -- diagnose with: node tools/bench/underspend-diagnose.js ${b.fx.name}`);
     }
     console.log('  These are builds the optimizer only gets right because the user already had '
       + 'them. A fresh account, or a heavily respecced one, would not.');

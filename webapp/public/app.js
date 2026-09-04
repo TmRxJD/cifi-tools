@@ -3489,6 +3489,7 @@ const OPTIMIZE_PHASES = {
   screen: { span: [1, 3], label: 'Ranking' },
   survey: { span: [3, 30], label: 'Tuning' },
   refine: { span: [30, 62], label: 'Refining' },
+  crossSeed: { span: [62, 70], label: 'Trying a boss-capable build' },
   // A boss-capable candidate, searched under the boss objective and entered here (see
   // Objective.crossSeedFor). It only runs when the build is stuck on a boss, so this span is
   // often skipped entirely -- the bar jumping over it is correct, not a stall.
@@ -3496,7 +3497,7 @@ const OPTIMIZE_PHASES = {
   // A MISSING ENTRY HERE IS FATAL: the progress handler throws on an unknown phase, so adding a
   // stage to the search without adding it here aborts the whole run. That is exactly how this
   // pass broke Optimize once already.
-  crossSeed: { span: [62, 70], label: 'Trying a boss-capable build' },
+
   final: { span: [70, 99], label: `Confirming winner at ${window.HunterOptimizer ? window.HunterOptimizer.FINAL_ITERATIONS : 1000} iterations` },
   done: { span: [99, 100], label: 'Done' },
 };

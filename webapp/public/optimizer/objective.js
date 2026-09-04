@@ -197,25 +197,22 @@
    * not in borrowing an answer from an objective that wants something else.
    */
   /**
-   * Which objective, if any, should ALSO be searched and its answer entered as a candidate here.
+   * Which objective should ALSO be searched, its answer entered here as an ordinary candidate.
    *
-   * `loot` IS BLIND ON A BOSS WALL. Every allocation that fails the kill scores the same
-   * lootPerMin, so there is no gradient to climb and the search is not weak -- it is standing on a
-   * flat surface. Measured on a real level-31 Knox: the import kills the stage-100 boss and scores
-   * 64,031, while EVERY method tried (coordinate exchange, support enumeration, greedy build-up,
-   * chunked greedy, joint greedy) returned ~6,900 with `bossKillRate 0` and `avgStage` pinned at
-   * exactly 100.00. The same optimizer in `boss` mode -- lexicographic over `bossHpPercent`, so it
-   * HAS a gradient -- returned a build worth 39,072 loot, and refining that under `loot` reached
-   * 46,820.
+   * IT IS A NAVIGATION AID, NOT A SECOND METRIC. The candidate is judged at Stage 3 on the
+   * caller's objective like every other finalist, so it only wins if it genuinely farms more.
+   * Boss HP is a smooth, low-variance signal that steers into build shapes `loot` cannot reach on
+   * its own -- near a boss threshold a kill is a rare event, and at screening fidelity the loot
+   * difference between "almost kills" and "never kills" is unresolvable noise.
    *
-   * The remedy is a CANDIDATE, not a scoring change: the objective stays exactly `lootPerMin` and
-   * the boss-capable build competes on it at Stage 3 like any other finalist. That distinction
-   * matters -- the objectives are the player's choice (kill now, kill with Timeless maxed, push
-   * stages, just farm), and folding boss progress into the loot score would quietly answer a
-   * different question than the one asked.
+   * MEASURED, and this is why it is here rather than deleted: on a real level-62 Ozzy that kills
+   * its boss 50-67% of the time, removing this pass took the result from 39,881,450 to 11,879,496
+   * -- a 3.3x loss on lootPerMin alone. Refinement hands the polish ~34M with it and ~11.8M
+   * without; the polish only ever adds the last 16%.
    *
-   * `push` gets the same treatment for the same reason: a stage wall is a boss that is not dying.
-   * The boss modes do not, which is also what terminates the recursion.
+   * Five loot-native routes to those builds were tried and measured failing: concentrated
+   * screening shapes, gate-paying fills, deterministic annealing, wider refinement, and ranking
+   * non-killing builds by boss progress (which fixed Knox and cost borge@26 73%).
    */
   function crossSeedFor(mode) {
     return modeOrThrow(mode).crossSeedFrom || null;

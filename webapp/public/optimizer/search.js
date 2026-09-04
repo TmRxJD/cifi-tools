@@ -184,7 +184,14 @@
   // a correction, not a search: the descent has already happened. Unbounded it was the largest
   // single cost on a high-level hunter -- a level-62 Ozzy run grew past three minutes, most of it
   // here -- for a measured gain of 0.32%.
-  const POLISH_MAX_ROUNDS = 4;
+  // Each round is now ONE screening pass plus POLISH_VERIFY accurate evaluations, so a round is
+  // cheap and the cap can be generous. It could not before: the old polish scanned the whole
+  // neighbourhood at FINAL_ITERATIONS, where 4 rounds per step level already cost minutes.
+  //
+  // Four was measured far too tight once the cost changed. On a level-62 Ozzy the wide polish had
+  // been making 16.67% of corrections across many rounds; capped at 4 it managed 0.92% and the run
+  // came back 66% below the player's own build.
+  const POLISH_MAX_ROUNDS = 40;
 
   const SURVEY_STEP_SIZES = [4, 1];
 
@@ -338,6 +345,83 @@
     if (budget - spent() > Space.MAX_IDLE_POINTS) return null;
     if (!Space.isLegal(defs, deps, minVal, alloc, budget)) return null;
     return alloc;
+  }
+
+  // SHORTLIST CHEAPLY, DECIDE EXPENSIVELY.
+  //
+  // The polish is the only stage that measures at FINAL_ITERATIONS, and that is what makes it able
+  // to correct a fine ridge -- on a real level-62 Ozzy it moved the winner 16.67%. But scanning the
+  // whole neighbourhood at that fidelity, across every step size, is ruinous: a level-60 Borge went
+  // from 94s to over five minutes when the amount range widened to 1..16.
+  //
+  // An evaluation at 1000 iterations costs about ten at 100, so the budget is far better spent as
+  // a FEW accurate decisions than as many accurate scans. Every candidate move is scored once at
+  // screening fidelity to rank them, and only the best POLISH_VERIFY of them are re-scored at full
+  // fidelity, where the choice is actually made.
+  //
+  // The shortlist being biased is exactly why it is a SHORTLIST and not a decision: a 100-iteration
+  // score has been measured ranking a 0.32% ridge backwards by 1.7%, so it is trusted only to say
+  // "these are the moves worth paying to look at properly", and the verdict always comes from the
+  // full-fidelity score.
+  const POLISH_VERIFY = 12;
+
+  async function polishWinner(ctx, cfg, talentAlloc, attrAlloc, startScore, pinnedAttrs, report) {
+    const { TALENTS, ATTRIBUTES, TALENT_BUDGET, ATTRIBUTE_BUDGET } = cfg;
+    const deps = cfg.ATTRIBUTE_DEPENDENCIES;
+    const minVal = cfg.ATTRIBUTE_MIN_VALUE;
+    let curT = { ...talentAlloc };
+    let curA = { ...attrAlloc };
+    let curScore = startScore;
+
+    for (let round = 0; round < POLISH_MAX_ROUNDS; round++) {
+      if (ctx.shouldCancel()) throw new Cancelled();
+      report(round / POLISH_MAX_ROUNDS);
+
+      // Build the whole neighbourhood: every pair, every amount in POLISH_STEP_SIZES, both blocks.
+      const moves = [];
+      const seen = new Set();
+      const push = (talents, attrs) => {
+        const sig = `${Space.signature(TALENTS, talents)}|${Space.signature(ATTRIBUTES, attrs)}`;
+        if (seen.has(sig)) return;
+        seen.add(sig);
+        moves.push({ talentAlloc: talents, attrAlloc: attrs });
+      };
+      for (const step of POLISH_STEP_SIZES) {
+        for (const from of ATTRIBUTES) {
+          if (pinnedAttrs.includes(from.id) || (curA[from.id] || 0) < step) continue;
+          for (const to of ATTRIBUTES) {
+            const nx = Space.transfer(ATTRIBUTES, deps, minVal, ATTRIBUTE_BUDGET, curA, from.id, to.id, step);
+            if (nx && pinsHeld(ATTRIBUTES, nx, pinnedAttrs)) push(curT, nx);
+          }
+        }
+        for (const from of TALENTS) {
+          if ((curT[from.id] || 0) < step) continue;
+          for (const to of TALENTS) {
+            const nx = Space.transfer(TALENTS, {}, {}, TALENT_BUDGET, curT, from.id, to.id, step);
+            if (nx) push(nx, curA);
+          }
+        }
+      }
+      if (!moves.length) break;
+
+      // Rank cheaply...
+      const verifyWidth = cfg.polishVerify || POLISH_VERIFY;
+      const cheap = await ctx.score(moves, SCREEN_ITERATIONS);
+      const order = moves.map((m, i) => ({ m, s: cheap[i] }))
+        .sort((a, b) => b.s - a.s)
+        .slice(0, verifyWidth);
+      // ...decide expensively.
+      const exact = await ctx.score(order.map((o) => o.m), FINAL_ITERATIONS);
+      let bestIdx = -1;
+      for (let i = 0; i < exact.length; i++) {
+        if (exact[i] > curScore && (bestIdx === -1 || exact[i] > exact[bestIdx])) bestIdx = i;
+      }
+      if (bestIdx === -1) break;                       // nothing verified better: converged
+      curT = order[bestIdx].m.talentAlloc;
+      curA = order[bestIdx].m.attrAlloc;
+      curScore = exact[bestIdx];
+    }
+    return { talentAlloc: curT, attrAlloc: curA, score: curScore };
   }
 
   // Every talent support, the same way attribute supports are enumerated.
@@ -807,18 +891,51 @@
           effortSpec.refineMaxRounds || MAX_ROUNDS_PER_BLOCK));
         noteBest(finalists[finalists.length - 1].score);
 
-        // THE MEASURED RE-FILL AND TALENT-SUPPORT ENUMERATION USED TO LIVE HERE. Removed as dead
-        // weight, measured on the account they were built for:
+        // ENUMERATE THE TALENT SUPPORTS. This is what a threshold talent needs.
         //
-        //     Borge lvl60  with    -> 142,839,497  56.7s  5,955 evals
-        //                  without -> 142,839,497  28.4s  2,257 evals   (62% of the run, no effect)
-        //     borge#16     without -> +0.70% over the import, no incumbent involved
+        // Coordinate exchange cannot BUILD a talent that is worthless until it is deep. Power Of
+        // Gaia is the standing example -- worthless at 3, decisive at 10 -- so a hill climb strips
+        // it early and no sequence of 8/4/2/1 transfers rebuilds it alongside Finisher. Talents
+        // have no dependencies and no thresholds, so every subset is a legal support and there are
+        // at most 511 of them: FEWER than the attribute supports already enumerated exhaustively.
         //
-        // borge#16 is the fixture this machinery was ADDED for (it was failing at -14.54%), so
-        // passing without it is the test that matters. It was compensating for Space.transfer
-        // judging legality mid-move -- the bug fixed in aeaf6a8 -- which fabricated cliffs that
-        // plain refinement could not cross. With the move generator correct, refinement reaches
-        // the same allocation on its own.
+        // MEASURED on knox#22 (level 31): the search settles on ll 10 / ghost 9 / finish 9 / calyp 3
+        // and scores 6,924, while the real build runs pog 10 / finish 13 / ghost 6 / revival 2 and
+        // scores 64,031. It is a JOINT peak -- neither half rescues the other:
+        //     import talents + search attrs -> 3,741
+        //     search talents + import attrs -> 6,455
+        // so the talent structure has to be enumerated, not climbed to.
+        //
+        // Screened against a MEASURED attribute fill rather than a flat one, because the coupling
+        // is one-way: a talent support that only wins at real attribute depth is invisible against
+        // a canonical fill.
+        //
+        // THIS WAS DELETED ONCE, on an ablation that measured it inert on borge#16 and a level-60
+        // Borge -- neither of which has a threshold talent to rebuild. knox#22 is the build it was
+        // written for and it was not in the ablation. A stage is only dead if the cases it exists
+        // for say so.
+        const support = allSupports.get(c.mask);
+        if (support) {
+          const opened = Space.canonicalFill(ATTRIBUTES, deps, minVal, attrBudget, support.ids, true);
+          if (opened) {
+            let measuredAttrs = await greedyTopUp(
+              ctx, ATTRIBUTES, deps, minVal, attrBudget, opened,
+              (a) => ({ talentAlloc: seedTalents, attrAlloc: a }), support.ids,
+            );
+            if (pinnedAttrs.length) {
+              measuredAttrs = applyPins(ATTRIBUTES, deps, minVal, attrBudget, measuredAttrs, pinnedAttrs);
+            }
+            if (Space.isLegal(ATTRIBUTES, deps, minVal, measuredAttrs, attrBudget)) {
+              const best = await bestTalentSupportsFor(ctx, measuredAttrs, TALENTS, talentBudget, BATCH, shouldCancel);
+              for (const t of best) {
+                if (shouldCancel()) throw new Cancelled();
+                finalists.push(await optimizeJointly(
+                  ctx, budgets, t.fill, measuredAttrs, t.score, STEP_SIZES, 6, pinnedAttrs,
+                ));
+              }
+            }
+          }
+        }
       }
 
       // Survey results that did not make the refinement cut still compete: they are complete,
@@ -962,11 +1079,9 @@
       // champion on the same FINAL_ITERATIONS measurement and only replaces it if it truly wins.
       if (ranked.length && !effortSpec.skipPolish) {
         const champion = ranked[0];
-        const polished = await optimizeJointly(
-          ctx, budgets, champion.talentAlloc, champion.attrAlloc, champion.score,
-          POLISH_STEP_SIZES, effortSpec.polishSweeps || 1, pinnedAttrs,
-          (f) => report('final', f, 1), FINAL_ITERATIONS,
-          effortSpec.polishMaxRounds || POLISH_MAX_ROUNDS,
+        const polished = await polishWinner(
+          ctx, budgets, champion.talentAlloc, champion.attrAlloc, champion.score, pinnedAttrs,
+          (f) => report('final', f, 1),
         );
         if (polished.score > champion.score) {
           ranked.unshift({

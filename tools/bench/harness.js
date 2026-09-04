@@ -233,6 +233,9 @@ async function evaluateAllocation(cfg, talentAlloc, attrAlloc, iterations = Opti
  */
 function findFixture(all, name) {
   const flat = Object.values(all).flat();
+  // The level-based name is the preferred form: `knox@31` is a level 31 Knox.
+  const byName = flat.filter((f) => f.name === name);
+  if (byName.length === 1) return byName[0];
   const exact = flat.filter((f) => f.uid === name);
   if (exact.length === 1) return exact[0];
   const m = /^([a-z]+)(?::([A-Z_]+))?#(\d+)$/.exec(name);
@@ -301,6 +304,23 @@ function loadKnownBuilds() {
       arr.forEach((b, i) => entries.push({
         ...b, hunter, mode, set: m[1], index: i, uid: `${hunter}:${m[1]}#${i}`,
       }));
+    }
+    // NAME FIXTURES BY LEVEL, NOT BY ARRAY POSITION.
+    //
+    // `#22` was an index. It reads as a level and is not one -- knox#22 is a LEVEL 31 build, and
+    // that cost real time: a whole debugging session ran against a level-31 fixture while the
+    // build being compared against was level 22. An identifier that looks like a level must be
+    // one.
+    //
+    // Several builds can share a level, so collisions get a letter suffix in load order
+    // (knox@31, knox@31b, knox@31c). `uid` stays as it was -- it is the unique array address and
+    // some notes reference it -- but `name` is what benches print and accept.
+    const byLevel = new Map();
+    for (const e of entries) {
+      const lvl = Number(e.level) || 0;
+      const seen = byLevel.get(lvl) || 0;
+      byLevel.set(lvl, seen + 1);
+      e.name = `${hunter}@${lvl}${seen ? String.fromCharCode(97 + seen) : ''}`;
     }
     out[hunter] = entries;
   }
