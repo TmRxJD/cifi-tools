@@ -918,6 +918,23 @@ think one is wrong, disprove it with a test.
   Before concluding a gate exists, set the value through the ACCOUNT -- the path a real player uses
   -- rather than through an importer that may filter it. The same trap in a milder form is why
   `compare_builds` now reports `notTransportedToLive`.
+- **`upgrades.loopmods.roe` WAS NOT INERT, AND "NO WASM ARGUMENT" IS NOT EVIDENCE THAT IT IS.**
+  It has no slot in `params.json` for any hunter, and that alone had put it on
+  `override-liveness-check`'s KNOWN_INERT list -- described there as inert in the ORIGINAL too. It
+  is not. Measured against cifi-tools with the value set in its ACCOUNT state, XP per run goes
+  **6,660,000 -> 49,220,000 at roe = 20000**: a factor of **7.3904** against the **7.3883** its own
+  bundle declaration (`multiplicative, value 1.0001, "EXP Gained"`) predicts, a 0.03% match. Loot,
+  stage and every material are untouched, and the result is identical with and without Temporal 4,
+  so it is not gem-gated in the sim either.
+  The site applies it OUTSIDE the evaluator, the same way it handles the diamondspecials
+  multipliers. `hunterSimBrowser.js` now does too, via `POST_SIM_XP_MULTIPLIERS`.
+  **This is the third time the same mistake has produced a false "inert" verdict**, and the pattern
+  is always a measurement that cannot see the field in question: `relic-sweep.js` watched loot while
+  r7 doubles MATERIALS; `sim-gate-probe.mjs`'s first signature was
+  `lootScore|avgStage|mat1PerRun` while roe moves XP ONLY; and this list inferred "does nothing"
+  from "owns no argument". Compare EVERY output before calling anything inert.
+  `override-liveness-check` no longer takes a post-sim multiplier on trust: it evaluates with the
+  value at 0 and at 20000 and requires the OUTPUT to move.
 - **A modal that starts async work must cancel it on close, and `titledModal` fires `modal-close`
   so it can.** Closing used to just `remove()` the overlay, leaving the Effective Path walk
   running: invisible, uncancellable, and still competing for the main thread and for wasm

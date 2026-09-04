@@ -64,8 +64,13 @@ const PROBES = [
   ['shardmilestones', 'upgrades.shardmilestones.m0', 90],
   ['researches', 'upgrades.researches.res81', 6],
   ['cms', 'upgrades.cms.cm46', 1],
-  ['loopmods', 'upgrades.loopmods.roe', 10],
-  ['trinkets', 'upgrades.trinkets.last_handbook', 230],
+  // These two need LARGE values to register at all, which is why an earlier pass reported them
+  // INERT and could say nothing about their gating. `roe` is x1.0001 per level and a trinket is
+  // +0.001 -- at 10 and 230 respectively they move the result by less than the display rounding.
+  // Neither has a cap (maxLevel 1/0 in the bundle), so the probe is free to use a level that
+  // actually shows up: 1.0001^20000 is about 7.4x.
+  ['loopmods', 'upgrades.loopmods.roe', 20000],
+  ['trinkets', 'upgrades.trinkets.last_handbook', 5000],
 ];
 
 const only = process.argv.slice(2);
@@ -80,8 +85,18 @@ function gemsFor(key) {
 }
 
 const flat = (k, v) => ({ [k.replace(/^upgrades\./, '')]: v });
-const sig = (s) => (s == null ? 'null' : [s.lootScore, s.avgStage, s.mat1PerRun].join('|'));
-const cloneSig = (s) => (s == null ? 'null' : [s.lootPerMin, s.avgStage, s.mat1].join('|'));
+// EVERY output, not a sample of three. The first version compared lootScore/avgStage/mat1PerRun
+// and reported `loopmods.roe` as inert -- but roe is an EXP multiplier, and xp was not in the
+// signature. An upgrade that moves only the field you did not look at is indistinguishable from one
+// that moves nothing, which is the same mistake relic-sweep.js made when it called Borge's r7
+// inert by watching loot alone while r7 doubles materials.
+const sig = (s) => (s == null ? 'null' : [
+  s.lootScore, s.avgStage, s.avgTimeMinutes,
+  s.mat1PerRun, s.mat2PerRun, s.mat3PerRun, s.xpPerRun,
+].join('|'));
+const cloneSig = (s) => (s == null ? 'null' : [
+  s.lootPerMin, s.avgStage, s.avgTime, s.mat1, s.mat2, s.mat3, s.xp,
+].join('|'));
 
 async function live(upgrades, gemStates) {
   return evaluateOnLiveSite(HUNTER, {

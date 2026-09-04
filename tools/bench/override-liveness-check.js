@@ -40,8 +40,20 @@ function maxedGemState() {
 // that rule would have excused the bug this bench was written for: the trinket overrides have no
 // parameter of their own either -- they feed the derived creation_galvTrinketsCount -- and they
 // were silently discarded for real accounts.
+// `upgrades.loopmods.roe` WAS on this list and should never have been. It has no slot in
+// params.json, and that was taken as proof it does nothing -- the exact inference the comment
+// above warns against. Measured against the site with the value in its account state, XP per run
+// goes 6,660,000 -> 49,220,000 at roe = 20000 (x7.3904 against the x7.3883 its own 1.0001-per-level
+// declaration predicts). The site applies it OUTSIDE the evaluator; hunterSimBrowser.js now does
+// the same, so it is live here and no longer belongs on an inert list.
+// Applied to the evaluator's OUTPUT rather than passed in as an argument, so "changed no argument"
+// is the wrong test for these -- they are live, just by a different mechanism. Read from HunterSim
+// itself rather than restated, so adding one there cannot leave this list stale.
+const POST_SIM = new Set(
+  (sb.HunterSim.POST_SIM_XP_MULTIPLIERS || []).map((m) => m.key),
+);
+
 const KNOWN_INERT = new Set([
-  'upgrades.loopmods.roe',
   'upgrades.cms.cm58',
   'upgrades.cms.cm_ultima',
   'upgrades.cms.cm_ultimas',
@@ -71,7 +83,19 @@ const KNOWN_INERT = new Set([
         const args = await sb.HunterSim.buildArgs(hunter, { ...base, overrides: { [key]: 5 } });
         let moved = 0;
         for (let i = 0; i < args.length; i++) if (args[i] !== a0[i]) moved++;
-        if (moved === 0 && KNOWN_INERT.has(key)) {
+        if (moved === 0 && POST_SIM.has(key)) {
+          // Live, but applied to the OUTPUT rather than to an argument -- so prove it moves the
+          // output instead of accepting it on the strength of being on a list.
+          const off = await sb.HunterSim.evaluate(hunter, { ...base, overrides: { [key]: 0 } });
+          const on = await sb.HunterSim.evaluate(hunter, { ...base, overrides: { [key]: 20000 } });
+          if (off.xp === on.xp) {
+            failures++;
+            console.log(`FAIL ${hunter} ${key}: declared a post-sim multiplier but the output does `
+              + 'not move');
+          } else if (verbose) {
+            console.log(`ok   ${hunter} ${key} -> post-sim, xp ${off.xp} -> ${on.xp}`);
+          }
+        } else if (moved === 0 && KNOWN_INERT.has(key)) {
           inert++;
           if (verbose) console.log(`inert ${hunter} ${key} (no parameter in the original either)`);
         } else if (moved === 0) {

@@ -229,6 +229,35 @@
     };
   }
 
+  // POST-SIM MULTIPLIERS: upgrades the live tool applies to the evaluator's OUTPUT rather than
+  // passing in as an argument.
+  //
+  // `upgrades.loopmods.roe` ("Ultima: Rule of Experience") has no slot in params.json for any
+  // hunter, and it had been listed as inert-in-the-original on that basis. It is not. Measured
+  // against cifi-tools with the value set in its account state: XP per run goes 6,660,000 ->
+  // 49,220,000 at roe = 20000, a factor of 7.3904 against the 1.0001^20000 = 7.3883 its own
+  // declaration predicts -- a 0.03% match -- while loot, stage and every material are untouched.
+  // It is also NOT gem-gated in the sim: the result is identical with and without Temporal 4.
+  //
+  // "No wasm argument" therefore does not mean "does nothing". The bundle declares this one as
+  // `upgradeType: "multiplicative", value: 1.0001, description: "EXP Gained"`, and applies it
+  // outside the evaluator, exactly as it does the diamondspecials multipliers that resolveParam
+  // already special-cases.
+  const POST_SIM_XP_MULTIPLIERS = [
+    { key: 'upgrades.loopmods.roe', perLevel: 1.0001 },
+  ];
+
+  function applyPostSimMultipliers(result, state) {
+    if (!result || result.xp == null) return result;
+    let xpMult = 1;
+    for (const { key, perLevel } of POST_SIM_XP_MULTIPLIERS) {
+      const level = resolveParam(key, state);
+      if (level > 0) xpMult *= perLevel ** level;
+    }
+    if (xpMult !== 1) result.xp *= xpMult;
+    return result;
+  }
+
   // Final post-upgrade combat stats, read via the same getLastBorge*/getLastOzzy*/getLastKnox*
   // exports the live site's worker uses to populate its "Build Stats" tab.
   const FINAL_STAT_NAMES = {
@@ -270,7 +299,7 @@
     if (!fn) throw new Error(`Missing wasm export for ${hunter}`);
     const args = await buildArgs(hunter, state);
     const lootPerMin = fn(...args);
-    return { lootPerMin, ...getStats(ex, hunter) };
+    return applyPostSimMultipliers({ lootPerMin, ...getStats(ex, hunter) }, state);
   }
 
   // Same run as evaluate(), but also returns the final post-upgrade combat stats and the
@@ -282,11 +311,11 @@
     if (!fn) throw new Error(`Missing wasm export for ${hunter}`);
     const args = await buildArgs(hunter, state);
     const lootPerMin = fn(...args);
-    return {
+    return applyPostSimMultipliers({
       lootPerMin, ...getStats(ex, hunter),
       finalStats: getFinalStats(ex, hunter),
       stageDistribution: getStageDistribution(ex, hunter),
-    };
+    }, state);
   }
 
   // Fast-path compiled evaluator, same idea as the Node version: resolve every constant
@@ -390,5 +419,8 @@
   global.HunterSim = {
     evaluate, evaluateDetailed, buildArgs, resolveParam, compileEvaluator, loadParams, loadWasm,
     clearCache, throwIfAborted, isAbort, ABORTED,
+    // Exposed so a liveness check can tell "changes no wasm argument" apart from "does nothing":
+    // these are applied to the evaluator's OUTPUT, so they are live without owning an argument.
+    POST_SIM_XP_MULTIPLIERS,
   };
 })(typeof window !== 'undefined' ? window : self);
