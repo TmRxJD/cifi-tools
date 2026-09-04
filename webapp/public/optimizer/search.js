@@ -552,6 +552,10 @@
   // parent happens to have. The enumeration is exact and already paid for, `gatePayingFill` knows
   // how to pay a tier threshold, and this is pure exploration -- it is not directed at the boss or
   // at any objective, so it cannot collapse the search into a basin.
+  const DEFAULT_SELECTION = 'curiosity';
+  const CURIOSITY_REWARD = 1;
+  const CURIOSITY_PENALTY = 0.5;
+  const CURIOSITY_INITIAL = 2;
   const STRUCTURAL_SHARE = 0.35;
   // What fraction of the attribute point-moves are DAG-native depth moves rather than flat
   // transfers. Sweepable through the effort object, same as the structural share.
@@ -730,7 +734,7 @@
    * Seeded from the enumerated supports rather than from random points: the enumeration is exact
    * and already paid for, so the archive starts with real structural coverage instead of noise.
    */
-  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, structuralShare, depthShare, seedList, report) {
+  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, structuralShare, depthShare, seedList, selection, report) {
     const stats = { rejected: 0, accepted: 0, repaired: 0, nodesCleared: 0, structural: 0,
       depthAccepted: 0, depthRejected: 0, depthOpened: 0 };
     const { TALENTS, ATTRIBUTES, talentBudget, attrBudget, deps, minVal } = spaces;
@@ -761,8 +765,14 @@
           score,
           kill: meta.kill,
           hp: Number.isFinite(meta.hp) ? meta.hp : 100,
+          // A brand-new elite starts curious, so an unexplored niche is developed before it has
+          // had to prove anything -- which is the only way a boss cell that is reached once gets
+          // the follow-up effort to become a real build.
+          curiosity: CURIOSITY_INITIAL,
         });
+        return true;
       }
+      return false;
     };
     // SEEDS MUST BE COMPLETE PAIRS. Screening varies attributes against a fixed talent seed, so a
     // screened row carries `attrAlloc` and no `talentAlloc` -- and `{ ...undefined }` is `{}`, so an
@@ -776,6 +786,9 @@
     }
 
     let spent = 0;
+    let parentCursor = 0;
+    let supportCursor = 0;
+    let crossStride = 1;
     const streams = Array.isArray(seedList) ? seedList : [seedList];
     const perStream = Math.max(ARCHIVE_BATCH, Math.floor(evalBudget / streams.length));
     for (const streamSeed of streams) {
@@ -787,18 +800,81 @@
       const elites = [...archive.values()];
       if (!elites.length) break;
 
+      // CURIOSITY SELECTION: deterministic, and DEPTH-CONCENTRATING.
+      //
+      // Two attempts at reducing the seed sensitivity failed for the SAME reason, and the reason is
+      // what this implements. Merging several seeds into one archive (each shallower) and sweeping
+      // parents round-robin (every cell equally) both traded depth for breadth, and both LOST THE
+      // BOSS REACH: round-robin on ozzy@62 dropped mean champion 6.4% and took best kill from 7 to
+      // 0 across three of four seeds. Deep development of ONE lineage is what crosses into a boss
+      // cell; spreading effort evenly guarantees no lineage gets there.
+      //
+      // The diagnosis that followed is sharper than "7% variance". Borge's archive varies 17.8%
+      // between seeds and its FINAL answer is 0.00% every time -- refinement recovers from any
+      // archive it is handed. Ozzy's outcome is not a spread at all, it is BIMODAL: a seed whose
+      // archive touches a boss cell finishes near 40.5M, one whose archive does not finishes near
+      // 11.9M. The quantity that actually varies is a discrete event -- did any lineage get deep
+      // enough -- not a continuous score.
+      //
+      // Curiosity selection (Cully & Demiris) is the standard answer to exactly this trade-off:
+      // pick the parent whose descendants have most recently been IMPROVING the archive. A lineage
+      // that keeps landing in new or better cells keeps being developed, so effort concentrates
+      // where it is paying; one that stops contributing decays and yields its turn. Selection is a
+      // deterministic function of archive state -- no draw -- so it cannot depend on the stream,
+      // while depth still concentrates.
+      // DETERMINISTIC SELECTION, RANDOM PERTURBATION -- and the split is the whole point.
+      //
+      // Illumination made three kinds of random decision: WHICH elite to develop, WHICH support to
+      // resample, and HOW to perturb. Only the third is exploration. The first two are COVERAGE
+      // decisions, and sampling a coverage decision is strictly worse than sweeping it: uniform
+      // draws revisit some cells many times and miss others entirely, purely by luck of the
+      // stream. That is where the seed sensitivity came from -- measured at 7.8% spread in the
+      // archive's own champion (9.614M / 8.919M / 9.562M) BEFORE refinement runs at all, so it
+      // could not have originated downstream.
+      //
+      // Round-robin fixes it at zero cost. Every cell gets developed equally often and every
+      // enumerated support gets tried, in a fixed order, so the answer stops depending on whether
+      // a particular stream happened to draw the right parent. Randomness is kept where it is
+      // actually doing work: which nodes move and by how much.
+      //
+      // Elites are ordered by CELL KEY, not by score. Ordering by score would make the sweep chase
+      // the current leader and reintroduce exactly the fitness bias the archive exists to avoid.
+      // Highest curiosity first; cell key breaks ties, so the order is total and reproducible.
+      // `selection` exists so the strategies can be A/B'd on the FULL pipeline without editing the
+      // file between arms -- which matters because the archive's own champion score turned out to
+      // be an unreliable proxy for the final answer (Borge's archive varies 17.8% between seeds
+      // while its final build is identical every time).
+      const ordered = selection === 'random'
+        ? [...archive.values()]
+        : [...archive.entries()]
+          .sort((x, y) => ((y[1].curiosity || 0) - (x[1].curiosity || 0))
+            || (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0))
+          .map(([, e]) => e);
+
       const batch = [];
+      const parents = [];
       for (let i = 0; i < ARCHIVE_BATCH; i++) {
-        const parent = elites[Math.floor(rng() * elites.length)];
+        // Draw from the most curious head of the list, cycling so one lineage cannot monopolise a
+        // whole batch. Depth without starving everything else.
+        const head = Math.max(1, Math.min(ordered.length, Math.ceil(ordered.length / 4)));
+        const parent = selection === 'random'
+          ? ordered[Math.floor(rng() * ordered.length)]
+          : ordered[(parentCursor++) % head];
+        parents.push(parent);
         let t = { ...parent.talentAlloc };
         let a = { ...parent.attrAlloc };
         // Structural resample: adopt a whole different support, filled two ways (gate-paying when
         // the support has a threshold to pay, canonical otherwise). This is the move that a
         // sequence of point transfers cannot make.
         if (supports.length && rng() < structuralShare) {
-          const pick = supports[Math.floor(rng() * supports.length)];
+          // Sweep the supports in order rather than sampling them, so every enumerated structure
+          // is tried once before any is tried twice. The enumeration is exhaustive and already
+          // paid for; drawing from it at random throws that property away.
+          const which = supportCursor++;
+          const pick = supports[which % supports.length];
           const ids = pick.support ? pick.support.ids : pick.ids;
-          const filled = (rng() < 0.5)
+          // Alternate the two fills deterministically so each support is seen both ways.
+          const filled = (which % 2 === 0)
             ? gatePayingFill(ATTRIBUTES, deps, minVal, attrBudget, ids)
             : Space.canonicalFill(ATTRIBUTES, deps, minVal, attrBudget, ids, true);
           if (filled && Space.isLegal(ATTRIBUTES, deps, minVal, filled, attrBudget)
@@ -809,8 +885,10 @@
         }
         // Crossing a boss-capable elite with a farming one is how ONE search reaches builds that
         // neither parent's basin contains -- which is what the cross-seed pass was doing by hand.
-        if (elites.length > 1 && rng() < ARCHIVE_CROSSOVER) {
-          const other = elites[Math.floor(rng() * elites.length)];
+        if (ordered.length > 1 && rng() < ARCHIVE_CROSSOVER) {
+          // Partner is a fixed stride away in the same cell order, so crossover pairs are spread
+          // across the archive instead of clustering wherever the stream happened to land.
+          const other = ordered[(parentCursor + crossStride++) % ordered.length];
           if (rng() < 0.5) t = { ...other.talentAlloc }; else a = { ...other.attrAlloc };
           if (Space.costOf(TALENTS, t) > talentBudget
             || !Space.isLegal(ATTRIBUTES, deps, minVal, a, attrBudget)) {
@@ -841,7 +919,15 @@
 
       const scores = await ctx.score(batch, SCREEN_ITERATIONS);
       const meta = scores.boss || [];
-      for (let i = 0; i < batch.length; i++) consider(batch[i], scores[i], meta[i]);
+      for (let i = 0; i < batch.length; i++) {
+        const improved = consider(batch[i], scores[i], meta[i]);
+        // Reward the PARENT, which is what makes this a lineage signal rather than a cell score.
+        const par = parents[i];
+        if (par) {
+          par.curiosity = (par.curiosity === undefined ? CURIOSITY_INITIAL : par.curiosity)
+            + (improved ? CURIOSITY_REWARD : -CURIOSITY_PENALTY);
+        }
+      }
       spent += batch.length;
     }
     }
@@ -1320,6 +1406,7 @@
         Number.isFinite(effortSpec.structuralShare) ? effortSpec.structuralShare : STRUCTURAL_SHARE,
         Number.isFinite(effortSpec.depthShare) ? effortSpec.depthShare : DEPTH_SHARE,
         effortSpec.seeds || (Number.isFinite(effortSpec.seed) ? [effortSpec.seed] : ARCHIVE_SEEDS),
+        effortSpec.selection || DEFAULT_SELECTION,
         (f) => report('survey', f * SURVEY_REPORT_SCALE, SURVEY_REPORT_SCALE),
       );
       const surveyed = elites.map((e) => ({ ...e, mask: maskOf(e.attrAlloc) }));
