@@ -167,9 +167,12 @@
   // timeless +1 costs 3, lotl +2 costs 2, and Space.transfer's fillLeftover distributes the
   // remainder by itself. Five is simply not on the ladder.
   //
-  // Enumerating 1..8 is a complete set of small moves rather than a hand-picked few, and it is
-  // affordable precisely because the polish only ever touches the winner.
-  const POLISH_STEP_SIZES = [8, 7, 6, 5, 4, 3, 2, 1];
+  // Enumerating a CONTIGUOUS RANGE rather than a hand-picked few is the point -- a ladder can
+  // only express the amounts on it. The range reaches 16 because 8 was not enough either: the
+  // remaining gap to the best allocation known for that account is a NINE-unit move
+  // (exo 65 -> 74). Affordable precisely because the polish only ever touches the winner: going
+  // from 3 amounts to 8 cost 140 evaluations.
+  const POLISH_STEP_SIZES = Array.from({ length: 16 }, (_, i) => 16 - i);
 
   // How many candidate moves are scored before a block settles for the best one found so far.
   // Sized to keep the worker pool (MAX_POOL_SIZE is 6) busy while bounding what one accepted move
