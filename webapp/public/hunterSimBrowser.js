@@ -73,9 +73,22 @@
     if (!g?.upgrades) return 0;
     return Object.values(g.upgrades).reduce((a, b) => a + (b || 0), 0);
   }
-  function exodusGateUnlocked(state, gateOverrideName, nodeIndex) {
+  // A handful of sim params are derived only when a specific gem NODE is owned. The gate key names
+  // its own tree and node -- `upgrades.gems_nodes.creation_gem5` is creation, node 5 -- so both are
+  // parsed from the key rather than passed alongside it.
+  //
+  // The previous version was named for the exodus tree and hard-coded it, taking the node index as
+  // a separate argument: two independent ways to get a gate wrong. The trinkets caller got both,
+  // naming `creation_gem5` while being answered from EXODUS node 5, so trinkets were gated on an
+  // unrelated tree and read 0 for any real account. Nothing caught it because a wrong gate returns
+  // 0 rather than throwing, and a trinket is +0.001 per level -- small enough that the zeroed
+  // parameter is invisible in an end-to-end output comparison. Deriving both halves from the one
+  // key means the tree and the index can no longer disagree.
+  function gemNodeGateUnlocked(state, gateOverrideName) {
     if (state.overrides && gateOverrideName in state.overrides) return state.overrides[gateOverrideName] === 1;
-    return gemTree(state, 'exodus')?.nodes?.[nodeIndex] || false;
+    const m = /^upgrades\.gems_nodes\.([a-z]+)_gem(\d+)$/.exec(gateOverrideName);
+    if (!m) throw new Error(`gemNodeGateUnlocked: not a gem-node key: ${gateOverrideName}`);
+    return gemTree(state, m[1])?.nodes?.[Number(m[2]) - 1] || false;
   }
 
   // TIER-2 RELICS ARE **NOT** GATED IN THE SIM. This is recorded because the opposite was briefly
@@ -102,7 +115,7 @@
     // temporal and evolution gem upgrades.
     if (name === 'upgrades.gems_nodes.exodus_temporalEvolutionCount') {
       if (state.overrides && name in state.overrides) return state.overrides[name];
-      if (!exodusGateUnlocked(state, 'upgrades.gems_nodes.exodus_gem1', 0)) return 0;
+      if (!gemNodeGateUnlocked(state, 'upgrades.gems_nodes.exodus_gem1')) return 0;
       return sumGemUpgrades(state, 'temporal') + sumGemUpgrades(state, 'evolution');
     }
     // NOTHING ELSE IN THE EXODUS FAMILY IS DERIVED, and getting that wrong cost two rounds of
@@ -130,7 +143,7 @@
     }
     if (name === 'upgrades.gems_nodes.creation_galvTrinketsCount') {
       if (state.overrides && name in state.overrides) return state.overrides[name];
-      if (!exodusGateUnlocked(state, 'upgrades.gems_nodes.creation_gem5', 4)) return 0;
+      if (!gemNodeGateUnlocked(state, 'upgrades.gems_nodes.creation_gem5')) return 0;
       // The live tool exposes the SUM as the override; we expose the three trinkets individually,
       // which is friendlier but only if those inputs actually arrive. They did not: this summed
       // only state.upgrades.trinkets, so a value typed into our Overrides panel for a single

@@ -36,6 +36,7 @@ const LOCAL = [
   'attribute-tree-check', 'cap-raise-check',
   'gem-coverage-test', 'gem-tree-test',
   'param-plumbing-check', 'override-liveness-check', 'wasm-arity-check',
+  'trinket-semantics-check',
   'gear-install-check', 'gear-name-check',
   'inscryption-slot-test', 'scene-defs-test',
   'path-relic-test', 'path-abort-test', 'route-test', 'gate-visibility-check',

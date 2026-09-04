@@ -621,14 +621,30 @@ think one is wrong, disprove it with a test.
     booster), T2F 197/tier 12 (mod booster), T3F 178/tier 11 (shard booster). Our three trinket
     ids are cifi-tools' lore names for these; `Handbook`, `Codex` and `Amplifier` appear nowhere
     in the game.
-    **What blocks the mapping:** the only sim consumer is
-    `upgrades.gems_nodes.creation_galvTrinketsCount`, which the live bundle names "Galvarium
-    Trinkets **Count**" while our `resolveParam` **sums** `state.upgrades.trinkets`. Sum-of-levels
-    is 605; a count of owned trinkets is 3. A 200× error on a sim parameter is not worth guessing,
-    and it is currently moot anyway — the param is gated at Creation gem 4 and the reference
-    account is at Creation 1, so it resolves to 0 either way. Settle the Count-vs-sum question
-    before wiring this up. (Per-trinket identity does NOT need settling: whichever way round the
-    three go, the consumer aggregates them.)
+    **THE COUNT-VS-SUM QUESTION IS SETTLED: it is the SUM of levels, and the parameter's name is a
+    misnomer.** `upgrades.gems_nodes.creation_galvTrinketsCount` is the only sim consumer, and the
+    live bundle names it "Galvarium Trinkets **Count**" while deriving it as
+    `Object.values(l.trinkets).reduce((e,t)=>e+(t||0),0)` — a sum over the VALUES. Its own
+    Trinkets page agrees with the code rather than the name, displaying the total as
+    `x${(1+.001*e).toFixed(3)}` over that same accumulated sum. So our `resolveParam` was right all
+    along; what was missing was the proof. Sum-of-levels 605 against a count of 3 was a 200×
+    exposure, so this mattered. (Per-trinket identity still does not need settling: whichever way
+    round the three go, the consumer aggregates them.)
+    **Read the BUNDLE, not the site's output, for a question like this.** The obvious experiment —
+    three trinkets at level 1 against one at level 3, same sum, different count — cannot work: a
+    trinket is +0.001 per level, so even at level 5000 the effect sits under the site's display
+    rounding and every black-box probe returns "inert", which is not an answer. That is why the
+    question stayed open through several passes of end-to-end comparison. `trinket-semantics-check.js`
+    now pins both halves (the bundle's derivation when given a bundle path, and our resolver always),
+    verified with a negative control.
+    **Settling it exposed a REAL BUG that no output comparison could have found.** The gate helper
+    was named for the exodus tree and hard-coded it, taking the node index as a separate argument.
+    The trinkets caller named `upgrades.gems_nodes.creation_gem5` and was answered from **EXODUS**
+    node 5 — so trinkets were gated on an unrelated tree and resolved to 0 for any real account.
+    Nothing caught it because a wrong gate returns 0 rather than throwing, and the parameter is too
+    small to move a displayed number. `gemNodeGateUnlocked` now parses BOTH the tree and the node
+    out of the one key, so they cannot disagree; a key that is not a gem-node key throws. **Two
+    arguments that must agree are a bug waiting to happen — derive the second from the first.**
   - `iap` — **absent from THIS save, which is not the same as never persisted.** Searched exhaustively by both our ids and the game's own labels ("Traversal
     Pack", "Hunter Loot Booster", "Revive Boost"), plus an inverted search: `tools/save/unclaimed.js`
     lists every field no importer reads, so nothing can hide behind an unexpected name. Zero hits.
@@ -1560,6 +1576,7 @@ node tools/bench/uniform-term-check.js # omitted per-node terms are provably 1 u
 node tools/bench/badge-check.js        # fleet badges: ships + multipliers vs the GAME
 node tools/bench/node-factor-check.js  # EVERY factor in every node getter is accounted for
 node tools/bench/param-plumbing-check.js # every sim param is settable into its own slot
+node tools/bench/trinket-semantics-check.js [live-bundle.js] # galvTrinketsCount is a SUM, gated on creation node 5
 node tools/bench/override-liveness-check.js # every override the UI offers reaches the evaluator
 node tools/bench/wasm-arity-check.js   # wasm argument count == params.json, per hunter
 node tools/bench/reference-schema-test.js # zod: every reference file matches its schema

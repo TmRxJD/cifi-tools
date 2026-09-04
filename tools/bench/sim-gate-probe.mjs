@@ -149,6 +149,15 @@ for (const [cat, key, value] of PROBES) {
   if (siteVerdict === 'INERT') {
     console.log(`     note: ${key} moves nothing on the site even unlocked, so this says nothing `
       + 'about gating -- pick a key with a real effect to test this category');
+    // AND AN INERT ROW CAN HIDE A REAL BUG BEHIND A FALSE AGREEMENT. Trinkets read INERT on both
+    // sides here and were counted as agreement; they were inert on the site because +0.001/level
+    // is under its display rounding, and inert on OUR side for an entirely different reason -- the
+    // gate helper answered a `creation_gem5` gate from the EXODUS tree, so the parameter resolved
+    // to 0 outright. Two different causes producing the same verdict is not parity.
+    if (cloneVerdict === 'INERT') {
+      console.log('     WARNING: inert on BOTH sides is not evidence of agreement -- the two can be '
+        + 'inert for different reasons. Verify this key against the bundle rather than by probing.');
+    }
   }
 }
 
