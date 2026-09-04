@@ -238,6 +238,93 @@
     return current;
   }
 
+  // A SECOND SCREENING SHAPE: PAY THE GATE, THEN BUY THE GATED NODE.
+  //
+  // canonicalFill spreads the budget evenly across a support's members. For a support whose value
+  // sits behind a TIER THRESHOLD that is a shape nobody would ever play, and the support is judged
+  // on it.
+  //
+  // MEASURED on a real level-62 Ozzy. Its best support screens 147th of 234 at a flat fill
+  // (3,105,388 against a leader of 7,351,118) so it never reaches refinement -- yet handed that
+  // same support, refinement reaches 39,139,365, which is 8.4% ABOVE the player's own build. The
+  // player's allocation is cat 18 / exo 79 / lotl 18, and the 79 is not greed: `cat` requires 150
+  // cost units spent in strictly-lower-threshold nodes before it is legal at all, and exo is the
+  // cheap uncapped node that pays it. A flat fill gives cat 9 and exo 53 -- it neither pays the
+  // gate nor buys what the gate protects.
+  //
+  // Five shapes were measured and all fail: flat, max-concentration, capped-at-cap, capped-at-cap
+  // with the remainder split, and a coarse measured greedy. Every one of them starves the 150 and
+  // loses `cat` to clearInvalidDescendants, taking the value with it.
+  //
+  // So this builds the shape deliberately: fund the gated members toward their caps, then fund the
+  // lower tiers until each gate is actually paid, then put whatever is left into the uncapped
+  // nodes. Uncapped nodes are exactly the "adjustable filler" that makes a threshold reachable --
+  // and are often the best buy in their own right, which is why the remainder goes there too.
+  //
+  // Costs ONE extra evaluation per support (~234 on this account, about 3s) against a screening
+  // stage that already decides everything downstream.
+  function gatePayingFill(defs, deps, minVal, budget, ids) {
+    const members = defs.filter((d) => ids.includes(d.id));
+    if (!members.length) return null;
+    const thresholdOf = (d) => minVal[d.id] || 0;
+    const costOf = (d) => d.cost || 1;
+    const capOf = (d) => (Number.isFinite(d.maxLevel) ? d.maxLevel : Infinity);
+    const alloc = {};
+    for (const d of members) alloc[d.id] = 0;
+    const spent = () => Space.costOf(defs, alloc);
+    const room = (d) => spent() + costOf(d) <= budget;
+
+    // 1. Gated members toward their caps, deepest gate first -- these are what the budget is for.
+    const tiers = [...new Set(members.map(thresholdOf))].sort((a, b) => b - a);
+    for (const t of tiers) {
+      if (t <= 0) continue;
+      for (const d of members) {
+        if (thresholdOf(d) !== t) continue;
+        const cap = Number.isFinite(capOf(d)) ? capOf(d) : 1;   // an uncapped gated node: just open it
+        while (alloc[d.id] < cap && room(d)) alloc[d.id] += 1;
+      }
+    }
+
+    // 2. Pay each gate: spend in strictly-lower-threshold members until it clears the threshold.
+    //    Uncapped members first -- they are the filler that can absorb an arbitrary amount.
+    for (const t of tiers) {
+      if (t <= 0) continue;
+      const lower = members.filter((d) => thresholdOf(d) < t)
+        .sort((a, b) => (Number.isFinite(capOf(a)) ? 1 : 0) - (Number.isFinite(capOf(b)) ? 1 : 0));
+      const lowerSpend = () => lower.reduce((sum, d) => sum + alloc[d.id] * costOf(d), 0);
+      let progressed = true;
+      while (lowerSpend() < t && progressed) {
+        progressed = false;
+        for (const d of lower) {
+          if (alloc[d.id] >= capOf(d) || !room(d)) continue;
+          alloc[d.id] += 1;
+          progressed = true;
+          if (lowerSpend() >= t) break;
+        }
+      }
+    }
+
+    // 3. Whatever is left goes to the uncapped nodes, round-robin.
+    const uncapped = members.filter((d) => !Number.isFinite(capOf(d)));
+    if (uncapped.length) {
+      let progressed = true;
+      while (progressed) {
+        progressed = false;
+        for (const d of uncapped) {
+          if (!room(d)) continue;
+          alloc[d.id] += 1;
+          progressed = true;
+        }
+      }
+    }
+    // 4. Anything still idle goes to whoever can take it, so the shape is not judged under-spent.
+    Space.fillLeftover(defs, deps, minVal, budget, alloc);
+    Space.clearInvalidDescendants(defs, deps, minVal, alloc);
+    if (budget - spent() > Space.MAX_IDLE_POINTS) return null;
+    if (!Space.isLegal(defs, deps, minVal, alloc, budget)) return null;
+    return alloc;
+  }
+
   // Every talent support, the same way attribute supports are enumerated.
   //
   // Talents have no dependency edges and no tier thresholds, so every non-empty subset is a legal
@@ -415,7 +502,7 @@
   // search itself is identical in both, so what the benchmark proves is what ships.
   // ---------------------------------------------------------------------------------------
   /** @param {OptimizerConfig} cfg @param {OptimizeOptions} [options] */
-  async function optimize(cfg, { mode = 'loot', effort = DEFAULT_EFFORT, scorer, onProgress = () => {}, shouldCancel = () => false } = /** @type {any} */ ({})) {
+  async function optimize(cfg, { mode = 'loot', effort = DEFAULT_EFFORT, scorer, scorerFor = null, onProgress = () => {}, shouldCancel = () => false } = /** @type {any} */ ({})) {
     if (typeof scorer !== 'function') throw new Error('optimize() requires a scorer function');
 
     // Mode is validated HERE as well as in the worker, so an unknown mode fails before a search
@@ -561,6 +648,16 @@
         // threshold it needs may be unreachable with this budget. Those are dropped here, and
         // the count is reported rather than hidden.
         if (fill) realizable.push({ support: s, attrAlloc: fill });
+        // The same support, shaped to pay its tier gates (see gatePayingFill). Scored separately;
+        // the support keeps whichever shape screens better.
+        let gated = gatePayingFill(ATTRIBUTES, deps, minVal, attrBudget, s.ids);
+        if (gated && pinnedAttrs.length) {
+          gated = applyPins(ATTRIBUTES, deps, minVal, attrBudget, gated, pinnedAttrs);
+          if (!pinsHeld(ATTRIBUTES, gated, pinnedAttrs)) gated = null;
+        }
+        if (gated && !Space.sameAlloc(ATTRIBUTES, gated, fill || {})) {
+          realizable.push({ support: s, attrAlloc: gated });
+        }
       }
       // Stage 2b needs the support MEMBERS behind a surveyed candidate, not just its fill, so it
       // can re-fill the same support a different way. Only the mask survives the survey.
@@ -578,6 +675,18 @@
       // Deterministic total order: score descending, then support mask ascending so equal
       // scores never depend on iteration or floating-point tie order.
       screened.sort((a, b) => (b.score - a.score) || (a.support.mask - b.support.mask));
+
+      // One entry per SUPPORT -- its better shape. Without this a support could occupy two of the
+      // few slots that go on to refinement, crowding out a genuinely different combination.
+      const bestPerSupport = [];
+      const seenMask = new Set();
+      for (const c of screened) {
+        if (seenMask.has(c.support.mask)) continue;
+        seenMask.add(c.support.mask);
+        bestPerSupport.push(c);
+      }
+      screened.length = 0;
+      screened.push(...bestPerSupport);
 
       // --- Stage 2a: THE COARSE SURVEY TIER IS GONE. -------------------------------------
       //
@@ -691,6 +800,96 @@
       // Survey results that did not make the refinement cut still compete: they are complete,
       // legal allocations, just less thoroughly tuned, and keeping them costs nothing at Stage 3.
       finalists.push(...surveyed.slice(refineWidth));
+
+      // --- Stage 2d: a candidate from the objective that can SEE a threshold. -------------
+      // `loot` is blind on a boss wall: every build that fails the kill scores the same, so there
+      // is no gradient to climb and the search is not weak, it is on a flat surface. The full
+      // reasoning and the measurements are on Objective.crossSeedFor. The remedy is a CANDIDATE,
+      // not a scoring change -- this build competes at Stage 3 on the caller's objective exactly
+      // like every other finalist, so the answer is still the best build by the metric asked for.
+      //
+      // `scorerFor` is how the pass gets a scorer bound to a different mode. It is required rather
+      // than optional for a mode that declares a cross-seed: silently skipping the pass would make
+      // the optimizer's answer depend on which caller invoked it, which is precisely the kind of
+      // quiet difference this project refuses to carry.
+      const crossMode = Objective.crossSeedFor(mode);
+      if (crossMode) {
+        if (typeof scorerFor !== 'function') {
+          throw new Error(`optimize(): mode "${mode}" cross-seeds from "${crossMode}", so a `
+            + 'scorerFor(mode) factory is required');
+        }
+        report('crossSeed', 0, 1);
+        // TARGET-AGNOSTIC ON PURPOSE, and this is the subtle part of the whole pass.
+        //
+        // The `boss` mode a PLAYER selects aims at the next boss they have not beaten -- at stage
+        // 101 that is the 200 boss, which their build may have no chance of reaching, and saying
+        // so is the honest answer. The cross-seed wants something different: the boss wall that is
+        // capping THIS build's loot right now, which is whatever boss the run actually reaches.
+        // On the level-31 Knox those are different bosses (200 vs 100), and seeding loot from a
+        // target-200 search would produce a push build instead of the boss-killer worth 45,180.
+        // So the pass explicitly clears the target.
+        const crossScorer = await scorerFor(crossMode, { bossTarget: null });
+        if (typeof crossScorer !== 'function') {
+          throw new Error(`optimize(): scorerFor("${crossMode}") did not return a scorer function`);
+        }
+
+        // GATE: ONE evaluation decides whether the whole pass is worth running.
+        //
+        // The pass exists because a loot search has no gradient while the boss is unkilled -- every
+        // walled build scores the same. But that is only true WHILE it is walled. Score the best
+        // build found so far under the boss objective, whose tiers already encode "reached the
+        // target" and "killed it": if the loot search has already produced a build that kills the
+        // target boss, it demonstrably had a gradient to follow and a boss-seeded candidate has
+        // nothing to add.
+        //
+        // Worth gating rather than always paying: measured on a level-26 Borge that is NOT
+        // boss-walled, the unconditional pass cost 15,047 evaluations against 6,483 without it --
+        // 2.3x for a candidate that could never win. The gate costs ONE evaluation to find that
+        // out, and the walled case (a level-31 Knox, 6,978 -> 45,180 loot) still gets the full pass.
+        const bestSoFar = finalists.reduce((a, b) => (a && a.score >= b.score ? a : b), null);
+        let crossWorthIt = true;
+        if (bestSoFar) {
+          const [bossViewOfBest] = await crossScorer(
+            [{ talentAlloc: bestSoFar.talentAlloc, attrAlloc: bestSoFar.attrAlloc }], SCREEN_ITERATIONS,
+          );
+          // KILL_ACHIEVED_BASE is the boss objective's own "this build kills it" floor. Comparing
+          // against it rather than against a number of our own keeps the two in one place.
+          crossWorthIt = bossViewOfBest < Objective.KILL_ACHIEVED_BASE;
+          if (!crossWorthIt) {
+            ctx.note(`cross-seed skipped: the ${mode} search already kills the target boss`);
+          }
+        }
+        if (!crossWorthIt) {
+          report('final', 0, 1);
+        } else {
+        // A plain recursion. The cross-seeded mode is one that does NOT declare a cross-seed of
+        // its own, which is what terminates it -- asserted rather than assumed.
+        if (Objective.crossSeedFor(crossMode)) {
+          throw new Error(`optimize(): cross-seed cycle -- "${crossMode}" itself cross-seeds`);
+        }
+        // No allocation to strip any more -- optimizerCfg stopped carrying the current build.
+        const crossCfg = { ...cfg };
+        const crossRes = await optimize(crossCfg, { mode: crossMode, effort, scorer: crossScorer, shouldCancel });
+        if (crossRes.best) {
+          evals += crossRes.evals;
+          // Refine it under THIS objective before it competes -- the boss search stopped caring
+          // about loot once the kill was secured, and on the Knox build above that refinement is
+          // worth another 20% (39,072 -> 46,820).
+          const [crossStart] = await ctx.score(
+            [{ talentAlloc: crossRes.best.talentAlloc, attrAlloc: crossRes.best.attrAlloc }], SCREEN_ITERATIONS,
+          );
+          finalists.push(await optimizeJointly(
+            ctx, budgets, crossRes.best.talentAlloc, crossRes.best.attrAlloc, crossStart,
+            STEP_SIZES, 6, pinnedAttrs,
+          ));
+          // And unrefined, so a refinement that wanders cannot lose the candidate outright.
+          finalists.push({
+            talentAlloc: crossRes.best.talentAlloc, attrAlloc: crossRes.best.attrAlloc, score: crossStart,
+          });
+          ctx.note(`cross-seeded a ${crossMode} build into ${mode}`);
+        }
+        }
+      }
 
       // --- Stage 3: full-fidelity decision. -----------------------------------------------
       report('final', 0, 1);

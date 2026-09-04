@@ -160,12 +160,12 @@ function cfgForImport(hunter, build, { budgetMode = 'spend' } = {}) {
 }
 
 /** A scorer backed by the shipped compileEvaluator -- the exact evaluation path the app uses. */
-async function makeScorer(cfg, mode) {
+async function makeScorer(cfg, mode, ctxOverride) {
   const sb = browserSandbox();
   const evalFast = await sb.HunterSim.compileEvaluator(cfg.hunter, cfg);
   // Same one definition the browser worker uses, so the bench and the app cannot disagree about
   // which boss is being aimed at.
-  const ctx = Objective.contextFor(cfg);
+  const ctx = { ...Objective.contextFor(cfg), ...(ctxOverride || {}) };
   return async function score(pairs, iterations) {
     const out = [];
     for (const p of pairs) {
@@ -175,6 +175,12 @@ async function makeScorer(cfg, mode) {
     }
     return out;
   };
+}
+
+// The factory optimize() needs for a mode that cross-seeds: a scorer bound to a DIFFERENT
+// objective. The browser supplies this from its worker pool; a bench builds one in-process.
+function scorerFactory(cfg) {
+  return (mode, ctxOverride) => makeScorer(cfg, mode, ctxOverride);
 }
 
 /** Score one specific allocation at full fidelity. */
@@ -302,7 +308,7 @@ function loadKnownBuilds() {
 }
 
 module.exports = {
-  browserSandbox, parseBuildCode, hunterDefs, cfgForImport, makeScorer, scoreAllocation,
+  browserSandbox, parseBuildCode, hunterDefs, cfgForImport, makeScorer, scorerFactory, scoreAllocation,
   latestDecodedSave,
   findFixture,
   loadKnownBuilds, evaluateAllocation, Space, Optimizer, Objective,

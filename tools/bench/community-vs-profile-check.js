@@ -141,7 +141,7 @@ function mulberry(a) {
       const scorer = await H.makeScorer(cfg, 'loot');
       let res;
       try {
-        res = await H.Optimizer.optimize(cfg, { mode: 'loot', scorer });
+        res = await H.Optimizer.optimize(cfg, { mode: 'loot', scorer, scorerFor: H.scorerFactory(cfg) });
       } catch (err) {
         failures++;
         console.log(`FAIL ${fx.uid}: optimize threw -- ${err.message}`);

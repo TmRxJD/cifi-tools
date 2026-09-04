@@ -142,11 +142,13 @@
       label: 'Loot Score',
       help: 'Maximises loot per minute — the default for farming.',
       score: (r) => r.lootPerMin,
+      crossSeedFrom: 'boss',
     },
     push: {
       label: 'Ø Stage (push)',
       help: 'Maximises average stage reached, trading loot for depth.',
       score: (r) => r.avgStage,
+      crossSeedFrom: 'boss',
     },
     boss: {
       label: 'Boss kill (as soon as possible)',
@@ -194,6 +196,31 @@
    * the score is what we are after -- and the fix belongs in the search's ability to get there,
    * not in borrowing an answer from an objective that wants something else.
    */
+  /**
+   * Which objective, if any, should ALSO be searched and its answer entered as a candidate here.
+   *
+   * `loot` IS BLIND ON A BOSS WALL. Every allocation that fails the kill scores the same
+   * lootPerMin, so there is no gradient to climb and the search is not weak -- it is standing on a
+   * flat surface. Measured on a real level-31 Knox: the import kills the stage-100 boss and scores
+   * 64,031, while EVERY method tried (coordinate exchange, support enumeration, greedy build-up,
+   * chunked greedy, joint greedy) returned ~6,900 with `bossKillRate 0` and `avgStage` pinned at
+   * exactly 100.00. The same optimizer in `boss` mode -- lexicographic over `bossHpPercent`, so it
+   * HAS a gradient -- returned a build worth 39,072 loot, and refining that under `loot` reached
+   * 46,820.
+   *
+   * The remedy is a CANDIDATE, not a scoring change: the objective stays exactly `lootPerMin` and
+   * the boss-capable build competes on it at Stage 3 like any other finalist. That distinction
+   * matters -- the objectives are the player's choice (kill now, kill with Timeless maxed, push
+   * stages, just farm), and folding boss progress into the loot score would quietly answer a
+   * different question than the one asked.
+   *
+   * `push` gets the same treatment for the same reason: a stage wall is a boss that is not dying.
+   * The boss modes do not, which is also what terminates the recursion.
+   */
+  function crossSeedFor(mode) {
+    return modeOrThrow(mode).crossSeedFrom || null;
+  }
+
   function pinnedAttrsFor(mode) {
     return modeOrThrow(mode).pinnedAttrs || [];
   }
@@ -213,7 +240,7 @@
     return Object.fromEntries(Object.entries(MODES).filter(([, spec]) => !spec.pinnedAttrs));
   }
 
-  const Objective = { MODES, scoreFor, pinnedAttrsFor, pathModes, modeOrThrow, bossTargetFor, contextFor, KILL_ACHIEVED_BASE };
+  const Objective = { MODES, scoreFor, pinnedAttrsFor, pathModes, modeOrThrow, crossSeedFor, bossTargetFor, contextFor, KILL_ACHIEVED_BASE };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Objective;
   else global.OptimizerObjective = Objective;
