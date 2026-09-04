@@ -494,6 +494,23 @@
   // So a bench must be able to average over seeds. Anything comparing two configurations on ONE
   // seed each is not a comparison.
   const ARCHIVE_SEED = 0x9e3779b9;
+  //
+  // ONE STREAM BY DEFAULT, MEASURED. Merging several streams into the archive was tried as a fix
+  // for the ~7-point seed variance and it does not work AT CONSTANT BUDGET -- splitting 2400
+  // variations three ways gave each stream 800, and none explored deep enough:
+  //     single 9e37   82 cells  2 bands  best kill 1   9.614M
+  //     single 1234   80 cells  2 bands  best kill 1   8.919M
+  //     single a5a5   82 cells  3 bands  best kill 7   9.562M
+  //     MERGED x3     75 cells  2 bands  best kill 1   9.226M
+  // The merge is worse than two of the three singles and has the FEWEST cells. Note what it cost:
+  // seed a5a5 alone reached 3 kill bands and kill rate 7 -- the best boss reach measured -- and
+  // truncating it at 800 variations threw that away.
+  //
+  // So PER-STREAM DEPTH beats stream diversity, and the variance is not free to remove: it would
+  // take 3x the archive budget, not the same budget redistributed. Left as a known, measured
+  // defect rather than papered over with a change that does not fix it. `seeds` stays available
+  // for benches, which is what it is genuinely for.
+  const ARCHIVE_SEEDS = [ARCHIVE_SEED];
   // Behaviour space. Kill rate says whether a build can pass a boss at all; the stage band says how
   // far it gets. Bands rather than raw values because cells are niches, not points.
   //
@@ -713,11 +730,24 @@
    * Seeded from the enumerated supports rather than from random points: the enumeration is exact
    * and already paid for, so the archive starts with real structural coverage instead of noise.
    */
-  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, structuralShare, depthShare, seed, report) {
+  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, structuralShare, depthShare, seedList, report) {
     const stats = { rejected: 0, accepted: 0, repaired: 0, nodesCleared: 0, structural: 0,
       depthAccepted: 0, depthRejected: 0, depthOpened: 0 };
     const { TALENTS, ATTRIBUTES, talentBudget, attrBudget, deps, minVal } = spaces;
-    const rng = seededRng(seed);
+    //
+    // ONE ARCHIVE, SEVERAL STREAMS -- because a single stream is one sample and the spread between
+    // samples was measured at ~7 percentage points on a real account. That is a user-visible
+    // defect: the same account, optimized twice with identical settings, returned builds 7% apart.
+    //
+    // Merging is what makes this more than a retry. Each stream writes into the SAME archive, so a
+    // cell keeps the best build found by ANY of them, and a stream that stumbles into the
+    // boss-engaging cell hands that stepping stone to every later stream as a parent. Running the
+    // whole search three times and taking the maximum would not do that -- the streams would never
+    // see each other's discoveries.
+    //
+    // It is affordable for the reason the archive-only bench established: illumination is ~10s of
+    // a ~130s run, so three streams cost about 20 extra seconds against a refinement stage that
+    // dominates either way.
     const archive = new Map();
 
     const consider = (pair, score, meta) => {
@@ -746,7 +776,12 @@
     }
 
     let spent = 0;
-    while (spent < evalBudget) {
+    const streams = Array.isArray(seedList) ? seedList : [seedList];
+    const perStream = Math.max(ARCHIVE_BATCH, Math.floor(evalBudget / streams.length));
+    for (const streamSeed of streams) {
+    const rng = seededRng(streamSeed);
+    const until = Math.min(evalBudget, spent + perStream);
+    while (spent < until) {
       if (ctx.shouldCancel()) throw new Cancelled();
       report(spent / evalBudget);
       const elites = [...archive.values()];
@@ -788,7 +823,11 @@
           if (rng() < 0.5) {
             const nx = randomTransfer(TALENTS, {}, {}, talentBudget, t, rng, [], null);
             if (nx) t = nx;
-          } else if (rng() < depthShare) {
+          // Guard the SHARE before drawing, so a disabled operator consumes no entropy. A draw
+          // taken for a check that can never pass still shifts every later draw, which is exactly
+          // how the "identical configuration" that returned +15.34% and +8.24% differed at all.
+          // A flag that is off must be inert, including in the random stream.
+          } else if (depthShare > 0 && rng() < depthShare) {
             // DAG-native depth: hold the support, change how deep it goes.
             const nx = depthMove(ATTRIBUTES, deps, minVal, attrBudget, a, rng, pinnedAttrs, stats);
             if (nx) a = nx;
@@ -805,6 +844,7 @@
       for (let i = 0; i < batch.length; i++) consider(batch[i], scores[i], meta[i]);
       spent += batch.length;
     }
+    }
 
     const bands = new Set([...archive.keys()].map((k) => k.split(':')[0]));
     const bestKill = [...archive.values()].reduce((m, e) => Math.max(m, e.kill || 0), 0);
@@ -815,6 +855,7 @@
     ctx.note(`moves: ${attempted} attribute transfers -- ${pct(stats.rejected)}% rejected, `
       + `${pct(stats.repaired)}% accepted-but-stranded (${stats.nodesCleared} nodes cleared); `
       + `${stats.structural} structural resamples at share ${structuralShare}`);
+    ctx.note(`illuminated from ${streams.length} merged stream(s)`);
     ctx.note(`depth moves: ${stats.depthAccepted} accepted (${stats.depthOpened} opened a new node), `
       + `${stats.depthRejected} rejected -- NONE stranded, by construction; share ${depthShare}`);
     return [...archive.entries()]
@@ -1278,7 +1319,7 @@
         // without editing constants -- the same convention the ablation hooks already use.
         Number.isFinite(effortSpec.structuralShare) ? effortSpec.structuralShare : STRUCTURAL_SHARE,
         Number.isFinite(effortSpec.depthShare) ? effortSpec.depthShare : DEPTH_SHARE,
-        Number.isFinite(effortSpec.seed) ? effortSpec.seed : ARCHIVE_SEED,
+        effortSpec.seeds || (Number.isFinite(effortSpec.seed) ? [effortSpec.seed] : ARCHIVE_SEEDS),
         (f) => report('survey', f * SURVEY_REPORT_SCALE, SURVEY_REPORT_SCALE),
       );
       const surveyed = elites.map((e) => ({ ...e, mask: maskOf(e.attrAlloc) }));
