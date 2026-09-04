@@ -144,7 +144,7 @@
   // can still take a point. Round-robin rather than "dump it all in the first node" because
   // the screen should reflect what a support set can do when actually used, not a degenerate
   // corner of it. Fully deterministic: no randomness, ties broken by declaration order.
-  function canonicalFill(defs, deps, minVal, budget, supportIds) {
+  function canonicalFill(defs, deps, minVal, budget, supportIds, openOnly = false) {
     const inSupport = new Set(supportIds);
     const members = defs.filter((d) => inSupport.has(d.id));
     const alloc = {};
@@ -163,10 +163,30 @@
     // saw it. A real level-38 import proves such allocations exist: it funds that exact support
     // legally, and the optimizer scored 1.96% below it while never having considered its shape.
     //
-    // So when a member is blocked ONLY by its threshold, pour points into the members already
-    // open (cheapest first, so the fewest points are committed) until the threshold is met, then
-    // open it. If the budget runs out first the support really is unrealizable -- which is what
-    // this was trying to detect, and now actually does.
+    // So when a member is blocked ONLY by its threshold, pour points into the members already open
+    // until the threshold is met, then open it. If the budget runs out first the support really is
+    // unrealizable -- which is what this was trying to detect, and now actually does.
+    //
+    // ROUND-ROBIN, NOT FIRST-ELIGIBLE, and the difference is not cosmetic.
+    //
+    // This used to take `growable.find(...)` -- the first eligible member -- on every iteration,
+    // justified as "cheapest first, so the fewest points are committed". That rationale is wrong:
+    // `pointsBelowThreshold` counts points in the SAME cost-weighted units as the budget, so
+    // reaching a threshold of 150 costs exactly 150 whatever the distribution. Concentrating buys
+    // nothing, and it wrecks the fill.
+    //
+    // Measured on a real level-55 Ozzy, whose `scarab` needs 150 banked points: the old code
+    // produced `lotl:135 exo:2 scorp:2 timeless:2 ibu:2 exterm:2 medusa:1 dance:1 scarab:1` --
+    // 135 of 165 points in ONE attribute, because `lotl` is cost 1, uncapped, and first in
+    // declaration order, so it never became ineligible. That fill screened the import's own
+    // support at rank 63 of 234, far outside the top-8 survey cut, so the shape the player
+    // actually used was never refined and the optimizer finished 4.20% below it.
+    //
+    // Which is exactly the degenerate corner canonicalFill's own header comment says it exists to
+    // avoid ("Round-robin rather than 'dump it all in the first node' because the screen should
+    // reflect what a support set can do when actually used"). The threshold path simply did not
+    // honour it. Cycling is still fully deterministic: same order, same starting point, same
+    // result every time.
     const openThreshold = (blocked) => {
       const need = minVal[blocked.id] || 0;
       if (need <= 0) return false;
@@ -175,9 +195,20 @@
         .sort((a, b) => (a.cost || 1) - (b.cost || 1));
       if (!growable.length) return false;
       let guard = 0;
+      let cursor = 0;
       while (pointsBelowThreshold(defs, minVal, alloc, need) < need && guard++ < 100000) {
-        const next = growable.find((m) => isEligible(m, defs, deps, minVal, alloc)
-          && spent + (m.cost || 1) <= budget);
+        let next = null;
+        // Scan the whole ring each time, so a member that has hit its cap is skipped rather than
+        // ending the fill. Realizability is therefore unchanged: this fails only when NO member is
+        // eligible, which is the same condition the old first-eligible scan failed on.
+        for (let i = 0; i < growable.length; i++) {
+          const cand = growable[(cursor + i) % growable.length];
+          if (isEligible(cand, defs, deps, minVal, alloc) && spent + (cand.cost || 1) <= budget) {
+            next = cand;
+            cursor = (cursor + i + 1) % growable.length;
+            break;
+          }
+        }
         if (!next) return false;   // cannot reach the threshold within budget
         alloc[next.id] += 1;
         spent += next.cost || 1;
@@ -207,6 +238,15 @@
     // budget -- now a real conclusion rather than an artefact of seeding one point at a time.
     if (members.some((d) => (alloc[d.id] || 0) === 0)) return null;
 
+    // OPEN-ONLY: hand back the support with one point in each member and the rest unspent, so a
+    // caller can choose its own distribution. `canonicalFill` distributes round-robin, which is
+    // right for RANKING supports against each other but wrong as a starting point for refinement:
+    // a support whose value is concentrated (one attribute taken deep) is represented by the one
+    // shape it would never actually use. Measured on a real level-26 Borge with talents held at
+    // the import's, the round-robin fill of the right support scores 18.24% below the import while
+    // filling the same support by measured marginal value scores 0.51% below it.
+    if (openOnly) return alloc;
+
     // Distribution pass: round-robin one point at a time.
     let progressed = true;
     while (progressed && spent < budget) {
@@ -222,7 +262,8 @@
       }
     }
     // Reject fills that cannot use the budget: a support whose caps leave points permanently
-    // idle is strictly worse than one that spends them.
+    // idle is strictly worse than one that spends them. (Not applied to an open-only result,
+    // which is unspent BY CONSTRUCTION and returns above.)
     if (budget - spent > MAX_IDLE_POINTS) return null;
     return alloc;
   }
@@ -259,6 +300,15 @@
   // has nowhere for the other 12 to go unless new nodes may be opened. Deterministic: nodes are
   // considered in declaration order, one point at a time, so the same input always fills the
   // same way.
+  //
+  // THIS IS NO LONGER THE OPTIMIZER'S TOP-UP, AND SHOULD NOT BE WIRED BACK IN AS ONE. Declaration
+  // order is flat, and a flat refill does not merely fail to improve an under-spent build -- it
+  // destroys the shape of the build it is repairing, spreading recovered points across talents
+  // the build never invested in. Measured on a real level-38 Borge, repairing 12 stripped talent
+  // points this way finished 12.06% below the untouched import, where search.js's greedyTopUp
+  // (which picks each point by measured marginal value) reproduces the import exactly. This
+  // function survives as the unscored primitive the benches compare against; the scored one is
+  // the one the search uses.
   function spendRemaining(defs, deps, minVal, budget, alloc) {
     let spent = costOf(defs, alloc);
     let progressed = true;

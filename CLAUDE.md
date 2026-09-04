@@ -168,6 +168,8 @@ There is exactly one place for each of these. **Do not add a second.**
 | Full evaluation fidelity | `HunterOptimizer.FINAL_ITERATIONS` |
 | Build share-code encode/decode | `webapp/public/buildCode.js` |
 | What each optimize mode maximizes | `webapp/public/optimizer/objective.js` (`OptimizerObjective.MODES`) |
+| Which mode cross-seeds a candidate into which | `objective.js` (`crossSeedFrom` / `crossSeedFor`) |
+| A scorer bound to another objective | `optimize()`'s `scorerFor` — `runner.js` (worker pool) / `harness.js` (`scorerFactory`) |
 | Optimizer acceptance gate | `tools/bench/run.js` |
 | Store schema tests | `tools/bench/schema-test.js` |
 | Clone-vs-live comparison | `compare-mcp/batch-test.mjs` |
@@ -841,16 +843,304 @@ think one is wrong, disprove it with a test.
   **68.9**. The good support was ranked out of the cut by a talent build nothing like the one it
   would be used with, and the optimizer returned 57.41 against an import of 68.92 that it was
   perfectly entitled to reproduce.
-  **The seed is now TUNED once, before any support is screened**, by the same coordinate exchange
-  the rest of the search uses -- no randomness, no new heuristic, one extra block optimization that
-  is cheap beside screening every support. The failing case now returns **69.03**, slightly ahead of
-  the import, and the sampled quality gate improves (`best 3.97%`, `worst 0.00%`).
-  **Tune against a REALIZABLE partner.** The first attempt tuned against `canonicalFill` over every
-  attribute, which looks neutral and returns `null` the moment a tree has tier thresholds the budget
-  cannot reach -- Ozzy's are 90/150/180 against a level-11 budget of 33. It silently fell back to
-  the flat seed and changed nothing; the bench still failed with an identical number, which is what
-  gave it away. The partner is now the incumbent's own attributes when it has any (the most
-  representative build available) and otherwise the widest realizable support's fill.
+  **THE "SEED IS NOW TUNED" CLAIM THAT USED TO BE WRITTEN HERE WAS FALSE -- THE TUNING WAS NEVER
+  IMPLEMENTED.** This file and the comment in `search.js` both stated that the seed was tuned once
+  by a block optimization before screening, against the incumbent's attributes or the widest
+  realizable support's fill, and reported measured results from it (`69.03`, `best 3.97%`). Commit
+  `2a25628` added 22 lines to `search.js` that were **almost entirely comment**: the code was
+  `let seedTalents = flatTalents;` and `seedTalents` was never reassigned anywhere in the file. The
+  seed remained the flat round-robin fill the comment said had been replaced, so the quoted numbers
+  cannot have come from that code.
+  Read this as the standing warning in this file applied to this file: **a comment describing a fix,
+  and a CLAUDE.md entry describing a fix, are not evidence the fix exists.** `grep` for the variable
+  the prose claims is being computed and check that something assigns it.
+  What the talent block actually needed was not a better seed but the same treatment attributes
+  already get -- see the entry below.
+- **WHERE THE IMPORT'S OWN SUPPORT RANKS IN SCREENING SAYS WHICH KIND OF PROBLEM A SHORTFALL IS.**
+  Stage 1 screens every realizable support at its canonical fill, and only the top
+  `SURVEY_SUPPORTS` are optimized at all. So if a real player's shape ranks below that cut, the
+  optimizer never refines it and no amount of local-search work can match that build --
+  a SCREENING problem, with a different fix from a search one. `support-rank-check.js` measures it,
+  and it earned its place immediately: it exonerated screening on the level-31 Knox (rank 2 of 144,
+  pointing at the talent block) and convicted it on the level-55 Ozzy (rank 63 of 234, pointing at
+  the `openThreshold` bug above).
+  **A bad rank is a RISK INDICATOR, not a defect.** The optimizer can still win from a different
+  support, so the rank has to be joined to an actual measured shortfall before it means anything.
+  Do not "fix" a rank.
+  First sample of 10 random loot fixtures after the threshold fix: **8/10 screen inside the cut**,
+  most at rank 1-4, and the two that do not are different from each other -- one at rank 9 (a
+  one-place miss, which is a question about how tight `SURVEY_SUPPORTS` should be) and one at rank
+  39 with no tier gates, no concentration and no boss wall, which is a genuinely unexplained case.
+- **A FLAT FILL IS BIASED TOWARD NARROW SUPPORTS ON ANY THRESHOLD-SENSITIVE BUILD, AND THAT IS A
+  THIRD, SEPARATE MECHANISM.** Found on `knox:KNOWN_KNOX_BUILDS#26` (level 33), whose own support
+  screens at rank 39 of 144. It is NOT the two causes already recorded: the support has no
+  tier-gated members (so the `openThreshold` bug cannot be it) and re-ranking against the import's
+  OWN talents makes it WORSE, 39 -> 50 (so the flat talent seed cannot be it either).
+  The numbers say what it is, with the import's own talents held fixed so only the fill varies:
+      import talents + FLAT FILL of its own support ->     7,404
+      flat talents   + import attributes            ->    84,008
+      import talents + import attributes            ->   102,964
+  The fill costs **14x**; the talent seed costs 18%. The import is `kraken:20 soul:13 dead:10 time:5
+  sear:5 pct:4 spa:1 pl:1` -- concentrated, with two members funded at exactly 1 as gates -- while a
+  round-robin over 8 members gives each about 5. The build kills its boss at `killRate 98.6`, so
+  spreading below the depth that kill needs drops it off the same cliff as the boss-wall entry.
+  **Generalised: concentration is what crosses a threshold, and a narrow support concentrates for
+  free.** Every support ranked above the import's here is a 5-6 member SUBSET of it. So flat-fill
+  screening does not measure "is this the right set of nodes", it measures "does an even split of
+  this set happen to clear the wall", and wide supports lose that by construction.
+  **WHETHER IT COSTS ANYTHING IS STILL OPEN, AND MUST BE MEASURED BEFORE ANYTHING IS CHANGED.**
+  `Space.transfer` may grant points to a node currently at 0, so refinement CAN widen a narrow
+  support back out -- the bias may be entirely harmless. A bad rank is a risk indicator, not a
+  defect. Do not tune a cut or a fill to move a rank that is not attached to a measured shortfall.
+- **BOSS-WALLING IS A POPULATION PROPERTY, NOT A CURIOSITY: 8 OF 10 SAMPLED IMPORTS DO NOT KILL THE
+  BOSS THEY REACH.** Their loot therefore sits on the plateau where `lootPerMin` has no gradient
+  (see the boss-wall entry). Two consequences worth stating plainly:
+  - The cross-seed pass is broadly load-bearing rather than a fix for one odd build, so paying for
+    it is justified.
+  - **The gate on it will rarely fire**, because it skips only when the search's own answer already
+    kills the boss, and on a walled build it does not. The 2.3x saving measured on one non-walled
+    Borge is NOT the typical case, and claiming the gate makes the pass cheap in general would be
+    wrong.
+- **THE THRESHOLD FILL DUMPED THE WHOLE BUDGET INTO ONE ATTRIBUTE, AND IT COST 4.20% ON A REAL
+  BUILD.** `canonicalFill`'s `openThreshold` -- the path that banks points to satisfy a tier gate --
+  took `growable.find(...)`, the FIRST eligible member, on every iteration. Justified in its own
+  comment as "cheapest first, so the fewest points are committed", which is simply not true:
+  `pointsBelowThreshold` counts points in the SAME cost-weighted units as the budget, so reaching a
+  threshold of 150 costs exactly 150 whatever the distribution. Concentrating buys nothing.
+  What it does buy is a degenerate fill. On a real level-55 Ozzy, whose `scarab` needs 150 banked
+  points, the fill came out `lotl:135 exo:2 scorp:2 timeless:2 ibu:2 exterm:2 medusa:1 dance:1
+  scarab:1` -- **135 of 165 points in one attribute**, because `lotl` is cost 1, uncapped, and first
+  in declaration order, so it never stopped being eligible.
+  That is the exact degenerate corner `canonicalFill`'s header comment says it exists to avoid
+  ("Round-robin rather than 'dump it all in the first node' because the screen should reflect what a
+  support set can do when actually used, not a degenerate corner of it"). The threshold path never
+  honoured it, and a comment asserting the right rule is not the rule.
+  **Effect, measured:** the import's own support screened at **rank 63 of 234** -- outside the
+  top-8 survey cut, so the shape the player actually used was never refined. Round-robin instead:
+  **rank 2 of 234**, with a fill of `lotl:41 exo:39 scorp:5 timeless:5 ibu:5 exterm:5 medusa:5
+  dance:4 scarab:4` against the import's `lotl:48 exo:38 scarab:7 scorp:5 timeless:5 ibu:5
+  exterm:5 dance:4 medusa:1` -- nearly the same shape. Every support's screen score rose (top
+  1.67M -> 1.83M), and the realizable counts are UNCHANGED (234/168/144/360), so no support was
+  traded away for it.
+  **How it hid:** it only fires for supports containing a tier-gated attribute, only bites when a
+  cheap uncapped member sits early in declaration order, and it produces a legal, plausible-looking
+  allocation. Nothing asserts that a canonical fill is REPRESENTATIVE, only that it is legal -- and
+  the whole screening stage is built on the assumption that it is both.
+- **DETERMINISM IS NOT PRECISION, AND THE DIFFERENCE BOUNDS WHAT EVERY QUALITY GATE MAY CLAIM.**
+  The evaluator returns bit-identical output for identical (allocation, iterations) -- settled, and
+  what makes memoization sound. It does NOT follow that a 1000-iteration score is the build's true
+  value: it is a sample, so any gate reading a DIFFERENCE between two of them sees the real gap plus
+  two sampling errors. Before treating a 4% shortfall as a search defect, that error has to be
+  measured rather than assumed.
+  Measured by `eval-precision-check.js`, which evaluates each fixture's OWN import allocation --
+  a fixed build, so the search is not involved -- at 1000 through 16000 iterations:
+  **mean absolute error 0.12%, worst 0.35%.** So `FINAL_ITERATIONS` is precise to roughly a tenth of
+  a percent, a comparison of two scores carries about 0.2%, and anything above ~1% is a real
+  difference. That is the number that licenses the other gates; it had never been measured.
+  The corollary matters as much: a gate threshold set well above 1% is not "tolerant", it is blind.
+- **AN IMPORT THE OPTIMIZER CANNOT LEGALLY PRODUCE WOULD MAKE EVERY QUALITY GATE MEASURE THE WRONG
+  THING.** All of them compare against a recorded import and read a shortfall as a search defect,
+  which is only valid if the import is inside our caps, legal under our dependency/threshold model,
+  and affordable at the budget the bench hands over. `import-legality-check.js` checks that
+  assumption -- nothing else did. All **182** fixtures pass, so the premise holds and a shortfall
+  really is about the search.
+- **THE 182-BUILD GATE CANNOT SEE SEARCH QUALITY AT ALL, AND THE OPTIMIZER WAS MUCH WEAKER THAN IT
+  IMPLIED.** The gate hands the optimizer the user's own build as an incumbent; the incumbent
+  competes as a finalist and is returned unchanged when nothing beats it. So "34/34 met or beat the
+  import" is satisfied whenever the incumbent SURVIVES. It proves the optimizer does not DOWNGRADE
+  a build -- a real property -- and says nothing about whether the search could FIND one.
+  Remove the incumbent and give the search the import's own budget, so the import is exactly
+  reachable, and `KNOWN_KNOX_BUILDS#22` (level 31) returns **6,916 against an import of 64,031 --
+  89% short**. The gate scored that build as a pass. `search-quality-check.js` is that measurement;
+  `--only=borge#16` re-checks one build without paying for a sweep.
+  **ROOT CAUSE: the two blocks are treated asymmetrically, and the game is threshold-shaped.**
+  Attribute STRUCTURE is enumerated exhaustively; talent structure and both blocks' DEPTH are found
+  by pairwise coordinate exchange starting from `canonicalFill`, a flat round-robin. Thresholds
+  (Power Of Gaia is worthless at 3 and decisive at 10; an attribute pays only once it is deep
+  enough to change a stage outcome) create plateaus that pairwise transfers cannot cross. Localised
+  on Knox#22, each step measured: the import's attribute support ranks **#2 of 144** in screening
+  (screening is fine), the same support at its flat fill scores 4,293 against the import's 64,031
+  (depth is the gap), attributes climb fine when talents are right (flat -> 44,348), and **talents
+  cannot climb at all even with the import's exact attributes** (flat -> 6,473). The talent block
+  is the broken half.
+  **TWO MECHANISMS FIX IT, and both are the same idea -- stop starting from a flat fill, and
+  enumerate the structure you were guessing:**
+  - `greedyTopUp` fills idle budget by MEASURED MARGINAL VALUE instead of declaration order. As the
+    incumbent's top-up it took a level-38 Borge from **-12.06% to 0.00%**; as a support's starting
+    fill it moves the right support from -18.24% to **-0.51%** on a level-26 Borge (talents held at
+    the import's, so the fill is the only variable).
+  - `enumerateTalentSupports` does for talents what Stage 1 does for attributes. At most 511
+    subsets for 9 talents -- FEWER than the 361 attribute supports already enumerated -- so the
+    asymmetry was never justified by cost.
+  Neither alone is enough and the pairing is not incidental: on the level-26 Borge, refining from
+  the flat fill and from the measured fill converge to the SAME 1,290.48 because the talent block
+  binds, and only doing both reaches **1,519.08, 0.60% ABOVE the import**, with no incumbent
+  involved. On Knox#22 the greedy top-up alone leaves it at -89%; adding the enumeration reaches
+  **-3.29%**. Every one of these is an additional FINALIST, never a replacement, so Stage 3 still
+  takes the maximum and no build can come back worse.
+  **THE COUPLING IS ONE-WAY, AND THAT DICTATES THE ORDER.** Attributes are learnable from a flat
+  talent seed; talents are NOT learnable from a flat attribute fill. Knox#22's winning talent
+  support ranks **152nd of 178** against a neutral attribute fill, **151st** against the RIGHT
+  attribute support at its flat fill, and **1st** once the attributes carry real depth. So the
+  talent enumeration has to be screened against a measured attribute allocation, never a canonical
+  one -- screening it earlier is not a cheaper version of this, it is a different and wrong answer.
+  **THINGS THAT DO NOT WORK -- measured, so they are not retried.** Talent-support enumeration
+  against a neutral partner (-89%, unchanged). Alternating the two support enumerations to a
+  fixpoint (converges to the same wrong answer in ONE round). Specialist seeds that max each talent
+  in turn (refinement strips them immediately, because with flat attributes the talent really is
+  worthless). Enumerating the full cross product is the only method guaranteed to find these, and
+  it is 361 x 511 = 184k screens on a high-level Borge -- hours.
+  **KNOX#22 IS A DIFFERENT PROBLEM AND I FIRST MISDIAGNOSED IT AS THIS ONE.** An earlier version of
+  this entry called it "a genuine joint peak in (talent support, attribute depth) that no
+  partner-free method reaches". That was wrong, and the correction is the useful part -- see the
+  next entry. It is boss-gating, not search weakness, and the tell was in a field the harness was
+  not printing.
+  **Cost: 2,227 -> 6,483 evals on the level-26 Borge (2.9x).** The greedy fill dominates it, being
+  O(idle points x members). The incumbent top-up is free on a fully-spent build -- the loop does not
+  run -- but the per-support fill is not, and this is the number to watch on high-level builds.
+- **THE BOSS-WALL FIX IS A CANDIDATE, NOT A SCORING CHANGE, AND THAT DISTINCTION IS THE PROJECT
+  OWNER'S CALL RATHER THAN A STYLE PREFERENCE.** `MODES.loot.score` is still exactly `r.lootPerMin`.
+  What changed is that `loot` and `push` declare `crossSeedFrom: 'boss'`, and Stage 2d runs a boss
+  search, refines its answer under the CALLER's objective, and enters both the refined and
+  unrefined versions as ordinary finalists. Stage 3 then decides on pure loot, so the answer is
+  still the best build by the metric the player asked for -- it is the candidate POOL that got
+  wider, not the question.
+  Blending boss progress into the loot score would have been the smaller diff and it would have
+  been wrong: the objectives exist so the player can say what they are going for, and a loot score
+  that secretly rewards boss progress answers a different question than the one asked.
+  **`scorerFor` is REQUIRED, not optional, for any mode that declares a cross-seed.** A scoring
+  pool is bound to one objective at init, so the pass needs a factory for a second one; making it
+  optional would mean the optimizer returned different answers depending on which caller invoked
+  it. `optimize()` throws if it is missing, and asserts the cross-seeded mode does not itself
+  cross-seed, which is what terminates the recursion. The browser builds the extra pool lazily and
+  terminates it in `finally` -- a leaked pool is a leaked WASM module per worker, which is the
+  thing `MAX_POOL_SIZE` exists to prevent.
+- **`loot` MODE IS BLIND TO A BOSS WALL, AND THAT IS AN OBJECTIVE PROBLEM, NOT A SEARCH PROBLEM.**
+  On `KNOWN_KNOX_BUILDS#22` every method tried -- coordinate exchange, support enumeration, greedy
+  build-up, chunked greedy, joint greedy -- returned the same ~6,900 against an import of 64,031,
+  and nine methods agreeing is itself the clue. The evaluator explains it in one line:
+  `bossKillRate 93.5 / bossHpPercent 0.12` for the import against `bossKillRate 0 /
+  bossHpPercent 85.24` for every candidate, with `avgStage` pinned at exactly 100.00. The whole
+  9.26x gap is "kills the stage-100 boss" vs "does not".
+  `MODES.loot.score` is `r.lootPerMin` and nothing else, so **every non-killing build scores the
+  same no matter how close it came.** The search is not weak here, it is being asked to climb a
+  flat surface. The proof is that the SAME optimizer, same budget, no incumbent, in `boss` mode --
+  whose objective is lexicographic over `bossHpPercent` and therefore has a gradient -- returns a
+  build with **39,072 loot against loot-mode's 6,978**, and refining that as a loot seed reaches
+  **46,820** (-89.10% -> -26.88%).
+  Two things this cost, both worth remembering:
+  - **The harness hid it.** `evaluateAllocation` returned `{loot, stage, time}` and dropped
+    `bossKillRate`, `bossHpPercent` and the materials. That is the SAME "the measurement could not
+    see the field" failure this file already records three times (relic-sweep watching loot while
+    r7 doubles materials; sim-gate-probe's first signature missing XP; "no wasm argument" read as
+    inert). **When several independent methods agree on an answer that is obviously wrong, print
+    every field the evaluator returns before theorising about the search.**
+  - **A plausible mechanism is not a diagnosis.** The flat-fill/block-alternation story was real
+    and does explain `borge#16` and `borge#24`, so it fit -- and it was still the wrong cause for
+    this build. Two failures that look identical from the outside can have unrelated causes.
+  `stage` ("Highest Stage Reached") is NOT the gap here -- it is a real wasm param for all three
+  hunters, lives in `baseStatKeys`, is carried in `CODE_PARAMS`, and matches the live bundle's own
+  label and `max: Infinity`. Knox#22 carries `stage: 101`, i.e. an account that had just cleared
+  that boss, which is exactly why it sits on the knife edge. Builds whose code carries no value
+  resolve to 0, which is correct for an account that has cleared nothing.
+- **THE OBJECTIVES ARE A PLAYER'S CHOICE, NOT A RANKING OF BUILD QUALITY, AND THE TOOL SHOULD NOT
+  QUIETLY OVERRIDE THAT.** Stated by the project owner: sometimes you want to die right after the
+  boss, sometimes pushing further pays more, sometimes you are farming stages for the Spoils Of War
+  mod, sometimes you only want to know your kill chance, sometimes you want the kill with Timeless
+  maxed so it pays the most. So a loot search that silently spends double the runtime chasing a
+  boss the player did not ask to fight is the wrong shape of fix, however much loot it finds.
+- **`cifi.mysticdrew.net` is a third-party CIFI optimizer, and its methodology is worth knowing --
+  including where it does NOT solve what it appears to.** Its bundle is a single unminified-ish
+  `hunter/optimizer-app.js`.
+  - It emits **one import code per hunter/objective pair** (`loot`, `boss`, `stage`, `ozzy300`)
+    rather than trying to make one objective serve every goal -- the same design the owner
+    describes above.
+  - Its objectives are lexicographic TUPLES via `objectiveTuple()`; loot's is
+    `[lootPerMin, bossKillRate, -bossHpPercent, maxStage, avgStage]`. **This does not actually
+    solve the boss wall**, because `compareTuple` is a strict float comparison and `lootPerMin`
+    always differs slightly between two allocations, so the later terms are effectively dead for
+    the loot objective. Do not copy it expecting it to fix the plateau.
+  - Its search is `randomNeighbor` -- move a random point between two random nodes -- driven by
+    `samples`, `passes`, `heat`, `perturbSteps` and fresh restarts. That is randomized multi-start
+    local search, i.e. exactly the family this repo deliberately removed. It crosses plateaus by
+    volume and luck rather than by construction.
+  - **The one idea there that we lack and probably want:**
+    `BossTargetFromHighestLevelReached = floor(level / 100) * 100 + 100`. Its boss objective, when
+    it knows that target, ranks `[reachedTargetBoss, cappedStage, bossKillRate, -bossHpPercent,
+    maxStage, avgStage, lootPerMin]` -- aimed at the NEXT boss rather than at whatever boss the run
+    happens to reach. Since rewards change on the first kill of a stage, "can I beat the next one"
+    is a more useful question than "maximise kill rate", and ours is currently target-agnostic.
+- **THE BOSS OBJECTIVE AIMS AT THE NEXT UNBEATEN BOSS, NOT AT WHATEVER BOSS THE RUN REACHES.**
+  Bosses stand every 100 stages and the FIRST kill of one is what changes that stage's rewards, so
+  the question a player is asking is always "can I beat the next one". The objective used to
+  maximise the kill rate on whichever boss the run happened to meet -- for any account past stage
+  100 that is a boss it has already killed, i.e. a build for a fight there is no reason to take.
+  `bossTargetFor(stage) = floor(stage / 100) * 100 + 100`, so an account at 104 is aimed at the 200
+  boss. Independently the same rule cifi.mysticdrew.net uses, which is worth noting because nothing
+  in our own data pins it.
+  **`stage` IS A POWER MULTIPLIER, NOT A BOSS SELECTOR, and that had to be measured before any of
+  this could be designed.** Holding one Knox build fixed and varying only that input:
+  `stage 0 -> killRate 0.0, loot 2,733`; `stage 101 -> killRate 93.5, loot 64,031`;
+  `stage 300 -> killRate 99.4, loot 93,221` -- while the run still ends around stage 100-106
+  throughout. So the evaluator has no target input to lean on and "am I fighting the target boss"
+  has to be read off `maxStage`. A build that cannot reach the target is ranked purely on progress
+  TOWARD it, which is what makes "give me the best shot at the 200 boss" answerable when the honest
+  answer is "you cannot get there yet" -- the reported kill chance then says so. Entering a target
+  the account cannot reach is the user's call to make; ours is to answer it legibly.
+  `boss-target-check.js` pins the target arithmetic and the whole tier ordering.
+- **THE LOOT CROSS-SEED IS DELIBERATELY TARGET-AGNOSTIC, AND CONFLATING THE TWO WOULD HAVE BROKEN
+  IT.** The two uses of the boss objective want different bosses. A player selecting `boss` means
+  "the next one I have not beaten". The loot cross-seed means "the boss wall capping THIS build's
+  loot", which is whatever boss the run actually reaches. On the level-31 Knox those are different
+  bosses -- target 200 (unreachable) versus the stage-100 wall it is really stuck on -- and seeding
+  loot from a target-200 search yields a push build instead of the boss-killer worth 45,180. So the
+  pass calls `scorerFor(crossMode, { bossTarget: null })`, and `bossScore` keeps its target-agnostic
+  behaviour when no target is supplied. The Effective Path uses the same fallback, correctly: it
+  never changes the account's stage.
+- **THE CROSS-SEED GATE COSTS ONE EVALUATION AND SAVES A WHOLE SEARCH.** The pass is only justified
+  while the objective is flat, i.e. while the boss is unkilled. Scoring the best build found so far
+  under the boss objective answers that in one call, because that objective's tiers already encode
+  "killed it" (`KILL_ACHIEVED_BASE`, exported so the comparison lives in one place rather than
+  being a number copied into the search). Unconditional seeding measured 15,047 evaluations against
+  6,483 on a build that was never boss-walled -- 2.3x for a candidate that could not win.
+- **RESEARCH: WHY GREEDY FAILED HERE, AND WHAT THE LITERATURE SAYS TO USE INSTEAD.** Recorded
+  because several plausible-looking methods were tried and measured worse, and the theory explains
+  exactly why rather than leaving it as "it did not work".
+  - **Marginal-greedy allocation is exact only for SEPARABLE CONCAVE problems.** Ours is neither:
+    thresholds make it non-concave (Power Of Gaia is worthless at 3 and decisive at 10) and
+    talent/attribute interaction makes it non-separable. Measured, with the other block held at the
+    import's own values: greedy build-up over talents reached -90.4% and over attributes -96.5%.
+    Adding chunked candidates (`+32/16/8/4/2/1` at once, so a threshold at depth 10 is visible to a
+    method whose lookahead would otherwise be 1) DID discover `kraken:32` where nothing else could,
+    but still lost overall. **Do not reach for greedy here again without re-reading this.**
+  - **The family that fits a deceptive/plateau landscape is QUALITY-DIVERSITY, specifically
+    MAP-Elites**: keep an archive of the best solution per cell of a BEHAVIOUR descriptor space,
+    so a build that scores badly on the objective but is unusual on a descriptor survives as a
+    stepping stone instead of being discarded. That is precisely the failure here -- a build that
+    farms poorly but nearly kills the boss is the stepping stone to the 9x cliff, and a
+    fitness-only search throws it away.
+  - **The natural descriptors for this tool are already in the evaluator's output**: boss progress
+    (`bossKillRate`, or reached-target) and depth (`avgStage`/`maxStage`), with `lootPerMin` as the
+    fitness. An archive over those would make `loot` mode find boss-crossing builds INHERENTLY --
+    the project owner's stated goal -- and would subsume the cross-seed pass, which is a targeted
+    workaround for the same problem. **This is the strongest known candidate for replacing the
+    cross-seed; it is NOT implemented.**
+  - Known costs before anyone starts: MAP-Elites suffers a curse of dimensionality with regular
+    grids, stagnates in unreachable regions of descriptor space, and is sample-inefficient with
+    naive variation operators -- and sample cost is exactly this project's binding constraint at
+    ~24ms per evaluation. It also would not be free of the determinism rules: the variation
+    operator must not reintroduce randomness, which is why this needs designing rather than
+    dropping in.
+- **`boss` AND `bossTimeless` HAVE NEVER BEEN QUALITY-TESTED, because there is nothing to compare
+  them against.** Of 182 fixtures, 168 are `loot` and 14 are `push`; two of the four modes the UI
+  offers have no coverage at all. That is the worst place for a blind spot, since the boss objective
+  is lexicographic over a kill rate that moves in visible steps -- exactly the threshold landscape
+  where coordinate exchange was just measured failing on `loot`.
+  `budget-monotonicity-check.js` covers it without fixtures: raising the budget cannot make the true
+  optimum worse, so `optimize(budget + k)` scoring below `optimize(budget)` means the search failed
+  on the larger problem. It works on any build in any mode. It deliberately does NOT assume the
+  feasible sets are nested -- they are not, since every allocation must leave at most
+  `MAX_IDLE_POINTS` idle -- and it prints both allocations rather than asserting a cause.
 - **`underspend-test.js` is the gate that covers this, and NOTHING WAS RUNNING IT.** It was failing
   on 6 known builds, identically on clean HEAD, and appeared in no hand-picked bench list -- which
   is why `tools/bench/all.js` now exists and runs everything. Its failure message also says which
@@ -1577,6 +1867,10 @@ node tools/bench/badge-check.js        # fleet badges: ships + multipliers vs th
 node tools/bench/node-factor-check.js  # EVERY factor in every node getter is accounted for
 node tools/bench/param-plumbing-check.js # every sim param is settable into its own slot
 node tools/bench/trinket-semantics-check.js [live-bundle.js] # galvTrinketsCount is a SUM, gated on creation node 5
+node tools/bench/boss-target-check.js   # the boss objective aims at the NEXT unbeaten boss
+node tools/bench/eval-precision-check.js # how precise is a FINAL_ITERATIONS score (report)
+node tools/bench/import-legality-check.js # every import is reproducible by the optimizer
+node tools/bench/support-rank-check.js # where the import's own support ranks in screening
 node tools/bench/override-liveness-check.js # every override the UI offers reaches the evaluator
 node tools/bench/wasm-arity-check.js   # wasm argument count == params.json, per hunter
 node tools/bench/reference-schema-test.js # zod: every reference file matches its schema
@@ -1587,6 +1881,9 @@ python tools/il2cpp-cli/typetree.py --dump FleetManager --grep BaseBonus  # read
 node tools/bench/relic-arg-probe.js    # every declared relic reaches the wasm (fast)
 node tools/bench/path-relic-test.js    # effective path never recommends an inert relic
 node tools/bench/path-abort-test.js    # closing the Effective Path actually stops the work
+node tools/bench/search-quality-check.js  # can the search FIND the import with no incumbent?
+node tools/bench/budget-monotonicity-check.js # more budget never scores worse, in every mode
+node tools/bench/underspend-diagnose.js <hunter> <index> # WHICH stage loses the value
 node tools/bench/route-test.js         # unknown hash routes normalise instead of hard-locking
 node tools/bench/relic-sweep.js        # which relics actually move the sim (slow)
 node tools/bench/gem-coverage-test.js  # every gem param is reachable from the Gem Planner

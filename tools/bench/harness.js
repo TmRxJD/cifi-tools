@@ -162,15 +162,27 @@ function cfgForImport(hunter, build, { budgetMode = 'spend' } = {}) {
 }
 
 /** A scorer backed by the shipped compileEvaluator -- the exact evaluation path the app uses. */
-async function makeScorer(cfg, mode) {
+/**
+ * A scorer factory for optimize()'s cross-seed pass, which needs a scorer bound to a DIFFERENT
+ * objective than the one being optimized. The browser supplies the same thing backed by a second
+ * worker pool; both go through optimize()'s one code path, so the bench exercises what ships.
+ */
+function scorerFactory(cfg) {
+  return (mode, ctxOverride) => makeScorer(cfg, mode, ctxOverride);
+}
+
+async function makeScorer(cfg, mode, ctxOverride) {
   const sb = browserSandbox();
   const evalFast = await sb.HunterSim.compileEvaluator(cfg.hunter, cfg);
+  // Same one definition the browser worker uses, so the bench and the app cannot disagree about
+  // which boss is being aimed at.
+  const ctx = { ...Objective.contextFor(cfg), ...(ctxOverride || {}) };
   return async function score(pairs, iterations) {
     const out = [];
     for (const p of pairs) {
       const r = await evalFast(p.talentAlloc, p.attrAlloc, iterations);
       // Same canonical objective the browser workers use -- not a second copy of the mode rules.
-      out.push(Objective.scoreFor(mode, r));
+      out.push(Objective.scoreFor(mode, r, ctx));
     }
     return out;
   };
@@ -192,7 +204,19 @@ async function evaluateAllocation(cfg, talentAlloc, attrAlloc, iterations = Opti
   const sb = browserSandbox();
   const evalFast = await sb.HunterSim.compileEvaluator(cfg.hunter, cfg);
   const r = await evalFast(talentAlloc, attrAlloc, iterations);
-  return { loot: r.lootPerMin, stage: r.avgStage, time: r.avgTime };
+  // EVERY field, not a chosen three. The old shape was `{loot, stage, time}`, and dropping the
+  // rest actively caused a misdiagnosis: on a Knox build where nine different search methods all
+  // returned ~6,900 against an import of 64,031, the entire explanation was `bossKillRate 93.5`
+  // vs `0` -- a field this function did not return, so the investigation went looking for a search
+  // defect that was not there. Same failure as relic-sweep.js calling r7 inert while watching only
+  // loot. `loot`/`stage`/`time` are kept as aliases so existing callers are untouched.
+  return {
+    loot: r.lootPerMin, stage: r.avgStage, time: r.avgTime,
+    lootPerMin: r.lootPerMin, avgStage: r.avgStage, avgTime: r.avgTime,
+    minStage: r.minStage, maxStage: r.maxStage,
+    bossHpPercent: r.bossHpPercent, bossKillRate: r.bossKillRate,
+    mat1: r.mat1, mat2: r.mat2, mat3: r.mat3, xp: r.xp,
+  };
 }
 
 /**
@@ -204,6 +228,31 @@ async function evaluateAllocation(cfg, talentAlloc, attrAlloc, iterations = Opti
  * perfectly good build as a failure for the wrong objective. Mode is derived from the export
  * name so a new fixture array is picked up automatically.
  */
+/**
+ * Find one fixture by a user-supplied name, refusing to guess when the name is ambiguous.
+ *
+ * Accepts the unique `uid` (`borge:KNOWN_BORGE_LATE_BUILDS#2`), a `hunter#index` shorthand, or a
+ * `hunter:SET#index`. The shorthand THROWS when it matches more than one fixture rather than
+ * taking the first -- silently investigating a different build than the one a gate flagged is
+ * worse than failing.
+ */
+function findFixture(all, name) {
+  const flat = Object.values(all).flat();
+  const exact = flat.filter((f) => f.uid === name);
+  if (exact.length === 1) return exact[0];
+  const m = /^([a-z]+)(?::([A-Z_]+))?#(\d+)$/.exec(name);
+  if (!m) throw new Error(`unrecognised fixture name "${name}" (want hunter#index or hunter:SET#index)`);
+  const [, hunter, set, idx] = m;
+  const hits = flat.filter((f) => f.hunter === hunter && f.index === Number(idx)
+    && (!set || f.set === set));
+  if (!hits.length) throw new Error(`no fixture "${name}"`);
+  if (hits.length > 1) {
+    throw new Error(`"${name}" is ambiguous -- ${hits.length} fixtures share it: `
+      + `${hits.map((f) => f.uid).join(', ')}. Name one exactly.`);
+  }
+  return hits[0];
+}
+
 function loadKnownBuilds() {
   const dir = path.join(__dirname, '../../compare-mcp');
   const files = {
@@ -229,7 +278,15 @@ function loadKnownBuilds() {
       if (end === -1) throw new Error(`Unterminated array for ${m[1]} in ${file}`);
       const arr = vm.runInNewContext(src.slice(open, end + 1));
       const mode = /_PUSH_/.test(m[1]) ? 'push' : 'loot';
-      arr.forEach((b, i) => entries.push({ ...b, hunter, mode, set: m[1], index: i }));
+      // `index` is the position WITHIN a set and is NOT unique per hunter: Borge's loot fixtures
+      // run 0-61 in KNOWN_BORGE_BUILDS and 0-10 again in KNOWN_BORGE_LATE_BUILDS, and Ozzy's
+      // collide over 0-4. A bench that identifies a build as "borge#2" therefore names two
+      // different builds, and any `find(f => f.index === n)` silently takes whichever was loaded
+      // first -- so a gate could flag one build and the diagnostic could investigate another.
+      // `uid` is the unique name; use it for reporting and selection.
+      arr.forEach((b, i) => entries.push({
+        ...b, hunter, mode, set: m[1], index: i, uid: `${hunter}:${m[1]}#${i}`,
+      }));
     }
     out[hunter] = entries;
   }
@@ -237,6 +294,7 @@ function loadKnownBuilds() {
 }
 
 module.exports = {
-  browserSandbox, parseBuildCode, hunterDefs, cfgForImport, makeScorer, scoreAllocation,
+  browserSandbox, parseBuildCode, hunterDefs, cfgForImport, makeScorer, scorerFactory, scoreAllocation,
+  findFixture,
   loadKnownBuilds, evaluateAllocation, Space, Optimizer, Objective,
 };

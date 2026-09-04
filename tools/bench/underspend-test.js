@@ -72,10 +72,10 @@ let failures = 0;
       const scorer = await H.makeScorer(damaged, 'loot');
       let res;
       try {
-        res = await H.Optimizer.optimize(damaged, { mode: 'loot', scorer });
+        res = await H.Optimizer.optimize(damaged, { mode: 'loot', scorer, scorerFor: H.scorerFactory(damaged) });
       } catch (err) {
         failures++;
-        console.log(`FAIL ${hunter}/${fx.set}#${fx.index} lvl${build.level}: optimize threw -- ${err.message}`);
+        console.log(`FAIL ${fx.uid} lvl${build.level}: optimize threw -- ${err.message}`);
         continue;
       }
 
@@ -95,7 +95,7 @@ let failures = 0;
       // 2. No worse than the untouched import.
       const regressed = outScore < importScore;
 
-      const tag = `${hunter}/${fx.set}#${fx.index} lvl${build.level}`;
+      const tag = `${fx.uid} lvl${build.level}`;
       if (tLeft || aLeft || regressed) {
         failures++;
         console.log(`FAIL ${tag}`);

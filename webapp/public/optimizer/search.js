@@ -121,6 +121,17 @@
   // binds on pathological inputs; it is reported rather than silently swallowed.
   const MAX_ROUNDS_PER_BLOCK = 400;
 
+  // Talent supports are enumerated as a bitmask over the talent list. 16 bits is 65,535 subsets,
+  // far past anything the game has (8-9 talents, i.e. 255-511); beyond it the enumeration is
+  // refused rather than attempted.
+  const MAX_TALENT_ENUM_BITS = 16;
+
+  // How many enumerated talent supports get a full joint refinement at each point one is used.
+  // The winning support ranks FIRST against the attributes it belongs with in every case measured
+  // (the level-31 Knox's by a factor of six over the runner-up), so this is a safety margin rather
+  // than a search width -- and each one costs a full fixpoint, which is the expensive unit here.
+  const REFINE_TALENT_SUPPORTS = 2;
+
   class Cancelled extends Error {}
 
   // ---------------------------------------------------------------------------------------
@@ -128,6 +139,94 @@
   // fixpoint. Deterministic throughout -- candidate moves are generated in declaration order
   // and ties are broken toward the earlier candidate, never by chance.
   // ---------------------------------------------------------------------------------------
+  // Spend idle budget by MEASURED marginal value: one point at a time into whichever eligible
+  // node most improves the score. Deterministic -- candidates are built in declaration order and
+  // ties break toward the earlier one -- and it introduces no weights or constants of its own.
+  //
+  // This replaces Space.spendRemaining for the incumbent, which filled in DECLARATION ORDER,
+  // round-robin. That is the same flat shape this file already learned not to trust as a talent
+  // seed, and on an under-spent build it is worse than merely uninformed: it DESTROYS the shape
+  // of the build being repaired. Measured on a real level-38 Borge whose 12 stripped talent
+  // points were spread across six talents by the flat fill, the repaired build came back 12.06%
+  // below the untouched import; filling by marginal value instead reproduces the import EXACTLY.
+  //
+  // It costs (idle points x eligible nodes) evaluations, so it costs nothing on a build that is
+  // already fully spent -- the loop does not run. The price is paid only in the case it fixes.
+  // `memberIds`, when given, confines the fill to one support -- widening the support is Stage 1's
+  // job, and letting the fill do it silently would make the support sets meaningless.
+  /** @param {string[] | null} [memberIds] */
+  async function greedyTopUp(ctx, defs, deps, minVal, budget, alloc, buildPair, memberIds = null) {
+    const current = { ...alloc };
+    for (;;) {
+      if (ctx.shouldCancel()) throw new Cancelled();
+      const idle = budget - Space.costOf(defs, current);
+      if (idle <= Space.MAX_IDLE_POINTS) break;
+      const cands = [];
+      for (const d of defs) {
+        if (memberIds && !memberIds.includes(d.id)) continue;
+        if ((d.cost || 1) > idle) continue;
+        if (!Space.isEligible(d, defs, deps, minVal, current)) continue;
+        const next = { ...current };
+        next[d.id] = (next[d.id] || 0) + 1;
+        cands.push({ id: d.id, alloc: next });
+      }
+      // Nothing eligible fits the remaining budget: the leftover is UNSPENDABLE, not unspent,
+      // which is exactly the condition the Stage 3 assertion allows.
+      if (!cands.length) break;
+      const scores = await ctx.score(cands.map((c) => buildPair(c.alloc)), SCREEN_ITERATIONS);
+      let best = 0;
+      for (let i = 1; i < scores.length; i++) if (scores[i] > scores[best]) best = i;
+      current[cands[best].id] = (current[cands[best].id] || 0) + 1;
+    }
+    return current;
+  }
+
+  // Every talent support, the same way attribute supports are enumerated.
+  //
+  // Talents have no dependency edges and no tier thresholds, so every non-empty subset is a legal
+  // support and canonicalFill alone decides whether it is realizable within the budget and caps.
+  // With 8-9 talents that is at most 511 subsets -- FEWER than the 361 dependency-closed attribute
+  // supports this file already enumerates exhaustively, so the asymmetry of enumerating one block
+  // and hill-climbing the other was never justified by cost.
+  //
+  // It matters because the talent block is where coordinate exchange actually fails. Measured on a
+  // real level-31 Knox: with the right attributes held fixed, hill climbing from a flat talent fill
+  // reaches 6,473 where the answer is 64,031 -- it strips Power Of Gaia early (worthless at 3) and
+  // no pairwise 8/4/2/1 transfer can rebuild it alongside Finisher. Enumerating the supports finds
+  // {revival, ghost, pog, finish} ranked FIRST and refines it to the import exactly.
+  function enumerateTalentSupports(defs, budget) {
+    const n = defs.length;
+    // 2^n subsets. Guarded rather than assumed: a future hunter with many more talents should
+    // make this fail visibly instead of quietly hanging the optimizer.
+    if (n > MAX_TALENT_ENUM_BITS) return null;
+    const out = [];
+    for (let mask = 1; mask < (1 << n); mask++) {
+      const ids = [];
+      for (let i = 0; i < n; i++) if (mask & (1 << i)) ids.push(defs[i].id);
+      const fill = Space.canonicalFill(defs, {}, {}, budget, ids);
+      if (fill) out.push({ mask, ids, fill });
+    }
+    return out;
+  }
+
+  // Screen every talent support against one attribute allocation and return the strongest few.
+  // Used from two places -- the refined supports and the incumbent -- so there is exactly one
+  // definition of "which talent structures are worth refining against these attributes".
+  async function bestTalentSupportsFor(ctx, attrAlloc, TALENTS, talentBudget, batch, shouldCancel) {
+    const supports = enumerateTalentSupports(TALENTS, talentBudget);
+    if (!supports || !supports.length) return [];
+    const screened = [];
+    for (let i = 0; i < supports.length; i += batch) {
+      if (shouldCancel()) throw new Cancelled();
+      const chunk = supports.slice(i, i + batch);
+      const scores = await ctx.score(chunk.map((c) => ({ talentAlloc: c.fill, attrAlloc })), SCREEN_ITERATIONS);
+      chunk.forEach((c, j) => screened.push({ ...c, score: scores[j] }));
+    }
+    // Deterministic total order, same rule as the attribute screen: score, then mask.
+    screened.sort((a, b) => (b.score - a.score) || (a.mask - b.mask));
+    return screened.slice(0, REFINE_TALENT_SUPPORTS);
+  }
+
   async function optimizeBlock(ctx, defs, deps, minVal, budget, alloc, buildPair, baseScore, stepSizes, pinnedIds = []) {
     let current = { ...alloc };
     let currentScore = baseScore;
@@ -215,7 +314,8 @@
   // browser supplies a Web Worker pool; the Node benchmark supplies a direct WASM call. The
   // search itself is identical in both, so what the benchmark proves is what ships.
   // ---------------------------------------------------------------------------------------
-  async function optimize(cfg, { mode = 'loot', scorer, onProgress = () => {}, shouldCancel = () => false } = {}) {
+  /** @param {OptimizerConfig} cfg @param {OptimizeOptions} [options] */
+  async function optimize(cfg, { mode = 'loot', scorer, scorerFor = null, onProgress = () => {}, shouldCancel = () => false } = /** @type {any} */ ({})) {
     if (typeof scorer !== 'function') throw new Error('optimize() requires a scorer function');
 
     // Mode is validated HERE as well as in the worker, so an unknown mode fails before a search
@@ -357,6 +457,9 @@
         // the count is reported rather than hidden.
         if (fill) realizable.push({ support: s, attrAlloc: fill });
       }
+      // Stage 2b needs the support MEMBERS behind a surveyed candidate, not just its fill, so it
+      // can re-fill the same support a different way. Only the mask survives the survey.
+      const allSupports = new Map(supports.map((s) => [s.mask, s]));
       ctx.note(`${supports.length} supports enumerated, ${realizable.length} realizable within budget`);
 
       for (let i = 0; i < realizable.length; i += BATCH) {
@@ -396,6 +499,45 @@
         report('refine', i, toRefine.length + 1);
         const c = toRefine[i];
         finalists.push(await optimizeJointly(ctx, budgets, c.talentAlloc, c.attrAlloc, c.score, STEP_SIZES, 6, pinnedAttrs));
+
+        // AND REFINE THE SAME SUPPORT FROM A MEASURED FILL, WITH ITS TALENTS ENUMERATED.
+        //
+        // The line above starts from the support's round-robin fill and hill-climbs. That is the
+        // combination measured failing: on a real level-26 Borge it reaches 14.54% below an import
+        // it was given the exact budget to reproduce, and the two reasons are separable.
+        //   * The flat fill misrepresents a support whose value is concentrated. Filling the SAME
+        //     support by marginal value instead moves it from -18.24% to -0.51% (import talents
+        //     held, so the fill is the only variable).
+        //   * The talent structure is never enumerated. Refining from the flat fill and from the
+        //     measured fill both converge to the SAME 1,290.48, because the talent block is what
+        //     binds -- so a better attribute fill alone changes nothing.
+        // Doing both, with no incumbent involved at all, returns 1,519.08: 0.60% ABOVE the import.
+        //
+        // Talent supports are screened against the measured attribute fill for the reason spelled
+        // out at the incumbent's own enumeration below: the coupling is one-way, and a talent
+        // support that wins only at real attribute depth is invisible against a flat one.
+        const support = allSupports.get(c.mask);
+        if (support) {
+          const opened = Space.canonicalFill(ATTRIBUTES, deps, minVal, attrBudget, support.ids, true);
+          if (opened) {
+            let measuredAttrs = await greedyTopUp(
+              ctx, ATTRIBUTES, deps, minVal, attrBudget, opened,
+              (a) => ({ talentAlloc: seedTalents, attrAlloc: a }), support.ids,
+            );
+            if (pinnedAttrs.length) {
+              measuredAttrs = applyPins(ATTRIBUTES, deps, minVal, attrBudget, measuredAttrs, pinnedAttrs);
+            }
+            if (Space.isLegal(ATTRIBUTES, deps, minVal, measuredAttrs, attrBudget)) {
+              const best = await bestTalentSupportsFor(ctx, measuredAttrs, TALENTS, talentBudget, BATCH, shouldCancel);
+              for (const t of best) {
+                if (shouldCancel()) throw new Cancelled();
+                finalists.push(await optimizeJointly(
+                  ctx, budgets, t.fill, measuredAttrs, t.score, STEP_SIZES, 6, pinnedAttrs,
+                ));
+              }
+            }
+          }
+        }
       }
       // Survey results that didn't make the refinement cut still compete -- they are complete,
       // legal allocations, just less thoroughly tuned. Keeping them costs nothing at Stage 3
@@ -417,8 +559,21 @@
         // points still unspent, which is never the right answer: those points are free value.
         // Nothing else in the pipeline could rescue it either, because a transfer moves points
         // rather than adding them, and fillLeftover refuses to open new nodes.
-        Space.spendRemaining(TALENTS, noDeps, noMin, talentBudget, incumbentTalents);
-        Space.spendRemaining(ATTRIBUTES, deps, minVal, attrBudget, incumbentAttrs);
+        //
+        // The top-up is by MEASURED MARGINAL VALUE, not declaration order -- see greedyTopUp.
+        // Attributes are topped up first, against the incumbent's own talents, and the talents
+        // then against the resulting attributes, so each half is filled against the best picture
+        // of the other that is available at the time.
+        const toppedAttrs = await greedyTopUp(
+          ctx, ATTRIBUTES, deps, minVal, attrBudget, incumbentAttrs,
+          (a) => ({ talentAlloc: incumbentTalents, attrAlloc: a }),
+        );
+        Object.assign(incumbentAttrs, toppedAttrs);
+        const toppedTalents = await greedyTopUp(
+          ctx, TALENTS, noDeps, noMin, talentBudget, incumbentTalents,
+          (t) => ({ talentAlloc: t, attrAlloc: incumbentAttrs }),
+        );
+        Object.assign(incumbentTalents, toppedTalents);
         if (pinnedAttrs.length) {
           Object.assign(incumbentAttrs, applyPins(ATTRIBUTES, deps, minVal, attrBudget, incumbentAttrs, pinnedAttrs));
         }
@@ -427,6 +582,146 @@
         // Also carry the incumbent through UNREFINED, so the result is provably never worse
         // than what the user already had, even if every refinement path leads somewhere weaker.
         finalists.push({ talentAlloc: incumbentTalents, attrAlloc: incumbentAttrs, score: startScore });
+
+        // --- Stage 2c: the TALENT structural choice, enumerated. --------------------------
+        // Stage 1 enumerates attribute supports because a heuristic cannot be trusted to pick
+        // which nodes get funded at all. The talent block had no equivalent: it started from one
+        // flat fill and hill-climbed, and on a threshold talent that is not enough -- coordinate
+        // exchange strips a talent that is worthless at low level and cannot rebuild it, because
+        // every intermediate pairwise transfer scores worse than staying put.
+        //
+        // These are screened against the incumbent's TOPPED-UP ATTRIBUTES rather than a neutral
+        // fill, and that is load-bearing rather than incidental. Measured on the level-31 Knox
+        // above, the winning talent support ranks 152nd of 178 against a neutral attribute fill
+        // and 151st against the right attribute support at its FLAT fill -- it only surfaces
+        // (ranked 1st) once the attributes carry their real DEPTH. The coupling runs one way:
+        // attributes are learnable from a flat talent seed, talents are not learnable from a flat
+        // attribute seed, so the talent enumeration has to come after the attributes are real.
+        //
+        // These are additional finalists, never replacements, so Stage 3 still takes the maximum
+        // and this pass cannot make any build worse than it was.
+        const screenedTalents = await bestTalentSupportsFor(
+          ctx, incumbentAttrs, TALENTS, talentBudget, BATCH, shouldCancel,
+        );
+        if (!screenedTalents.length) {
+          ctx.note(`talent support enumeration produced nothing (${TALENTS.length} talents)`);
+        } else {
+
+          // REFINE ONLY IF SOMETHING HERE COULD ACTUALLY WIN. The screen is cheap -- one
+          // evaluation per support -- but each refinement is a full joint fixpoint, and running
+          // three of those on every optimize would be a large, permanent cost paid mostly by
+          // builds that gain nothing. The incumbent's own talents were just screened at the same
+          // fidelity against the same attributes, so the comparison is like for like.
+          //
+          // On the two builds this pass was built from, the gate does exactly what it should:
+          // the level-31 Knox screens its best talent support at 37,090 against an incumbent at
+          // roughly 5,200 and proceeds, while the level-38 Borge screens 51,993 against an
+          // incumbent already at 63,583 and skips -- and that Borge is fixed by the top-up alone,
+          // so nothing is lost by skipping. The screen is a ranking surrogate rather than a
+          // verdict, which is why the gate asks only whether the BEST candidate beats the
+          // incumbent, not whether each individual one does.
+          if (screenedTalents[0].score <= startScore) {
+            ctx.note('talent support refinement skipped: none screens above the incumbent');
+          } else {
+            for (const c of screenedTalents) {
+              if (shouldCancel()) throw new Cancelled();
+              finalists.push(await optimizeJointly(
+                ctx, budgets, c.fill, incumbentAttrs, c.score, STEP_SIZES, 6, pinnedAttrs,
+              ));
+            }
+          }
+        }
+      }
+
+      // --- Stage 2d: a candidate from the objective that can SEE a threshold. -------------
+      // `loot` is blind on a boss wall: every build that fails the kill scores the same, so there
+      // is no gradient to climb and the search is not weak, it is on a flat surface. The full
+      // reasoning and the measurements are on Objective.crossSeedFor. The remedy is a CANDIDATE,
+      // not a scoring change -- this build competes at Stage 3 on the caller's objective exactly
+      // like every other finalist, so the answer is still the best build by the metric asked for.
+      //
+      // `scorerFor` is how the pass gets a scorer bound to a different mode. It is required rather
+      // than optional for a mode that declares a cross-seed: silently skipping the pass would make
+      // the optimizer's answer depend on which caller invoked it, which is precisely the kind of
+      // quiet difference this project refuses to carry.
+      const crossMode = Objective.crossSeedFor(mode);
+      if (crossMode) {
+        if (typeof scorerFor !== 'function') {
+          throw new Error(`optimize(): mode "${mode}" cross-seeds from "${crossMode}", so a `
+            + 'scorerFor(mode) factory is required');
+        }
+        report('crossSeed', 0, 1);
+        // TARGET-AGNOSTIC ON PURPOSE, and this is the subtle part of the whole pass.
+        //
+        // The `boss` mode a PLAYER selects aims at the next boss they have not beaten -- at stage
+        // 101 that is the 200 boss, which their build may have no chance of reaching, and saying
+        // so is the honest answer. The cross-seed wants something different: the boss wall that is
+        // capping THIS build's loot right now, which is whatever boss the run actually reaches.
+        // On the level-31 Knox those are different bosses (200 vs 100), and seeding loot from a
+        // target-200 search would produce a push build instead of the boss-killer worth 45,180.
+        // So the pass explicitly clears the target.
+        const crossScorer = await scorerFor(crossMode, { bossTarget: null });
+        if (typeof crossScorer !== 'function') {
+          throw new Error(`optimize(): scorerFor("${crossMode}") did not return a scorer function`);
+        }
+
+        // GATE: ONE evaluation decides whether the whole pass is worth running.
+        //
+        // The pass exists because a loot search has no gradient while the boss is unkilled -- every
+        // walled build scores the same. But that is only true WHILE it is walled. Score the best
+        // build found so far under the boss objective, whose tiers already encode "reached the
+        // target" and "killed it": if the loot search has already produced a build that kills the
+        // target boss, it demonstrably had a gradient to follow and a boss-seeded candidate has
+        // nothing to add.
+        //
+        // Worth gating rather than always paying: measured on a level-26 Borge that is NOT
+        // boss-walled, the unconditional pass cost 15,047 evaluations against 6,483 without it --
+        // 2.3x for a candidate that could never win. The gate costs ONE evaluation to find that
+        // out, and the walled case (a level-31 Knox, 6,978 -> 45,180 loot) still gets the full pass.
+        const bestSoFar = finalists.reduce((a, b) => (a && a.score >= b.score ? a : b), null);
+        let crossWorthIt = true;
+        if (bestSoFar) {
+          const [bossViewOfBest] = await crossScorer(
+            [{ talentAlloc: bestSoFar.talentAlloc, attrAlloc: bestSoFar.attrAlloc }], SCREEN_ITERATIONS,
+          );
+          // KILL_ACHIEVED_BASE is the boss objective's own "this build kills it" floor. Comparing
+          // against it rather than against a number of our own keeps the two in one place.
+          crossWorthIt = bossViewOfBest < Objective.KILL_ACHIEVED_BASE;
+          if (!crossWorthIt) {
+            ctx.note(`cross-seed skipped: the ${mode} search already kills the target boss`);
+          }
+        }
+        if (!crossWorthIt) {
+          report('final', 0, 1);
+        } else {
+        // A plain recursion. The cross-seeded mode is one that does NOT declare a cross-seed of
+        // its own, which is what terminates it -- asserted rather than assumed.
+        if (Objective.crossSeedFor(crossMode)) {
+          throw new Error(`optimize(): cross-seed cycle -- "${crossMode}" itself cross-seeds`);
+        }
+        const crossCfg = { ...cfg };
+        delete crossCfg.currentTalents;
+        delete crossCfg.currentAttrs;
+        const crossRes = await optimize(crossCfg, { mode: crossMode, scorer: crossScorer, shouldCancel });
+        if (crossRes.best) {
+          evals += crossRes.evals;
+          // Refine it under THIS objective before it competes -- the boss search stopped caring
+          // about loot once the kill was secured, and on the Knox build above that refinement is
+          // worth another 20% (39,072 -> 46,820).
+          const [crossStart] = await ctx.score(
+            [{ talentAlloc: crossRes.best.talentAlloc, attrAlloc: crossRes.best.attrAlloc }], SCREEN_ITERATIONS,
+          );
+          finalists.push(await optimizeJointly(
+            ctx, budgets, crossRes.best.talentAlloc, crossRes.best.attrAlloc, crossStart,
+            STEP_SIZES, 6, pinnedAttrs,
+          ));
+          // And unrefined, so a refinement that wanders cannot lose the candidate outright.
+          finalists.push({
+            talentAlloc: crossRes.best.talentAlloc, attrAlloc: crossRes.best.attrAlloc, score: crossStart,
+          });
+          ctx.note(`cross-seeded a ${crossMode} build into ${mode}`);
+        }
+        }
       }
 
       // --- Stage 3: full-fidelity decision. -----------------------------------------------

@@ -139,6 +139,15 @@ interface OptimizeOptions {
   mode?: OptimizeMode;
   /** The ONLY I/O the search performs. Must be pure and deterministic. */
   scorer: (pairs: AllocationPair[], iterations: number) => Promise<number[]>;
+  /**
+   * A scorer bound to a DIFFERENT objective, for the cross-seed pass.
+   *
+   * REQUIRED whenever the mode declares `crossSeedFrom` (`loot` and `push` both do); optional
+   * only for the boss modes, which cross-seed from nothing. It is not optional-with-a-fallback:
+   * `optimize()` throws when a cross-seeding mode is given no factory, because silently skipping
+   * the pass would make the answer depend on which caller invoked it.
+   */
+  scorerFor?: (mode: OptimizeMode) => Promise<OptimizeOptions['scorer']> | OptimizeOptions['scorer'];
   onProgress?: (p: OptimizeProgress) => void;
   shouldCancel?: () => boolean;
 }

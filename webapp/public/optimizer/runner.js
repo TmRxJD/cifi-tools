@@ -12,7 +12,7 @@
   // Bump alongside the ?v= on the <script> tags in index.html. A Worker URL is cached
   // independently of the page, so without this a worker.js change silently keeps running the
   // previous version after a reload.
-  const WORKER_VERSION = '20260903a';
+  const WORKER_VERSION = '20260903e';
 
   // Each worker compiles and holds its OWN copy of the WASM module and churns a fresh instance
   // per evaluation (required for determinism -- the evaluator's RNG state lives in mutable wasm
@@ -23,7 +23,8 @@
   const MAX_POOL_SIZE = 6;
 
   class ScoringPool {
-    constructor(cfg, mode, size) {
+    constructor(cfg, mode, size, scoreCtxOverride) {
+      this.scoreCtxOverride = scoreCtxOverride || null;
       this.workers = [];
       this.pending = new Map();
       this.nextRequestId = 0;
@@ -40,7 +41,7 @@
           // Always resolves, so ready() can never hang on a worker that failed to load.
           worker.onerror = (e) => resolve(String((e && e.message) || 'worker failed to load'));
         });
-        worker.postMessage({ type: 'init', cfg: serializeCfg(cfg), mode });
+        worker.postMessage({ type: 'init', cfg: serializeCfg(cfg), mode, scoreCtxOverride: this.scoreCtxOverride });
         this.readyPromises.push(ready);
         this.workers.push(worker);
       }
@@ -120,6 +121,7 @@
   async function runOptimizer(cfg, { mode = 'loot', onProgress = () => {}, shouldCancel = () => false, poolSize } = {}) {
     const size = poolSize || Math.max(2, Math.min(MAX_POOL_SIZE, (navigator.hardwareConcurrency || 4) - 1));
     const pool = new ScoringPool(cfg, mode, size);
+    const crossPools = new Map();
     try {
       const initError = await pool.ready();
       if (initError) {
@@ -135,11 +137,27 @@
       return await global.HunterOptimizer.optimize(cfg, {
         mode,
         scorer: (pairs, iterations) => pool.score(pairs, iterations),
+        // A pool is bound to ONE objective at init, so the cross-seed pass needs its own. Built
+        // lazily -- a mode that does not cross-seed never pays for it -- and tracked so `finally`
+        // terminates it even when the search throws or is cancelled. Leaking a pool would leak a
+        // WASM module per worker, which is exactly what MAX_POOL_SIZE exists to prevent.
+        scorerFor: async (crossMode, ctxOverride) => {
+          const key = `${crossMode}|${JSON.stringify(ctxOverride || null)}`;
+          if (!crossPools.has(key)) {
+            const crossPool = new ScoringPool(cfg, crossMode, size, ctxOverride);
+            crossPools.set(key, crossPool);
+            const err = await crossPool.ready();
+            if (err) throw new Error(`Cross-seed worker failed to initialize: ${err}`);
+          }
+          const p = crossPools.get(key);
+          return (pairs, iterations) => p.score(pairs, iterations);
+        },
         onProgress,
         shouldCancel,
       });
     } finally {
       pool.terminate();
+      for (const p of crossPools.values()) p.terminate();
     }
   }
 

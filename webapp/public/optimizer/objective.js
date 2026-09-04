@@ -49,15 +49,76 @@
   const KILL_RATE_SCALE = 1000;
   const KILL_ACHIEVED_BASE = 1e9; // any kill outranks every not-yet-killing build
   const STAGE_PROGRESS_SCALE = 1e4;
+  // Reaching the target boss at all outranks every build that cannot, by more than the stage
+  // term can ever reach, and still sits far below any actual kill.
+  const REACHED_TARGET_BASE = 1e7;
   const LOOT_TIEBREAK_SCALE = 5;
 
-  function bossScore(r) {
+  /**
+   * The NEXT boss the account has not killed yet, from its highest stage reached.
+   *
+   * Bosses stand every 100 stages, so an account at 104 has cleared the 100 boss and its next
+   * one is 200; an account at 99 has cleared none and its next is 100. This is the same rule the
+   * third-party cifi.mysticdrew.net optimizer uses (`floor(level / 100) * 100 + 100`), arrived at
+   * independently, which is worth noting because nothing in our own data pins it.
+   *
+   * WHY IT MATTERS: without it the boss objective maximises the kill rate on whatever boss the
+   * run happens to reach, which for an account past 100 is a boss it has ALREADY KILLED. That is
+   * a build for a fight the player has no reason to take. The objective is "kill the next one",
+   * always -- the first kill is what changes the stage's rewards.
+   */
+  /**
+   * The scoring context for a cfg: the boss target derived from that account's highest stage.
+   *
+   * One definition, used by the browser worker and the Node bench alike, so the two cannot come
+   * to different conclusions about which boss is being fought. `stage` lives in baseOverrides for
+   * an imported build and in hunterStats for account state; both are read, override first, which
+   * is the same precedence resolveParam uses.
+   */
+  function contextFor(cfg) {
+    const stage = (cfg && cfg.baseOverrides && cfg.baseOverrides.stage)
+      ?? (cfg && cfg.hunterStats && cfg.hunterStats.stage)
+      ?? (cfg && cfg.overrides && cfg.overrides.stage)
+      ?? 0;
+    return { bossTarget: bossTargetFor(stage) };
+  }
+
+  function bossTargetFor(highestStageReached) {
+    const reached = Math.max(0, Math.floor(Number(highestStageReached) || 0));
+    return Math.floor(reached / 100) * 100 + 100;
+  }
+
+  /**
+   * `ctx.bossTarget` is the stage of the boss being aimed at. Absent, the objective keeps its old
+   * target-agnostic behaviour, which is right for the Effective Path (it never changes the
+   * account's stage) but NOT for the optimizer, which always supplies one.
+   */
+  function bossScore(r, ctx) {
+    const target = ctx && Number.isFinite(ctx.bossTarget) ? ctx.bossTarget : null;
     const killRate = r.bossKillRate || 0;
+    const maxStage = Number.isFinite(r.maxStage) ? r.maxStage : 0;
+
+    // TIER 0, only when a target is known: can the build even GET to that boss?
+    //
+    // The evaluator has no boss-target input -- `stage` is a power multiplier, not a selector
+    // (measured: the same build at stage 0 -> 300 goes from killRate 0 to 99.4 while the run
+    // still ends around 100-106) -- so "am I fighting the target boss" has to be read off how
+    // deep the run gets. A build that never reaches the target is ranked purely on progress
+    // TOWARD it, which is what makes "give me the best shot at the 200 boss" answerable even when
+    // the honest answer is "you cannot get there yet". The reported kill chance then says so.
+    if (target !== null && maxStage < target) {
+      const stage = Number.isFinite(r.avgStage) ? r.avgStage : 0;
+      // Deliberately below every reached-the-target score, and ordered by depth. bossHpPercent is
+      // NOT used here: it describes whichever earlier boss the run met, not the target.
+      return stage * STAGE_PROGRESS_SCALE + maxStage;
+    }
+
     if (killRate <= 0) {
-      // Not killing it yet: how far it gets, then how little boss HP is left at that wall.
+      // Reaching it (or target unknown) but not killing it: how far it gets, then how little boss
+      // HP is left at that wall.
       const stage = Number.isFinite(r.avgStage) ? r.avgStage : 0;
       const remaining = Number.isFinite(r.bossHpPercent) ? r.bossHpPercent : 100;
-      return stage * STAGE_PROGRESS_SCALE + (100 - remaining);
+      return REACHED_TARGET_BASE + stage * STAGE_PROGRESS_SCALE + (100 - remaining);
     }
     const loot = Math.max(0, r.lootPerMin || 0);
     return KILL_ACHIEVED_BASE
@@ -81,11 +142,13 @@
       label: 'Loot Score',
       help: 'Maximises loot per minute — the default for farming.',
       score: (r) => r.lootPerMin,
+      crossSeedFrom: 'boss',
     },
     push: {
       label: 'Ø Stage (push)',
       help: 'Maximises average stage reached, trading loot for depth.',
       score: (r) => r.avgStage,
+      crossSeedFrom: 'boss',
     },
     boss: {
       label: 'Boss kill (as soon as possible)',
@@ -110,11 +173,36 @@
   }
 
   /** Score one evaluate() result under a mode. */
-  function scoreFor(mode, result) {
-    return modeOrThrow(mode).score(result);
+  function scoreFor(mode, result, ctx) {
+    return modeOrThrow(mode).score(result, ctx);
   }
 
   /** Attribute ids this mode requires to be held at maximum, or an empty array. */
+  /**
+   * The mode whose optimum should be entered as an extra CANDIDATE in this mode, or null.
+   *
+   * `loot` scores `r.lootPerMin` and nothing else, so when loot is gated behind a boss kill every
+   * build that fails the kill scores the same however close it came -- a flat surface with no
+   * gradient. Measured on a real level-31 Knox: the import kills the stage-100 boss and scores
+   * 64,031, while EVERY method tried (coordinate exchange, support enumeration, greedy build-up,
+   * chunked greedy, joint greedy) returned ~6,900 with `bossKillRate 0` and `avgStage` pinned at
+   * exactly 100.00. The same optimizer in `boss` mode -- whose objective is lexicographic over
+   * `bossHpPercent` and therefore HAS a gradient -- returned a build worth 39,072 loot, and
+   * refining that under `loot` reached 46,820.
+   *
+   * So the fix is a candidate, not a scoring change: the objective stays exactly `lootPerMin`, and
+   * the boss-capable build simply competes on it at Stage 3. That matters beyond tidiness -- the
+   * objectives are a player's choice (kill now, kill with Timeless maxed, push stages for Spoils
+   * Of War, just farm), and blending boss progress into the loot score would quietly answer a
+   * different question than the one asked.
+   *
+   * `push` gets the same treatment for the same reason: a stage wall is a boss that is not dying.
+   * The boss modes do not, which is also what terminates the recursion.
+   */
+  function crossSeedFor(mode) {
+    return modeOrThrow(mode).crossSeedFrom || null;
+  }
+
   function pinnedAttrsFor(mode) {
     return modeOrThrow(mode).pinnedAttrs || [];
   }
@@ -134,7 +222,7 @@
     return Object.fromEntries(Object.entries(MODES).filter(([, spec]) => !spec.pinnedAttrs));
   }
 
-  const Objective = { MODES, scoreFor, pinnedAttrsFor, pathModes, modeOrThrow };
+  const Objective = { MODES, scoreFor, pinnedAttrsFor, pathModes, modeOrThrow, crossSeedFor, bossTargetFor, contextFor, KILL_ACHIEVED_BASE };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Objective;
   else global.OptimizerObjective = Objective;

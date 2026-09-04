@@ -14,6 +14,7 @@ importScripts('../hunterDefs.js', '../hunterSimBrowser.js', 'objective.js');
 
 let evalFast = null;
 let scoreMode = 'loot';
+let scoreCtx = null;
 
 // Evaluations between macrotask yields -- see the note in the scoring loop below.
 const YIELD_EVERY = 32;
@@ -69,6 +70,9 @@ self.onmessage = async (e) => {
       evalFast = await HunterSim.compileEvaluator(msg.cfg.hunter, msg.cfg);
       scoreMode = msg.mode;
       OptimizerObjective.modeOrThrow(scoreMode); // fail loudly on an unknown mode, not silently as loot
+      // Derived once per worker from the cfg it was initialised with -- the boss target cannot
+      // change mid-search, and recomputing it per evaluation would be per-eval work for a constant.
+      scoreCtx = { ...OptimizerObjective.contextFor(msg.cfg), ...(msg.scoreCtxOverride || {}) };
       self.postMessage({ type: 'ready' });
     } catch (err) {
       self.postMessage({ type: 'ready', error: String((err && err.message) || err) });
@@ -83,7 +87,7 @@ self.onmessage = async (e) => {
       let sinceYield = 0;
       for (const item of batch) {
         const r = await evaluateWithGcRetry(item, iterations);
-        scores.push(OptimizerObjective.scoreFor(scoreMode, r));
+        scores.push(OptimizerObjective.scoreFor(scoreMode, r, scoreCtx));
         // Determinism requires a FRESH WASM instance per evaluation (the evaluator's RNG state
         // lives in mutable wasm globals -- verified: restoring linear memory alone leaves the
         // instance in a state that aborts on the next call, so there is no cheaper reset).
