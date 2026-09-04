@@ -522,6 +522,9 @@
   // how to pay a tier threshold, and this is pure exploration -- it is not directed at the boss or
   // at any objective, so it cannot collapse the search into a basin.
   const STRUCTURAL_SHARE = 0.35;
+  // What fraction of the attribute point-moves are DAG-native depth moves rather than flat
+  // transfers. Sweepable through the effort object, same as the structural share.
+  const DEPTH_SHARE = 0.6;
   // A BOSS-DIRECTED EMITTER WAS TRIED HERE AND MEASURED USELESS. Recorded so it is not retried.
   //
   // The idea was to draw a third of parents from the elites nearest a kill, on the theory that the
@@ -575,7 +578,16 @@
   }
 
   /** One legal transfer within a block, drawn from the same move set the refiner uses. */
-  function randomTransfer(defs, deps, minVal, budget, alloc, rng, pinnedIds) {
+  //
+  // REJECTIONS AND REPAIRS ARE DIFFERENT EVENTS AND MUST BE COUNTED SEPARATELY.
+  //
+  // Space.transfer returns null for a move it cannot make, and silently ZEROES stranded
+  // descendants for one it can. A rejection only wastes a variation. A repair produces a
+  // structurally demolished child that looks perfectly legal and then BREEDS. Counting them
+  // together would report a healthy move set while it was quietly destroying structure -- which is
+  // the failure mode this whole change exists to remove, so the measurement must be able to see
+  // the difference.
+  function randomTransfer(defs, deps, minVal, budget, alloc, rng, pinnedIds, stats) {
     const held = defs.filter((d) => (alloc[d.id] || 0) > 0 && pinnedIds.indexOf(d.id) === -1);
     if (!held.length) return null;
     for (let tries = 0; tries < 8; tries++) {
@@ -583,7 +595,84 @@
       const to = defs[Math.floor(rng() * defs.length)];
       const amount = 1 + Math.floor(rng() * Math.min(12, alloc[from.id] || 1));
       const next = Space.transfer(defs, deps, minVal, budget, alloc, from.id, to.id, amount);
-      if (next) return next;
+      if (!next) { if (stats) stats.rejected++; continue; }
+      if (stats) {
+        stats.accepted++;
+        // A node that held points before and holds none after, other than the one we moved OUT of
+        // by request, was stranded and cleared -- structure destroyed as a side effect.
+        let cleared = 0;
+        for (const d of defs) {
+          if (d.id === from.id) continue;
+          if ((alloc[d.id] || 0) > 0 && (next[d.id] || 0) === 0) cleared++;
+        }
+        if (cleared) { stats.repaired++; stats.nodesCleared += cleared; }
+      }
+      return next;
+    }
+    return null;
+  }
+
+  //
+  // THE DEPTH OPERATORS, and the measurement that specified them.
+  //
+  // Sweeping the structural share on a real level-62 Ozzy account, 2400 variations each:
+  //     share 0.00   52 cells   2 kill bands   best kill 1
+  //     share 0.35   86 cells   2 kill bands   best kill 2
+  //     share 0.70   87 cells   2 kill bands   best kill 2
+  //     share 1.00   87 cells   1 kill band    best kill 0
+  // Support resampling SATURATES at ~35%: it draws from a fixed pool of enumerated supports at two
+  // fill patterns, so once those are sampled there is nothing left for it to say. And at 100% the
+  // BOSS BAND IS LOST, because going fully structural means no point transfers, and those were the
+  // only source of DEPTH variation. The boss-engaging build needs depth a canonical fill does not
+  // have.
+  //
+  // So "replace the flat nudges with DAG-native moves" is right, but it cannot be done by removing
+  // the nudges -- the replacement has to exist first, and removing them early is a regression.
+  // These are the replacement. Both change DEPTH while holding the SUPPORT fixed or growing it by
+  // one legally-openable node, and neither can strand anything: the donor is required to keep at
+  // least one point, so no funded node is ever emptied, so no descendant is ever orphaned and
+  // clearInvalidDescendants has nothing to clear.
+  //
+  // Threshold gates are the one thing this still has to CHECK rather than guarantee, because a
+  // tier gate counts points in strictly-lower-threshold nodes and a legal depth shift can drop one
+  // below its gate. That is a rejection, not a repair -- the cheap failure, not the destructive one.
+  function depthMove(defs, deps, minVal, budget, alloc, rng, pinnedIds, stats) {
+    const costOf = (d) => d.cost || 1;
+    const capOf = (d) => (Number.isFinite(d.maxLevel) ? d.maxLevel : Infinity);
+    // Donors must keep a point, which is what makes stranding impossible by construction.
+    const donors = defs.filter((d) => (alloc[d.id] || 0) > 1 && pinnedIds.indexOf(d.id) === -1);
+    if (!donors.length) return null;
+    const funded = (id) => (alloc[id] || 0) > 0;
+    // Targets: already-funded nodes (pure depth shift), or one unfunded node whose parents are all
+    // funded (deepen the path by opening exactly one legal step -- never a stranded orphan).
+    const targets = defs.filter((d) => {
+      if ((alloc[d.id] || 0) >= capOf(d)) return false;
+      if (funded(d.id)) return true;
+      const parents = deps[d.id] || [];
+      return parents.every(funded);
+    });
+    if (!targets.length) return null;
+
+    for (let tries = 0; tries < 8; tries++) {
+      const from = donors[Math.floor(rng() * donors.length)];
+      const to = targets[Math.floor(rng() * targets.length)];
+      if (from.id === to.id) continue;
+      const maxOut = (alloc[from.id] || 0) - 1;                       // never empty the donor
+      const maxIn = capOf(to) - (alloc[to.id] || 0);
+      if (maxOut < 1 || maxIn < 1) continue;
+      const take = 1 + Math.floor(rng() * Math.min(maxOut, 12));
+      // Convert the donated spend into levels of the target, which may cost differently.
+      const give = Math.max(1, Math.min(maxIn, Math.floor((take * costOf(from)) / costOf(to))));
+      const next = { ...alloc };
+      next[from.id] = (next[from.id] || 0) - take;
+      next[to.id] = (next[to.id] || 0) + give;
+      if (Space.costOf(defs, next) > budget) continue;
+      // Legality is CHECKED, never repaired: an illegal proposal is discarded whole, so no
+      // candidate can enter the archive with structure silently deleted out of it.
+      if (!Space.isLegal(defs, deps, minVal, next, budget)) { if (stats) stats.depthRejected++; continue; }
+      if (!pinsHeld(defs, next, pinnedIds)) continue;
+      if (stats) { stats.depthAccepted++; if (!funded(to.id)) stats.depthOpened++; }
+      return next;
     }
     return null;
   }
@@ -594,7 +683,9 @@
    * Seeded from the enumerated supports rather than from random points: the enumeration is exact
    * and already paid for, so the archive starts with real structural coverage instead of noise.
    */
-  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, report) {
+  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, structuralShare, depthShare, report) {
+    const stats = { rejected: 0, accepted: 0, repaired: 0, nodesCleared: 0, structural: 0,
+      depthAccepted: 0, depthRejected: 0, depthOpened: 0 };
     const { TALENTS, ATTRIBUTES, talentBudget, attrBudget, deps, minVal } = spaces;
     const rng = seededRng(ARCHIVE_SEED);
     const archive = new Map();
@@ -639,7 +730,7 @@
         // Structural resample: adopt a whole different support, filled two ways (gate-paying when
         // the support has a threshold to pay, canonical otherwise). This is the move that a
         // sequence of point transfers cannot make.
-        if (supports.length && rng() < STRUCTURAL_SHARE) {
+        if (supports.length && rng() < structuralShare) {
           const pick = supports[Math.floor(rng() * supports.length)];
           const ids = pick.support ? pick.support.ids : pick.ids;
           const filled = (rng() < 0.5)
@@ -648,6 +739,7 @@
           if (filled && Space.isLegal(ATTRIBUTES, deps, minVal, filled, attrBudget)
             && pinsHeld(ATTRIBUTES, filled, pinnedAttrs)) {
             a = filled;
+            stats.structural++;
           }
         }
         // Crossing a boss-capable elite with a farming one is how ONE search reaches builds that
@@ -664,10 +756,14 @@
         const steps = 1 + Math.floor(rng() * ARCHIVE_MAX_MOVES);
         for (let m = 0; m < steps; m++) {
           if (rng() < 0.5) {
-            const nx = randomTransfer(TALENTS, {}, {}, talentBudget, t, rng, []);
+            const nx = randomTransfer(TALENTS, {}, {}, talentBudget, t, rng, [], null);
             if (nx) t = nx;
+          } else if (rng() < depthShare) {
+            // DAG-native depth: hold the support, change how deep it goes.
+            const nx = depthMove(ATTRIBUTES, deps, minVal, attrBudget, a, rng, pinnedAttrs, stats);
+            if (nx) a = nx;
           } else {
-            const nx = randomTransfer(ATTRIBUTES, deps, minVal, attrBudget, a, rng, pinnedAttrs);
+            const nx = randomTransfer(ATTRIBUTES, deps, minVal, attrBudget, a, rng, pinnedAttrs, stats);
             if (nx && pinsHeld(ATTRIBUTES, nx, pinnedAttrs)) a = nx;
           }
         }
@@ -684,6 +780,13 @@
     const bestKill = [...archive.values()].reduce((m, e) => Math.max(m, e.kill || 0), 0);
     ctx.note(`archive: ${archive.size} cells across ${bands.size} kill bands from ${spent} `
       + `variations (best kill rate reached ${bestKill})`);
+    const attempted = stats.rejected + stats.accepted;
+    const pct = (n) => (attempted ? ((n / attempted) * 100).toFixed(1) : '0.0');
+    ctx.note(`moves: ${attempted} attribute transfers -- ${pct(stats.rejected)}% rejected, `
+      + `${pct(stats.repaired)}% accepted-but-stranded (${stats.nodesCleared} nodes cleared); `
+      + `${stats.structural} structural resamples at share ${structuralShare}`);
+    ctx.note(`depth moves: ${stats.depthAccepted} accepted (${stats.depthOpened} opened a new node), `
+      + `${stats.depthRejected} rejected -- NONE stranded, by construction; share ${depthShare}`);
     return [...archive.entries()]
       .map(([cell, e]) => ({ ...e, cell }))
       .sort((x, y) => y.score - x.score);
@@ -1141,6 +1244,10 @@
         realizable,
         pinnedAttrs,
         effortSpec.archiveEvals || DEFAULT_ARCHIVE_EVALS,
+        // Sweepable through the effort-object form, so the DAG-native fraction can be measured
+        // without editing constants -- the same convention the ablation hooks already use.
+        Number.isFinite(effortSpec.structuralShare) ? effortSpec.structuralShare : STRUCTURAL_SHARE,
+        Number.isFinite(effortSpec.depthShare) ? effortSpec.depthShare : DEPTH_SHARE,
         (f) => report('survey', f * SURVEY_REPORT_SCALE, SURVEY_REPORT_SCALE),
       );
       const surveyed = elites.map((e) => ({ ...e, mask: maskOf(e.attrAlloc) }));
