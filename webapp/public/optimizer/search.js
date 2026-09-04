@@ -128,25 +128,28 @@
   // realizable support, which is the only setting that can promise a support was never discarded
   // on an estimate. The table lives here, beside the search, and the UI renders from it -- so a
   // level cannot exist in the dropdown without the optimizer implementing it.
+  // Effort now buys ARCHIVE COVERAGE and refinement width, not survey width -- there is no survey
+  // to widen. `archiveEvals` is how many variations the behaviour archive gets to spend; more
+  // evaluations mean more cells reached and more depth inside each, which is the only lever that
+  // was ever actually monotone in quality.
   const EFFORT_LEVELS = {
     fast: {
-      label: 'Fast', surveySupports: 3, refineSupports: 3,
-      rungs: [{ keep: 3, iterations: SCREEN_ITERATIONS, maxRounds: 1 }],
-      help: 'Refines the 3 strongest-screening combinations. Quickest.',
+      label: 'Fast', archiveEvals: 1200, refineSupports: 3,
+      help: 'A shorter archive pass, then refines the 3 strongest elites. Quickest.',
     },
     complete: {
-      label: 'Complete', surveySupports: 16, refineSupports: 16,
-      rungs: [{ keep: 16, iterations: SCREEN_ITERATIONS, maxRounds: 1 }],
-      help: 'Refines the 16 strongest-screening combinations. Finds builds Fast misses, at '
-        + 'several times the cost.',
+      label: 'Complete', archiveEvals: 4800, refineSupports: 8,
+      help: 'A full archive pass, then refines the 8 strongest elites. Finds builds Fast '
+        + 'misses, at several times the cost.',
     },
   };
   const DEFAULT_EFFORT = 'fast';
+  const DEFAULT_ARCHIVE_EVALS = EFFORT_LEVELS.fast.archiveEvals;
 
   // The survey stage reports progress as a fraction of this, since a rung schedule has no single
   // natural denominator.
   const SURVEY_REPORT_SCALE = 100;
-  const SURVEY_SUPPORTS = EFFORT_LEVELS.fast.surveySupports;
+  const SURVEY_SUPPORTS = EFFORT_LEVELS.fast.refineSupports;
   const REFINE_SUPPORTS = 3;
 
   // Transfer sizes, largest first. Large steps cross the flat regions that trap single-point
@@ -448,6 +451,156 @@
     return { talentAlloc: curT, attrAlloc: curA, score: curScore };
   }
 
+  // ============================ THE ARCHIVE (quality-diversity) ============================
+  //
+  // WHY THE SEARCH IS BUILT THIS WAY, because the previous architecture failed for ONE reason in
+  // four disguises.
+  //
+  // It was staged filtering: enumerate, screen at a canonical fill, tune a few, refine fewer -- and
+  // every stage cut candidates PERMANENTLY on a cheap, biased proxy. Measured consequences:
+  //   * a level-62 Ozzy's best support screens 147th of 234 and is never tuned
+  //   * a 0.32% ridge is ranked BACKWARDS by 1.7% at SCREEN_ITERATIONS
+  //   * boss capability is invisible to screening -- on all three hunters, ZERO screened fills
+  //     engage a boss at all, because capability is something refinement CREATES
+  //   * borge@54 comes back 88% short, at a level that was never in the test set
+  // Those are one architecture failing four ways, not four bugs. Each patch fitted to one of them
+  // (a depth multi-start, a boss cross-seed, annealing) broke another hunter.
+  //
+  // A quality-diversity archive (MAP-Elites) inverts the rule that caused it: keep the BEST
+  // SOLUTION PER BEHAVIOUR CELL rather than the top N by score, so a build that scores badly now
+  // but behaves differently survives as a stepping stone instead of being cut. That is exactly the
+  // boss-capable build this search kept losing -- poor loot today, decisive once refined.
+  //
+  // The descriptors are FREE. Every evaluation already returns bossKillRate and maxStage alongside
+  // the objective; the old scorer computed and discarded them, which is precisely why a second
+  // boss-objective search had to be bolted on to recover the same information.
+  //
+  // DETERMINISM IS PRESERVED. The ban is on Math.random, not on sampling: this uses a seeded PRNG
+  // with a fixed seed and a fixed traversal order, so identical input gives identical output.
+  // Reproducibility is the invariant; unpredictability was never the point.
+
+  const ARCHIVE_SEED = 0x9e3779b9;
+  // Behaviour space. Kill rate says whether a build can pass a boss at all; the stage band says how
+  // far it gets. Bands rather than raw values because cells are niches, not points.
+  const KILL_BANDS = [0, 1, 10, 25, 50, 75, 95];
+  const ARCHIVE_STAGE_BAND = 25;
+  const ARCHIVE_BATCH = 48;            // large enough to keep the worker pool saturated
+  const ARCHIVE_CROSSOVER = 0.25;
+  const ARCHIVE_MAX_MOVES = 6;
+
+  function seededRng(seed) {
+    let a = seed >>> 0;
+    return function next() {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /** Which archive cell a result belongs to, from the metadata every score already carries. */
+  function cellOf(meta) {
+    // A missing descriptor is a PLUMBING FAULT, not a niche. Returning a placeholder cell for it
+    // makes every candidate a neighbour of every other and turns the archive into a hill climb
+    // that still returns a plausible-looking build -- the exact failure this replaced. Throw.
+    if (!meta || !Number.isFinite(meta.kill) || !Number.isFinite(meta.maxStage)) {
+      throw new Error('cellOf: scorer returned no boss metadata; the archive cannot form cells');
+    }
+    let killBand = 0;
+    for (let i = 0; i < KILL_BANDS.length; i++) if (meta.kill >= KILL_BANDS[i]) killBand = i;
+    return killBand + ':' + Math.floor(meta.maxStage / ARCHIVE_STAGE_BAND);
+  }
+
+  /** One legal transfer within a block, drawn from the same move set the refiner uses. */
+  function randomTransfer(defs, deps, minVal, budget, alloc, rng, pinnedIds) {
+    const held = defs.filter((d) => (alloc[d.id] || 0) > 0 && pinnedIds.indexOf(d.id) === -1);
+    if (!held.length) return null;
+    for (let tries = 0; tries < 8; tries++) {
+      const from = held[Math.floor(rng() * held.length)];
+      const to = defs[Math.floor(rng() * defs.length)];
+      const amount = 1 + Math.floor(rng() * Math.min(12, alloc[from.id] || 1));
+      const next = Space.transfer(defs, deps, minVal, budget, alloc, from.id, to.id, amount);
+      if (next) return next;
+    }
+    return null;
+  }
+
+  /**
+   * Illuminate the behaviour space and return the elites, best score first.
+   *
+   * Seeded from the enumerated supports rather than from random points: the enumeration is exact
+   * and already paid for, so the archive starts with real structural coverage instead of noise.
+   */
+  async function illuminate(ctx, spaces, seeds, pinnedAttrs, evalBudget, report) {
+    const { TALENTS, ATTRIBUTES, talentBudget, attrBudget, deps, minVal } = spaces;
+    const rng = seededRng(ARCHIVE_SEED);
+    const archive = new Map();
+
+    const consider = (pair, score, meta) => {
+      if (!Number.isFinite(score)) return;
+      const cell = cellOf(meta);
+      const held = archive.get(cell);
+      if (!held || score > held.score) {
+        archive.set(cell, { talentAlloc: pair.talentAlloc, attrAlloc: pair.attrAlloc, score });
+      }
+    };
+    // SEEDS MUST BE COMPLETE PAIRS. Screening varies attributes against a fixed talent seed, so a
+    // screened row carries `attrAlloc` and no `talentAlloc` -- and `{ ...undefined }` is `{}`, so an
+    // incomplete seed does not throw, it silently becomes a build with NO TALENTS that then breeds
+    // through the whole archive. Assert the shape instead of trusting the caller.
+    for (const s of seeds) {
+      if (!s.talentAlloc || !s.attrAlloc) {
+        throw new Error('illuminate: seed is not a complete {talentAlloc, attrAlloc} pair');
+      }
+      consider(s, s.score, s.boss);
+    }
+
+    let spent = 0;
+    while (spent < evalBudget) {
+      if (ctx.shouldCancel()) throw new Cancelled();
+      report(spent / evalBudget);
+      const elites = [...archive.values()];
+      if (!elites.length) break;
+
+      const batch = [];
+      for (let i = 0; i < ARCHIVE_BATCH; i++) {
+        const parent = elites[Math.floor(rng() * elites.length)];
+        let t = { ...parent.talentAlloc };
+        let a = { ...parent.attrAlloc };
+        // Crossing a boss-capable elite with a farming one is how ONE search reaches builds that
+        // neither parent's basin contains -- which is what the cross-seed pass was doing by hand.
+        if (elites.length > 1 && rng() < ARCHIVE_CROSSOVER) {
+          const other = elites[Math.floor(rng() * elites.length)];
+          if (rng() < 0.5) t = { ...other.talentAlloc }; else a = { ...other.attrAlloc };
+          if (Space.costOf(TALENTS, t) > talentBudget
+            || !Space.isLegal(ATTRIBUTES, deps, minVal, a, attrBudget)) {
+            t = { ...parent.talentAlloc }; a = { ...parent.attrAlloc };
+          }
+        }
+        // Multi-move perturbation: one transfer cannot leave a basin, several can.
+        const steps = 1 + Math.floor(rng() * ARCHIVE_MAX_MOVES);
+        for (let m = 0; m < steps; m++) {
+          if (rng() < 0.5) {
+            const nx = randomTransfer(TALENTS, {}, {}, talentBudget, t, rng, []);
+            if (nx) t = nx;
+          } else {
+            const nx = randomTransfer(ATTRIBUTES, deps, minVal, attrBudget, a, rng, pinnedAttrs);
+            if (nx && pinsHeld(ATTRIBUTES, nx, pinnedAttrs)) a = nx;
+          }
+        }
+        batch.push({ talentAlloc: t, attrAlloc: a });
+      }
+
+      const scores = await ctx.score(batch, SCREEN_ITERATIONS);
+      const meta = scores.boss || [];
+      for (let i = 0; i < batch.length; i++) consider(batch[i], scores[i], meta[i]);
+      spent += batch.length;
+    }
+
+    ctx.note(`archive: ${archive.size} behaviour cells filled from ${spent} variations`);
+    return [...archive.values()].sort((x, y) => y.score - x.score);
+  }
+
   // Every talent support, the same way attribute supports are enumerated.
   //
   // Talents have no dependency edges and no tier thresholds, so every non-empty subset is a legal
@@ -673,15 +826,36 @@
     const ctx = {
       shouldCancel,
       note: (m) => notes.push(m),
+      // BOSS METADATA RIDES ON THE RESULT ARRAY, AND THE MEMO MUST CARRY IT TOO.
+      //
+      // The scorer returns `scores` with a parallel `scores.boss` -- kill rate, boss HP and
+      // maxStage, which the evaluator produces anyway. This function rebuilds the array (it has
+      // to, because of the memo), so `.boss` has to be rebuilt with it or it is silently dropped.
+      //
+      // IT WAS DROPPED, and the failure was invisible in exactly the way this repo keeps
+      // recording: nothing threw, `(scores.boss || [])[j]` quietly yielded undefined, and the
+      // archive's descriptor became `Math.floor(undefined / 25)` = NaN for every candidate. All
+      // 4800 variations landed in ONE cell, so the quality-diversity search silently degraded into
+      // the single-elite hill climb it was written to replace -- and still reported a plausible
+      // build. The note "archive: 1 behaviour cells" is what exposed it; print the count.
+      //
+      // The memo therefore caches {score, boss} rather than a bare number, so a cache HIT carries
+      // the same descriptor a miss would. Caching only the score would leave the descriptor
+      // dependent on whether a candidate happened to be re-scored, which is not deterministic in
+      // any useful sense.
       async score(pairs, iterations) {
-        if (!pairs.length) return [];
+        if (!pairs.length) { const e = []; e.boss = []; return e; }
         const out = new Array(pairs.length);
+        const boss = new Array(pairs.length);
         const missIdx = [];
         const missPairs = [];
         const missKeys = [];
         for (let i = 0; i < pairs.length; i++) {
           const key = `${iterations}|${Space.signature(TALENTS, pairs[i].talentAlloc)}|${Space.signature(ATTRIBUTES, pairs[i].attrAlloc)}`;
-          if (cache.has(key)) { out[i] = cache.get(key); cacheHits++; continue; }
+          if (cache.has(key)) {
+            const hit = cache.get(key);
+            out[i] = hit.score; boss[i] = hit.boss; cacheHits++; continue;
+          }
           missIdx.push(i);
           missPairs.push(pairs[i]);
           missKeys.push(key);
@@ -689,11 +863,14 @@
         if (missPairs.length) {
           evals += missPairs.length;
           const scores = await scorer(missPairs, iterations);
+          const meta = scores.boss || [];
           for (let j = 0; j < missIdx.length; j++) {
-            cache.set(missKeys[j], scores[j]);
+            cache.set(missKeys[j], { score: scores[j], boss: meta[j] });
             out[missIdx[j]] = scores[j];
+            boss[missIdx[j]] = meta[j];
           }
         }
+        out.boss = boss;
         return out;
       },
     };
@@ -846,66 +1023,38 @@
       //
       // The coverage lever is now REFINEMENT width, which is the stage that demonstrably decides
       // the answer.
-      // Screening scores each support at a canonical fill, which says little about what that
-      // support can do once its depth is tuned. The survey gives each contender a cheap, equal
-      // shot at showing its real potential before the expensive tier picks winners.
-      const surveyed = [];
       // `effort` is a key from EFFORT_LEVELS, or a spec object of the same shape. The object form
-      // exists so a bench can ABLATE a stage -- measure what the pipeline returns with the survey
-      // cut to nothing, say -- without editing constants and rebuilding. The UI only ever passes a
-      // key, so there is still exactly one table of shipped levels.
+      // exists so a bench can ABLATE a stage without editing constants and rebuilding. The UI only
+      // ever passes a key, so there is still exactly one table of shipped levels.
       const effortSpec = (effort && typeof effort === 'object') ? effort : EFFORT_LEVELS[effort];
       if (!effortSpec) throw new Error(`optimize(): unknown effort level "${effort}"`);
-      const surveyWidth = Number.isFinite(effortSpec.surveySupports)
-        ? effortSpec.surveySupports : screened.length;
-      // Either one pass over a fixed width (Fast), or a rung schedule that starts with every
-      // combination and concentrates on survivors (Complete). One loop serves both -- Fast is
-      // simply a single rung over a truncated list.
-      const rungs = effortSpec.rungs || [{
-        keep: surveyWidth, iterations: SCREEN_ITERATIONS, maxRounds: null,
-      }];
-      // The tuning pool is the loot leaders PLUS the boss-capable supports. Appending them to
-      // `screened` was not enough -- the pool is a slice of its head, so they were added and then
-      // sliced straight back off, which is exactly how a level-62 Ozzy came back 66% low with the
-      // boss candidates supposedly "in play".
-      let arms = screened.slice(0, surveyWidth).map((c) => ({
-        attrAlloc: c.attrAlloc, talentAlloc: seedTalents, score: c.score, mask: c.support.mask,
-      }));
-      ctx.note(`effort "${effortSpec.label}": ${arms.length} of ${screened.length} combinations enter tuning`);
 
-      // Progress is reported across the WHOLE schedule, weighted by each rung's share of the work
-      // (arms x rounds), so the bar does not stall on the long first rung and then leap.
-      const roundsOf = (r) => (r.maxRounds === null ? MAX_ROUNDS_PER_BLOCK : r.maxRounds);
-      const TYPICAL_ROUNDS = 6;
-      const rungWork = rungs.map((r, i) => Math.min(arms.length, i === 0 ? arms.length : rungs[i - 1].keep)
-        * Math.min(roundsOf(r), TYPICAL_ROUNDS));
-      const totalWork = rungWork.reduce((x, y) => x + y, 0) || 1;
-      let workDone = 0;
-
-      for (let ri = 0; ri < rungs.length; ri++) {
-        const rung = rungs[ri];
-        const tuned = [];
-        for (let i = 0; i < arms.length; i++) {
-          if (shouldCancel()) throw new Cancelled();
-          const c = arms[i];
-          const share = (workDone + (rungWork[ri] * (i / Math.max(arms.length, 1)))) / totalWork;
-          report('survey', share * SURVEY_REPORT_SCALE, SURVEY_REPORT_SCALE);
-          const r = await optimizeJointly(
-            ctx, budgets, c.talentAlloc, c.attrAlloc, c.score, SURVEY_STEP_SIZES, 1, pinnedAttrs,
-            null, rung.iterations, roundsOf(rung),
-          );
-          tuned.push({ ...r, mask: c.mask });
-          noteBest(r.score);
-        }
-        workDone += rungWork[ri];
-        // Rank within the rung and carry the survivors forward. Scores are only ever compared
-        // against others measured at the SAME fidelity, which is what makes a cheap rung sound.
-        tuned.sort((x, y) => (y.score - x.score) || (x.mask - y.mask));
-        arms = tuned.slice(0, Math.min(rung.keep, tuned.length));
-        if (rungs.length > 1) ctx.note(`rung ${ri + 1}: ${tuned.length} -> ${arms.length} at ${rung.iterations} iterations`);
-      }
-      surveyed.push(...arms);
-      surveyed.sort((a, b) => (b.score - a.score) || (a.mask - b.mask));
+      // --- Stage 2a: ILLUMINATE THE BEHAVIOUR SPACE. --------------------------------------
+      //
+      // This replaces the rung/survey schedule, which ranked every candidate by score at
+      // SCREEN_ITERATIONS and cut the rest permanently. See the archive header for why that
+      // architecture failed on ozzy@62, borge@54 and every boss-limited build: a cheap biased
+      // proxy was being used to make an irreversible decision.
+      //
+      // The archive makes no irreversible cut. Every behaviour cell keeps its own best build, so a
+      // shape that is behind on loot today but different in KIND -- most importantly, one that has
+      // started to engage a boss -- stays available as a parent instead of being ranked away.
+      const maskOf = (alloc) => ATTRIBUTES.reduce(
+        (m, d, k) => ((alloc[d.id] || 0) > 0 ? (m | (1 << k)) : m), 0,
+      );
+      const spaces = { TALENTS, ATTRIBUTES, talentBudget, attrBudget, deps, minVal };
+      const elites = await illuminate(
+        ctx, spaces,
+        // Screening only varies attributes, so pair each row back up with the talent seed it was
+        // actually measured against before it becomes an archive elite.
+        screened.map((c) => ({
+          talentAlloc: seedTalents, attrAlloc: c.attrAlloc, score: c.score, boss: c.boss,
+        })),
+        pinnedAttrs,
+        effortSpec.archiveEvals || DEFAULT_ARCHIVE_EVALS,
+        (f) => report('survey', f * SURVEY_REPORT_SCALE, SURVEY_REPORT_SCALE),
+      );
+      const surveyed = elites.map((e) => ({ ...e, mask: maskOf(e.attrAlloc) }));
 
       // --- Stage 2b: full fixpoint refinement of the survivors. ---------------------------
       const finalists = [];
