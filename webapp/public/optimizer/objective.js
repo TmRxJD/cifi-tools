@@ -142,13 +142,11 @@
       label: 'Loot Score',
       help: 'Maximises loot per minute — the default for farming.',
       score: (r) => r.lootPerMin,
-      crossSeedFrom: 'boss',
     },
     push: {
       label: 'Ø Stage (push)',
       help: 'Maximises average stage reached, trading loot for depth.',
       score: (r) => r.avgStage,
-      crossSeedFrom: 'boss',
     },
     boss: {
       label: 'Boss kill (as soon as possible)',
@@ -179,30 +177,23 @@
 
   /** Attribute ids this mode requires to be held at maximum, or an empty array. */
   /**
-   * The mode whose optimum should be entered as an extra CANDIDATE in this mode, or null.
+   * WHY THERE IS NO CROSS-SEEDING BETWEEN OBJECTIVES.
    *
-   * `loot` scores `r.lootPerMin` and nothing else, so when loot is gated behind a boss kill every
-   * build that fails the kill scores the same however close it came -- a flat surface with no
-   * gradient. Measured on a real level-31 Knox: the import kills the stage-100 boss and scores
-   * 64,031, while EVERY method tried (coordinate exchange, support enumeration, greedy build-up,
-   * chunked greedy, joint greedy) returned ~6,900 with `bossKillRate 0` and `avgStage` pinned at
-   * exactly 100.00. The same optimizer in `boss` mode -- whose objective is lexicographic over
-   * `bossHpPercent` and therefore HAS a gradient -- returned a build worth 39,072 loot, and
-   * refining that under `loot` reached 46,820.
+   * A pass used to run a `boss` search inside `loot` and enter its answer as a loot candidate,
+   * to get past builds that stall at an unkilled boss. That was wrong on the game's own terms.
    *
-   * So the fix is a candidate, not a scoring change: the objective stays exactly `lootPerMin`, and
-   * the boss-capable build simply competes on it at Stage 3. That matters beyond tidiness -- the
-   * objectives are a player's choice (kill now, kill with Timeless maxed, push stages for Spoils
-   * Of War, just farm), and blending boss progress into the loot score would quietly answer a
-   * different question than the one asked.
+   * Node effects are ASYMMETRIC: some are weaker against bosses, some only apply to bosses. A
+   * boss build therefore deliberately funds boss-positive nodes and avoids boss-reduced ones,
+   * while a push build -- which already goes past the boss and kills mostly normal enemies --
+   * happily takes the boss-reduced nodes. So a boss-shaped allocation is not "a stronger version"
+   * of a loot or push allocation; it is tuned for a different fight. Injecting one into the loot
+   * search offers a candidate built to the wrong asymmetry, and costs a full second search to do
+   * it.
    *
-   * `push` gets the same treatment for the same reason: a stage wall is a boss that is not dying.
-   * The boss modes do not, which is also what terminates the recursion.
+   * If loot genuinely is capped by an unkilled boss, that shows up in `lootPerMin` on its own --
+   * the score is what we are after -- and the fix belongs in the search's ability to get there,
+   * not in borrowing an answer from an objective that wants something else.
    */
-  function crossSeedFor(mode) {
-    return modeOrThrow(mode).crossSeedFrom || null;
-  }
-
   function pinnedAttrsFor(mode) {
     return modeOrThrow(mode).pinnedAttrs || [];
   }
@@ -222,7 +213,7 @@
     return Object.fromEntries(Object.entries(MODES).filter(([, spec]) => !spec.pinnedAttrs));
   }
 
-  const Objective = { MODES, scoreFor, pinnedAttrsFor, pathModes, modeOrThrow, crossSeedFor, bossTargetFor, contextFor, KILL_ACHIEVED_BASE };
+  const Objective = { MODES, scoreFor, pinnedAttrsFor, pathModes, modeOrThrow, bossTargetFor, contextFor, KILL_ACHIEVED_BASE };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Objective;
   else global.OptimizerObjective = Objective;

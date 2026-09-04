@@ -42,7 +42,7 @@ const asJson = process.argv.includes('--json');
 
 const SAVE_DIR = path.join(__dirname, '../gamefiles/save');
 const decoded = fs.existsSync(SAVE_DIR)
-  ? fs.readdirSync(SAVE_DIR).filter((f) => f.startsWith('decoded-') && f.endsWith('.json'))
+  ? fs.readdirSync(SAVE_DIR).filter((f) => f.startsWith('decoded-') && f.endsWith('.json')).sort().reverse()
   : [];
 if (!decoded.length) {
   console.log('SKIP: no decoded save -- this verifies NOTHING without one.');

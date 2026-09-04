@@ -24,7 +24,7 @@ const fs = require('fs');
 const path = require('path');
 
 const REF = path.join(__dirname, '../reference/loop-mods.json');
-const savePath = process.argv[2] || path.join(__dirname, '../gamefiles/save/decoded-20260809.json');
+const savePath = process.argv[2] || (H.latestDecodedSave() || {}).path;
 
 if (!fs.existsSync(REF)) {
   console.log(`SKIP: ${REF} missing -- regenerate with tools/bench/extract-loopmods.js`);

@@ -100,6 +100,10 @@
     // call site, and validated against the optimizer's own path-applicable mode table so a
     // stale/renamed mode cannot persist into a screen that then throws.
     effectivePathMode: { make: () => 'loot' },
+    // Which hunter the sim page was last showing. Persisted so a refresh returns you to the
+    // hunter you were working on instead of snapping back to Borge -- the app's in-memory
+    // `currentHunter` defaulted to 'borge' on every load, so the selection was lost with the page.
+    lastHunter: { make: () => 'borge' },
     // Fragments are the currency relics are bought with, and they are ACCOUNT-WIDE, not
     // per-hunter and not per-build: there is one Relic #7, you buy it once, and every hunter
     // that reads it benefits. So this lives at the top level of the store alongside the other

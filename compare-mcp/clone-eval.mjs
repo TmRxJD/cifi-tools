@@ -88,7 +88,20 @@ export async function evaluateOnClone(hunter, testBuild, iterations = 1000) {
       talents: testBuild.talents || {},
       attributes: testBuild.attributes || {},
       overrides,
-      gemPlannerStore: { gemStates: {} },
+      // GEM STATE MUST BE PASSED THROUGH, AND HARDCODING {} HERE INVALIDATED EVERY PARITY RESULT
+      // THIS HARNESS EVER PRODUCED.
+      //
+      // The reasoning for the empty object was sound for ONE caller: a build-code import carries
+      // gem params as flat `upgrades.gems_nodes.*` overrides, which resolveParam's generic
+      // override check answers before the gems_nodes special-case ever runs. But
+      // live-account-parity.mjs seeds a real ACCOUNT, passes real gemStates, and this discarded
+      // them -- so the clone was scored in a gem-less world while the site was seeded with gems,
+      // and "the clone matches the live site" was comparing the wrong two things.
+      //
+      // Measured on the reference account: gem-less 55.09M against 142.84M with the real gem
+      // state -- a 2.59x error, entirely from gem NODES (tree levels contribute nothing to loot).
+      // The harness reported parity within 0.5% throughout.
+      gemPlannerStore: { gemStates: testBuild.gemStates || {} },
       iterations,
     };
 

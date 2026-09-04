@@ -34,7 +34,7 @@ const pass = (m) => console.log(`pass  ${m}`);
 
 (async () => {
   const decoded = fs.existsSync(SAVE_DIR)
-    ? fs.readdirSync(SAVE_DIR).filter((f) => f.startsWith('decoded-') && f.endsWith('.json'))
+    ? fs.readdirSync(SAVE_DIR).filter((f) => f.startsWith('decoded-') && f.endsWith('.json')).sort().reverse()
     : [];
   if (!decoded.length) {
     // A skip here is honest but useless, so say so loudly rather than exiting 0 quietly.
@@ -84,7 +84,7 @@ const pass = (m) => console.log(`pass  ${m}`);
       const scorer = await H.makeScorer(cfg, 'loot');
       let res;
       try {
-        res = await H.Optimizer.optimize(cfg, { mode: 'loot', scorer, scorerFor: H.scorerFactory(cfg) });
+        res = await H.Optimizer.optimize(cfg, { mode: 'loot', scorer });
       } catch (err) {
         fail(`${label}: optimize threw -- ${err.message}`);
         continue;

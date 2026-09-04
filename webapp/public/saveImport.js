@@ -214,6 +214,27 @@ const BASE_STAT_SAVE_FIELD = {
 
 // Returns { globalUpgrades: {...}, gems: {...}, perHunter: { borge: {level, talents, highestStage}, ... },
 //           unmapped: [category names not imported] }
+/**
+ * Every upgrade id the TOOL offers in a category, across all hunters.
+ *
+ * The importer used to carry hand-written copies of these lists, which is a mirror of another
+ * module's data and drifts the moment an id is added -- silently, because a missing mapping just
+ * leaves an input blank rather than throwing. `researches.res112` and `cms.cm58` were both lost
+ * that way. Reading HUNTER_DEFS makes the tool's own surface the single source.
+ *
+ * Categories are account-wide but declared per hunter, so ids are unioned across all three.
+ */
+function upgradeIdsFor(category) {
+  const defs = (typeof window !== 'undefined' ? window : globalThis).HUNTER_DEFS;
+  if (!defs) throw new Error('upgradeIdsFor: HUNTER_DEFS is not loaded (check index.html script order)');
+  const ids = new Set();
+  for (const hunter of Object.keys(defs)) {
+    const group = ((defs[hunter] || {}).globalUpgrades || {})[category];
+    for (const item of (group && group.items) || []) ids.add(item.id);
+  }
+  return [...ids];
+}
+
 function mapSaveToStore(save) {
   const globalUpgrades = {};
   const unmapped = [];
@@ -302,15 +323,30 @@ function mapSaveToStore(save) {
   // to be hunter-facing instead of ship-facing. Field exists and reads 0 on the account this
   // was checked against (matches the in-game state: none of the three had been leveled), so
   // this is pattern-confirmed but not yet value-diff-confirmed against a nonzero real number.
-  if (save.RU81Level !== undefined) globalUpgrades['researches.res81'] = realNum(save.RU81Level);
-  if (save.RU95Level !== undefined) globalUpgrades['researches.res95'] = realNum(save.RU95Level);
-  if (save.RU105Level !== undefined) globalUpgrades['researches.res105'] = realNum(save.RU105Level);
+  // Researches: `res<N>` -> `RU<N>Level`, DERIVED from the ids the tool actually offers rather
+  // than a hand-written list. The list used to be three literals (81/95/105), so `res112` -- which
+  // the tool exposes and the save carries as `RU112Level` -- was silently never imported. A
+  // hardcoded mirror of another module's data is a gap waiting to happen: it only breaks when
+  // someone adds an id, and then it fails silently rather than loudly.
+  for (const id of upgradeIdsFor('researches')) {
+    const n = /^res(\d+)$/.exec(id);
+    if (!n) continue;
+    const v = save[`RU${n[1]}Level`];
+    if (v !== undefined) globalUpgrades[`researches.${id}`] = realNum(v);
+  }
 
   // Diamond Ultima -> DiamondUltimaLevel. Exact name match to the "Diamond Ultima" upgrade
   // page, same {Name}Level convention as every other confirmed field -- reads 0 on the account
   // this was checked against (matches in-game state), so pattern-confirmed, not yet
   // value-diff-confirmed against a nonzero real number.
   if (save.DiamondUltimaLevel !== undefined) globalUpgrades['ultima.ulti'] = realNum(save.DiamondUltimaLevel);
+
+  // Mats Exchange -> `TysconDrives`. Exact-name match on the same {Name} convention as the rest,
+  // and the only Tyscon-shaped field that is a plain count: the save also carries
+  // `TysconDriveProgress` (progress toward the next one) and `TysconDriveMultiplierLevel` (a
+  // separate multiplier upgrade), neither of which is the number this input wants. Reads 0 on this
+  // account, which matches the tool showing it empty.
+  if (save.TysconDrives !== undefined) globalUpgrades['mats_exchange.tysconDrives'] = realNum(save.TysconDrives);
 
   // Loop mods: the 4 tool inputs are 4 completely different save fields, not one array -- each
   // found via a NEW extraction technique (2026-09) that needed no save diffing and no live
@@ -445,13 +481,27 @@ function mapSaveToStore(save) {
       const v = save[`${attrPrefix}${i}Level`];
       if (v !== undefined) attributes[attrId] = realNum(v);
     });
-    // Base stat levels. 'stage' is deliberately not in the table -- it is the account's highest
-    // stage, already carried separately as highestStage, not an upgrade the player buys.
+    // Base stat levels. 'stage' is not in that table because it is not an upgrade the player buys
+    // -- it is the account's highest stage reached, which the save stores as `<Hunter>HighestStage`.
     const hunterStats = {};
     for (const [statKey, saveField] of Object.entries(BASE_STAT_SAVE_FIELD[hunterKey] || {})) {
       const v = save[`${prefix}Upgrade${saveField}Level`];
       if (v !== undefined) hunterStats[statKey] = realNum(v);
     }
+    // AND IT MUST LAND IN hunterStats.stage, WHICH IS WHERE THE SIM READS IT.
+    //
+    // This used to be returned only as `perHunter.highestStage`, described as "carried separately"
+    // -- but nothing consumed that field anywhere in the app, so it was dead output and the sim's
+    // `stage` argument kept its default of 1 forever.
+    //
+    // That is not a cosmetic input. `stage` is a POWER MULTIPLIER, not a cosmetic record of
+    // progress: holding one build fixed and varying only this value moves boss kill rate 0 -> 99.4
+    // and loot by more than an order of magnitude (measured, see CLAUDE.md). So every loot number
+    // the app displayed was computed for an account that had never cleared a stage. On this save
+    // the real values are Borge 262, Ozzy 201, Knox 100 against the 1 the tool was using.
+    // `resolveParam('stage')` reads `hunterStats.stage`; the Overrides panel's "Highest Stage
+    // Reached" input is the same field, so importing it also fills that box.
+    if (highestStage !== undefined) hunterStats.stage = realNum(highestStage);
 
     perHunter[hunterKey] = {
       level: level !== undefined ? realNum(level) : undefined,
@@ -489,10 +539,20 @@ function mapSaveToStore(save) {
   // 20 milestones, so `CM<N>` is something else entirely (a claim or notification flag) and is
   // deliberately not used. Shard milestones are a third, separate family
   // (AllTimeHighestShardMilestoneLevels et al) and are not these either.
-  const CM_IDS = ['cm46', 'cm47', 'cm48', 'cm51', 'cm53', 'cm54', 'cm57'];
-  for (const id of CM_IDS) {
-    const n = Number(id.replace('cm', ''));
-    const v = save[`Milestone${n}Acquired`];
+  // Derived from the tool's own cms ids, not a literal list -- the literal list stopped at cm57
+  // and so never imported `cm58`, which the save does carry (`Milestone58Acquired`). The save's
+  // family runs to Milestone60 on this build, so the tool can grow into it without a code change.
+  //
+  // `cm_ultima` and `cm_ultimas` are DELIBERATELY NOT MAPPED. The only plausible field family is
+  // `MilestoneU<N>Level`, and there are THREE of those against the tool's TWO inputs, all reading
+  // 0 on this account -- so nothing distinguishes which is which. Guessing a mapping that happens
+  // to look right on an all-zero account is exactly how `Gadget7Level = 90` nearly became a
+  // confident wrong mapping (see CLAUDE.md). Leave them for the user to type until one of the
+  // three moves in a save diff.
+  for (const id of upgradeIdsFor('cms')) {
+    const n = /^cm(\d+)$/.exec(id);
+    if (!n) continue;
+    const v = save[`Milestone${n[1]}Acquired`];
     if (v !== undefined) globalUpgrades[`cms.${id}`] = v ? 1 : 0;
   }
   // milestoneCount is a real sim parameter (upgrades.cms.milestoneCount) -- how many are owned,

@@ -170,7 +170,7 @@ check('spends the whole budget unless the ship physically cannot absorb it', () 
 check('a save import never lands installs in a node its own gate would forbid', () => {
   const fs = require('fs');
   const path = require('path');
-  const savePath = path.join(__dirname, '../gamefiles/save/decoded-20260809.json');
+  const savePath = (H.latestDecodedSave() || {}).path;
   if (!fs.existsSync(savePath)) return null;   // no pulled save in this checkout
   const save = JSON.parse(fs.readFileSync(savePath, 'utf8'));
   const rus = sb.mapCifiSaveToResearchUnits

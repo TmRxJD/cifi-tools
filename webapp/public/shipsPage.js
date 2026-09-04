@@ -1293,7 +1293,24 @@ window.applyImportedShipData = function applyImportedShipData(save, cats = {}) {
   if (cats.fleetResearch) {
     // Fleet Analysis 1/2 (Research #68/#78) -- direct field match, RU{68,78}Level.
     const research = getFleetResearch();
-    if (save.RU68Level !== undefined) research.levels.fleetAnalysis1 = realNum(save.RU68Level);
+
+    // FLEET ANALYSIS 1 IS IMPORTED AS A BOOLEAN, ON PURPOSE, AND IMPORTING THE REAL LEVEL WAS A
+    // DOUBLE-COUNT. Its six tiers do two unrelated things:
+    //   tier 1     "All Rank Installs Max LV x5" -- a pure switch, read as `level >= 1 ? 5 : 1`
+    //              by installCapMultiplier(). This is the only part the tool derives.
+    //   tiers 2-6  +20/+30/+40/+50/+60 All Ships Rank Points & LP, which computeFleetResearchSp()
+    //              ADDS to the fleet's SP automatically.
+    // Rank points are a figure the player enters themselves, already including whatever this
+    // research granted them -- so importing the true level made the tool add them a second time.
+    // On the reference account (RU68Level = 3) that was a silent +50 SP across all seven ships.
+    // Clamping keeps the one effect the save can settle and leaves the rest to the user, which is
+    // the project owner's stated intent for this input.
+    if (save.RU68Level !== undefined) {
+      research.levels.fleetAnalysis1 = realNum(save.RU68Level) >= 1 ? 1 : 0;
+    }
+    // Fleet Analysis 2 is NOT clamped: each of its tiers unlocks the x5 installs bonus for a
+    // DIFFERENT ship (shipOrder), so the level is genuinely which ships are covered, not a switch,
+    // and nothing about it is double-entered by the player.
     if (save.RU78Level !== undefined) research.levels.fleetAnalysis2 = realNum(save.RU78Level);
   }
   if (cats.gearSets) {

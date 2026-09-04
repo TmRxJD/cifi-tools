@@ -75,7 +75,7 @@ const setOf = (defs, a) => defs.filter((d) => (a[d.id] || 0) > 0).map((d) => d.i
       if (!start) continue;
       const seeded = { ...cfg, currentTalents: flatT, currentAttrs: start.fill };
       const s2 = await H.makeScorer(seeded, 'loot');
-      const res = await O.optimize(seeded, { mode: 'loot', scorer: s2, scorerFor: H.scorerFactory(seeded) });
+      const res = await O.optimize(seeded, { mode: 'loot', scorer: s2 });
       const v = (await evalFast(res.best.talentAlloc, res.best.attrAlloc, O.FINAL_ITERATIONS)).lootPerMin;
       const endIds = setOf(cfg.ATTRIBUTES, res.best.attrAlloc);
       const gained = endIds.filter((i) => !start.ids.includes(i));

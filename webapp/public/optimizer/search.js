@@ -115,11 +115,30 @@
   // hill climbing; the size-1 pass at the end is what makes the fixpoint claim above true.
   // The survey tier uses a subset -- enough to rank supports fairly, not enough to converge.
   const STEP_SIZES = [8, 4, 2, 1];
+
+  // The winner's final polish, run at FINAL_ITERATIONS. Small steps only: the coarse descent has
+  // already happened at screening fidelity, and this pass exists to correct the last few points
+  // where the screen and the judge disagree.
+  const POLISH_STEP_SIZES = [4, 2, 1];
+
+  // How many candidate moves are scored before a block settles for the best one found so far.
+  // Sized to keep the worker pool (MAX_POOL_SIZE is 6) busy while bounding what one accepted move
+  // can cost. A scheduling constant: it changes how fast the fixpoint is reached, not which one.
+  const MOVE_CHUNK = 24;
+
+  // The polish runs at FINAL_ITERATIONS, where every evaluation costs about 10x a screening one,
+  // so it is the one stage whose cost must be BOUNDED rather than left to run to a fixpoint. It is
+  // a correction, not a search: the descent has already happened. Unbounded it was the largest
+  // single cost on a high-level hunter -- a level-62 Ozzy run grew past three minutes, most of it
+  // here -- for a measured gain of 0.32%.
+  const POLISH_MAX_ROUNDS = 4;
+
   const SURVEY_STEP_SIZES = [4, 1];
 
   // Bound on improving moves per block pass. Each round applies at most one move, so this only
   // binds on pathological inputs; it is reported rather than silently swallowed.
   const MAX_ROUNDS_PER_BLOCK = 400;
+
 
   // Talent supports are enumerated as a bitmask over the talent list. 16 bits is 65,535 subsets,
   // far past anything the game has (8-9 talents, i.e. 255-511); beyond it the enumeration is
@@ -227,16 +246,30 @@
     return screened.slice(0, REFINE_TALENT_SUPPORTS);
   }
 
-  async function optimizeBlock(ctx, defs, deps, minVal, budget, alloc, buildPair, baseScore, stepSizes, pinnedIds = []) {
+  async function optimizeBlock(ctx, defs, deps, minVal, budget, alloc, buildPair, baseScore, stepSizes, pinnedIds = [], onFrac = null, iterations = SCREEN_ITERATIONS, maxRounds = MAX_ROUNDS_PER_BLOCK) {
     let current = { ...alloc };
     let currentScore = baseScore;
     let rounds = 0;
+
+    // CONTINUOUS PROGRESS. A block runs an unbounded number of rounds, so there is no exact
+    // denominator to report against -- the step index gives the coarse position and the round
+    // count eases within it, saturating so the fraction only ever moves forward.
+    //
+    // Without this the bar reported once per SUPPORT, and survey plus refine are 94% of the
+    // runtime: it sat still for tens of seconds and then jumped, which from the outside is
+    // indistinguishable from the optimizer having hung.
+    const ROUND_EASE = 25;
+    let stepIdx = 0;
+    const tick = () => {
+      if (!onFrac) return;
+      onFrac(Math.min((stepIdx + Math.min(rounds / ROUND_EASE, 1)) / stepSizes.length, 1));
+    };
 
     for (const step of stepSizes) {
       let improved = true;
       while (improved) {
         if (ctx.shouldCancel()) throw new Cancelled();
-        if (++rounds > MAX_ROUNDS_PER_BLOCK) { ctx.note(`block hit MAX_ROUNDS_PER_BLOCK at step ${step}`); break; }
+        if (++rounds > maxRounds) { ctx.note(`block hit MAX_ROUNDS_PER_BLOCK at step ${step}`); break; }
         improved = false;
 
         const moves = [];
@@ -259,17 +292,37 @@
         }
         if (!moves.length) break;
 
-        const scores = await ctx.score(moves.map(buildPair), SCREEN_ITERATIONS);
-        let bestIdx = -1;
-        for (let i = 0; i < scores.length; i++) {
-          if (scores[i] > currentScore && (bestIdx === -1 || scores[i] > scores[bestIdx])) bestIdx = i;
+        // FIRST IMPROVEMENT, scanned in chunks -- not steepest descent.
+        //
+        // Scoring the whole neighbourhood costs ~66 evaluations here and buys exactly ONE
+        // point-move, and a block runs many rounds. Early rounds have plenty of improving moves,
+        // so a chunk almost always holds one.
+        //
+        // The fixpoint guarantee is untouched: as the block converges, improvements get rarer and
+        // the loop scans further, until the final round scans every move and finds none. Only the
+        // path to the fixpoint is cheaper. Deterministic -- chunks are taken in generation order
+        // and ties inside a chunk break toward the earlier candidate.
+        let bestMove = null;
+        let bestScore = currentScore;
+        for (let start = 0; start < moves.length; start += MOVE_CHUNK) {
+          if (ctx.shouldCancel()) throw new Cancelled();
+          const chunk = moves.slice(start, start + MOVE_CHUNK);
+          const scores = await ctx.score(chunk.map(buildPair), iterations);
+          for (let i = 0; i < scores.length; i++) {
+            if (scores[i] > bestScore) { bestScore = scores[i]; bestMove = chunk[i]; }
+          }
+          if (bestMove) break;
         }
-        if (bestIdx !== -1) {
-          current = moves[bestIdx];
-          currentScore = scores[bestIdx];
+        if (bestMove) {
+          current = bestMove;
+          currentScore = bestScore;
           improved = true;
         }
+        tick();
       }
+      stepIdx++;
+      rounds = 0;
+      tick();
     }
     return { alloc: current, score: currentScore };
   }
@@ -277,7 +330,7 @@
   // Alternate attribute and talent blocks until neither improves. Both blocks see the other's
   // current state, so this converges on a joint fixpoint rather than optimizing each in
   // isolation against a stale partner.
-  async function optimizeJointly(ctx, cfg, talentAlloc, attrAlloc, startScore, stepSizes, maxSweeps, pinnedAttrs = []) {
+  async function optimizeJointly(ctx, cfg, talentAlloc, attrAlloc, startScore, stepSizes, maxSweeps, pinnedAttrs = [], onFrac = null, iterations = SCREEN_ITERATIONS, maxRounds = MAX_ROUNDS_PER_BLOCK) {
     const { TALENTS, ATTRIBUTES, TALENT_BUDGET, ATTRIBUTE_BUDGET } = cfg;
     const noDeps = {};
     const noMin = {};
@@ -287,17 +340,26 @@
 
     for (let sweep = 0; sweep < maxSweeps; sweep++) {
       const before = score;
+      // Each sweep runs two blocks, so a sweep owns 1/maxSweeps of the bar and each block half of
+      // that. A sweep that exits early simply leaves the remainder unused -- the fraction is
+      // monotone, which is what the bar needs; it is not a prediction of how many sweeps will run.
+      const blockFrac = (half, f) => {
+        if (!onFrac) return;
+        onFrac(Math.min((sweep + (half + f) / 2) / maxSweeps, 1));
+      };
 
       const attrResult = await optimizeBlock(
         ctx, ATTRIBUTES, cfg.ATTRIBUTE_DEPENDENCIES, cfg.ATTRIBUTE_MIN_VALUE, ATTRIBUTE_BUDGET,
         attrs, (a) => ({ talentAlloc: talents, attrAlloc: a }), score, stepSizes, pinnedAttrs,
+        (f) => blockFrac(0, f), iterations, maxRounds,
       );
       attrs = attrResult.alloc;
       score = attrResult.score;
 
       const talentResult = await optimizeBlock(
         ctx, TALENTS, noDeps, noMin, TALENT_BUDGET,
-        talents, (t) => ({ talentAlloc: t, attrAlloc: attrs }), score, stepSizes,
+        talents, (t) => ({ talentAlloc: t, attrAlloc: attrs }), score, stepSizes, [],
+        (f) => blockFrac(1, f), iterations, maxRounds,
       );
       talents = talentResult.alloc;
       score = talentResult.score;
@@ -315,7 +377,7 @@
   // search itself is identical in both, so what the benchmark proves is what ships.
   // ---------------------------------------------------------------------------------------
   /** @param {OptimizerConfig} cfg @param {OptimizeOptions} [options] */
-  async function optimize(cfg, { mode = 'loot', scorer, scorerFor = null, onProgress = () => {}, shouldCancel = () => false } = /** @type {any} */ ({})) {
+  async function optimize(cfg, { mode = 'loot', scorer, onProgress = () => {}, shouldCancel = () => false } = /** @type {any} */ ({})) {
     if (typeof scorer !== 'function') throw new Error('optimize() requires a scorer function');
 
     // Mode is validated HERE as well as in the worker, so an unknown mode fails before a search
@@ -410,7 +472,12 @@
     // than letting any block read the raw cfg values again.
     const budgets = { ...cfg, TALENT_BUDGET: talentBudget, ATTRIBUTE_BUDGET: attrBudget };
 
-    const report = (phase, done, total) => onProgress({ phase, done, total, evals });
+    // The best score found SO FAR travels with every progress event. It is the one number that
+    // tells the user something they cannot infer -- that the search is finding better builds rather
+    // than merely still running -- and it costs nothing, since it is already computed.
+    let bestSoFarScore = null;
+    const noteBest = (v) => { if (typeof v === 'number' && Number.isFinite(v) && (bestSoFarScore === null || v > bestSoFarScore)) bestSoFarScore = v; };
+    const report = (phase, done, total) => onProgress({ phase, done, total, evals, best: bestSoFarScore });
 
     try {
       // --- Stage 0: a talent allocation to screen attribute supports against. -------------
@@ -485,9 +552,15 @@
         report('survey', i, toSurvey.length);
         const c = toSurvey[i];
         surveyed.push({
-          ...(await optimizeJointly(ctx, budgets, seedTalents, c.attrAlloc, c.score, SURVEY_STEP_SIZES, 2, pinnedAttrs)),
+          // TWO sweeps. Cutting this to one was tried as a speed measure -- it saved ~1,000
+          // evaluations and produced an identical answer on the build it was tested against, but a
+          // sweep count is COVERAGE, and a coverage cut can only ever fail by returning a worse
+          // build on some OTHER input. It was reverted after exactly that was reported.
+          ...(await optimizeJointly(ctx, budgets, seedTalents, c.attrAlloc, c.score, SURVEY_STEP_SIZES, 1,
+            pinnedAttrs, (f) => report('survey', i + f, toSurvey.length))),
           mask: c.support.mask,
         });
+        noteBest(surveyed[surveyed.length - 1].score);
       }
       surveyed.sort((a, b) => (b.score - a.score) || (a.mask - b.mask));
 
@@ -498,7 +571,9 @@
         if (shouldCancel()) throw new Cancelled();
         report('refine', i, toRefine.length + 1);
         const c = toRefine[i];
-        finalists.push(await optimizeJointly(ctx, budgets, c.talentAlloc, c.attrAlloc, c.score, STEP_SIZES, 6, pinnedAttrs));
+        finalists.push(await optimizeJointly(ctx, budgets, c.talentAlloc, c.attrAlloc, c.score, STEP_SIZES, 6,
+          pinnedAttrs, (f) => report('refine', i + f, toRefine.length + 1)));
+        noteBest(finalists[finalists.length - 1].score);
 
         // AND REFINE THE SAME SUPPORT FROM A MEASURED FILL, WITH ITS TALENTS ENUMERATED.
         //
@@ -633,97 +708,6 @@
         }
       }
 
-      // --- Stage 2d: a candidate from the objective that can SEE a threshold. -------------
-      // `loot` is blind on a boss wall: every build that fails the kill scores the same, so there
-      // is no gradient to climb and the search is not weak, it is on a flat surface. The full
-      // reasoning and the measurements are on Objective.crossSeedFor. The remedy is a CANDIDATE,
-      // not a scoring change -- this build competes at Stage 3 on the caller's objective exactly
-      // like every other finalist, so the answer is still the best build by the metric asked for.
-      //
-      // `scorerFor` is how the pass gets a scorer bound to a different mode. It is required rather
-      // than optional for a mode that declares a cross-seed: silently skipping the pass would make
-      // the optimizer's answer depend on which caller invoked it, which is precisely the kind of
-      // quiet difference this project refuses to carry.
-      const crossMode = Objective.crossSeedFor(mode);
-      if (crossMode) {
-        if (typeof scorerFor !== 'function') {
-          throw new Error(`optimize(): mode "${mode}" cross-seeds from "${crossMode}", so a `
-            + 'scorerFor(mode) factory is required');
-        }
-        report('crossSeed', 0, 1);
-        // TARGET-AGNOSTIC ON PURPOSE, and this is the subtle part of the whole pass.
-        //
-        // The `boss` mode a PLAYER selects aims at the next boss they have not beaten -- at stage
-        // 101 that is the 200 boss, which their build may have no chance of reaching, and saying
-        // so is the honest answer. The cross-seed wants something different: the boss wall that is
-        // capping THIS build's loot right now, which is whatever boss the run actually reaches.
-        // On the level-31 Knox those are different bosses (200 vs 100), and seeding loot from a
-        // target-200 search would produce a push build instead of the boss-killer worth 45,180.
-        // So the pass explicitly clears the target.
-        const crossScorer = await scorerFor(crossMode, { bossTarget: null });
-        if (typeof crossScorer !== 'function') {
-          throw new Error(`optimize(): scorerFor("${crossMode}") did not return a scorer function`);
-        }
-
-        // GATE: ONE evaluation decides whether the whole pass is worth running.
-        //
-        // The pass exists because a loot search has no gradient while the boss is unkilled -- every
-        // walled build scores the same. But that is only true WHILE it is walled. Score the best
-        // build found so far under the boss objective, whose tiers already encode "reached the
-        // target" and "killed it": if the loot search has already produced a build that kills the
-        // target boss, it demonstrably had a gradient to follow and a boss-seeded candidate has
-        // nothing to add.
-        //
-        // Worth gating rather than always paying: measured on a level-26 Borge that is NOT
-        // boss-walled, the unconditional pass cost 15,047 evaluations against 6,483 without it --
-        // 2.3x for a candidate that could never win. The gate costs ONE evaluation to find that
-        // out, and the walled case (a level-31 Knox, 6,978 -> 45,180 loot) still gets the full pass.
-        const bestSoFar = finalists.reduce((a, b) => (a && a.score >= b.score ? a : b), null);
-        let crossWorthIt = true;
-        if (bestSoFar) {
-          const [bossViewOfBest] = await crossScorer(
-            [{ talentAlloc: bestSoFar.talentAlloc, attrAlloc: bestSoFar.attrAlloc }], SCREEN_ITERATIONS,
-          );
-          // KILL_ACHIEVED_BASE is the boss objective's own "this build kills it" floor. Comparing
-          // against it rather than against a number of our own keeps the two in one place.
-          crossWorthIt = bossViewOfBest < Objective.KILL_ACHIEVED_BASE;
-          if (!crossWorthIt) {
-            ctx.note(`cross-seed skipped: the ${mode} search already kills the target boss`);
-          }
-        }
-        if (!crossWorthIt) {
-          report('final', 0, 1);
-        } else {
-        // A plain recursion. The cross-seeded mode is one that does NOT declare a cross-seed of
-        // its own, which is what terminates it -- asserted rather than assumed.
-        if (Objective.crossSeedFor(crossMode)) {
-          throw new Error(`optimize(): cross-seed cycle -- "${crossMode}" itself cross-seeds`);
-        }
-        const crossCfg = { ...cfg };
-        delete crossCfg.currentTalents;
-        delete crossCfg.currentAttrs;
-        const crossRes = await optimize(crossCfg, { mode: crossMode, scorer: crossScorer, shouldCancel });
-        if (crossRes.best) {
-          evals += crossRes.evals;
-          // Refine it under THIS objective before it competes -- the boss search stopped caring
-          // about loot once the kill was secured, and on the Knox build above that refinement is
-          // worth another 20% (39,072 -> 46,820).
-          const [crossStart] = await ctx.score(
-            [{ talentAlloc: crossRes.best.talentAlloc, attrAlloc: crossRes.best.attrAlloc }], SCREEN_ITERATIONS,
-          );
-          finalists.push(await optimizeJointly(
-            ctx, budgets, crossRes.best.talentAlloc, crossRes.best.attrAlloc, crossStart,
-            STEP_SIZES, 6, pinnedAttrs,
-          ));
-          // And unrefined, so a refinement that wanders cannot lose the candidate outright.
-          finalists.push({
-            talentAlloc: crossRes.best.talentAlloc, attrAlloc: crossRes.best.attrAlloc, score: crossStart,
-          });
-          ctx.note(`cross-seeded a ${crossMode} build into ${mode}`);
-        }
-        }
-      }
-
       // --- Stage 3: full-fidelity decision. -----------------------------------------------
       report('final', 0, 1);
       const unique = [];
@@ -738,6 +722,44 @@
       const ranked = unique
         .map((f, i) => ({ talentAlloc: f.talentAlloc, attrAlloc: f.attrAlloc, score: finalScores[i] }))
         .sort((a, b) => b.score - a.score);
+
+      // POLISH THE WINNER AT THE FIDELITY IT IS JUDGED AT.
+      //
+      // Stage 3 ranks at FINAL_ITERATIONS, but survey and refine hill-climb at SCREEN_ITERATIONS,
+      // and the two do not always agree about which of two builds is better. Where they disagree,
+      // the search optimizes one metric and is then judged by another -- so it can converge on a
+      // build that is genuinely worse and never know.
+      //
+      // MEASURED on a real level-60 Borge, on two allocations differing only in how a single
+      // uncapped attribute is funded (the evaluator is deterministic, so these are exact, not
+      // samples):
+      //     iterations   ares22/htb1     ares16/htb4     screen prefers
+      //        100       141,219,577     143,620,249     htb  -- INVERTED by 1.7%
+      //        200       141,894,986     143,816,017     htb  -- INVERTED
+      //        400       142,620,391     142,041,394     ares -- correct
+      //       1000       142,839,497     142,383,349     ares -- correct
+      // The true difference is 0.32% in favour of ares; the screen reports 1.7% in favour of htb.
+      // The bias is systematic rather than scatter, which is why the search landed on htb on every
+      // run instead of occasionally. This is the documented ~0.9% mean deviation and ~1.2% rank
+      // inversion rate of a 100-iteration score, biting on a ridge finer than its resolution.
+      //
+      // Only the WINNER is polished, and only with small steps: this corrects the last few points,
+      // it does not redo the descent. It is additive -- the polished build is compared against the
+      // champion on the same FINAL_ITERATIONS measurement and only replaces it if it truly wins.
+      if (ranked.length) {
+        const champion = ranked[0];
+        const polished = await optimizeJointly(
+          ctx, budgets, champion.talentAlloc, champion.attrAlloc, champion.score,
+          POLISH_STEP_SIZES, 1, pinnedAttrs, (f) => report('final', f, 1), FINAL_ITERATIONS,
+          POLISH_MAX_ROUNDS,
+        );
+        if (polished.score > champion.score) {
+          ranked.unshift({
+            talentAlloc: polished.talentAlloc, attrAlloc: polished.attrAlloc, score: polished.score,
+          });
+          ctx.note(`final polish improved the winner by ${(((polished.score / champion.score) - 1) * 100).toFixed(2)}%`);
+        }
+      }
 
       // Nothing illegal can reach here -- every allocation was produced by Space.transfer or
       // Space.canonicalFill, both of which refuse to return an illegal state. Assert it rather
@@ -802,6 +824,9 @@
   const Optimizer = {
     optimize, SCREEN_ITERATIONS, FINAL_ITERATIONS,
     SURVEY_SUPPORTS, REFINE_SUPPORTS, STEP_SIZES, SURVEY_STEP_SIZES,
+    // Exposed so a bench can measure ONE support's tuning in isolation. The search's own stages
+    // all call this same function -- there is no second implementation to drift from it.
+    optimizeJointly,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = Optimizer;
   else global.HunterOptimizer = Optimizer;

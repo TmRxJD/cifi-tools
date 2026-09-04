@@ -33,7 +33,6 @@ const H = require('./harness.js');
   const result = await H.Optimizer.optimize(cfg, {
     mode: 'loot',
     scorer,
-    scorerFor: H.scorerFactory(cfg),
     onProgress: ({ phase, done, total }) => {
       if (phase !== lastPhase) { lastPhase = phase; process.stdout.write(`  [${phase} ${done}/${total}]\n`); }
     },

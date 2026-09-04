@@ -162,21 +162,12 @@ function cfgForImport(hunter, build, { budgetMode = 'spend' } = {}) {
 }
 
 /** A scorer backed by the shipped compileEvaluator -- the exact evaluation path the app uses. */
-/**
- * A scorer factory for optimize()'s cross-seed pass, which needs a scorer bound to a DIFFERENT
- * objective than the one being optimized. The browser supplies the same thing backed by a second
- * worker pool; both go through optimize()'s one code path, so the bench exercises what ships.
- */
-function scorerFactory(cfg) {
-  return (mode, ctxOverride) => makeScorer(cfg, mode, ctxOverride);
-}
-
-async function makeScorer(cfg, mode, ctxOverride) {
+async function makeScorer(cfg, mode) {
   const sb = browserSandbox();
   const evalFast = await sb.HunterSim.compileEvaluator(cfg.hunter, cfg);
   // Same one definition the browser worker uses, so the bench and the app cannot disagree about
   // which boss is being aimed at.
-  const ctx = { ...Objective.contextFor(cfg), ...(ctxOverride || {}) };
+  const ctx = Objective.contextFor(cfg);
   return async function score(pairs, iterations) {
     const out = [];
     for (const p of pairs) {
@@ -253,6 +244,25 @@ function findFixture(all, name) {
   return hits[0];
 }
 
+/**
+ * The NEWEST decoded save under tools/gamefiles/save, or null when none is pulled.
+ *
+ * Benches used to do `readdirSync(...).filter(startsWith('decoded-'))[0]`, which is directory
+ * order -- so the moment a second save was pulled, every one of them silently kept testing
+ * against the OLDER account state while reporting as though it were current. Sorted descending
+ * by filename, which is date-ordered by the `decoded-YYYYMMDD.json` convention.
+ */
+function latestDecodedSave() {
+  const dir = path.join(__dirname, '../gamefiles/save');
+  if (!fs.existsSync(dir)) return null;
+  const files = fs.readdirSync(dir)
+    .filter((f) => f.startsWith('decoded-') && f.endsWith('.json'))
+    .sort()
+    .reverse();
+  if (!files.length) return null;
+  return { path: path.join(dir, files[0]), name: files[0] };
+}
+
 function loadKnownBuilds() {
   const dir = path.join(__dirname, '../../compare-mcp');
   const files = {
@@ -294,7 +304,8 @@ function loadKnownBuilds() {
 }
 
 module.exports = {
-  browserSandbox, parseBuildCode, hunterDefs, cfgForImport, makeScorer, scorerFactory, scoreAllocation,
+  browserSandbox, parseBuildCode, hunterDefs, cfgForImport, makeScorer, scoreAllocation,
+  latestDecodedSave,
   findFixture,
   loadKnownBuilds, evaluateAllocation, Space, Optimizer, Objective,
 };

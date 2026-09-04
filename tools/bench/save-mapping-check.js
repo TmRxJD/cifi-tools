@@ -31,7 +31,7 @@ const H = require('./harness.js');
 
 const SAVE_DIR = path.join(__dirname, '../gamefiles/save');
 const decoded = fs.existsSync(SAVE_DIR)
-  ? fs.readdirSync(SAVE_DIR).filter((f) => f.startsWith('decoded-') && f.endsWith('.json'))
+  ? fs.readdirSync(SAVE_DIR).filter((f) => f.startsWith('decoded-') && f.endsWith('.json')).sort().reverse()
   : [];
 if (!decoded.length) {
   console.log('SKIP: no decoded save -- this verifies NOTHING without one.');
@@ -99,14 +99,23 @@ const SKILL_FAMILY = { borge: 'BorgeSkill', ozzy: 'OzzySkill', knox: 'KnoxSkill'
 const overCap = [];
 for (const [hunter, st] of Object.entries(mapped.perHunter || {})) {
   const defs = sb.HUNTER_DEFS[hunter];
+  // CAPS MUST BE RESOLVED FOR THIS ACCOUNT, NOT READ RAW. Borge's Call Me Lucky Loot caps at 12
+  // rather than 10 once Attraction gem node 2 is owned, and this account owns it -- so reading the
+  // static `maxLevel` reported a correct import of ll=12 as "imported past the cap", which is a
+  // bench failing GOOD DATA. That is the more dangerous direction, because the tempting fix is to
+  // change the importer. CLAUDE.md already records this exact mistake being made in the optimizer;
+  // this is the same one, in a check.
+  const capCtx = { buildOverrides: {}, gemPlannerStore: { gemStates: mapped.gems || {} } };
+  const talentCaps = sb.resolveMaxLevels(defs.talents || [], capCtx);
+  const attrCaps = sb.resolveMaxLevels(defs.attributes || [], capCtx);
   for (const [id, lvl] of Object.entries(st.attributes || {})) {
-    const a = (defs.attributes || []).find((x) => x.id === id);
+    const a = attrCaps.find((x) => x.id === id);
     if (a && Number.isFinite(a.maxLevel) && lvl > a.maxLevel) {
       overCap.push(`${hunter}.${id} imported ${lvl}, cap ${a.maxLevel}`);
     }
   }
   for (const [id, lvl] of Object.entries(st.talents || {})) {
-    const t = (defs.talents || []).find((x) => x.id === id);
+    const t = talentCaps.find((x) => x.id === id);
     if (t && Number.isFinite(t.maxLevel) && lvl > t.maxLevel) {
       overCap.push(`${hunter}.${id} imported ${lvl}, cap ${t.maxLevel}`);
     }

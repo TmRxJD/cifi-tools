@@ -363,8 +363,26 @@
 
     const next = { ...alloc };
     next[fromId] -= amount;
-    clearInvalidDescendants(defs, deps, minVal, next);
     if ((next[toId] || 0) >= to.maxLevel) return null;
+
+    // LEGALITY IS A STATE PREDICATE, NOT A PATH PREDICATE -- so it is checked on the FINISHED
+    // move, never halfway through it.
+    //
+    // clearInvalidDescendants used to run HERE, between the withdrawal and the grant. A tier
+    // threshold counts points spent in strictly-lower-threshold nodes, so a transfer BETWEEN two
+    // tier-0 nodes is threshold-neutral by construction -- yet mid-move the total is short by the
+    // withdrawn amount, so a dependent node read as unsupported and was ZEROED. The grant that
+    // restores the total landed immediately afterwards, too late to save it, and fillLeftover then
+    // scattered the freed points in declaration order.
+    //
+    // MEASURED on a real level-60 Borge sitting at exactly the 150-point threshold that mino
+    // requires: `htb -> ares x1`, a move between two tier-0 nodes that cannot change the tier-0
+    // total, came back with mino 15 -> 0, ares 3 -> 35 and a score of -20.92%. Every escape from
+    // that allocation looked like a cliff for the same reason, and the allocation was not actually
+    // a local optimum at all -- the move generator was fabricating the walls around it.
+    //
+    // The withdrawal and the grant are two halves of ONE move. Nothing is stranded until both have
+    // happened, which is what the state-predicate rule means.
 
     let room = budget - costOf(defs, next);
     const toCost = to.cost || 1;
@@ -377,6 +395,8 @@
       granted++;
     }
     if (granted === 0) return null;
+    // Now the move is complete: anything still stranded is genuinely stranded.
+    clearInvalidDescendants(defs, deps, minVal, next);
     fillLeftover(defs, deps, minVal, budget, next);
     if (!isLegal(defs, deps, minVal, next, budget)) return null;
     // Same rule as canonicalFill: a transfer that strands budget is not worth evaluating.

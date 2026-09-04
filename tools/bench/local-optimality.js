@@ -77,7 +77,7 @@ function neighbours(defs, deps, minVal, budget, alloc) {
       for (const budgetMode of MODES) {
         const cfg = H.cfgForImport(hunter, build, { budgetMode });
         const scorer = await H.makeScorer(cfg, 'loot');
-        const res = await H.Optimizer.optimize(cfg, { mode: 'loot', scorer, scorerFor: H.scorerFactory(cfg) });
+        const res = await H.Optimizer.optimize(cfg, { mode: 'loot', scorer });
         const { talentAlloc, attrAlloc } = res.best;
 
         const score = (t, a) => H.evaluateAllocation(cfg, t, a).then((r) => r.loot);

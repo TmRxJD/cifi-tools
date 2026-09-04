@@ -225,7 +225,11 @@ window.updateNavGating = updateNavGating;
 
 let store = loadStore();
 window.store = store;
-let currentHunter = 'borge';
+// Restored from the store, not defaulted to Borge. `store` is loaded two lines above, so the
+// selection survives a refresh instead of being reset every load. Validated against the real
+// hunter list so a corrupted or renamed value cannot leave the app pointing at a hunter that
+// does not exist.
+let currentHunter = (['borge', 'ozzy', 'knox'].includes(store.lastHunter) ? store.lastHunter : 'borge');
 let editingBuild = null;
 let showCategoryId = 'active';
 try { window.__lastScan = JSON.parse(localStorage.getItem('huntersim_last_scan') || '{}'); } catch { window.__lastScan = {}; }
@@ -298,17 +302,19 @@ function currentIterations() {
   return StoreSchema.clampIterations(store[currentHunter].iterations, store);
 }
 
+function accountStateFor(hunter, build) {
+  return window.AccountState.build({
+    hunter,
+    build,
+    hunterStats: store[hunter].hunterStats,
+    globalUpgrades: store.globalUpgrades,
+    gems: store.gems,
+    showAdvancedTalents: shouldShowAdvancedTalents(hunter),
+  });
+}
+
 function evalStateFor(build, iterations) {
-  return {
-    level: build.level,
-    iterations,
-    hunterStats: store[currentHunter].hunterStats,
-    talents: build.talents,
-    attributes: build.attributes,
-    overrides: build.overrides || {},
-    upgrades: window.buildNestedUpgrades(store.globalUpgrades),
-    gemPlannerStore: { gemStates: store.gems },
-  };
+  return window.AccountState.simState(accountStateFor(currentHunter, build), iterations);
 }
 
 const MAT_LABELS = ['Obsidian', 'Behlium', 'Hellish-Biomatter'];
@@ -330,61 +336,28 @@ function newDraftBuild() {
 // It was written out as an identical object literal at both call sites in
 // hunterStatPathPage.js; this is that literal, once.
 function statPathCfgFor(hunter, baseline) {
-  const d = window.HUNTER_DEFS[hunter];
-  return {
-    level: baseline.level,
-    talents: baseline.talents,
-    attributes: baseline.attributes,
-    hunterStats: store[hunter].hunterStats,
-    baseOverrides: {},
-    globalUpgrades: window.buildNestedUpgrades(store.globalUpgrades),
-    gemPlannerStore: { gemStates: store.gems },
-    TALENTS: d.talents,
-    ATTRIBUTES: d.attributes,
-  };
+  return window.AccountState.pathCfg(accountStateFor(hunter, baseline));
 }
 
-// THE canonical optimizer config for a build -- the sibling of evalStateFor() above.
-//
-// Two builders exist because HunterSim exposes two entry points with different shapes:
-// evaluate() takes a state (`overrides`, `upgrades`), compileEvaluator() takes a config
-// (`baseOverrides`, `globalUpgrades`) plus the search's node tables and budgets. They MUST
-// describe the same account state, or the optimizer searches a different world than the build
-// card displays. Both read the same `store` fields for exactly that reason; if you add an
-// account-state field to one, add it to the other in the same change.
+// The optimizer's view of the account. A projection of accountStateFor(), NOT a second builder:
+// the two entry points differ only in the names their APIs demand (`overrides`/`upgrades` versus
+// `baseOverrides`/`globalUpgrades`), and that renaming is all the adapter does. Adding an
+// account-state field is now a one-line change in accountState.js that every consumer sees at
+// once, instead of a rule asking three call sites to be edited together.
 function cfgFor(hunter, build) {
-  const d = window.HUNTER_DEFS[hunter];
-  const { talentBudget, attributeBudget } = budgetsForLevel(build.level);
-  const mergedUpgrades = window.buildNestedUpgrades(store.globalUpgrades);
-  // The optimizer must never allocate points into an advanced talent (e.g. The Legacy of
-  // Ultima) that isn't unlocked yet -- it was previously getting the FULL unfiltered talent
-  // list, so "Optimize within budget" could spend points there even while the talent stayed
-  // hidden in the editor, skewing the rest of the distribution. Existing points already in an
-  // advanced talent are kept (it's still a valid current allocation), just no NEW points get
-  // assigned unless the talent is actually visible/unlocked.
-  const showAdvanced = shouldShowAdvancedTalents(hunter);
-  // Caps resolved for THIS account/build (see resolveMaxLevels in hunterDefs.js) -- Borge's
-  // Call Me Lucky Loot caps at 12 rather than 10 once Attraction gem node 2 is active.
-  const capCtx = capContextFor(build);
-  const talents = window.resolveMaxLevels(
-    d.talents.filter((t) => !t.advanced || showAdvanced || (build.talents[t.id] || 0) > 0), capCtx,
-  );
-  return {
-    hunter, level: build.level, hunterStats: store[hunter].hunterStats,
-    globalUpgrades: mergedUpgrades, gemPlannerStore: { gemStates: store.gems }, baseOverrides: build.overrides || {},
-    TALENTS: talents, ATTRIBUTES: window.resolveMaxLevels(d.attributes, capCtx),
-    ATTRIBUTE_DEPENDENCIES: d.attributeDependencies, ATTRIBUTE_MIN_VALUE: d.attributeMinValue,
-    TALENT_BUDGET: talentBudget, ATTRIBUTE_BUDGET: attributeBudget,
-    currentTalents: build.talents, currentAttrs: build.attributes,
-  };
+  return window.AccountState.optimizerCfg(accountStateFor(hunter, build));
 }
 
+// ONE number formatter, and it is CostFormulas.fmtBig -- the live site's own suffix ladder
+// (k/m/b/t/qa/qu/sx/sp/oc/n/d), ported verbatim for parity.
+//
+// This function used to carry its own ladder that stopped at "b", so anything past a trillion was
+// printed in the wrong scale: 7.17e12 rendered as "7170.83b" where the original tool shows
+// "7.10t". Identical magnitude, unreadable next to the tool it is meant to clone -- and the
+// correct ladder already existed one file away, exported and unused.
 function fmt(n) {
   if (n === undefined || n === null) return '-';
-  if (n >= 1e9) return `${(n / 1e9).toFixed(2)}b`;
-  if (n >= 1e6) return `${(n / 1e6).toFixed(2)}m`;
-  if (n >= 1e3) return `${(n / 1e3).toFixed(2)}k`;
-  return n.toFixed(2);
+  return window.CostFormulas.fmtBig(n);
 }
 function fmtTime(minutes) {
   if (!minutes) return '-';
@@ -494,26 +467,34 @@ window.addEventListener('hashchange', render);
 // ==================== SIMULATOR PAGE ====================
 
 function renderSimPage(root) {
+  // RENDER THE CURRENT HUNTER, NOT BORGE-THEN-FIX-IT.
+  //
+  // This template used to hard-code Borge's portrait, title and red banner, leaving switchHunter to
+  // overwrite all three immediately afterwards. Every sim-page render therefore painted Borge for a
+  // frame before showing the hunter actually selected -- visible as the page "refreshing back to
+  // Borge" on the way to Ozzy or Knox. The markup now states the truth the first time; switchHunter
+  // still updates the same nodes when the hunter changes without a re-render.
+  const h = currentHunter;
   root.innerHTML = `
     <div class="mb-6 rounded-lg overflow-hidden shadow-lg">
       <div class="bg-gray-800 pt-3 pb-1 flex items-center justify-center gap-1">
-        <button id="hunterBorgeBtn" class="nav-pill" data-nav="borge">Borge</button>
-        <button id="hunterOzzyBtn" class="nav-pill" data-nav="ozzy" data-unlock-gem="exodus" data-unlock-lvl="2">Ozzy</button>
-        <button id="hunterKnoxBtn" class="nav-pill" data-nav="knox" data-unlock-gem="exodus" data-unlock-lvl="4">Knox</button>
+        <button id="hunterBorgeBtn" class="nav-pill ${h === 'borge' ? 'active-borge' : ''}" data-nav="borge">Borge</button>
+        <button id="hunterOzzyBtn" class="nav-pill ${h === 'ozzy' ? 'active-ozzy' : ''}" data-nav="ozzy" data-unlock-gem="exodus" data-unlock-lvl="2">Ozzy</button>
+        <button id="hunterKnoxBtn" class="nav-pill ${h === 'knox' ? 'active-knox' : ''}" data-nav="knox" data-unlock-gem="exodus" data-unlock-lvl="4">Knox</button>
       </div>
-      <div id="hunterBanner" class="bg-gradient-to-r from-red-900 to-gray-800 px-5 py-5 sm:py-0.5 border-b border-gray-600">
+      <div id="hunterBanner" class="bg-gradient-to-r ${HUNTER_BANNER_GRADIENT[h]} to-gray-800 px-5 py-5 sm:py-0.5 border-b border-gray-600">
         <div class="flex flex-wrap items-center justify-between gap-4">
           <div class="flex items-center gap-4">
             <div class="hidden sm:flex items-center justify-center">
-              <img id="hunterPortrait" src="assets/hunter_borge.png" alt="Borge" class="object-contain rounded-lg select-none w-16 h-16" draggable="false" style="filter: drop-shadow(rgba(0,0,0,0.5) 0px 0px 4px);" />
+              <img id="hunterPortrait" src="assets/hunter_${h}.png" alt="${escapeHtml(HUNTER_TITLES[h].replace(' Simulator', ''))}" class="object-contain rounded-lg select-none w-16 h-16" draggable="false" style="filter: drop-shadow(rgba(0,0,0,0.5) 0px 0px 4px);" />
             </div>
             <div>
-              <h1 id="hunterTitle" class="text-2xl font-bold mb-1">Borge Simulator</h1>
+              <h1 id="hunterTitle" class="text-2xl font-bold mb-1">${escapeHtml(HUNTER_TITLES[h])}</h1>
               <p class="text-sm text-gray-300">Compare builds and optimize your performance</p>
             </div>
           </div>
           <div class="flex flex-row flex-wrap justify-end gap-2">
-            <button id="hunterStatsBtn" class="flex items-center space-x-1 px-3 py-2 rounded-full bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 text-white font-semibold shadow-lg transition-colors duration-200 text-xs sm:text-sm">${iconSvg('chart-arrows-vertical', 16)}<span id="hunterStatsBtnLabel">Borge Stats</span></button>
+            <button id="hunterStatsBtn" class="flex items-center space-x-1 px-3 py-2 rounded-full bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 text-white font-semibold shadow-lg transition-colors duration-200 text-xs sm:text-sm">${iconSvg('chart-arrows-vertical', 16)}<span id="hunterStatsBtnLabel">${escapeHtml(HUNTER_TITLES[h].replace(' Simulator', ''))} Stats</span></button>
             <button id="newBuildBtn" class="flex items-center space-x-1 px-3 py-2 rounded-full bg-gradient-to-r from-gray-500 to-gray-700 hover:from-gray-600 hover:to-gray-800 text-white font-semibold shadow-lg transition-colors duration-200 text-xs sm:text-sm">${iconSvg('plus', 16)}<span>New Build</span></button>
             <button id="importBtn" class="flex items-center space-x-1 px-3 py-2 rounded-full bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 text-white font-semibold shadow-lg transition-colors duration-200 text-xs sm:text-sm">${iconSvg('download', 16)}<span>Import</span></button>
           </div>
@@ -1627,10 +1608,21 @@ const HUNTER_BANNER_GRADIENT = { borge: 'from-red-900', ozzy: 'from-green-900', 
 
 function switchHunter(h, skipNav) {
   currentHunter = h;
+  // Remember it, so a refresh comes back to this hunter.
+  if (store.lastHunter !== h) { store.lastHunter = h; saveStore(); }
   showCategoryId = 'active';
+  // The hunter pills live on the SIM PAGE, so they do not exist while another page is showing.
+  // This loop assumed they always did and threw a TypeError on a null element -- three lines into
+  // the function, AFTER `currentHunter` had already been reassigned but BEFORE the title, banner,
+  // portrait, iterations input and re-render below. Switching hunter from any other page therefore
+  // left the app half-switched: the new hunter selected internally, the old one still on screen,
+  // corrected only by whatever render happened next. That is the "it refreshes back to Borge before
+  // letting me switch" behaviour.
+  //
+  // Every other DOM lookup in this function is already null-guarded; this one now matches.
   ['borge', 'ozzy', 'knox'].forEach((hh) => {
     const btn = document.getElementById(`hunter${hh[0].toUpperCase()}${hh.slice(1)}Btn`);
-    btn.className = `nav-pill ${h === hh ? `active-${hh}` : ''}`;
+    if (btn) btn.className = `nav-pill ${h === hh ? `active-${hh}` : ''}`;
   });
   if (!skipNav && currentRoute() !== 'sim') navigate('sim');
   const title = document.getElementById('hunterTitle');
@@ -2819,11 +2811,24 @@ function renderAttributes() {
 function trimAllocationToBudget(hunter, level) {
   const d = window.HUNTER_DEFS[hunter];
   const { talentBudget, attributeBudget } = budgetsForLevel(level);
-  // Both blocks trim through the same canonical routine (optimizer/space.js). This used to be
-  // two separate hand-rolled loops here -- same "remove from whichever holds the most" rule
-  // written twice, with only the attribute one repairing stranded dependencies afterwards.
-  AllocSpace.trimToBudget(d.talents, {}, {}, talentBudget, editingBuild.talents);
-  AllocSpace.trimToBudget(d.attributes, d.attributeDependencies, d.attributeMinValue, attributeBudget, editingBuild.attributes);
+  // CAPS MUST BE THE ACCOUNT'S, NOT THE STATIC ONES, AND READING THE STATIC ONES HERE SILENTLY
+  // DELETED POINTS.
+  //
+  // trimToBudget ends in clearInvalidDescendants, and `isHeld` treats a node above its cap as
+  // invalid -- which does not clamp it, it sets it to ZERO. Borge's Call Me Lucky Loot caps at 10
+  // statically and at 12 once Attraction gem node 2 is owned, so on an account that owns that node
+  // this ran on every single build change and threw away all 12 points.
+  //
+  // Observed end to end: the optimizer returned a legal 60/60 build containing ll:12, this trim
+  // then zeroed ll, and the build landed at 48/60 with the dominant loot talent at zero -- roughly
+  // half the loot score, reported as "the optimizer leaves talent points on the table". The search
+  // was never at fault; its own Stage 3 assertion had already proved the winner spent its budget.
+  //
+  // cappedDefs() resolves against this build's account context, the same defs the optimizer and
+  // the build card use.
+  const capped = cappedDefs(hunter, editingBuild);
+  AllocSpace.trimToBudget(capped.talents, {}, {}, talentBudget, editingBuild.talents);
+  AllocSpace.trimToBudget(capped.attributes, d.attributeDependencies, d.attributeMinValue, attributeBudget, editingBuild.attributes);
 }
 
 function onBuildChanged() {
@@ -2831,9 +2836,27 @@ function onBuildChanged() {
   renderBudgetHeader(); renderTalents(); renderAttributes();
 }
 
-document.getElementById('levelInput').addEventListener('input', (e) => {
-  editingBuild.level = Math.max(1, Math.floor(Number(e.target.value) || 1));
+// AN EMPTY FIELD MEANS "MID-EDIT", NOT "LEVEL 1".
+//
+// This used to run `Number('') || 1` on every keystroke, so clearing the box instantly became 1 --
+// and onBuildChanged() re-renders, writing that 1 straight back under the cursor. The box could
+// therefore never be emptied: to type 60 you had to type it AROUND the 1 and then delete the 1,
+// and typing into a field that already reads "1" silently produces 160 or 601. That is a build at
+// the wrong level, which changes both budgets and re-trims the allocation.
+//
+// While the field is empty the model is left alone; blur settles it back to the last good value.
+const levelInputEl = document.getElementById('levelInput');
+levelInputEl.addEventListener('input', (e) => {
+  const raw = String(e.target.value).trim();
+  if (raw === '') return;   // still typing -- do not clamp, do not re-render
+  const next = Math.max(1, Math.floor(Number(raw) || 1));
+  if (next === editingBuild.level) return;   // no-op keystrokes must not re-render the field
+  editingBuild.level = next;
   onBuildChanged();
+});
+levelInputEl.addEventListener('blur', () => {
+  // Commit: an empty or unparseable field falls back to the level the build still has.
+  levelInputEl.value = editingBuild.level;
 });
 document.getElementById('levelDecBtn').innerHTML = iconSvg('chevron-left', 14);
 document.getElementById('levelIncBtn').innerHTML = iconSvg('chevron-right', 14);
@@ -3134,7 +3157,15 @@ async function processImportedSaveText(rawText, silent) {
     return { applied: [], error: e.message };
   }
   const prefs = getImportPrefs();
-  const cats = prefs.categories;
+  // A CATEGORY THE USER HAS NEVER SEEN DEFAULTS TO ON, AND THE TWO PLACES THAT DECIDE THAT MUST
+  // AGREE. The checklist renders a box as checked when the pref is `!== false`, so a category
+  // added after the user last saved their prefs shows ticked -- but this path read plain
+  // truthiness, where `undefined` is FALSE. So a newly added category appeared enabled and was
+  // silently skipped. That is exactly what happened to `matsExchange`: the mapping existed, the
+  // box was ticked, and nothing was imported.
+  const cats = new Proxy(prefs.categories, {
+    get: (target, key) => target[key] !== false,
+  });
   const mapped = window.mapCifiSaveToStore(save);
   const applied = []; // categories that were checked AND actually changed something
 
@@ -3194,6 +3225,25 @@ async function processImportedSaveText(rawText, silent) {
   applyUpgradesByPrefix('loopmods.', 'loop mods', cats.loopmods);
   applyUpgradesByPrefix('trinkets.', 'trinkets', cats.trinkets);
   applyUpgradesByPrefix('iap.', 'iap', cats.iap);
+  applyUpgradesByPrefix('mats_exchange.', 'mats exchange', cats.matsExchange);
+
+  // EVERY PREFIX THE IMPORTER PRODUCES MUST BE APPLIED BY ONE OF THE LINES ABOVE.
+  //
+  // This list is hand-maintained and the importer's key set is not, so the two drift -- silently,
+  // because an unapplied prefix just leaves an input blank rather than failing. `mats_exchange.`
+  // was mapped by saveImport and dropped here for exactly that reason, and it is the THIRD time
+  // this shape of gap has appeared in the import path (the others were hardcoded id lists inside
+  // saveImport itself, which now derive from HUNTER_DEFS). Turn the silent case into a loud one.
+  const appliedPrefixes = [
+    'relics.', 'inscryptions.', 'diamondcards.', 'shardmilestones.', 'researches.', 'ultima.',
+    'diamondspecials.', 'cms.', 'gadgets.', 'loopmods.', 'trinkets.', 'iap.', 'mats_exchange.',
+  ];
+  const unapplied = [...new Set(Object.keys(mapped.globalUpgrades || {})
+    .map((k) => `${k.split('.')[0]}.`))].filter((p) => !appliedPrefixes.includes(p));
+  if (unapplied.length) {
+    throw new Error(`Save import maps ${unapplied.join(', ')} but nothing applies it -- add an `
+      + 'applyUpgradesByPrefix line and an import checkbox for it.');
+  }
 
   if (cats.gems) {
     diffApply('gems', () => store.gems, () => {
@@ -3391,12 +3441,20 @@ let cancelRequested = false;
 // it owns and the label shown while it runs. Spans are proportional to each phase's measured
 // share of the work, so the bar advances monotonically -- no resets, no stalls at a fixed
 // number, and no phase the UI doesn't have a name for.
+// Spans are each phase's MEASURED share of the runtime, so the bar tracks real progress instead
+// of racing through cheap stages and crawling through expensive ones.
+//
+// Measured on a level-60 Borge (the phase profile printed by the optimizer itself):
+//     enumerate 0.3s | screen 1.2s | survey ~22s | refine ~35s | final (full-fidelity polish) ~26s
+// The previous spans gave screening 18% of the bar for one second of work and the final polish 4%
+// for twenty-six seconds -- so the bar leapt to a fifth immediately and then appeared to stall at
+// 95% for nearly half a minute, which is precisely the "not moving steadily" complaint.
 const OPTIMIZE_PHASES = {
-  enumerate: { span: [0, 2], label: 'Enumerating every legal attribute combination' },
-  screen: { span: [2, 20], label: 'Screening combinations' },
-  survey: { span: [20, 65], label: 'Tuning the strongest candidates' },
-  refine: { span: [65, 95], label: 'Refining finalists to a fixpoint' },
-  final: { span: [95, 99], label: 'Full-precision comparison' },
+  enumerate: { span: [0, 1], label: 'Mapping legal combinations' },
+  screen: { span: [1, 3], label: 'Ranking' },
+  survey: { span: [3, 30], label: 'Tuning' },
+  refine: { span: [30, 70], label: 'Refining' },
+  final: { span: [70, 99], label: `Confirming winner at ${window.HunterOptimizer ? window.HunterOptimizer.FINAL_ITERATIONS : 1000} iterations` },
   done: { span: [99, 100], label: 'Done' },
 };
 
@@ -3409,6 +3467,32 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
   const cfg = cfgFor(currentHunter, editingBuild);
 
   const startedAt = Date.now();
+
+  // THE CLOCK RUNS ON A CLOCK, NOT ON PROGRESS EVENTS.
+  //
+  // Elapsed time used to be repainted only inside onProgress, so it advanced when the SEARCH
+  // happened to emit an event rather than when time passed. A single scoring batch is one event
+  // covering dozens of evaluations, so the display sat frozen for a second or more and then
+  // jumped -- which reads as "stuck", exactly what a progress dialog exists to disprove.
+  //
+  // The bar is eased toward its target on the same interval for the same reason: the search
+  // reports genuine step changes, and interpolating between them keeps the motion continuous
+  // without ever inventing progress that has not happened (it approaches the reported target and
+  // stops there).
+  let targetPct = 0;
+  let shownPct = 0;
+  const barEl = document.getElementById('progressBar');
+  const pctEl = document.getElementById('progressPercent');
+  const elapsedEl = document.getElementById('progressElapsed');
+  const ticker = setInterval(() => {
+    elapsedEl.textContent = `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
+    if (shownPct < targetPct) {
+      shownPct = Math.min(targetPct, shownPct + Math.max(0.1, (targetPct - shownPct) * 0.18));
+      barEl.style.width = `${shownPct}%`;
+      pctEl.textContent = `${Math.round(shownPct)}%`;
+    }
+  }, 100);
+
   try {
     const result = await runOptimizer(cfg, {
       mode,
@@ -3418,10 +3502,20 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
         if (!entry) throw new Error(`Optimizer reported an unknown phase "${phase}"`);
         const [from, to] = entry.span;
         const pct = Math.min(100, from + (to - from) * (total ? Math.min(1, done / total) : 0));
-        document.getElementById('progressBar').style.width = `${pct}%`;
-        document.getElementById('progressPercent').textContent = `${Math.round(pct)}%`;
-        document.getElementById('progressElapsed').textContent = `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
-        document.getElementById('progressPhase').textContent = total > 1 ? `${entry.label} (${done}/${total})` : entry.label;
+        targetPct = Math.max(targetPct, pct);   // monotone: the bar never goes backwards
+        // NO RUNNING SCORE IS SHOWN, DELIBERATELY.
+        //
+        // A "best so far" was tried here and removed: mid-search candidates are scored at
+        // SCREEN_ITERATIONS (100) and are only partially tuned, while the number the user sees at
+        // the end is the fully refined winner at FINAL_ITERATIONS (1000). The two are different
+        // builds measured at different fidelities, so the dialog reported a figure far below the
+        // result -- which reads as the optimizer being wrong rather than as a progress estimate.
+        //
+        // Showing a number that disagrees with the answer is worse than showing no number. The
+        // count and the phase are honest; a provisional score is not.
+        const shown = Math.min(Math.floor(done) + 1, Math.ceil(total));
+        document.getElementById('progressPhase').textContent = total > 1
+          ? `${entry.label} ${shown}/${Math.ceil(total)}` : entry.label;
       },
     });
 
@@ -3458,6 +3552,7 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
     console.error('Optimizer failed', err);
     alert(`Optimizer failed to run: ${err.message || err}`);
   } finally {
+    clearInterval(ticker);
     document.getElementById('optimizeProgressModal').classList.add('hidden');
   }
 };

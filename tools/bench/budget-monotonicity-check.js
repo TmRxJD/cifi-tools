@@ -78,7 +78,7 @@ const top = (defs, a, n = 6) => defs.map((d) => [d.id, a[d.id] || 0]).filter(([,
         const scorer = await H.makeScorer(cfg, mode);
         let res;
         try {
-          res = await H.Optimizer.optimize(cfg, { mode, scorer, scorerFor: H.scorerFactory(cfg) });
+          res = await H.Optimizer.optimize(cfg, { mode, scorer });
         } catch (err) {
           console.log(`ERR  ${hunter}/${mode} budget ${cfg.TALENT_BUDGET}T: ${err.message}`);
           break;

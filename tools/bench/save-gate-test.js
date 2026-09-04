@@ -22,7 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const H = require('./harness.js');
 
-const savePath = process.argv[2] || path.join(__dirname, '../gamefiles/save/decoded-20260809.json');
+const savePath = process.argv[2] || (H.latestDecodedSave() || {}).path;
 if (!fs.existsSync(savePath)) {
   console.log(`SKIP: no decoded save at ${savePath}`);
   console.log('  game files are gitignored -- see tools/gamefiles/README.md to re-pull and decode.');

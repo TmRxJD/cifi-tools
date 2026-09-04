@@ -72,7 +72,7 @@ self.onmessage = async (e) => {
       OptimizerObjective.modeOrThrow(scoreMode); // fail loudly on an unknown mode, not silently as loot
       // Derived once per worker from the cfg it was initialised with -- the boss target cannot
       // change mid-search, and recomputing it per evaluation would be per-eval work for a constant.
-      scoreCtx = { ...OptimizerObjective.contextFor(msg.cfg), ...(msg.scoreCtxOverride || {}) };
+      scoreCtx = OptimizerObjective.contextFor(msg.cfg);
       self.postMessage({ type: 'ready' });
     } catch (err) {
       self.postMessage({ type: 'ready', error: String((err && err.message) || err) });
