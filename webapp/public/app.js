@@ -1519,7 +1519,10 @@ async function renderBuildList() {
       saveStore(); renderCategoryTabs(); renderBuildList();
     };
     card.querySelector('[data-act=overrides]').onclick = () => openOverridesModal(build);
-    card.querySelector('[data-act=export]').onclick = () => exportBuildCode(build);
+    // Captured at RENDER time: whichever hunter this list was drawn for is the hunter this card's
+    // code describes, regardless of what the global says by the time the button is clicked.
+    const cardHunter = currentHunter;
+    card.querySelector('[data-act=export]').onclick = () => exportBuildCode(build, cardHunter);
     card.querySelector('[data-act=delete]').onclick = () => {
       store[currentHunter].builds = store[currentHunter].builds.filter((b) => b.id !== build.id);
       saveStore(); renderCategoryTabs(); renderBuildList();
@@ -2896,9 +2899,16 @@ document.getElementById('closeModalBtn').onclick = closeBuildModal;
 // "**Hunter** • Level N • 🔥 X Loot Score" line) and a separate shareable-link row.
 const HUNTER_DISCORD_EMOJI = { borge: ':CIFI_EXPHuntBorge:', ozzy: ':CIFI_EXPHuntOzzy:', knox: ':CIFI_EXPHuntKnox:' };
 
-async function exportBuildCode(build) {
+// THE HUNTER TRAVELS WITH THE BUILD, it is not read from a global at encode time.
+//
+// This used to take only `build` and encode against `currentHunter`. A build object does not
+// carry its own hunter, so the two could disagree -- and when they did, the export produced a
+// perfectly valid share code for the WRONG hunter, with nothing to indicate it. Callers now pass
+// the hunter the card was rendered for, captured at render time, so the code always describes the
+// build the user clicked.
+async function exportBuildCode(build, hunter = currentHunter) {
   try {
-    const code = await window.generateBuildCode(currentHunter, build, store[currentHunter].hunterStats, store.globalUpgrades, store.gems);
+    const code = await window.generateBuildCode(hunter, build, store[hunter].hunterStats, store.globalUpgrades, store.gems);
     const iterations = currentIterations();
     let lootScore = 0;
     try {

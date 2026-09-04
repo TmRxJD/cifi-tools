@@ -141,7 +141,7 @@
         + 'several times the cost.',
     },
   };
-  const DEFAULT_EFFORT = 'complete';
+  const DEFAULT_EFFORT = 'fast';
 
   // The survey stage reports progress as a fraction of this, since a rung schedule has no single
   // natural denominator.
@@ -674,67 +674,24 @@
           pinnedAttrs, (f) => report('refine', i + f, toRefine.length + 1)));
         noteBest(finalists[finalists.length - 1].score);
 
-        // AND REFINE THE SAME SUPPORT FROM A MEASURED FILL, WITH ITS TALENTS ENUMERATED.
+        // THE MEASURED RE-FILL AND TALENT-SUPPORT ENUMERATION USED TO LIVE HERE. Removed as dead
+        // weight, measured on the account they were built for:
         //
-        // The line above starts from the support's round-robin fill and hill-climbs. That is the
-        // combination measured failing: on a real level-26 Borge it reaches 14.54% below an import
-        // it was given the exact budget to reproduce, and the two reasons are separable.
-        //   * The flat fill misrepresents a support whose value is concentrated. Filling the SAME
-        //     support by marginal value instead moves it from -18.24% to -0.51% (import talents
-        //     held, so the fill is the only variable).
-        //   * The talent structure is never enumerated. Refining from the flat fill and from the
-        //     measured fill both converge to the SAME 1,290.48, because the talent block is what
-        //     binds -- so a better attribute fill alone changes nothing.
-        // Doing both, with no incumbent involved at all, returns 1,519.08: 0.60% ABOVE the import.
+        //     Borge lvl60  with    -> 142,839,497  56.7s  5,955 evals
+        //                  without -> 142,839,497  28.4s  2,257 evals   (62% of the run, no effect)
+        //     borge#16     without -> +0.70% over the import, no incumbent involved
         //
-        // Talent supports are screened against the measured attribute fill for the reason spelled
-        // out at the incumbent's own enumeration below: the coupling is one-way, and a talent
-        // support that wins only at real attribute depth is invisible against a flat one.
-        const support = allSupports.get(c.mask);
-        if (support) {
-          const opened = Space.canonicalFill(ATTRIBUTES, deps, minVal, attrBudget, support.ids, true);
-          if (opened) {
-            let measuredAttrs = await greedyTopUp(
-              ctx, ATTRIBUTES, deps, minVal, attrBudget, opened,
-              (a) => ({ talentAlloc: seedTalents, attrAlloc: a }), support.ids,
-            );
-            if (pinnedAttrs.length) {
-              measuredAttrs = applyPins(ATTRIBUTES, deps, minVal, attrBudget, measuredAttrs, pinnedAttrs);
-            }
-            if (Space.isLegal(ATTRIBUTES, deps, minVal, measuredAttrs, attrBudget)) {
-              const best = await bestTalentSupportsFor(ctx, measuredAttrs, TALENTS, talentBudget, BATCH, shouldCancel);
-              for (const t of best) {
-                if (shouldCancel()) throw new Cancelled();
-                finalists.push(await optimizeJointly(
-                  ctx, budgets, t.fill, measuredAttrs, t.score, STEP_SIZES, 6, pinnedAttrs,
-                ));
-              }
-            }
-          }
-        }
+        // borge#16 is the fixture this machinery was ADDED for (it was failing at -14.54%), so
+        // passing without it is the test that matters. It was compensating for Space.transfer
+        // judging legality mid-move -- the bug fixed in aeaf6a8 -- which fabricated cliffs that
+        // plain refinement could not cross. With the move generator correct, refinement reaches
+        // the same allocation on its own.
       }
-      // Survey results that didn't make the refinement cut still compete -- they are complete,
-      // legal allocations, just less thoroughly tuned. Keeping them costs nothing at Stage 3
-      // and removes any chance the cut discards an outright winner.
+
+      // Survey results that did not make the refinement cut still compete: they are complete,
+      // legal allocations, just less thoroughly tuned, and keeping them costs nothing at Stage 3.
       finalists.push(...surveyed.slice(refineWidth));
 
-      // THE OPTIMIZER DOES NOT LOOK AT THE BUILD YOU ARE EDITING. AT ALL.
-      //
-      // It used to: the current build was topped up, refined and entered as a competing finalist,
-      // which guaranteed the result could never be worse than what you already had. That guarantee
-      // is worth less than it sounds and cost more than it was worth -- it made the ANSWER DEPEND
-      // ON WHERE YOU STARTED, which is precisely what an optimizer must not do.
-      //
-      // Measured on a level-62 Ozzy: with the build competing the search returned 36,093,953 (the
-      // player's own allocation, unchanged); with it removed, 11,809,928. Same account, same level,
-      // same budget -- a 3x spread decided entirely by what happened to be in the editor. It also
-      // masked the real defect for most of a day, because every UI run silently passed while the
-      // search itself was failing.
-      //
-      // So the search now answers one question only: given this account and this level, what is
-      // the best build? If that is worse than what the player already has, the honest response is
-      // to fix the search -- not to quietly hand their own build back and call it an optimization.
-      //
       // --- Stage 3: full-fidelity decision. -----------------------------------------------
       report('final', 0, 1);
       const unique = [];
@@ -773,7 +730,7 @@
       // Only the WINNER is polished, and only with small steps: this corrects the last few points,
       // it does not redo the descent. It is additive -- the polished build is compared against the
       // champion on the same FINAL_ITERATIONS measurement and only replaces it if it truly wins.
-      if (ranked.length) {
+      if (ranked.length && !effortSpec.skipPolish) {
         const champion = ranked[0];
         const polished = await optimizeJointly(
           ctx, budgets, champion.talentAlloc, champion.attrAlloc, champion.score,
