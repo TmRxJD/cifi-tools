@@ -157,22 +157,23 @@
   // The winner's final polish, run at FINAL_ITERATIONS. Small steps only: the coarse descent has
   // already happened at screening fidelity, and this pass exists to correct the last few points
   // where the screen and the judge disagree.
-  // EVERY small amount, not a ladder. The polish is the only stage that measures at
-  // FINAL_ITERATIONS, so it is the only one that can resolve a fine ridge -- and a ladder of
-  // 4/2/1 cannot express the move the ridge needs.
+  // AMOUNTS ARE WIDENED ONLY WHILE WIDENING PAYS.
   //
-  // MEASURED on a real level-62 Ozzy. The polish converges at exo 79 / lotl 15 / timeless 1 and a
-  // deeper cap changes nothing (40 rounds is byte-identical to 4), yet exo 74 / lotl 17 /
-  // timeless 2 scores 3.9% higher. Getting there is ONE transfer of FIVE units out of exo:
-  // timeless +1 costs 3, lotl +2 costs 2, and Space.transfer's fillLeftover distributes the
-  // remainder by itself. Five is simply not on the ladder.
+  // The polish needs big transfers on some builds and not others, and the cost of offering them is
+  // brutal: scanning the whole neighbourhood at FINAL_ITERATIONS for every amount 1..16 took a
+  // level-60 Borge from 28.8s to over five minutes -- for a polish gain of 0.32% it already got
+  // from amounts 1..4. A level-62 Ozzy genuinely needs 9-unit moves (exo 65 -> 74, worth 1.9%).
   //
-  // Enumerating a CONTIGUOUS RANGE rather than a hand-picked few is the point -- a ladder can
-  // only express the amounts on it. The range reaches 16 because 8 was not enough either: the
-  // remaining gap to the best allocation known for that account is a NINE-unit move
-  // (exo 65 -> 74). Affordable precisely because the polish only ever touches the winner: going
-  // from 3 amounts to 8 cost 140 evaluations.
-  const POLISH_STEP_SIZES = Array.from({ length: 16 }, (_, i) => 16 - i);
+  // So the range is not fixed. It starts narrow and doubles ONLY when the move just accepted used
+  // the widest amount currently on offer -- evidence that something wider might pay. A build that
+  // never wants a big transfer never scans for one.
+  const POLISH_TIERS = [4, 8, 16];
+
+
+  // A boss at full health was never engaged, so "how close did it come" says nothing.
+  const BOSS_UNENGAGED_HP = 100;
+  // How many boss-capable supports join the loot leaders in the tuning pool.
+  const BOSS_CANDIDATES = 3;
 
   // How many candidate moves are scored before a block settles for the best one found so far.
   // Sized to keep the worker pool (MAX_POOL_SIZE is 6) busy while bounding what one accepted move
@@ -363,7 +364,22 @@
   // score has been measured ranking a 0.32% ridge backwards by 1.7%, so it is trusted only to say
   // "these are the moves worth paying to look at properly", and the verdict always comes from the
   // full-fidelity score.
-  const POLISH_VERIFY = 12;
+  // VERIFY EVERY CANDIDATE MOVE AT FULL FIDELITY. Quality over speed, deliberately.
+  //
+  // A cheap shortlist was tried: rank the neighbourhood at SCREEN_ITERATIONS and re-score only the
+  // best few at FINAL_ITERATIONS. It looked lossless and was not. The check that "proved" it was
+  // run while cross-seed was removed and the build was stuck 66% low, so it compared convergence
+  // from a broken starting point and said nothing about the real one. With cross-seed active a
+  // top-12 shortlist returns 38,238,568 where a full scan returns 39,881,450 -- 1.64M given away.
+  //
+  // The reason is the shortlist's own ranking: a 100-iteration score has been measured ordering a
+  // 0.32% ridge BACKWARDS by 1.7%, and the moves that matter here ARE fine-ridge redistributions
+  // (exo/lotl/timeless). A noisy ranking buries exactly the candidates worth verifying, so the
+  // shortlist discards the answer before the accurate scorer ever sees it.
+  //
+  // The polish only ever touches ONE build -- the winner -- which is what makes scanning it in
+  // full affordable at all.
+  const POLISH_VERIFY = Infinity;
 
   async function polishWinner(ctx, cfg, talentAlloc, attrAlloc, startScore, pinnedAttrs, report) {
     const { TALENTS, ATTRIBUTES, TALENT_BUDGET, ATTRIBUTE_BUDGET } = cfg;
@@ -373,9 +389,12 @@
     let curA = { ...attrAlloc };
     let curScore = startScore;
 
+    let tier = 0;                       // index into POLISH_TIERS: how wide the amounts go
     for (let round = 0; round < POLISH_MAX_ROUNDS; round++) {
       if (ctx.shouldCancel()) throw new Cancelled();
       report(round / POLISH_MAX_ROUNDS);
+      const maxAmount = POLISH_TIERS[tier];
+      const amounts = Array.from({ length: maxAmount }, (_, i) => maxAmount - i);
 
       // Build the whole neighbourhood: every pair, every amount in POLISH_STEP_SIZES, both blocks.
       const moves = [];
@@ -386,7 +405,7 @@
         seen.add(sig);
         moves.push({ talentAlloc: talents, attrAlloc: attrs });
       };
-      for (const step of POLISH_STEP_SIZES) {
+      for (const step of amounts) {
         for (const from of ATTRIBUTES) {
           if (pinnedAttrs.includes(from.id) || (curA[from.id] || 0) < step) continue;
           for (const to of ATTRIBUTES) {
@@ -416,7 +435,12 @@
       for (let i = 0; i < exact.length; i++) {
         if (exact[i] > curScore && (bestIdx === -1 || exact[i] > exact[bestIdx])) bestIdx = i;
       }
-      if (bestIdx === -1) break;                       // nothing verified better: converged
+      if (bestIdx === -1) {
+        // Nothing improved at this width. Widen once and try again; if the widest tier is already
+        // in play, the polish is genuinely converged.
+        if (tier < POLISH_TIERS.length - 1) { tier += 1; continue; }
+        break;
+      }
       curT = order[bestIdx].m.talentAlloc;
       curA = order[bestIdx].m.attrAlloc;
       curScore = exact[bestIdx];
@@ -609,7 +633,7 @@
   // search itself is identical in both, so what the benchmark proves is what ships.
   // ---------------------------------------------------------------------------------------
   /** @param {OptimizerConfig} cfg @param {OptimizeOptions} [options] */
-  async function optimize(cfg, { mode = 'loot', effort = DEFAULT_EFFORT, scorer, scorerFor = null, onProgress = () => {}, shouldCancel = () => false } = /** @type {any} */ ({})) {
+  async function optimize(cfg, { mode = 'loot', effort = DEFAULT_EFFORT, scorer, onProgress = () => {}, shouldCancel = () => false } = /** @type {any} */ ({})) {
     if (typeof scorer !== 'function') throw new Error('optimize() requires a scorer function');
 
     // Mode is validated HERE as well as in the worker, so an unknown mode fails before a search
@@ -775,7 +799,8 @@
         if (shouldCancel()) throw new Cancelled();
         const chunk = realizable.slice(i, i + BATCH);
         const scores = await ctx.score(chunk.map((c) => ({ talentAlloc: seedTalents, attrAlloc: c.attrAlloc })), SCREEN_ITERATIONS);
-        chunk.forEach((c, j) => screened.push({ ...c, score: scores[j] }));
+        // Boss progress comes back with the score at no extra cost -- see the worker.
+        chunk.forEach((c, j) => screened.push({ ...c, score: scores[j], boss: (scores.boss || [])[j] }));
         report('screen', Math.min(i + BATCH, realizable.length), realizable.length);
       }
 
@@ -794,6 +819,14 @@
       }
       screened.length = 0;
       screened.push(...bestPerSupport);
+
+      // BOSS CAPABILITY CANNOT BE SEEN AT SCREENING, so it is not looked for here.
+      //
+      // Screening scores canonical fills, and those never engage a boss at all: on all three
+      // hunters, ZERO of the screened shapes had bossHpPercent below 100. Boss capability is
+      // something refinement CREATES, not a property screening can detect -- which is why
+      // selecting "boss-capable supports" from screening kept exactly none, on every hunter.
+
 
       // --- Stage 2a: THE COARSE SURVEY TIER IS GONE. -------------------------------------
       //
@@ -831,6 +864,10 @@
       const rungs = effortSpec.rungs || [{
         keep: surveyWidth, iterations: SCREEN_ITERATIONS, maxRounds: null,
       }];
+      // The tuning pool is the loot leaders PLUS the boss-capable supports. Appending them to
+      // `screened` was not enough -- the pool is a slice of its head, so they were added and then
+      // sliced straight back off, which is exactly how a level-62 Ozzy came back 66% low with the
+      // boss candidates supposedly "in play".
       let arms = screened.slice(0, surveyWidth).map((c) => ({
         attrAlloc: c.attrAlloc, talentAlloc: seedTalents, score: c.score, mask: c.support.mask,
       }));
@@ -882,6 +919,7 @@
       // 39,139,365, 8.4% above the player's build).
       const refineWidth = Math.min(effortSpec.refineSupports, surveyed.length);
       const toRefine = surveyed.slice(0, refineWidth);
+
       for (let i = 0; i < toRefine.length; i++) {
         if (shouldCancel()) throw new Cancelled();
         report('refine', i, toRefine.length + 1);
@@ -941,103 +979,6 @@
       // Survey results that did not make the refinement cut still compete: they are complete,
       // legal allocations, just less thoroughly tuned, and keeping them costs nothing at Stage 3.
       finalists.push(...surveyed.slice(refineWidth));
-
-      // --- Stage 2d: a candidate from the objective that can SEE a threshold. -------------
-      // `loot` is blind on a boss wall: every build that fails the kill scores the same, so there
-      // is no gradient to climb and the search is not weak, it is on a flat surface. The full
-      // reasoning and the measurements are on Objective.crossSeedFor. The remedy is a CANDIDATE,
-      // not a scoring change -- this build competes at Stage 3 on the caller's objective exactly
-      // like every other finalist, so the answer is still the best build by the metric asked for.
-      //
-      // `scorerFor` is how the pass gets a scorer bound to a different mode. It is required rather
-      // than optional for a mode that declares a cross-seed: silently skipping the pass would make
-      // the optimizer's answer depend on which caller invoked it, which is precisely the kind of
-      // quiet difference this project refuses to carry.
-      const crossMode = Objective.crossSeedFor(mode);
-      if (crossMode) {
-        if (typeof scorerFor !== 'function') {
-          throw new Error(`optimize(): mode "${mode}" cross-seeds from "${crossMode}", so a `
-            + 'scorerFor(mode) factory is required');
-        }
-        report('crossSeed', 0, 1);
-        // TARGET-AGNOSTIC ON PURPOSE, and this is the subtle part of the whole pass.
-        //
-        // The `boss` mode a PLAYER selects aims at the next boss they have not beaten -- at stage
-        // 101 that is the 200 boss, which their build may have no chance of reaching, and saying
-        // so is the honest answer. The cross-seed wants something different: the boss wall that is
-        // capping THIS build's loot right now, which is whatever boss the run actually reaches.
-        // On the level-31 Knox those are different bosses (200 vs 100), and seeding loot from a
-        // target-200 search would produce a push build instead of the boss-killer worth 45,180.
-        // So the pass explicitly clears the target.
-        const crossScorer = await scorerFor(crossMode, { bossTarget: null });
-        if (typeof crossScorer !== 'function') {
-          throw new Error(`optimize(): scorerFor("${crossMode}") did not return a scorer function`);
-        }
-
-        // GATE: ONE evaluation decides whether the whole pass is worth running.
-        //
-        // The pass exists because a loot search has no gradient while the boss is unkilled -- every
-        // walled build scores the same. But that is only true WHILE it is walled. Score the best
-        // build found so far under the boss objective, whose tiers already encode "reached the
-        // target" and "killed it": if the loot search has already produced a build that kills the
-        // target boss, it demonstrably had a gradient to follow and a boss-seeded candidate has
-        // nothing to add.
-        //
-        // Worth gating rather than always paying: measured on a level-26 Borge that is NOT
-        // boss-walled, the unconditional pass cost 15,047 evaluations against 6,483 without it --
-        // 2.3x for a candidate that could never win. The gate costs ONE evaluation to find that
-        // out, and the walled case (a level-31 Knox, 6,978 -> 45,180 loot) still gets the full pass.
-        const bestSoFar = finalists.reduce((a, b) => (a && a.score >= b.score ? a : b), null);
-        let crossWorthIt = true;
-        if (bestSoFar) {
-          const [bossViewOfBest] = await crossScorer(
-            [{ talentAlloc: bestSoFar.talentAlloc, attrAlloc: bestSoFar.attrAlloc }], SCREEN_ITERATIONS,
-          );
-          // KILL_ACHIEVED_BASE is the boss objective's own "this build kills it" floor. Comparing
-          // against it rather than against a number of our own keeps the two in one place.
-          crossWorthIt = bossViewOfBest < Objective.KILL_ACHIEVED_BASE;
-          if (!crossWorthIt) {
-            ctx.note(`cross-seed skipped: the ${mode} search already kills the target boss`);
-          }
-        }
-        if (!crossWorthIt) {
-          report('final', 0, 1);
-        } else {
-        // A plain recursion. The cross-seeded mode is one that does NOT declare a cross-seed of
-        // its own, which is what terminates it -- asserted rather than assumed.
-        if (Objective.crossSeedFor(crossMode)) {
-          throw new Error(`optimize(): cross-seed cycle -- "${crossMode}" itself cross-seeds`);
-        }
-        // No allocation to strip any more -- optimizerCfg stopped carrying the current build.
-        const crossCfg = { ...cfg };
-        // A CHEAP search, not the caller's. Its job is to produce a BOSS-CAPABLE build; the
-        // answer is then refined again under the caller's objective and judged as an ordinary
-        // finalist, so thoroughness here is largely redundant. Measured on a level-60 Borge, where
-        // the pass fires legitimately (the build does not kill the boss it reaches) and its
-        // candidate never wins: the pass was most of an 80s -> 116s regression.
-        const crossEffort = { surveySupports: 3, refineSupports: 1,
-          rungs: [{ keep: 3, iterations: SCREEN_ITERATIONS, maxRounds: 1 }] };
-        const crossRes = await optimize(crossCfg, { mode: crossMode, effort: crossEffort, scorer: crossScorer, shouldCancel });
-        if (crossRes.best) {
-          evals += crossRes.evals;
-          // Refine it under THIS objective before it competes -- the boss search stopped caring
-          // about loot once the kill was secured, and on the Knox build above that refinement is
-          // worth another 20% (39,072 -> 46,820).
-          const [crossStart] = await ctx.score(
-            [{ talentAlloc: crossRes.best.talentAlloc, attrAlloc: crossRes.best.attrAlloc }], SCREEN_ITERATIONS,
-          );
-          finalists.push(await optimizeJointly(
-            ctx, budgets, crossRes.best.talentAlloc, crossRes.best.attrAlloc, crossStart,
-            STEP_SIZES, 6, pinnedAttrs,
-          ));
-          // And unrefined, so a refinement that wanders cannot lose the candidate outright.
-          finalists.push({
-            talentAlloc: crossRes.best.talentAlloc, attrAlloc: crossRes.best.attrAlloc, score: crossStart,
-          });
-          ctx.note(`cross-seeded a ${crossMode} build into ${mode}`);
-        }
-        }
-      }
 
       // --- Stage 3: full-fidelity decision. -----------------------------------------------
       report('final', 0, 1);

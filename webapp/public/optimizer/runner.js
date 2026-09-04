@@ -12,7 +12,7 @@
   // Bump alongside the ?v= on the <script> tags in index.html. A Worker URL is cached
   // independently of the page, so without this a worker.js change silently keeps running the
   // previous version after a reload.
-  const WORKER_VERSION = '20260905h';
+  const WORKER_VERSION = '20260906e';
 
   // Each worker compiles and holds its OWN copy of the WASM module and churns a fresh instance
   // per evaluation (required for determinism -- the evaluator's RNG state lives in mutable wasm
@@ -58,7 +58,7 @@
       if (!entry) return;
       this.pending.delete(msg.requestId);
       if (msg.error) entry.reject(new Error(msg.error));
-      else entry.resolve(msg.scores);
+      else entry.resolve({ scores: msg.scores, boss: msg.boss || [] });
     }
 
     /** First init error, or null if every worker came up clean. */
@@ -79,7 +79,7 @@
         return { w, pos };
       });
 
-      const chunkScores = await Promise.all(chunks.map((batch, w) => {
+      const chunkResults = await Promise.all(chunks.map((batch, w) => {
         if (!batch.length) return Promise.resolve([]);
         const requestId = this.nextRequestId++;
         return new Promise((resolve, reject) => {
@@ -88,7 +88,11 @@
         });
       }));
 
-      return placement.map(({ w, pos }) => chunkScores[w][pos]);
+      // Scores are returned as before. Boss progress rides alongside on `score.boss`, so callers
+      // that want it (screening) can read it and callers that do not are unaffected.
+      const out = placement.map(({ w, pos }) => chunkResults[w].scores[pos]);
+      out.boss = placement.map(({ w, pos }) => (chunkResults[w].boss || [])[pos]);
+      return out;
     }
 
     terminate() {
@@ -146,10 +150,6 @@
       cachedPool = { key: poolKey, pool: new ScoringPool(cfg, mode, size), crossPools: new Map() };
     }
     const pool = cachedPool.pool;
-    // Cross-seed pools, keyed by (mode, context). A pool is bound to ONE objective at init, so a
-    // second objective needs its own; built lazily, so a mode that does not cross-seed never pays.
-    // Cached alongside the main pool for the same reason.
-    const crossPools = cachedPool.crossPools;
     try {
       const initError = await pool.ready();
       if (initError) {
@@ -170,40 +170,13 @@
         scorer: (pairs, iterations) => pool.score(pairs, iterations),
         // Tracked so `finally` terminates it even when the search throws or is cancelled: leaking
         // a pool leaks a WASM module per worker, which is what MAX_POOL_SIZE exists to prevent.
-        scorerFor: async (crossMode, ctxOverride) => {
-          const key = `${crossMode}|${JSON.stringify(ctxOverride || null)}`;
-          if (!crossPools.has(key)) {
-            // HALF SIZE, AND AT LEAST 2. A cross-seed pool is a SECOND set of workers, each
-            // holding its own WASM module, alive at the same time as the main pool -- which is
-            // precisely what MAX_POOL_SIZE exists to bound. At full size the pair exceeded the
-            // browser's wasm allocation on a level-60 Borge and the search died with
-            // "Cannot allocate Wasm memory for new instance".
-            //
-            // The pass is a single extra search whose answer is then judged like any other
-            // candidate, so halving its parallelism costs some wall clock on the builds that need
-            // it and nothing at all on the builds that skip it.
-            const crossSize = 2;   // secondary search: minimum viable parallelism
-            const crossPool = new ScoringPool(cfg, crossMode, crossSize, ctxOverride);
-            crossPools.set(key, crossPool);
-            const err = await crossPool.ready();
-            if (err) throw new Error(`Cross-seed worker failed to initialize: ${err}`);
-          }
-          const p = crossPools.get(key);
-          return (pairs, iterations) => p.score(pairs, iterations);
-        },
         onProgress,
         shouldCancel,
       });
     } finally {
-      // THE MAIN POOL IS KEPT, THE CROSS-SEED POOL IS NOT.
-      //
-      // The main pool is used throughout every run, so rebuilding it each time is what exhausted
-      // wasm memory in the first place. The cross-seed pool is used for ONE pass, and holding it
-      // afterwards means two pools' worth of WASM instances alive between runs -- which brought
-      // the OOM straight back on a level-62 Ozzy (6 main + 3 cross workers, each with its own
-      // instance). Freed here; rebuilt on demand by the next run that actually cross-seeds.
-      for (const p of cachedPool.crossPools.values()) p.terminate();
-      cachedPool.crossPools.clear();
+      // The pool is REUSED by the next run with the same account and mode -- rebuilding six WASM
+      // instances per run is what exhausted memory after two consecutive level-62 Ozzy optimizes.
+      // It is released when that key changes, or by releaseScoringPools().
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
   }

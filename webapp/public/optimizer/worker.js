@@ -72,8 +72,8 @@ self.onmessage = async (e) => {
       OptimizerObjective.modeOrThrow(scoreMode); // fail loudly on an unknown mode, not silently as loot
       // Derived once per worker from the cfg it was initialised with -- the boss target cannot
       // change mid-search, and recomputing it per evaluation would be per-eval work for a constant.
-      // The override exists for the cross-seed pass, which needs the boss objective WITHOUT a
-      // target (see Objective.crossSeedFor and the note in search.js Stage 2d).
+      // An objective-context override, kept because a caller may legitimately need to score a
+      // mode with different context (e.g. a bench pinning a boss target).
       scoreCtx = { ...OptimizerObjective.contextFor(msg.cfg), ...(msg.scoreCtxOverride || {}) };
       self.postMessage({ type: 'ready' });
     } catch (err) {
@@ -85,11 +85,17 @@ self.onmessage = async (e) => {
   if (msg.type === 'score') {
     const { requestId, iterations, batch } = msg;
     const scores = [];
+    // BOSS PROGRESS TRAVELS WITH THE SCORE. The evaluator returns bossKillRate and bossHpPercent
+    // in the same result as lootPerMin, at no extra cost -- discarding them is what forced a whole
+    // second search to recover the same information. The search uses them to keep boss-capable
+    // shapes in play while still ranking on the caller's objective.
+    const boss = [];
     try {
       let sinceYield = 0;
       for (const item of batch) {
         const r = await evaluateWithGcRetry(item, iterations);
         scores.push(OptimizerObjective.scoreFor(scoreMode, r, scoreCtx));
+        boss.push({ kill: r.bossKillRate, hp: r.bossHpPercent, maxStage: r.maxStage });
         // Determinism requires a FRESH WASM instance per evaluation (the evaluator's RNG state
         // lives in mutable wasm globals -- verified: restoring linear memory alone leaves the
         // instance in a state that aborts on the next call, so there is no cheaper reset).
@@ -103,7 +109,7 @@ self.onmessage = async (e) => {
           await new Promise((resolve) => setTimeout(resolve, 0));
         }
       }
-      self.postMessage({ type: 'scored', requestId, scores });
+      self.postMessage({ type: 'scored', requestId, scores, boss });
     } catch (err) {
       // Fail the request explicitly rather than returning a sentinel score. A candidate that
       // cannot be evaluated is a bug to surface, not a candidate to silently rank last -- the

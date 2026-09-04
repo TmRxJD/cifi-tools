@@ -168,11 +168,16 @@ async function makeScorer(cfg, mode, ctxOverride) {
   const ctx = { ...Objective.contextFor(cfg), ...(ctxOverride || {}) };
   return async function score(pairs, iterations) {
     const out = [];
+    // Boss progress rides alongside the score, exactly as the browser pool does it, so a bench and
+    // the app cannot disagree about what the search can see.
+    const boss = [];
     for (const p of pairs) {
       const r = await evalFast(p.talentAlloc, p.attrAlloc, iterations);
       // Same canonical objective the browser workers use -- not a second copy of the mode rules.
       out.push(Objective.scoreFor(mode, r, ctx));
+      boss.push({ kill: r.bossKillRate, hp: r.bossHpPercent, maxStage: r.maxStage });
     }
+    out.boss = boss;
     return out;
   };
 }

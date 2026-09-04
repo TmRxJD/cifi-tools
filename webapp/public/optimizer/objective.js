@@ -47,6 +47,11 @@
    * buy back even a tenth of a percent of kill rate.
    */
   const KILL_RATE_SCALE = 1000;
+  // Bosses stand every 100 stages. A run that ends within a few stages of one is being held up by
+  // it; a run that dies well past one is limited by something else entirely.
+  const BOSS_INTERVAL = 100;
+  const BOSS_STALL_MARGIN = 5;
+
   const KILL_ACHIEVED_BASE = 1e9; // any kill outranks every not-yet-killing build
   const STAGE_PROGRESS_SCALE = 1e4;
   // Reaching the target boss at all outranks every build that cannot, by more than the stage
@@ -142,13 +147,11 @@
       label: 'Loot Score',
       help: 'Maximises loot per minute — the default for farming.',
       score: (r) => r.lootPerMin,
-      crossSeedFrom: 'boss',
     },
     push: {
       label: 'Ø Stage (push)',
       help: 'Maximises average stage reached, trading loot for depth.',
       score: (r) => r.avgStage,
-      crossSeedFrom: 'boss',
     },
     boss: {
       label: 'Boss kill (as soon as possible)',
@@ -196,26 +199,36 @@
    * the score is what we are after -- and the fix belongs in the search's ability to get there,
    * not in borrowing an answer from an objective that wants something else.
    */
+  // THERE IS NO CROSS-SEEDING BETWEEN OBJECTIVES, AND THERE MUST NOT BE.
+  //
+  // A pass used to run a whole `boss` search inside `loot` and enter its answer as a candidate. If
+  // `loot` needs another objective to find a build that farms more, then `loot` is broken -- a
+  // build that produces more loot per minute IS the better loot build by definition, and the
+  // search must be able to reach it on its own.
+  //
+  // What that pass was really supplying is INFORMATION the search already had and threw away:
+  // every evaluation returns bossKillRate and bossHpPercent alongside lootPerMin. Screening now
+  // keeps both, so boss-capable shapes are explored as part of the initial search rather than
+  // recovered by a second one.
   /**
-   * Which objective should ALSO be searched, its answer entered here as an ordinary candidate.
+   * Is this build STOPPED BY A BOSS, as opposed to merely failing to kill one?
    *
-   * IT IS A NAVIGATION AID, NOT A SECOND METRIC. The candidate is judged at Stage 3 on the
-   * caller's objective like every other finalist, so it only wins if it genuinely farms more.
-   * Boss HP is a smooth, low-variance signal that steers into build shapes `loot` cannot reach on
-   * its own -- near a boss threshold a kill is a rare event, and at screening fidelity the loot
-   * difference between "almost kills" and "never kills" is unresolvable noise.
+   * Bosses stand every 100 stages, so the two cases are visible in where a run ends:
+   *     Knox  lvl26  maxStage 100.0  -> pinned exactly on the stage-100 boss   BOSS-LIMITED
+   *     Ozzy  lvl62  maxStage 202.6  -> stalls just past the stage-200 boss    BOSS-LIMITED
+   *     Borge lvl60  maxStage 267.2  -> dies 67 stages past a boss             NOT boss-limited
    *
-   * MEASURED, and this is why it is here rather than deleted: on a real level-62 Ozzy that kills
-   * its boss 50-67% of the time, removing this pass took the result from 39,881,450 to 11,879,496
-   * -- a 3.3x loss on lootPerMin alone. Refinement hands the polish ~34M with it and ~11.8M
-   * without; the polish only ever adds the last 16%.
-   *
-   * Five loot-native routes to those builds were tried and measured failing: concentrated
-   * screening shapes, gate-paying fills, deterministic annealing, wider refinement, and ranking
-   * non-killing builds by boss progress (which fixed Knox and cost borge@26 73%).
+   * The distinction is not cosmetic. Ranking non-killing builds by boss progress fixed a Knox
+   * fixture and took borge@26 to -73%, because Borge is not held up by a boss at all -- steering
+   * it toward boss damage trades away farming for something that was never in its way. Any
+   * boss-aware behaviour has to be gated on this, and `bossKillRate === 0` is NOT the gate: Borge
+   * reports 0 kills simply because no boss is involved in how its run ends.
    */
-  function crossSeedFor(mode) {
-    return modeOrThrow(mode).crossSeedFrom || null;
+  function isBossLimited(result) {
+    if (!result || !Number.isFinite(result.maxStage)) return false;
+    if (result.maxStage < BOSS_INTERVAL) return false;          // no boss reached yet at all
+    const pastLastBoss = result.maxStage % BOSS_INTERVAL;
+    return pastLastBoss <= BOSS_STALL_MARGIN;
   }
 
   function pinnedAttrsFor(mode) {
@@ -237,7 +250,7 @@
     return Object.fromEntries(Object.entries(MODES).filter(([, spec]) => !spec.pinnedAttrs));
   }
 
-  const Objective = { MODES, scoreFor, pinnedAttrsFor, pathModes, modeOrThrow, crossSeedFor, bossTargetFor, contextFor, KILL_ACHIEVED_BASE };
+  const Objective = { MODES, scoreFor, pinnedAttrsFor, pathModes, modeOrThrow, isBossLimited, bossTargetFor, contextFor, KILL_ACHIEVED_BASE };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Objective;
   else global.OptimizerObjective = Objective;
