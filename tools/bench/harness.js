@@ -156,8 +156,6 @@ function cfgForImport(hunter, build, { budgetMode = 'spend' } = {}) {
     ATTRIBUTE_MIN_VALUE: d.attributeMinValue,
     TALENT_BUDGET: talentBudget,
     ATTRIBUTE_BUDGET: attrBudget,
-    currentTalents: build.talents,
-    currentAttrs: build.attributes,
   };
 }
 

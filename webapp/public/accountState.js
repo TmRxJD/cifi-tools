@@ -113,8 +113,6 @@
       ATTRIBUTE_MIN_VALUE: acct.ATTRIBUTE_MIN_VALUE,
       TALENT_BUDGET: acct.TALENT_BUDGET,
       ATTRIBUTE_BUDGET: acct.ATTRIBUTE_BUDGET,
-      currentTalents: acct.talents,
-      currentAttrs: acct.attributes,
     };
   }
 

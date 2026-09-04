@@ -3432,6 +3432,31 @@ function renderOptimizeModes() {
 }
 renderOptimizeModes();
 
+// Search effort, rendered from the optimizer's own EFFORT_LEVELS for the same reason the mode
+// list is: the dropdown cannot offer a level the search does not implement, and a level cannot
+// ship without a label and an explanation.
+function renderOptimizeEffort() {
+  const select = document.getElementById('optimizeEffort');
+  const help = document.getElementById('optimizeEffortHelp');
+  if (!select || !help) return;
+  const LEVELS = window.HunterOptimizer.EFFORT_LEVELS;
+  select.innerHTML = Object.entries(LEVELS)
+    .map(([key, spec]) => `<option value="${key}">${escapeHtml(spec.label)}</option>`)
+    .join('');
+  const stored = store.optimizeEffort;
+  select.value = LEVELS[stored] ? stored : window.HunterOptimizer.DEFAULT_EFFORT;
+  const showHelp = () => { help.textContent = LEVELS[select.value].help; };
+  select.onchange = () => {
+    showHelp();
+    // Remembered, because effort is a standing preference about how long the user is willing to
+    // wait, not a per-run decision.
+    store.optimizeEffort = select.value;
+    saveStore();
+  };
+  showHelp();
+}
+renderOptimizeEffort();
+
 document.getElementById('optimizeBtn').onclick = () => document.getElementById('optimizeSetupModal').classList.remove('hidden');
 document.getElementById('cancelOptimizeSetup').onclick = () => document.getElementById('optimizeSetupModal').classList.add('hidden');
 
@@ -3460,6 +3485,7 @@ const OPTIMIZE_PHASES = {
 
 document.getElementById('startOptimizeBtn').onclick = async () => {
   const mode = document.getElementById('optimizeMode').value;
+  const effort = document.getElementById('optimizeEffort').value;
   document.getElementById('optimizeSetupModal').classList.add('hidden');
   document.getElementById('optimizeProgressModal').classList.remove('hidden');
   cancelRequested = false;
@@ -3496,6 +3522,7 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
   try {
     const result = await runOptimizer(cfg, {
       mode,
+      effort,
       shouldCancel: () => cancelRequested,
       onProgress: ({ phase, done, total }) => {
         const entry = OPTIMIZE_PHASES[phase];

@@ -17,9 +17,14 @@
 //   * WITHOUT is the control: if the two disagree about which allocation wins, the overrides are
 //     changing the RANKING, which is exactly where a mis-modelled relic or trinket would show up.
 //
-// The incumbent is the real build, so "never worse" is a design guarantee here rather than a hope
-// (the current build competes as a finalist). A failure means that guarantee is broken, which is a
-// different and more serious thing than the search shortfalls underspend-test measures.
+// THIS IS NO LONGER A GUARANTEE, AND THAT IS THE POINT. The optimizer used to enter the player's
+// own build as a competing finalist, so "never worse than what you have" held by construction and
+// this bench could not fail. That masked the search itself: on a level-62 Ozzy the incumbent path
+// returned 36,093,953 (the player's own allocation, handed straight back) while the search alone
+// returned 11,809,928 -- a 3x gap that every UI run silently passed over.
+//
+// The search now ignores the current build entirely, so this bench measures what it claims to:
+// whether the optimizer can FIND a build at least as good as the player's, from nothing.
 
 const fs = require('fs');
 const path = require('path');
@@ -103,8 +108,8 @@ const pass = (m) => console.log(`pass  ${m}`);
 
       if (outScore < importScore) {
         fail(`${label}: optimizer returned ${outScore.toFixed(2)} vs the account's own `
-          + `${importScore.toFixed(2)} (${delta.toFixed(2)}%) -- the incumbent competes as a `
-          + 'finalist, so this should be impossible');
+          + `${importScore.toFixed(2)} (${delta.toFixed(2)}%) -- the search could not FIND a build `
+          + 'as good as the account already has');
       } else if (idle.length) {
         fail(`${label}: left ${idle.join(' and ')} point(s) unspent `
           + `(${tSpent}/${cfg.TALENT_BUDGET}T ${aSpent}/${cfg.ATTRIBUTE_BUDGET}A)`);

@@ -104,6 +104,10 @@
     // hunter you were working on instead of snapping back to Borge -- the app's in-memory
     // `currentHunter` defaulted to 'borge' on every load, so the selection was lost with the page.
     lastHunter: { make: () => 'borge' },
+    // How much search effort the user is willing to pay for. A standing preference about time,
+    // validated against the optimizer's own EFFORT_LEVELS at render time so a stale or renamed
+    // level falls back to the default instead of reaching a search that cannot honour it.
+    optimizeEffort: { make: () => 'complete' },
     // Fragments are the currency relics are bought with, and they are ACCOUNT-WIDE, not
     // per-hunter and not per-build: there is one Relic #7, you buy it once, and every hunter
     // that reads it benefits. So this lives at the top level of the store alongside the other

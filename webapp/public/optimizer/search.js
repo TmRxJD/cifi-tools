@@ -108,7 +108,45 @@
   // with level (it scales with how far the build progresses), so eval count is the binding
   // constraint on wall clock -- spending the full budget on supports that the coarse tier
   // already shows are uncompetitive buys nothing.
-  const SURVEY_SUPPORTS = 8;
+  // HOW MANY SUPPORTS GET TUNED, as a user-facing choice.
+  //
+  // Screening scores each support at a canonical fill, and that estimate is a POOR predictor of
+  // what the support is worth once tuned. Measured on a real level-62 Ozzy: the best support in
+  // the whole space screens 147th of 234, so at the default width it is never surveyed and no
+  // later stage can recover it. Handed that support at the very same flat fill, refinement reaches
+  // 39,139,365 -- 8.4% above the player's own build -- so refinement is sound and the loss is
+  // entirely the screening cut.
+  //
+  // Five cheaper fills were measured as screening proxies (flat, max-concentration, capped-at-cap,
+  // capped-at-cap with the remainder split, and a coarse measured greedy) and ALL of them rank it
+  // below the cut. The reason is structural: its value needs exo deep enough to clear cat's
+  // 150-cost tier threshold AND cat funded to 18, and no single-shot fill produces that pair --
+  // each one strands cat, which is then zeroed, taking the value with it.
+  //
+  // So the honest lever is coverage, and its cost is roughly linear in the number surveyed. Rather
+  // than pick one point on that trade for everybody, it is exposed: `complete` surveys EVERY
+  // realizable support, which is the only setting that can promise a support was never discarded
+  // on an estimate. The table lives here, beside the search, and the UI renders from it -- so a
+  // level cannot exist in the dropdown without the optimizer implementing it.
+  const EFFORT_LEVELS = {
+    fast: {
+      label: 'Fast', surveySupports: 3, refineSupports: 3,
+      rungs: [{ keep: 3, iterations: SCREEN_ITERATIONS, maxRounds: 1 }],
+      help: 'Refines the 3 strongest-screening combinations. Quickest.',
+    },
+    complete: {
+      label: 'Complete', surveySupports: 16, refineSupports: 16,
+      rungs: [{ keep: 16, iterations: SCREEN_ITERATIONS, maxRounds: 1 }],
+      help: 'Refines the 16 strongest-screening combinations. Finds builds Fast misses, at '
+        + 'several times the cost.',
+    },
+  };
+  const DEFAULT_EFFORT = 'complete';
+
+  // The survey stage reports progress as a fraction of this, since a rung schedule has no single
+  // natural denominator.
+  const SURVEY_REPORT_SCALE = 100;
+  const SURVEY_SUPPORTS = EFFORT_LEVELS.fast.surveySupports;
   const REFINE_SUPPORTS = 3;
 
   // Transfer sizes, largest first. Large steps cross the flat regions that trap single-point
@@ -377,7 +415,7 @@
   // search itself is identical in both, so what the benchmark proves is what ships.
   // ---------------------------------------------------------------------------------------
   /** @param {OptimizerConfig} cfg @param {OptimizeOptions} [options] */
-  async function optimize(cfg, { mode = 'loot', scorer, onProgress = () => {}, shouldCancel = () => false } = /** @type {any} */ ({})) {
+  async function optimize(cfg, { mode = 'loot', effort = DEFAULT_EFFORT, scorer, onProgress = () => {}, shouldCancel = () => false } = /** @type {any} */ ({})) {
     if (typeof scorer !== 'function') throw new Error('optimize() requires a scorer function');
 
     // Mode is validated HERE as well as in the worker, so an unknown mode fails before a search
@@ -541,32 +579,93 @@
       // scores never depend on iteration or floating-point tie order.
       screened.sort((a, b) => (b.score - a.score) || (a.support.mask - b.support.mask));
 
-      // --- Stage 2a: coarse survey of the strongest supports. -----------------------------
+      // --- Stage 2a: THE COARSE SURVEY TIER IS GONE. -------------------------------------
+      //
+      // It used to tune a wide set of supports with a cheap pass, to RE-RANK them before the
+      // expensive refinement picked winners. It was measured contributing NOTHING, four times:
+      //
+      //   Ozzy lvl62   survey 24 -> 11,809,928 in 166.8s   (15,163 evals)
+      //                survey  8 -> 11,809,928 in  85.8s   ( 7,351 evals)
+      //                survey  0 -> 11,809,928 in  66.1s   ( 3,885 evals)
+      //   Borge lvl60  survey  0 -> 142,839,497 in 56.7s -- EXACTLY the best allocation known for
+      //                that account, the one the full pipeline reproduces.
+      //
+      // Same answers, 2.5x the time. Refinement converges to the same place from any of the top
+      // few screened candidates, so the survey's ranking work was discarded -- it was the single
+      // largest cost in the search and it moved no number. What remains is one cheap tuning round
+      // to give refinement a sane starting point, then refinement itself.
+      //
+      // The coverage lever is now REFINEMENT width, which is the stage that demonstrably decides
+      // the answer.
       // Screening scores each support at a canonical fill, which says little about what that
       // support can do once its depth is tuned. The survey gives each contender a cheap, equal
       // shot at showing its real potential before the expensive tier picks winners.
       const surveyed = [];
-      const toSurvey = screened.slice(0, SURVEY_SUPPORTS);
-      for (let i = 0; i < toSurvey.length; i++) {
-        if (shouldCancel()) throw new Cancelled();
-        report('survey', i, toSurvey.length);
-        const c = toSurvey[i];
-        surveyed.push({
-          // TWO sweeps. Cutting this to one was tried as a speed measure -- it saved ~1,000
-          // evaluations and produced an identical answer on the build it was tested against, but a
-          // sweep count is COVERAGE, and a coverage cut can only ever fail by returning a worse
-          // build on some OTHER input. It was reverted after exactly that was reported.
-          ...(await optimizeJointly(ctx, budgets, seedTalents, c.attrAlloc, c.score, SURVEY_STEP_SIZES, 1,
-            pinnedAttrs, (f) => report('survey', i + f, toSurvey.length))),
-          mask: c.support.mask,
-        });
-        noteBest(surveyed[surveyed.length - 1].score);
+      // `effort` is a key from EFFORT_LEVELS, or a spec object of the same shape. The object form
+      // exists so a bench can ABLATE a stage -- measure what the pipeline returns with the survey
+      // cut to nothing, say -- without editing constants and rebuilding. The UI only ever passes a
+      // key, so there is still exactly one table of shipped levels.
+      const effortSpec = (effort && typeof effort === 'object') ? effort : EFFORT_LEVELS[effort];
+      if (!effortSpec) throw new Error(`optimize(): unknown effort level "${effort}"`);
+      const surveyWidth = Number.isFinite(effortSpec.surveySupports)
+        ? effortSpec.surveySupports : screened.length;
+      // Either one pass over a fixed width (Fast), or a rung schedule that starts with every
+      // combination and concentrates on survivors (Complete). One loop serves both -- Fast is
+      // simply a single rung over a truncated list.
+      const rungs = effortSpec.rungs || [{
+        keep: surveyWidth, iterations: SCREEN_ITERATIONS, maxRounds: null,
+      }];
+      let arms = screened.slice(0, surveyWidth).map((c) => ({
+        attrAlloc: c.attrAlloc, talentAlloc: seedTalents, score: c.score, mask: c.support.mask,
+      }));
+      ctx.note(`effort "${effortSpec.label}": ${arms.length} of ${screened.length} combinations enter tuning`);
+
+      // Progress is reported across the WHOLE schedule, weighted by each rung's share of the work
+      // (arms x rounds), so the bar does not stall on the long first rung and then leap.
+      const roundsOf = (r) => (r.maxRounds === null ? MAX_ROUNDS_PER_BLOCK : r.maxRounds);
+      const TYPICAL_ROUNDS = 6;
+      const rungWork = rungs.map((r, i) => Math.min(arms.length, i === 0 ? arms.length : rungs[i - 1].keep)
+        * Math.min(roundsOf(r), TYPICAL_ROUNDS));
+      const totalWork = rungWork.reduce((x, y) => x + y, 0) || 1;
+      let workDone = 0;
+
+      for (let ri = 0; ri < rungs.length; ri++) {
+        const rung = rungs[ri];
+        const tuned = [];
+        for (let i = 0; i < arms.length; i++) {
+          if (shouldCancel()) throw new Cancelled();
+          const c = arms[i];
+          const share = (workDone + (rungWork[ri] * (i / Math.max(arms.length, 1)))) / totalWork;
+          report('survey', share * SURVEY_REPORT_SCALE, SURVEY_REPORT_SCALE);
+          const r = await optimizeJointly(
+            ctx, budgets, c.talentAlloc, c.attrAlloc, c.score, SURVEY_STEP_SIZES, 1, pinnedAttrs,
+            null, rung.iterations, roundsOf(rung),
+          );
+          tuned.push({ ...r, mask: c.mask });
+          noteBest(r.score);
+        }
+        workDone += rungWork[ri];
+        // Rank within the rung and carry the survivors forward. Scores are only ever compared
+        // against others measured at the SAME fidelity, which is what makes a cheap rung sound.
+        tuned.sort((x, y) => (y.score - x.score) || (x.mask - y.mask));
+        arms = tuned.slice(0, Math.min(rung.keep, tuned.length));
+        if (rungs.length > 1) ctx.note(`rung ${ri + 1}: ${tuned.length} -> ${arms.length} at ${rung.iterations} iterations`);
       }
+      surveyed.push(...arms);
       surveyed.sort((a, b) => (b.score - a.score) || (a.mask - b.mask));
 
       // --- Stage 2b: full fixpoint refinement of the survivors. ---------------------------
       const finalists = [];
-      const toRefine = surveyed.slice(0, REFINE_SUPPORTS);
+      // REFINEMENT WIDTH IS PART OF THE EFFORT CHOICE, not a fixed 3.
+      //
+      // Widening the SURVEY alone was measured insufficient: at Complete effort every support is
+      // surveyed, including the one that matters, and a level-62 Ozzy still came back 4.03% below
+      // the player's own build. Survey is a single-sweep probe, so a support whose value only
+      // appears under real refinement surveys poorly and misses a top-3 cut -- and refinement is
+      // demonstrably what finds it (handed that support at its flat fill, refinement reaches
+      // 39,139,365, 8.4% above the player's build).
+      const refineWidth = Math.min(effortSpec.refineSupports, surveyed.length);
+      const toRefine = surveyed.slice(0, refineWidth);
       for (let i = 0; i < toRefine.length; i++) {
         if (shouldCancel()) throw new Cancelled();
         report('refine', i, toRefine.length + 1);
@@ -617,97 +716,25 @@
       // Survey results that didn't make the refinement cut still compete -- they are complete,
       // legal allocations, just less thoroughly tuned. Keeping them costs nothing at Stage 3
       // and removes any chance the cut discards an outright winner.
-      finalists.push(...surveyed.slice(REFINE_SUPPORTS));
+      finalists.push(...surveyed.slice(refineWidth));
 
-      // The build the user started with is refined on identical terms and competes as a
-      // finalist. This is the only reason the optimizer can never hand back a downgrade: the
-      // incumbent is in the same race, judged by the same Stage 3 measurement.
-      if (cfg.currentTalents && cfg.currentAttrs) {
-        report('refine', toRefine.length, toRefine.length + 1);
-        const incumbentAttrs = { ...cfg.currentAttrs };
-        Space.clearInvalidDescendants(ATTRIBUTES, deps, minVal, incumbentAttrs);
-        const incumbentTalents = { ...cfg.currentTalents };
-
-        // TOP THE INCUMBENT UP BEFORE IT COMPETES. It is the user's saved build, which may well
-        // be under-spent -- a level-58 Borge build sitting at 46 of 58 talent points is a normal
-        // thing to have. Entered as-is it can win Stage 3 on merit and hand back a build with 12
-        // points still unspent, which is never the right answer: those points are free value.
-        // Nothing else in the pipeline could rescue it either, because a transfer moves points
-        // rather than adding them, and fillLeftover refuses to open new nodes.
-        //
-        // The top-up is by MEASURED MARGINAL VALUE, not declaration order -- see greedyTopUp.
-        // Attributes are topped up first, against the incumbent's own talents, and the talents
-        // then against the resulting attributes, so each half is filled against the best picture
-        // of the other that is available at the time.
-        const toppedAttrs = await greedyTopUp(
-          ctx, ATTRIBUTES, deps, minVal, attrBudget, incumbentAttrs,
-          (a) => ({ talentAlloc: incumbentTalents, attrAlloc: a }),
-        );
-        Object.assign(incumbentAttrs, toppedAttrs);
-        const toppedTalents = await greedyTopUp(
-          ctx, TALENTS, noDeps, noMin, talentBudget, incumbentTalents,
-          (t) => ({ talentAlloc: t, attrAlloc: incumbentAttrs }),
-        );
-        Object.assign(incumbentTalents, toppedTalents);
-        if (pinnedAttrs.length) {
-          Object.assign(incumbentAttrs, applyPins(ATTRIBUTES, deps, minVal, attrBudget, incumbentAttrs, pinnedAttrs));
-        }
-        const [startScore] = await ctx.score([{ talentAlloc: incumbentTalents, attrAlloc: incumbentAttrs }], SCREEN_ITERATIONS);
-        finalists.push(await optimizeJointly(ctx, budgets, incumbentTalents, incumbentAttrs, startScore, STEP_SIZES, 6, pinnedAttrs));
-        // Also carry the incumbent through UNREFINED, so the result is provably never worse
-        // than what the user already had, even if every refinement path leads somewhere weaker.
-        finalists.push({ talentAlloc: incumbentTalents, attrAlloc: incumbentAttrs, score: startScore });
-
-        // --- Stage 2c: the TALENT structural choice, enumerated. --------------------------
-        // Stage 1 enumerates attribute supports because a heuristic cannot be trusted to pick
-        // which nodes get funded at all. The talent block had no equivalent: it started from one
-        // flat fill and hill-climbed, and on a threshold talent that is not enough -- coordinate
-        // exchange strips a talent that is worthless at low level and cannot rebuild it, because
-        // every intermediate pairwise transfer scores worse than staying put.
-        //
-        // These are screened against the incumbent's TOPPED-UP ATTRIBUTES rather than a neutral
-        // fill, and that is load-bearing rather than incidental. Measured on the level-31 Knox
-        // above, the winning talent support ranks 152nd of 178 against a neutral attribute fill
-        // and 151st against the right attribute support at its FLAT fill -- it only surfaces
-        // (ranked 1st) once the attributes carry their real DEPTH. The coupling runs one way:
-        // attributes are learnable from a flat talent seed, talents are not learnable from a flat
-        // attribute seed, so the talent enumeration has to come after the attributes are real.
-        //
-        // These are additional finalists, never replacements, so Stage 3 still takes the maximum
-        // and this pass cannot make any build worse than it was.
-        const screenedTalents = await bestTalentSupportsFor(
-          ctx, incumbentAttrs, TALENTS, talentBudget, BATCH, shouldCancel,
-        );
-        if (!screenedTalents.length) {
-          ctx.note(`talent support enumeration produced nothing (${TALENTS.length} talents)`);
-        } else {
-
-          // REFINE ONLY IF SOMETHING HERE COULD ACTUALLY WIN. The screen is cheap -- one
-          // evaluation per support -- but each refinement is a full joint fixpoint, and running
-          // three of those on every optimize would be a large, permanent cost paid mostly by
-          // builds that gain nothing. The incumbent's own talents were just screened at the same
-          // fidelity against the same attributes, so the comparison is like for like.
-          //
-          // On the two builds this pass was built from, the gate does exactly what it should:
-          // the level-31 Knox screens its best talent support at 37,090 against an incumbent at
-          // roughly 5,200 and proceeds, while the level-38 Borge screens 51,993 against an
-          // incumbent already at 63,583 and skips -- and that Borge is fixed by the top-up alone,
-          // so nothing is lost by skipping. The screen is a ranking surrogate rather than a
-          // verdict, which is why the gate asks only whether the BEST candidate beats the
-          // incumbent, not whether each individual one does.
-          if (screenedTalents[0].score <= startScore) {
-            ctx.note('talent support refinement skipped: none screens above the incumbent');
-          } else {
-            for (const c of screenedTalents) {
-              if (shouldCancel()) throw new Cancelled();
-              finalists.push(await optimizeJointly(
-                ctx, budgets, c.fill, incumbentAttrs, c.score, STEP_SIZES, 6, pinnedAttrs,
-              ));
-            }
-          }
-        }
-      }
-
+      // THE OPTIMIZER DOES NOT LOOK AT THE BUILD YOU ARE EDITING. AT ALL.
+      //
+      // It used to: the current build was topped up, refined and entered as a competing finalist,
+      // which guaranteed the result could never be worse than what you already had. That guarantee
+      // is worth less than it sounds and cost more than it was worth -- it made the ANSWER DEPEND
+      // ON WHERE YOU STARTED, which is precisely what an optimizer must not do.
+      //
+      // Measured on a level-62 Ozzy: with the build competing the search returned 36,093,953 (the
+      // player's own allocation, unchanged); with it removed, 11,809,928. Same account, same level,
+      // same budget -- a 3x spread decided entirely by what happened to be in the editor. It also
+      // masked the real defect for most of a day, because every UI run silently passed while the
+      // search itself was failing.
+      //
+      // So the search now answers one question only: given this account and this level, what is
+      // the best build? If that is worse than what the player already has, the honest response is
+      // to fix the search -- not to quietly hand their own build back and call it an optimization.
+      //
       // --- Stage 3: full-fidelity decision. -----------------------------------------------
       report('final', 0, 1);
       const unique = [];
@@ -824,6 +851,7 @@
   const Optimizer = {
     optimize, SCREEN_ITERATIONS, FINAL_ITERATIONS,
     SURVEY_SUPPORTS, REFINE_SUPPORTS, STEP_SIZES, SURVEY_STEP_SIZES,
+    EFFORT_LEVELS, DEFAULT_EFFORT,
     // Exposed so a bench can measure ONE support's tuning in isolation. The search's own stages
     // all call this same function -- there is no second implementation to drift from it.
     optimizeJointly,

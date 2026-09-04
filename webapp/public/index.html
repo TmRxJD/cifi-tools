@@ -526,9 +526,16 @@
       <select id="optimizeMode" class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white"></select>
       <p id="optimizeModeHelp" class="text-xs text-gray-400 mt-1"></p>
     </div>
+    <div class="mb-3">
+      <label class="block text-sm text-gray-300 mb-1">Search effort</label>
+      <!-- Rendered from optimizer/search.js's EFFORT_LEVELS, so a level cannot appear here
+           without the optimizer implementing it. -->
+      <select id="optimizeEffort" class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white"></select>
+      <p id="optimizeEffortHelp" class="text-xs text-gray-400 mt-1"></p>
+    </div>
     <p class="mb-3 text-xs text-gray-400">
-      Every legal combination of attributes is enumerated and the strongest are tuned to a
-      fixpoint, so there is nothing to configure &mdash; the same build always produces the same
+      Every legal combination of attributes is enumerated; search effort decides how many are
+      tuned before the best are refined. The same build and effort always produce the same
       result. Higher-level builds take longer.
     </p>
     <div class="flex justify-end gap-2 mt-4">
@@ -566,16 +573,16 @@
 <script src="icons.js?v=20260810p"></script>
 <script src="hunterDefs.js?v=20260903a"></script>
 <script src="shipSchema.js?v=20260810p"></script>
-<script src="accountState.js?v=20260903a"></script>
+<script src="accountState.js?v=20260904y"></script>
 <script src="shipsPage.js?v=20260903a"></script>
 <script src="upgradeEffects.js?v=20260810p"></script>
 <script src="hunterSimBrowser.js?v=20260903l"></script>
 <script src="optimizer/space.js?v=20260904c"></script>
 <script src="optimizer/objective.js?v=20260903c"></script>
 <!-- storeSchema depends on HUNTER_DEFS (hunterDefs.js) and AllocSpace (optimizer/space.js). -->
-<script src="storeSchema.js?v=20260904r"></script>
-<script src="optimizer/search.js?v=20260904w"></script>
-<script src="optimizer/runner.js?v=20260903f"></script>
+<script src="storeSchema.js?v=20260904y"></script>
+<script src="optimizer/search.js?v=20260905d"></script>
+<script src="optimizer/runner.js?v=20260904x"></script>
 <script src="saveImport.js?v=20260903a"></script>
 <script src="buildCode.js?v=20260810p"></script>
 <script src="costFormulas.js?v=20260810q"></script>
@@ -583,7 +590,7 @@
 <script src="hunterStatPath.js?v=20260810p"></script>
 <script src="hunterStatPathBrowser.js?v=20260810r"></script>
 <script src="hunterStatPathPage.js?v=20260810r"></script>
-<script src="app.js?v=20260904r"></script>
+<script src="app.js?v=20260904x"></script>
 <script>
   // Custom (non-Tabler) sidebar icons: real game-asset SVG paths copied verbatim from the
   // live site's rendered DOM (Relics/Loop Mods/Milestones use bespoke icons, not Tabler's).

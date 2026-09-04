@@ -109,7 +109,7 @@
    * @param {object} options  { mode, onProgress, shouldCancel, poolSize }
    * @returns the search result: { best, ranked, evals, cacheHits, notes, cancelled }
    */
-  async function runOptimizer(cfg, { mode = 'loot', onProgress = () => {}, shouldCancel = () => false, poolSize } = {}) {
+  async function runOptimizer(cfg, { mode = 'loot', effort, onProgress = () => {}, shouldCancel = () => false, poolSize } = {}) {
     const size = poolSize || Math.max(2, Math.min(MAX_POOL_SIZE, (navigator.hardwareConcurrency || 4) - 1));
     const pool = new ScoringPool(cfg, mode, size);
     try {
@@ -126,6 +126,9 @@
       }
       return await global.HunterOptimizer.optimize(cfg, {
         mode,
+        // Omitted rather than defaulted here: optimize() owns DEFAULT_EFFORT, so there is one
+        // place that decides what an unspecified effort means.
+        ...(effort ? { effort } : {}),
         scorer: (pairs, iterations) => pool.score(pairs, iterations),
         onProgress,
         shouldCancel,
