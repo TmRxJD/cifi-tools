@@ -394,7 +394,15 @@
       let improved = true;
       while (improved) {
         if (ctx.shouldCancel()) throw new Cancelled();
-        if (++rounds > maxRounds) { ctx.note(`block hit MAX_ROUNDS_PER_BLOCK at step ${step}`); break; }
+        // Only the EMERGENCY cap is worth reporting. A rung deliberately caps a block at one or
+        // two rounds, and reporting that as "hit MAX_ROUNDS_PER_BLOCK" made a normal run look
+        // pathological -- 12 such notes per run, which read as refinement churning without
+        // converging. Raising the real cap from 400 to 3000 changed nothing (byte-identical
+        // score and evaluation count), which is what proved the notes were spurious.
+        if (++rounds > maxRounds) {
+          if (maxRounds === MAX_ROUNDS_PER_BLOCK) ctx.note(`block hit MAX_ROUNDS_PER_BLOCK at step ${step}`);
+          break;
+        }
         improved = false;
 
         const moves = [];
@@ -780,7 +788,8 @@
         report('refine', i, toRefine.length + 1);
         const c = toRefine[i];
         finalists.push(await optimizeJointly(ctx, budgets, c.talentAlloc, c.attrAlloc, c.score, STEP_SIZES, 6,
-          pinnedAttrs, (f) => report('refine', i + f, toRefine.length + 1)));
+          pinnedAttrs, (f) => report('refine', i + f, toRefine.length + 1), SCREEN_ITERATIONS,
+          effortSpec.refineMaxRounds || MAX_ROUNDS_PER_BLOCK));
         noteBest(finalists[finalists.length - 1].score);
 
         // THE MEASURED RE-FILL AND TALENT-SUPPORT ENUMERATION USED TO LIVE HERE. Removed as dead
@@ -869,7 +878,14 @@
         }
         // No allocation to strip any more -- optimizerCfg stopped carrying the current build.
         const crossCfg = { ...cfg };
-        const crossRes = await optimize(crossCfg, { mode: crossMode, effort, scorer: crossScorer, shouldCancel });
+        // A CHEAP search, not the caller's. Its job is to produce a BOSS-CAPABLE build; the
+        // answer is then refined again under the caller's objective and judged as an ordinary
+        // finalist, so thoroughness here is largely redundant. Measured on a level-60 Borge, where
+        // the pass fires legitimately (the build does not kill the boss it reaches) and its
+        // candidate never wins: the pass was most of an 80s -> 116s regression.
+        const crossEffort = { surveySupports: 3, refineSupports: 1,
+          rungs: [{ keep: 3, iterations: SCREEN_ITERATIONS, maxRounds: 1 }] };
+        const crossRes = await optimize(crossCfg, { mode: crossMode, effort: crossEffort, scorer: crossScorer, shouldCancel });
         if (crossRes.best) {
           evals += crossRes.evals;
           // Refine it under THIS objective before it competes -- the boss search stopped caring

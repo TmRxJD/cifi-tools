@@ -88,7 +88,18 @@
     }
 
     terminate() {
-      this.workers.forEach((w) => w.terminate());
+      // DROP EVERY REFERENCE, not just the workers. Each worker holds a compiled WASM module and
+      // an instance; the browser reclaims that lazily, so anything still pointing at a terminated
+      // worker keeps its memory alive. Three optimize runs in one page session were enough to hit
+      // "Cannot allocate Wasm memory for new instance" -- a user pressing Optimize a third time
+      // without reloading, which is entirely ordinary.
+      this.workers.forEach((w) => {
+        w.onmessage = null;
+        w.onerror = null;
+        w.terminate();
+      });
+      this.workers.length = 0;
+      this.readyPromises.length = 0;
       this.pending.clear();
     }
   }
@@ -139,7 +150,17 @@
         scorerFor: async (crossMode, ctxOverride) => {
           const key = `${crossMode}|${JSON.stringify(ctxOverride || null)}`;
           if (!crossPools.has(key)) {
-            const crossPool = new ScoringPool(cfg, crossMode, size, ctxOverride);
+            // HALF SIZE, AND AT LEAST 2. A cross-seed pool is a SECOND set of workers, each
+            // holding its own WASM module, alive at the same time as the main pool -- which is
+            // precisely what MAX_POOL_SIZE exists to bound. At full size the pair exceeded the
+            // browser's wasm allocation on a level-60 Borge and the search died with
+            // "Cannot allocate Wasm memory for new instance".
+            //
+            // The pass is a single extra search whose answer is then judged like any other
+            // candidate, so halving its parallelism costs some wall clock on the builds that need
+            // it and nothing at all on the builds that skip it.
+            const crossSize = Math.max(2, Math.floor(size / 2));
+            const crossPool = new ScoringPool(cfg, crossMode, crossSize, ctxOverride);
             crossPools.set(key, crossPool);
             const err = await crossPool.ready();
             if (err) throw new Error(`Cross-seed worker failed to initialize: ${err}`);
@@ -153,6 +174,10 @@
     } finally {
       pool.terminate();
       for (const p of crossPools.values()) p.terminate();
+      crossPools.clear();
+      // Yield a macrotask before returning, so termination settles before a caller starts another
+      // run. Without it, back-to-back optimizes race the browser's reclamation.
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
   }
 
