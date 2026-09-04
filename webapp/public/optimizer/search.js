@@ -479,6 +479,20 @@
   // with a fixed seed and a fixed traversal order, so identical input gives identical output.
   // Reproducibility is the invariant; unpredictability was never the point.
 
+  //
+  // THE SEED IS FIXED FOR REPRODUCIBILITY, AND MUST BE SWEEPABLE FOR MEASUREMENT. Those are
+  // different requirements and conflating them cost a day of false conclusions.
+  //
+  // The search is deterministic: one seed, one traversal order, one answer. But it is only ONE
+  // SAMPLE of a stochastic process, and the spread across seeds was measured at roughly SEVEN
+  // PERCENTAGE POINTS on a level-62 Ozzy -- the identical configuration returned +15.34% and
+  // +8.24% on two different streams. Every single-run A/B comparison narrower than that is noise,
+  // and several were read as signal before this was noticed. The tell was there and was explained
+  // away: cell counts that went 82 -> 94 -> 83 as a share increased monotonically are not
+  // measuring the share.
+  //
+  // So a bench must be able to average over seeds. Anything comparing two configurations on ONE
+  // seed each is not a comparison.
   const ARCHIVE_SEED = 0x9e3779b9;
   // Behaviour space. Kill rate says whether a build can pass a boss at all; the stage band says how
   // far it gets. Bands rather than raw values because cells are niches, not points.
@@ -524,7 +538,23 @@
   const STRUCTURAL_SHARE = 0.35;
   // What fraction of the attribute point-moves are DAG-native depth moves rather than flat
   // transfers. Sweepable through the effort object, same as the structural share.
-  const DEPTH_SHARE = 0.6;
+  //
+  // DEFAULT ZERO, ON MEASUREMENT. Four seeds per arm on a level-62 Ozzy, archive-only so the
+  // comparison is not swamped by refinement:
+  //     ds 0.0   81.8 cells   archive best 9.384M   (flat transfers only)
+  //     ds 0.3   87.8 cells                9.271M
+  //     ds 0.6   92.5 cells                9.170M
+  //     ds 1.0   84.7 cells                9.015M   (DAG depth moves only)
+  // Coverage rises with the share and that survives averaging. Champion quality does not -- it
+  // declines, and the fully DAG-native arm is the worst of the four. The differences sit inside
+  // the 0.7-1.65M seed spread, so this is "no measured benefit", NOT "measurably worse".
+  //
+  // The hypothesis this refutes is a specific one worth recording: that flat transfers become
+  // actively harmful once the structure is right, so they should be REPLACED. The ds 1.0 arm is
+  // that replacement, and it did not win. The operator is kept because it is proven non-stranding
+  // (81.7% acceptance against 28%, zero repairs by construction) and may matter under a different
+  // refinement or fidelity regime -- but it ships off until something measures it winning.
+  const DEPTH_SHARE = 0;
   // A BOSS-DIRECTED EMITTER WAS TRIED HERE AND MEASURED USELESS. Recorded so it is not retried.
   //
   // The idea was to draw a third of parents from the elites nearest a kill, on the theory that the
@@ -683,11 +713,11 @@
    * Seeded from the enumerated supports rather than from random points: the enumeration is exact
    * and already paid for, so the archive starts with real structural coverage instead of noise.
    */
-  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, structuralShare, depthShare, report) {
+  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, structuralShare, depthShare, seed, report) {
     const stats = { rejected: 0, accepted: 0, repaired: 0, nodesCleared: 0, structural: 0,
       depthAccepted: 0, depthRejected: 0, depthOpened: 0 };
     const { TALENTS, ATTRIBUTES, talentBudget, attrBudget, deps, minVal } = spaces;
-    const rng = seededRng(ARCHIVE_SEED);
+    const rng = seededRng(seed);
     const archive = new Map();
 
     const consider = (pair, score, meta) => {
@@ -1248,9 +1278,33 @@
         // without editing constants -- the same convention the ablation hooks already use.
         Number.isFinite(effortSpec.structuralShare) ? effortSpec.structuralShare : STRUCTURAL_SHARE,
         Number.isFinite(effortSpec.depthShare) ? effortSpec.depthShare : DEPTH_SHARE,
+        Number.isFinite(effortSpec.seed) ? effortSpec.seed : ARCHIVE_SEED,
         (f) => report('survey', f * SURVEY_REPORT_SCALE, SURVEY_REPORT_SCALE),
       );
       const surveyed = elites.map((e) => ({ ...e, mask: maskOf(e.attrAlloc) }));
+
+      // ARCHIVE-ONLY: return before refinement, for measuring the MOVE SET rather than the whole
+      // pipeline. Refinement and the final polish are roughly 90% of a run's wall clock and are
+      // identical across move-set configurations, so paying for them to compare two variation
+      // operators measures mostly the part that did not change -- and it is what made a
+      // configuration sweep cost hours instead of minutes.
+      //
+      // The archive's own best score is at SCREEN_ITERATIONS, so it ranks configurations; it does
+      // NOT predict the final build. Full fidelity stays where it belongs: on the ONE configuration
+      // that wins, measured once.
+      if (effortSpec.archiveOnly) {
+        const bands = new Set(surveyed.map((e) => String(e.cell).split(':')[0]));
+        return {
+          best: surveyed[0],
+          archiveOnly: true,
+          cells: surveyed.length,
+          killBands: bands.size,
+          bestKill: surveyed.reduce((m, e) => Math.max(m, e.kill || 0), 0),
+          bestScore: surveyed[0] ? surveyed[0].score : 0,
+          evals,
+          notes,
+        };
+      }
 
       // --- Stage 2b: full fixpoint refinement of the survivors. ---------------------------
       const finalists = [];
