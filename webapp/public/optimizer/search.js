@@ -482,10 +482,58 @@
   const ARCHIVE_SEED = 0x9e3779b9;
   // Behaviour space. Kill rate says whether a build can pass a boss at all; the stage band says how
   // far it gets. Bands rather than raw values because cells are niches, not points.
-  const KILL_BANDS = [0, 1, 10, 25, 50, 75, 95];
-  const ARCHIVE_STAGE_BAND = 25;
+  //
+  // RESOLUTION IS WHAT MAKES AN ARCHIVE AN ARCHIVE. The first version used 7 kill bands and
+  // 25-stage bands and filled FIVE cells from 1200 variations -- so nearly every child competed
+  // against the same handful of elites and the diversity pressure that justifies the whole method
+  // was not actually being applied. Coarse cells are not a conservative choice; they are a
+  // degenerate one.
+  const KILL_BANDS = [0, 1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 99];
+  const ARCHIVE_STAGE_BAND = 5;
+  // THE THIRD AXIS IS CONCENTRATION, and it is the one this repo's own notes predict matters most:
+  // "concentration is what crosses a threshold, and a narrow support concentrates for free". A
+  // build that dumps its budget into one attribute and one that spreads it evenly can reach the
+  // same stage with the same kill rate while being completely different builds -- and crossing
+  // between them is exactly the move coordinate exchange cannot make. Without this axis they share
+  // a cell and one of them is discarded.
+  const CONCENTRATION_BANDS = 6;
   const ARCHIVE_BATCH = 48;            // large enough to keep the worker pool saturated
   const ARCHIVE_CROSSOVER = 0.25;
+  // POINT TRANSFERS CANNOT NAVIGATE A THRESHOLD TREE, AND THAT -- NOT BOSS CAPABILITY -- IS WHY
+  // THE ARCHIVE STAYED EMPTY FOR TWO OF THREE HUNTERS.
+  //
+  // Measured, same account, same 4800 variations, at Complete effort:
+  //     borge@60   571 cells   14 kill bands   best kill 99     0.00%
+  //     ozzy@62     50 cells    1 kill band    best kill  0   -66.27%
+  //     knox@26     28 cells    1 kill band    best kill  0    -1.39%
+  // An archive that fills 571 cells is exploring; one that fills 50 is not. Borge reaches the
+  // boss region by ordinary variation with no help at all, so the boss region is not intrinsically
+  // unreachable -- the MOVE SET is what differs.
+  //
+  // Ozzy is the hunter with real tier thresholds (0/90/150/180). `Space.transfer` legalises its
+  // result by ZEROING stranded descendants, so a random transfer out of a threshold build usually
+  // either fails outright or demolishes the structure that made the build worth anything -- and
+  // the child comes back indistinguishable from its parent. Thousands of variations then explore
+  // almost nothing.
+  //
+  // So a share of children are generated STRUCTURALLY: pick one of the already-enumerated
+  // dependency-closed supports and fill it, rather than nudging points inside the support the
+  // parent happens to have. The enumeration is exact and already paid for, `gatePayingFill` knows
+  // how to pay a tier threshold, and this is pure exploration -- it is not directed at the boss or
+  // at any objective, so it cannot collapse the search into a basin.
+  const STRUCTURAL_SHARE = 0.35;
+  // A BOSS-DIRECTED EMITTER WAS TRIED HERE AND MEASURED USELESS. Recorded so it is not retried.
+  //
+  // The idea was to draw a third of parents from the elites nearest a kill, on the theory that the
+  // archive was failing to REACH the boss region. On a real level-62 Ozzy account it made coverage
+  // WORSE -- 2 kill bands became 1 -- and the note read "best kill rate reached 0" across all 4800
+  // variations, against an account build sitting at kill 67.2.
+  //
+  // The reason is worth keeping: when every elite has kill 0 and full boss HP, "nearest a kill" is
+  // not an ordering at all, so there was nothing to steer by. Biasing parent selection cannot
+  // create a gradient that the population does not already contain.
+  //
+  // The real defect was variation, not selection -- see STRUCTURAL_SHARE below.
   const ARCHIVE_MAX_MOVES = 6;
 
   function seededRng(seed) {
@@ -499,7 +547,21 @@
   }
 
   /** Which archive cell a result belongs to, from the metadata every score already carries. */
-  function cellOf(meta) {
+  /** How concentrated an allocation is: the share of spend sitting in its single largest node. */
+  function concentrationBand(defs, alloc) {
+    let total = 0;
+    let top = 0;
+    for (const d of defs) {
+      const v = (alloc[d.id] || 0) * (d.cost || 1);
+      total += v;
+      if (v > top) top = v;
+    }
+    if (total <= 0) return 0;
+    const share = top / total;
+    return Math.min(CONCENTRATION_BANDS - 1, Math.floor(share * CONCENTRATION_BANDS));
+  }
+
+  function cellOf(meta, defs, attrAlloc) {
     // A missing descriptor is a PLUMBING FAULT, not a niche. Returning a placeholder cell for it
     // makes every candidate a neighbour of every other and turns the archive into a hill climb
     // that still returns a plausible-looking build -- the exact failure this replaced. Throw.
@@ -508,7 +570,8 @@
     }
     let killBand = 0;
     for (let i = 0; i < KILL_BANDS.length; i++) if (meta.kill >= KILL_BANDS[i]) killBand = i;
-    return killBand + ':' + Math.floor(meta.maxStage / ARCHIVE_STAGE_BAND);
+    return killBand + ':' + Math.floor(meta.maxStage / ARCHIVE_STAGE_BAND)
+      + ':' + concentrationBand(defs, attrAlloc);
   }
 
   /** One legal transfer within a block, drawn from the same move set the refiner uses. */
@@ -531,17 +594,23 @@
    * Seeded from the enumerated supports rather than from random points: the enumeration is exact
    * and already paid for, so the archive starts with real structural coverage instead of noise.
    */
-  async function illuminate(ctx, spaces, seeds, pinnedAttrs, evalBudget, report) {
+  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, report) {
     const { TALENTS, ATTRIBUTES, talentBudget, attrBudget, deps, minVal } = spaces;
     const rng = seededRng(ARCHIVE_SEED);
     const archive = new Map();
 
     const consider = (pair, score, meta) => {
       if (!Number.isFinite(score)) return;
-      const cell = cellOf(meta);
+      const cell = cellOf(meta, ATTRIBUTES, pair.attrAlloc);
       const held = archive.get(cell);
       if (!held || score > held.score) {
-        archive.set(cell, { talentAlloc: pair.talentAlloc, attrAlloc: pair.attrAlloc, score });
+        archive.set(cell, {
+          talentAlloc: pair.talentAlloc,
+          attrAlloc: pair.attrAlloc,
+          score,
+          kill: meta.kill,
+          hp: Number.isFinite(meta.hp) ? meta.hp : 100,
+        });
       }
     };
     // SEEDS MUST BE COMPLETE PAIRS. Screening varies attributes against a fixed talent seed, so a
@@ -567,6 +636,20 @@
         const parent = elites[Math.floor(rng() * elites.length)];
         let t = { ...parent.talentAlloc };
         let a = { ...parent.attrAlloc };
+        // Structural resample: adopt a whole different support, filled two ways (gate-paying when
+        // the support has a threshold to pay, canonical otherwise). This is the move that a
+        // sequence of point transfers cannot make.
+        if (supports.length && rng() < STRUCTURAL_SHARE) {
+          const pick = supports[Math.floor(rng() * supports.length)];
+          const ids = pick.support ? pick.support.ids : pick.ids;
+          const filled = (rng() < 0.5)
+            ? gatePayingFill(ATTRIBUTES, deps, minVal, attrBudget, ids)
+            : Space.canonicalFill(ATTRIBUTES, deps, minVal, attrBudget, ids, true);
+          if (filled && Space.isLegal(ATTRIBUTES, deps, minVal, filled, attrBudget)
+            && pinsHeld(ATTRIBUTES, filled, pinnedAttrs)) {
+            a = filled;
+          }
+        }
         // Crossing a boss-capable elite with a farming one is how ONE search reaches builds that
         // neither parent's basin contains -- which is what the cross-seed pass was doing by hand.
         if (elites.length > 1 && rng() < ARCHIVE_CROSSOVER) {
@@ -597,8 +680,13 @@
       spent += batch.length;
     }
 
-    ctx.note(`archive: ${archive.size} behaviour cells filled from ${spent} variations`);
-    return [...archive.values()].sort((x, y) => y.score - x.score);
+    const bands = new Set([...archive.keys()].map((k) => k.split(':')[0]));
+    const bestKill = [...archive.values()].reduce((m, e) => Math.max(m, e.kill || 0), 0);
+    ctx.note(`archive: ${archive.size} cells across ${bands.size} kill bands from ${spent} `
+      + `variations (best kill rate reached ${bestKill})`);
+    return [...archive.entries()]
+      .map(([cell, e]) => ({ ...e, cell }))
+      .sort((x, y) => y.score - x.score);
   }
 
   // Every talent support, the same way attribute supports are enumerated.
@@ -1050,6 +1138,7 @@
         screened.map((c) => ({
           talentAlloc: seedTalents, attrAlloc: c.attrAlloc, score: c.score, boss: c.boss,
         })),
+        realizable,
         pinnedAttrs,
         effortSpec.archiveEvals || DEFAULT_ARCHIVE_EVALS,
         (f) => report('survey', f * SURVEY_REPORT_SCALE, SURVEY_REPORT_SCALE),
@@ -1067,7 +1156,38 @@
       // demonstrably what finds it (handed that support at its flat fill, refinement reaches
       // 39,139,365, 8.4% above the player's build).
       const refineWidth = Math.min(effortSpec.refineSupports, surveyed.length);
-      const toRefine = surveyed.slice(0, refineWidth);
+      // SELECTING FROM THE ARCHIVE BY SCORE ALONE THROWS THE ARCHIVE AWAY, and it cost 66% on a
+      // real level-62 Ozzy account.
+      //
+      // The archive filled 58 behaviour cells, so the boss-capable build WAS found -- and then the
+      // refinement cut took the top 8 by score at SCREEN_ITERATIONS, where a build that has begun
+      // to engage a boss but not yet kill it scores near the bottom. Its value only appears AFTER
+      // refinement (that is the whole reason the archive keeps it), so ranking it before
+      // refinement reintroduces the exact irreversible-cut failure the archive replaced, one stage
+      // later. The result was kill 0 and 11.88M against the account's own 35.15M.
+      //
+      // So the cut is stratified by kill band: the best elite in each distinct band is taken first,
+      // strongest band first, and only then are the remaining slots filled by score. Every
+      // qualitatively different way of engaging a boss gets one refinement slot before any band
+      // gets a second.
+      const bandOf = (e) => String(e.cell).split(':')[0];
+      const byBand = new Map();
+      for (const e of surveyed) {
+        const b = bandOf(e);
+        if (!byBand.has(b) || byBand.get(b).score < e.score) byBand.set(b, e);
+      }
+      const stratified = [...byBand.values()].sort((a, b) => (Number(bandOf(b)) - Number(bandOf(a))) || (b.score - a.score));
+      const toRefine = [];
+      const takenSig = new Set();
+      const take = (e) => {
+        const sig = `${Space.signature(TALENTS, e.talentAlloc)}|${Space.signature(ATTRIBUTES, e.attrAlloc)}`;
+        if (takenSig.has(sig) || toRefine.length >= refineWidth) return;
+        takenSig.add(sig);
+        toRefine.push(e);
+      };
+      for (const e of stratified) take(e);
+      for (const e of surveyed) take(e);
+      ctx.note(`refining ${toRefine.length} elites across ${new Set(toRefine.map(bandOf)).size} kill bands`);
 
       for (let i = 0; i < toRefine.length; i++) {
         if (shouldCancel()) throw new Cancelled();
@@ -1127,7 +1247,7 @@
 
       // Survey results that did not make the refinement cut still compete: they are complete,
       // legal allocations, just less thoroughly tuned, and keeping them costs nothing at Stage 3.
-      finalists.push(...surveyed.slice(refineWidth));
+      finalists.push(...surveyed.filter((e) => toRefine.indexOf(e) === -1));
 
       // --- Stage 3: full-fidelity decision. -----------------------------------------------
       report('final', 0, 1);
