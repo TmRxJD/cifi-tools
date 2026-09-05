@@ -48,6 +48,34 @@
     const defs = global.HUNTER_DEFS[hunter];
     if (!defs) throw new Error(`AccountState: unknown hunter "${hunter}"`);
 
+    // THE STATS MUST BELONG TO THIS HUNTER, AND A MISMATCH MUST THROW RATHER THAN SCORE.
+    //
+    // Every hunter has its own base-stat vocabulary -- Ozzy has multichance/multipower/evade,
+    // Knox has block/charge/chargeGain/reload/proj, Borge has critchance/critpower. Hand one
+    // hunter's stats to another and the evaluator does NOT fail: the foreign keys resolve to
+    // nothing, the missing ones default, and it returns a perfectly plausible number for a build
+    // nobody has. That is the worst possible failure mode, and it already cost a day -- a Knox
+    // build scored with Ozzy's stats (and Ozzy's stage 201 instead of Knox's 100) read as 0.48%
+    // BELOW the account's own build, when measured correctly it is 18.48% ABOVE. A whole
+    // investigation into a Knox "refinement depth defect" chased a bug in the measurement.
+    //
+    // The trap is that `evalStateFor(build, iterations)` in app.js takes no hunter -- it reads the
+    // `currentHunter` global, which is right for the app and wrong for any bench or console script
+    // that loops over hunters. Rather than fix the call sites and hope, the check lives HERE,
+    // because every path (cfgFor, evalStateFor, the benches, the optimizer) funnels through this
+    // one constructor. It cannot be bypassed by writing a new caller.
+    if (hunterStats) {
+      const allowed = new Set(defs.baseStatKeys);
+      const foreign = Object.keys(hunterStats).filter((k) => !allowed.has(k));
+      if (foreign.length) {
+        throw new Error(`AccountState: hunterStats for "${hunter}" carries field(s) `
+          + `${foreign.join(', ')} that belong to a different hunter -- `
+          + `${hunter} declares ${defs.baseStatKeys.join(', ')}. `
+          + 'This is almost always another hunter’s stats, which would score a plausible '
+          + 'but meaningless build rather than fail.');
+      }
+    }
+
     const buildOverrides = b.overrides || {};
     // Caps are resolved ONCE, here, for this account -- never re-derived per consumer. Borge's
     // Call Me Lucky Loot caps at 12 rather than 10 once Attraction gem node 2 is owned, and a

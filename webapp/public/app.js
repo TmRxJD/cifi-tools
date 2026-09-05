@@ -313,8 +313,20 @@ function accountStateFor(hunter, build) {
   });
 }
 
+// MEASUREMENT TAKES THE HUNTER EXPLICITLY. `evalStateFor` reads the `currentHunter` global, which
+// is correct for the app -- the build on screen always belongs to the hunter on screen -- and is a
+// trap for anything else. A bench or console script that loops over hunters calling it scores every
+// build with ONE hunter's stats and returns plausible numbers for builds nobody has; that produced
+// a phantom "Knox is 0.48% short" defect that was really 18.48% ahead. AccountState now throws on a
+// stats/hunter mismatch, so this is belt and braces -- but the explicit form is what callers
+// outside the render path should use, because it states the assumption instead of inheriting it.
+function evalStateForHunter(hunter, build, iterations) {
+  if (!hunter) throw new Error('evalStateForHunter: hunter is required');
+  return window.AccountState.simState(accountStateFor(hunter, build), iterations);
+}
+
 function evalStateFor(build, iterations) {
-  return window.AccountState.simState(accountStateFor(currentHunter, build), iterations);
+  return evalStateForHunter(currentHunter, build, iterations);
 }
 
 const MAT_LABELS = ['Obsidian', 'Behlium', 'Hellish-Biomatter'];

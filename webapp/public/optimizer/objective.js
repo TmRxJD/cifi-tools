@@ -250,7 +250,59 @@
     return Object.fromEntries(Object.entries(MODES).filter(([, spec]) => !spec.pinnedAttrs));
   }
 
-  const Objective = { MODES, scoreFor, pinnedAttrsFor, pathModes, modeOrThrow, isBossLimited, bossTargetFor, contextFor, KILL_ACHIEVED_BASE };
+  /**
+   * Describe a run in terms that CANNOT be misread, because the conclusions are stated rather
+   * than left to be inferred from raw fields.
+   *
+   * THIS EXISTS BECAUSE READING THE RAW FIELDS PRODUCED TWO WRONG DIAGNOSES IN ONE SESSION.
+   * A Knox run returning `avgStage 96.1, maxStage 100, bossKillRate 0, bossHpPercent 99.996` was
+   * first reported as "already kills its stage-100 boss" (from contaminated stats) and then as
+   * "does not reach stage 100 at all" (reading the AVERAGE as the reach). Both were wrong, and the
+   * truth -- reaches the boss, does no damage to it, dies there -- was sitting in `maxStage` and
+   * `bossHpPercent` the whole time. Each misreading was about to start its own investigation.
+   *
+   * `avgStage` is where runs END ON AVERAGE. `maxStage` is how far the build GETS. They answer
+   * different questions and the names do not say so, which is the whole problem. So this returns
+   * booleans and a named regime; a report quotes a labelled fact instead of paraphrasing a number.
+   *
+   * The three regimes are the game's own, per the project owner: you reach a boss several levels
+   * before you can kill it (and until then dying to it quickly is correct play), and once you can
+   * kill it, farming it beats pushing until you can go well past. A build is only comparable to
+   * another in the same regime -- that is what made the -66.27% Ozzy builds look broken when they
+   * were the optimum of a different regime.
+   */
+  function describeRun(result, highestStageReached) {
+    if (!result) throw new Error('describeRun: result is required');
+    for (const f of ['avgStage', 'maxStage', 'minStage', 'bossKillRate', 'bossHpPercent']) {
+      if (!Number.isFinite(result[f])) throw new Error(`describeRun: result.${f} is not a number`);
+    }
+    // Which boss this run meets: the next one at or above where the run actually gets to.
+    const bossStage = Math.ceil(result.maxStage / BOSS_INTERVAL) * BOSS_INTERVAL
+      || BOSS_INTERVAL;
+    const reachesBoss = result.maxStage >= bossStage - 1e-9
+      || Math.floor(result.maxStage / BOSS_INTERVAL) >= 1;
+    const killsBoss = result.bossKillRate > 0;
+    const regime = killsBoss ? 'kills-boss'
+      : (reachesBoss ? 'reaches-cannot-kill' : 'cannot-reach-boss');
+    return {
+      regime,
+      bossStage,
+      reachesBoss,
+      killsBoss,
+      bossKillRatePct: result.bossKillRate,
+      bossHpRemainingPct: result.bossHpPercent,
+      stageMin: result.minStage,
+      stageAvg: result.avgStage,
+      stageMax: result.maxStage,
+      lootPerMin: result.lootPerMin,
+      // One line that says the whole thing, so a report cannot restate it wrongly.
+      summary: `${regime}: reaches stage ${result.maxStage.toFixed(1)} at best `
+        + `(avg ${result.avgStage.toFixed(1)}), boss at ${bossStage}, `
+        + `kill rate ${result.bossKillRate}%, boss HP left ${result.bossHpPercent.toFixed(2)}%`,
+    };
+  }
+
+  const Objective = { MODES, scoreFor, pinnedAttrsFor, pathModes, modeOrThrow, isBossLimited, bossTargetFor, contextFor, describeRun, KILL_ACHIEVED_BASE };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Objective;
   else global.OptimizerObjective = Objective;
