@@ -1919,6 +1919,48 @@ fixed traversal order give identical output for identical input.
   stated conclusions (`regime` of cannot-reach-boss / reaches-cannot-kill / kills-boss, plus
   `reachesBoss`, `killsBoss`, `stageMin/stageAvg/stageMax` and a one-line summary) so a report
   quotes a labelled fact instead of paraphrasing a number. A malformed result throws.
+- **KNOX IS A DIFFERENT OPTIMIZATION PROBLEM FROM BORGE AND OZZY, AND THAT -- NOT A SEARCH DEFECT --
+  IS WHY IT KEEPS BEHAVING DIFFERENTLY.** Measured from the resolved configs at the account's own
+  levels:
+
+  | | Borge | Ozzy | Knox |
+  |---|---|---|---|
+  | attributes | 15 | 15 | 11 |
+  | tier thresholds | 75/150/180 | 90/150/180 | **none** |
+  | dependency depth | 4 | 6 | 3 |
+  | uncapped roots | 2 | 2 | 1 |
+  | budget / total capped capacity | 0.71 | 0.78 | **0.20** |
+  | nodes the budget could max | 11 of 13 | 11 of 13 | **4 of 10** |
+  | biggest node cost-to-max / budget | 0.22 | 0.22 | **1.28** |
+
+  Borge and Ozzy can fill roughly three quarters of their space and max 11 of 13 nodes, so DEPTH IS
+  NEARLY FORCED -- most nodes end at or near cap and the real question is WHICH SUBSET to fund.
+  Thresholds and a deep dependency tree make structure the dominant lever, which is exactly what
+  support enumeration and structural resampling are built for.
+
+  Knox can fill a FIFTH of its space, can max only 4 of 10 nodes, and its `soul` node (cap 100 at
+  cost 1) costs 128% OF THE ENTIRE BUDGET on its own. With no thresholds and a depth-3 tree,
+  structure barely discriminates: the question is HOW DEEP to go in a handful of nodes. It is a
+  continuous depth/knapsack problem wearing the same interface as a subset-selection problem.
+
+  This explains every Knox symptom at once, and they stop looking like defects:
+  - the archive fills 26-29 cells against Borge's 500+, because the behaviour space genuinely IS
+    that small (stage spans ~91-100, one kill band) -- not under-exploration;
+  - structural resampling does nothing for it, because supports are not the lever;
+  - its builds sit at strict local optima that differ from the import only in DEPTH (kraken 14 vs
+    kraken 1, same support, same talents) -- 108 legal neighbours, best -0.015%;
+  - knox#12 (L22) fails the gate at -0.44% with that same shape.
+
+  **The search is currently tuned for structure selection** -- 35% structural resampling ON, depth
+  moves OFF. And the depth-move default was set from a sweep run on OZZY, with the Knox arm judged
+  on CELL COUNT, which is the wrong metric for a hunter whose behaviour space is small by nature.
+  That is the same error as every other one recorded here: a measurement that could not see the
+  thing being asked about.
+
+  **The discriminator is MEASURABLE FROM THE CONFIG, not the hunter name** -- `budget / cappedCapacity`
+  (0.20 against 0.71/0.78) or `biggestNode.costToMax / budget` (1.28 against 0.22). Any adaptation
+  must key off that, never off `hunter === 'knox'`.
+
 - **A FIXTURE MUST BE SCORED UNDER ITS OWN ACCOUNT STATE, NOT THE DEVELOPER'S -- AND DOING IT
   WRONG INFLATED A LEVEL-13 BORGE 13x.** `cfgFor(hunter, build)` reads the STORE: the current
   account's `hunterStats` and `globalUpgrades`. `cfgForImport(hunter, build)` (tools/bench) reads
