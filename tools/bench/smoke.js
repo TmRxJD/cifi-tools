@@ -43,7 +43,7 @@ const H = require('./harness.js');
   console.log(`optimizer loot score: ${result.best.score.toFixed(2)}`);
   console.log(`delta vs import     : ${(100 * (result.best.score - importScore) / importScore).toFixed(2)}%`);
   console.log(`evals ${result.evals} (+${result.cacheHits} cached), ${secs.toFixed(1)}s (${(1000 * secs / result.evals).toFixed(2)} ms/eval)`);
-  console.log(`supports: ${result.supportsEnumerated} enumerated, ${result.supportsRealizable} realizable`);
+  console.log(`supports: ${result.diag.stages.enumerate.supports} enumerated, ${result.diag.stages.enumerate.realizable} realizable`);
   result.notes.forEach((n) => console.log(`note: ${n}`));
   console.log('best talents   :', JSON.stringify(result.best.talentAlloc));
   console.log('best attributes:', JSON.stringify(result.best.attrAlloc));

@@ -3573,7 +3573,7 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
     const unchanged = AllocSpace.sameAlloc(d.talents, result.best.talentAlloc, editingBuild.talents)
       && AllocSpace.sameAlloc(d.attributes, result.best.attrAlloc, editingBuild.attributes);
     if (unchanged) {
-      alert(`Your build is already the best allocation found. Every legal attribute combination was enumerated (${result.supportsRealizable} of ${result.supportsEnumerated} are reachable at this budget) and none beat what you have.`);
+      alert(`Your build is already the best allocation found. Every legal attribute combination was enumerated (${result.diag.stages.enumerate.realizable} of ${result.diag.stages.enumerate.supports} are reachable at this budget) and none beat what you have.`);
       return;
     }
 

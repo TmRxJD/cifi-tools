@@ -4,7 +4,9 @@
 //   node tools/bench/support-rank-check.js [--sample=N] [--seed=N] [--only=ozzy#38]
 //
 // Stage 1 screens every realizable attribute support at its canonical fill; only the top
-// SURVEY_SUPPORTS get a coarse optimization and only the top REFINE_SUPPORTS get a full fixpoint.
+// NOTE: this bench predates the archive. There is no survey cut any more -- screening only SEEDS
+// the behaviour archive and cuts nothing -- so a poor rank here no longer means the support is
+// excluded. It is kept as a descriptive report of where the import's own shape screens.
 // So if the shape a real player actually used ranks below the survey cut, the optimizer never
 // refines it and cannot match that build no matter how good the local search is. The rank is
 // therefore diagnostic in a way a percentage is not: it says whether a shortfall is a SEARCH
@@ -101,7 +103,7 @@ function mulberry(a) {
     const r = await evalFast(build.talents, build.attributes, H.Optimizer.SCREEN_ITERATIONS);
     const walled = (r.bossKillRate || 0) <= 0;
 
-    const inCut = rank >= 0 && rank < H.Optimizer.SURVEY_SUPPORTS;
+    const inCut = rank >= 0 && rank < ARCHIVE_SEED_REPORT_WIDTH;
     rows.push({ fx, level: build.level, rank, total: scored.length, inCut, gated: gated.length, conc, walled });
     console.log(`${fx.uid.padEnd(36)} ${String(build.level).padEnd(4)} `
       + `${rank < 0 ? 'UNREALIZABLE' : `${rank + 1}/${scored.length}`}`.padEnd(17)
@@ -112,7 +114,7 @@ function mulberry(a) {
   const out = rows.filter((r) => !r.inCut);
   console.log('');
   console.log(`${rows.length - out.length}/${rows.length} imports screen INSIDE the survey cut `
-    + `(top ${H.Optimizer.SURVEY_SUPPORTS})`);
+    + `(top ${ARCHIVE_SEED_REPORT_WIDTH})`);
   if (out.length) {
     console.log(`\n${out.length} whose own shape the optimizer never refines:`);
     for (const r of out) {

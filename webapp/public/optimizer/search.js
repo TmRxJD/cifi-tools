@@ -102,12 +102,8 @@
   const SCREEN_ITERATIONS = 100;
   const FINAL_ITERATIONS = 1000;
 
-  // Stage 2 runs in two tiers. Every enumerated support is screened in Stage 1; SURVEY_SUPPORTS
-  // of them get a cheap coarse optimization, and only REFINE_SUPPORTS of those get the full
-  // fixpoint treatment. A single WASM evaluation costs ~11ms on a mid-level build and rises
-  // with level (it scales with how far the build progresses), so eval count is the binding
-  // constraint on wall clock -- spending the full budget on supports that the coarse tier
-  // already shows are uncompetitive buys nothing.
+  // A single WASM evaluation costs ~11ms on a mid-level build and rises with level (it scales with
+  // how far the build progresses), so EVALUATION COUNT is the binding constraint on wall clock.
   // HOW MANY SUPPORTS GET TUNED, as a user-facing choice.
   //
   // Screening scores each support at a canonical fill, and that estimate is a POOR predictor of
@@ -155,15 +151,12 @@
   const DEFAULT_EFFORT = 'fast';
   const DEFAULT_ARCHIVE_EVALS = EFFORT_LEVELS.fast.archiveEvals;
 
-  // The survey stage reports progress as a fraction of this, since a rung schedule has no single
-  // natural denominator.
+  // Illumination reports progress as a fraction of this: it has no natural denominator of its own,
+  // since the archive's size is not known until it is built.
   const SURVEY_REPORT_SCALE = 100;
-  const SURVEY_SUPPORTS = EFFORT_LEVELS.fast.refineSupports;
-  const REFINE_SUPPORTS = 3;
 
   // Transfer sizes, largest first. Large steps cross the flat regions that trap single-point
   // hill climbing; the size-1 pass at the end is what makes the fixpoint claim above true.
-  // The survey tier uses a subset -- enough to rank supports fairly, not enough to converge.
   const STEP_SIZES = [8, 4, 2, 1];
 
   // The winner's final polish, run at FINAL_ITERATIONS. Small steps only: the coarse descent has
@@ -182,10 +175,6 @@
   const POLISH_TIERS = [4, 8, 16];
 
 
-  // A boss at full health was never engaged, so "how close did it come" says nothing.
-  const BOSS_UNENGAGED_HP = 100;
-  // How many boss-capable supports join the loot leaders in the tuning pool.
-  const BOSS_CANDIDATES = 3;
 
   // How many candidate moves are scored before a block settles for the best one found so far.
   // Sized to keep the worker pool (MAX_POOL_SIZE is 6) busy while bounding what one accepted move
@@ -205,8 +194,6 @@
   // been making 16.67% of corrections across many rounds; capped at 4 it managed 0.92% and the run
   // came back 66% below the player's own build.
   const POLISH_MAX_ROUNDS = 40;
-
-  const SURVEY_STEP_SIZES = [4, 1];
 
   // Bound on improving moves per block pass. Each round applies at most one move, so this only
   // binds on pathological inputs; it is reported rather than silently swallowed.
@@ -1017,7 +1004,33 @@
     ctx.note(`moves: ${attempted} attribute transfers -- ${pct(stats.rejected)}% rejected, `
       + `${pct(stats.repaired)}% accepted-but-stranded (${stats.nodesCleared} nodes cleared); `
       + `${stats.structural} structural resamples at share ${structuralShare}`);
-    ctx.note(`illuminated from ${streams.length} merged stream(s)`);
+    ctx.note(`illuminated from ${streams.length} stream(s)`);
+    // STRUCTURED, NOT STRINGIFIED. The notes are for a human reading one run; a bench comparing
+    // twenty configurations needs numbers it can sort. Every diagnosis in this file's history was
+    // delayed by a measurement that could not see the field in question, so the record carries
+    // every counter the archive keeps -- not the ones that seem interesting today.
+    ctx.diag.archive = {
+      cells: archive.size,
+      killBands: bands.size,
+      bestKillReached: bestKill,
+      bestScore: [...archive.values()].reduce((m, e) => Math.max(m, e.score || 0), 0),
+      variations: spent,
+      streams: streams.length,
+      structuralShare,
+      depthShare,
+      selection,
+      moves: {
+        attempted: stats.rejected + stats.accepted,
+        rejected: stats.rejected,
+        accepted: stats.accepted,
+        strandedRepairs: stats.repaired,
+        nodesCleared: stats.nodesCleared,
+        structuralResamples: stats.structural,
+        depthAccepted: stats.depthAccepted,
+        depthRejected: stats.depthRejected,
+        depthOpenedNode: stats.depthOpened,
+      },
+    };
     ctx.note(`depth moves: ${stats.depthAccepted} accepted (${stats.depthOpened} opened a new node), `
       + `${stats.depthRejected} rejected -- NONE stranded, by construction; share ${depthShare}`);
     return [...archive.entries()]
@@ -1247,8 +1260,10 @@
     // neighbours constantly and separate supports converge onto overlapping allocations, so
     // this removes a large fraction of the real work rather than a rounding error.
     const cache = new Map();
+    const diag = { stages: {}, timings: {} };
     const ctx = {
       shouldCancel,
+      diag,
       note: (m) => notes.push(m),
       // BOSS METADATA RIDES ON THE RESULT ARRAY, AND THE MEMO MUST CARRY IT TOO.
       //
@@ -1395,6 +1410,7 @@
       // can re-fill the same support a different way. Only the mask survives the survey.
       const allSupports = new Map(supports.map((s) => [s.mask, s]));
       ctx.note(`${supports.length} supports enumerated, ${realizable.length} realizable within budget`);
+      diag.stages.enumerate = { supports: supports.length, realizable: realizable.length };
 
       for (let i = 0; i < realizable.length; i += BATCH) {
         if (shouldCancel()) throw new Cancelled();
@@ -1497,17 +1513,7 @@
       // NOT predict the final build. Full fidelity stays where it belongs: on the ONE configuration
       // that wins, measured once.
       if (effortSpec.archiveOnly) {
-        const bands = new Set(surveyed.map((e) => String(e.cell).split(':')[0]));
-        return {
-          best: surveyed[0],
-          archiveOnly: true,
-          cells: surveyed.length,
-          killBands: bands.size,
-          bestKill: surveyed.reduce((m, e) => Math.max(m, e.kill || 0), 0),
-          bestScore: surveyed[0] ? surveyed[0].score : 0,
-          evals,
-          notes,
-        };
+        return { best: surveyed[0], archiveOnly: true, evals, notes, diag };
       }
 
       // --- Stage 2b: full fixpoint refinement of the survivors. ---------------------------
@@ -1633,6 +1639,10 @@
         const best = fb.reduce((m, b) => Math.max(m, (b && b.kill) || 0), 0);
         const withKill = fb.filter((b) => b && b.kill > 0).length;
         ctx.note(`finalists: ${unique.length}, ${withKill} kill a boss, best kill rate ${best}`);
+        diag.finalists = {
+          count: unique.length, killing: withKill, bestKillRate: best, refined: toRefine.length,
+          refinedKillBands: new Set(toRefine.map((e) => String(e.cell).split(':')[0])).size,
+        };
       }
       const ranked = unique
         .map((f, i) => ({ talentAlloc: f.talentAlloc, attrAlloc: f.attrAlloc, score: finalScores[i] }))
@@ -1726,18 +1736,20 @@
         cacheHits,
         notes,
         cancelled: false,
-        supportsEnumerated: supports.length,
-        supportsRealizable: realizable.length,
+        // ONE diagnostic channel, not two. `supportsEnumerated`/`supportsRealizable` used to sit
+        // here as well as in the diag record -- the same numbers reported twice, which is how the
+        // two copies get to disagree.
+        diag,
       };
     } catch (err) {
-      if (err instanceof Cancelled) return { best: null, ranked: [], evals, cacheHits, notes, cancelled: true };
+      if (err instanceof Cancelled) return { best: null, ranked: [], evals, cacheHits, notes, cancelled: true, diag };
       throw err;
     }
   }
 
   const Optimizer = {
     optimize, SCREEN_ITERATIONS, FINAL_ITERATIONS,
-    SURVEY_SUPPORTS, REFINE_SUPPORTS, STEP_SIZES, SURVEY_STEP_SIZES,
+    STEP_SIZES,
     EFFORT_LEVELS, DEFAULT_EFFORT,
     // Exposed so a bench can measure ONE support's tuning in isolation. The search's own stages
     // all call this same function -- there is no second implementation to drift from it.
