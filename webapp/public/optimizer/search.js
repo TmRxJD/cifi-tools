@@ -165,6 +165,21 @@
   // schema-test asserts they agree, so the two cannot drift apart again. A bench that wants the
   // cheap configuration must now ask for it BY NAME, where the choice is visible in the diff.
   const DEFAULT_EFFORT = 'complete';
+  // EVERY KEY THE EFFORT SPEC MAY CARRY. Adding a flag to the search means adding it here, and
+  // that is deliberate friction: it is the step that makes a typo throw instead of quietly
+  // disabling the thing being measured.
+  const EFFORT_SPEC_KEYS = new Set([
+    'label', 'help',                                   // shipped-level metadata
+    'archiveEvals', 'refineSupports',                  // the two budget dials
+    // frontierShare is deliberately ABSENT: FRONTIER_SHARE is a module constant and is not read
+    // from the spec, so accepting the key would permit a flag that silently does nothing -- the
+    // exact failure this whitelist exists to catch.
+    'structuralShare', 'depthShare',                   // variation mix
+    'selection', 'seeds', 'seed',                      // parent choice + determinism
+    'clampToHeadroom', 'breakpointSpending', 'bossDamageBands', // move/descriptor flags
+    'archiveOnly',                                     // ablation: stop after illumination
+  ]);
+
   const DEFAULT_ARCHIVE_EVALS = EFFORT_LEVELS.fast.archiveEvals;
 
   // Illumination reports progress as a fraction of this: it has no natural denominator of its own,
@@ -539,6 +554,29 @@
   // same stage with the same kill rate while being completely different builds -- and crossing
   // between them is exactly the move coordinate exchange cannot make. Without this axis they share
   // a cell and one of them is discarded.
+  // BOSS DAMAGE IS A DESCRIPTOR AXIS BELOW A KILL, AND ITS ABSENCE THREW AWAY EVERY STEPPING
+  // STONE TOWARD ONE.
+  //
+  // Kill rate is a step function: it reads 0 for a build that never scratched the boss and 0 for
+  // one that left 5% of its HP. So the entire approach to a cliff occupies a SINGLE band, and the
+  // archive keeps whichever member has the most loot/min -- which is the build that farms fastest
+  // and hits the boss weakest. The candidate one step from the kill is discarded, every generation.
+  //
+  // Measured on borge@73, archive-only, 9600 variations. Kill-0 elites at the deepest stage band
+  // (300-305) span 63.1%-93.8% boss HP remaining -- a 30.6-point spread of boss damage sharing one
+  // kill band -- and NOTHING exists between 63% and a kill. The returned build leaves 67.44%; the
+  // community reference leaves 3.43% and clears it 31.7% of the time, for 39.44% more loot.
+  //
+  // CONDITIONED ON STAGE, WHICH IS WHAT MAKES IT VALID. objective.js records the measurement
+  // showing bossHpPercent is NOT a gradient on its own: it reads 0 both for a build that never
+  // reached the wall and one already past it. The same measurement found it discriminating once
+  // depth is held fixed ("where stage ties at a wall the HP reading is precisely what
+  // discriminates, 74.0 vs 47.0"). The archive key already carries a stage band, so this axis is
+  // only ever compared within one wall -- exactly the conditioning that measurement licenses.
+  // The probe above confirms it directly: bands 205-300 all read HP 0 (never engaged) and are
+  // separated from band 300+ by stage, not by this axis.
+  const BOSS_DAMAGE_BAND = 10;
+  const BOSS_DAMAGE_BANDS_MAX = 9;
   const CONCENTRATION_BANDS = 6;
   const ARCHIVE_BATCH = 48;            // large enough to keep the worker pool saturated
   const ARCHIVE_CROSSOVER = 0.25;
@@ -679,7 +717,7 @@
     return Math.min(CONCENTRATION_BANDS - 1, Math.floor(share * CONCENTRATION_BANDS));
   }
 
-  function cellOf(meta, defs, attrAlloc) {
+  function cellOf(meta, defs, attrAlloc, bossDamageBands) {
     // A missing descriptor is a PLUMBING FAULT, not a niche. Returning a placeholder cell for it
     // makes every candidate a neighbour of every other and turns the archive into a hill climb
     // that still returns a plausible-looking build -- the exact failure this replaced. Throw.
@@ -688,7 +726,17 @@
     }
     let killBand = 0;
     for (let i = 0; i < KILL_BANDS.length; i++) if (meta.kill >= KILL_BANDS[i]) killBand = i;
-    return killBand + ':' + Math.floor(meta.maxStage / ARCHIVE_STAGE_BAND)
+    // Only below a kill. Once a build kills, KILL_BANDS is already a fine-grained gradient and a
+    // second axis would split niches that the kill rate has finished distinguishing.
+    let damageBand = 0;
+    if (bossDamageBands && killBand === 0) {
+      if (!Number.isFinite(meta.hp)) {
+        throw new Error('cellOf: boss damage banding is on but the scorer returned no bossHpPercent');
+      }
+      damageBand = Math.max(0, Math.min(BOSS_DAMAGE_BANDS_MAX,
+        Math.floor((100 - meta.hp) / BOSS_DAMAGE_BAND)));
+    }
+    return killBand + ':' + damageBand + ':' + Math.floor(meta.maxStage / ARCHIVE_STAGE_BAND)
       + ':' + concentrationBand(defs, attrAlloc);
   }
 
@@ -877,7 +925,7 @@
    * Seeded from the enumerated supports rather than from random points: the enumeration is exact
    * and already paid for, so the archive starts with real structural coverage instead of noise.
    */
-  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, structuralShare, depthShare, seedList, selection, clampToHeadroom, breakpointSpending, report) {
+  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, structuralShare, depthShare, seedList, selection, clampToHeadroom, breakpointSpending, bossDamageBands, report) {
     const stats = { rejected: 0, accepted: 0, repaired: 0, nodesCleared: 0, structural: 0,
       depthAccepted: 0, depthRejected: 0, depthOpened: 0,
       breakpointClamped: 0, breakpointBlocked: 0 };
@@ -900,7 +948,7 @@
 
     const consider = (pair, score, meta) => {
       if (!Number.isFinite(score)) return;
-      const cell = cellOf(meta, ATTRIBUTES, pair.attrAlloc);
+      const cell = cellOf(meta, ATTRIBUTES, pair.attrAlloc, bossDamageBands);
       const held = archive.get(cell);
       if (!held || score > held.score) {
         archive.set(cell, {
@@ -1098,8 +1146,17 @@
 
     const bands = new Set([...archive.keys()].map((k) => k.split(':')[0]));
     const bestKill = [...archive.values()].reduce((m, e) => Math.max(m, e.kill || 0), 0);
+    // HOW FAR DID ILLUMINATION ACTUALLY GET? Loot is a CLIFF at every boss boundary (bosses stand
+    // every 100 stages and clearing one changes that stage's rewards), so a build 0.6 stages short
+    // of 300 scores ~40% below one that crosses it -- measured on borge@73, whose reference
+    // averages stage 300.50 against our 299.90 for a 39.44% loot gap. Whether the archive ever
+    // REACHED the far side of a boundary is therefore the whole question for such a build, and
+    // there was no field that answered it.
+    const bestStage = [...archive.values()].reduce((m, e) => Math.max(m, e.maxStage || 0), 0);
+    const bossBoundariesCrossed = Math.floor(bestStage / Objective.BOSS_INTERVAL);
     ctx.note(`archive: ${archive.size} cells across ${bands.size} kill bands from ${spent} `
-      + `variations (best kill rate reached ${bestKill})`);
+      + `variations (best kill rate reached ${bestKill}, furthest stage ${bestStage.toFixed(1)}, `
+      + `${bossBoundariesCrossed} boss boundary/ies crossed)`);
     const attempted = stats.rejected + stats.accepted;
     const pct = (n) => (attempted ? ((n / attempted) * 100).toFixed(1) : '0.0');
     ctx.note(`moves: ${attempted} attribute transfers -- ${pct(stats.rejected)}% rejected, `
@@ -1107,16 +1164,48 @@
       + `${stats.structural} structural resamples at share ${structuralShare}`
       + `; clampToHeadroom ${clampToHeadroom ? 'ON' : 'off'}`
       + `; breakpoint ${breakpointSpending ? 'ON' : 'off'}`
+      + `; bossDamageBands ${bossDamageBands ? 'ON' : 'off'}`
       + (breakpointSpending ? ` (${stats.breakpointClamped} clamped, ${stats.breakpointBlocked} blocked)` : ''));
     ctx.note(`illuminated from ${streams.length} stream(s)`);
     // STRUCTURED, NOT STRINGIFIED. The notes are for a human reading one run; a bench comparing
     // twenty configurations needs numbers it can sort. Every diagnosis in this file's history was
     // delayed by a measurement that could not see the field in question, so the record carries
     // every counter the archive keeps -- not the ones that seem interesting today.
+    // IS THE KILL-0 BAND ONE NICHE OR MANY? The archive collapses every non-killing build into
+    // kill band 0 no matter how much of the boss it removed, so a build leaving 5% of the boss HP
+    // and one that never scratched it compete for a single cell and the loser is discarded. Whether
+    // that actually throws away stepping stones is an empirical question about THIS archive, not a
+    // thing to assume -- so report the spread rather than reason about it.
+    //
+    // Reported PER STAGE BAND because bossHpPercent is only meaningful conditioned on depth:
+    // objective.js records the measurement showing it reads 0 both for a build that never reached
+    // the wall and one already past it. Within one stage band every build is at the same wall,
+    // which is exactly the case where that same measurement found it discriminating (74.0 vs 47.0).
+    const hpByStageBand = {};
+    for (const e of archive.values()) {
+      if (!Number.isFinite(e.kill) || e.kill > 0) continue;
+      const band = Math.floor((e.maxStage || 0) / ARCHIVE_STAGE_BAND);
+      const hp = Number.isFinite(e.hp) ? e.hp : 100;
+      const b = hpByStageBand[band] || (hpByStageBand[band] = { n: 0, minHp: Infinity, maxHp: -Infinity });
+      b.n++; b.minHp = Math.min(b.minHp, hp); b.maxHp = Math.max(b.maxHp, hp);
+    }
+    const deepestBand = Object.keys(hpByStageBand).map(Number).sort((a, b) => b - a)[0];
+    const deepest = deepestBand === undefined ? null : Object.assign(
+      { stageBand: deepestBand, stageFrom: deepestBand * ARCHIVE_STAGE_BAND }, hpByStageBand[deepestBand]);
+    if (deepest) {
+      ctx.note(`archive kill-0 depth: deepest stage band ${deepest.stageFrom}+ holds ${deepest.n} `
+        + `cell(s), boss HP left ranging ${deepest.minHp.toFixed(1)}%-${deepest.maxHp.toFixed(1)}% `
+        + `(spread ${(deepest.maxHp - deepest.minHp).toFixed(1)} points)`);
+    }
+
     ctx.diag.archive = {
       cells: archive.size,
       killBands: bands.size,
       bestKillReached: bestKill,
+      bestMaxStageReached: bestStage,
+      bossBoundariesCrossed,
+      killZeroHpByStageBand: hpByStageBand,
+      killZeroDeepest: deepest,
       // NAMED FOR ITS FIDELITY, DELIBERATELY. This is a SCREEN_ITERATIONS score, and it was
       // compared against a FINAL_ITERATIONS import score in an earlier analysis -- 779,420 against
       // 1,004,599 -- producing the confident and wrong conclusion that "the archive never finds
@@ -1130,6 +1219,7 @@
       selection,
       clampToHeadroom,
       breakpointSpending,
+      bossDamageBands,
       breakpointClamped: stats.breakpointClamped,
       breakpointBlocked: stats.breakpointBlocked,
       moves: {
@@ -1606,6 +1696,24 @@
       // ever passes a key, so there is still exactly one table of shipped levels.
       const effortSpec = (effort && typeof effort === 'object') ? effort : EFFORT_LEVELS[effort];
       if (!effortSpec) throw new Error(`optimize(): unknown effort level "${effort}"`);
+      // AN UNRECOGNISED EFFORT KEY IS A SILENT NO-OP, AND A SILENT NO-OP IN AN A/B MEASURES A LIE.
+      //
+      // Every flag here is read as `effortSpec.<name>`, so a misspelling reads `undefined`, the
+      // feature stays off, and the arm meant to have it ON returns the control's number -- which
+      // is then recorded as "measured, no effect". That is not hypothetical: `bossDamageBands` was
+      // added to illuminate's signature and to cellOf and was never passed at the call site,
+      // because the surrounding lines used `!== false` where the patch expected `=== true`. It
+      // read as fully wired at three of four sites.
+      //
+      // The top-level options object is already whitelisted for exactly this reason
+      // (OPTIMIZE_OPTIONS); the effort spec is the other half and had no such check.
+      if (effort && typeof effort === 'object') {
+        const unknown = Object.keys(effortSpec).filter((k) => !EFFORT_SPEC_KEYS.has(k));
+        if (unknown.length) {
+          throw new Error(`optimize(): unknown effort option(s) ${unknown.join(', ')}; `
+            + `known keys are ${[...EFFORT_SPEC_KEYS].sort().join(', ')}`);
+        }
+      }
 
       // --- Stage 2a: ILLUMINATE THE BEHAVIOUR SPACE. --------------------------------------
       //
@@ -1647,6 +1755,10 @@
         // Confirmed at the shipped effort (9600/8) as well as at 2400/4, with the same answer, so
         // it is not a budget artefact. Opt OUT with effort.breakpointSpending === false.
         effortSpec.breakpointSpending !== false,
+        // OFF until measured end-to-end. Cell count is NOT the metric -- this repo has already
+        // measured a move set that raised coverage and LOWERED champion quality, so the arm that
+        // wins has to win on returned loot.
+        effortSpec.bossDamageBands === true,
         (f) => report('survey', f * SURVEY_REPORT_SCALE, SURVEY_REPORT_SCALE),
       );
       const surveyed = elites.map((e) => ({ ...e, mask: maskOf(e.attrAlloc) }));

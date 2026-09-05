@@ -41,6 +41,16 @@ const LOCAL = [
   'inscryption-slot-test', 'scene-defs-test',
   'path-relic-test', 'path-abort-test', 'route-test', 'gate-visibility-check',
   'underspend-test',
+  // SEARCH-SIDE INVARIANTS. These were written for the borge@73 investigation and each one caught
+  // a real defect while being written, which is the argument for running them every time:
+  //   describe-run-check  -- describeRun labelled a stage-303 run "boss at 400", contradicting the
+  //                          kill rate printed beside it, in exactly the case a boss diagnosis reads
+  //   effort-option-check -- a misspelled effort flag silently disabled the feature under test, so
+  //                          an A/B would have recorded the control's number as "no effect"
+  //   boss-parity-check   -- the optimizer must never clear fewer bosses than the build it is given
+  'describe-run-check', 'effort-option-check', 'boss-parity-check',
+  // Structural/self-audit gates that existed but were in no list, so nothing ran them.
+  'config-sanity-check', 'guard-liveness-check',
 ];
 
 // Gates that compare against the live cifi-tools bundle; they need --bundle=.

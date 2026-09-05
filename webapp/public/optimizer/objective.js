@@ -226,11 +226,20 @@
     for (const f of ['avgStage', 'maxStage', 'minStage', 'bossKillRate', 'bossHpPercent']) {
       if (!Number.isFinite(result[f])) throw new Error(`describeRun: result.${f} is not a number`);
     }
-    // Which boss this run meets: the next one at or above where the run actually gets to.
-    const bossStage = Math.ceil(result.maxStage / BOSS_INTERVAL) * BOSS_INTERVAL
-      || BOSS_INTERVAL;
-    const reachesBoss = result.maxStage >= bossStage - 1e-9
-      || Math.floor(result.maxStage / BOSS_INTERVAL) >= 1;
+    // WHICH BOSS THE REPORTED KILL RATE IS ABOUT -- and this was WRONG, in the one case that
+    // matters most. It rounded UP (`ceil`), so a build reaching stage 303.8 was labelled
+    // "boss at 400, kill rate 31.7%". It cannot have a kill rate against the 400 boss; it never
+    // gets there. 31.7% is the rate at which it clears the boss at 300, which is exactly how it
+    // ends up past 300 in the first place. The label contradicted the number beside it.
+    //
+    // The boss a run CONTESTS is the deepest boundary it actually reached, which is the floor:
+    //     dies at 300.0   -> 300   (met it, killed none of the time)
+    //     reaches 303.8   -> 300   (met it, killed 31.7% of the time, so some runs went past)
+    //     reaches  99.7   ->   0   (never met one)
+    // `ceil` agrees with `floor` for the first and third of those and disagrees for the second --
+    // the boss-clearing build, i.e. precisely the case a boss investigation is looking at.
+    const bossStage = Math.floor(result.maxStage / BOSS_INTERVAL) * BOSS_INTERVAL;
+    const reachesBoss = bossStage >= BOSS_INTERVAL;
     const killsBoss = result.bossKillRate > 0;
     const regime = killsBoss ? 'kills-boss'
       : (reachesBoss ? 'reaches-cannot-kill' : 'cannot-reach-boss');
@@ -247,7 +256,8 @@
       lootPerMin: result.lootPerMin,
       // One line that says the whole thing, so a report cannot restate it wrongly.
       summary: `${regime}: reaches stage ${result.maxStage.toFixed(1)} at best `
-        + `(avg ${result.avgStage.toFixed(1)}), boss at ${bossStage}, `
+        + `(avg ${result.avgStage.toFixed(1)}), `
+        + (reachesBoss ? `boss contested ${bossStage}, ` : 'no boss reached, ')
         + `kill rate ${result.bossKillRate}%, boss HP left ${result.bossHpPercent.toFixed(2)}%`,
     };
   }
