@@ -89,7 +89,19 @@ bench that cannot exit non-zero is decorative regardless of what it prints.
 
 ### D. Wire everything up
 
-- [ ] **D1** Triage the 28 gates not in `all.js`: gate, report, or diagnostic tool. Wire the gates.
+- [ ] **D1** Triage the gates not in `all.js`: gate, report, or diagnostic tool. Wire the gates.
+      **The count of 28 was wrong -- MEASURED 2026-09-05, it is 46 of 107 bench files** (excluding
+      the 11 known helpers/entrypoints). Five were wired during the borge@73 work
+      (`describe-run-check`, `effort-option-check`, `boss-parity-check`, `config-sanity-check`,
+      `guard-liveness-check`), leaving 41. Many of the remainder are legitimately NOT gates --
+      `extract-*.py/js` are extractors, and `basin-probe`, `value-ledger`, `underspend-diagnose`,
+      `params-report`, `show-*` are diagnostics. The ones that look like real gates and are still
+      run by nothing:
+        attr-save-order-check, authored-value-check, budget-monotonicity-check, local-optimality,
+        pureloot-check, real-save-optimizer-check, real-account-optimizer-check, relic-arg-probe,
+        save-gate-test, save-mapping-check, search-quality-check, sirred-algorithm-check,
+        support-drift-check, support-rank-check, eval-precision-check
+      Regenerate the list with the one-liner in this file's history; do NOT hand-count it again.
       *Acceptance: `all.js` membership is complete and each omission is justified in one line.*
 - [ ] **D2** Add `config-sanity-check` and `guard-liveness-check` to `all.js` (they are gates and
       are currently not run).
