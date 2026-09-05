@@ -1846,6 +1846,45 @@ fixed traversal order give identical output for identical input.
 
 ### Known open defects
 
+- **FOUR MECHANISMS HAVE NOW BEEN MEASURED ON borge@73 AND NONE OF THEM MOVES IT. The build is the
+  standing open defect; the value is in what has been RULED OUT with numbers.**
+
+  | mechanism | result on borge@73 | archive |
+  |---|---|---|
+  | baseline | -39.44% | 477 cells |
+  | `bossDamageBands` (extra descriptor axis) | **-39.48%** | 455 cells |
+  | `paretoDepth 2` (MOME, per-cell Pareto front) | **-39.44%** | 329 cells, 447 entries |
+  | regime decomposition | machinery verified; see below | - |
+  | frontier pushing (measured earlier, on Ozzy) | broke a working seed | - |
+
+  **THE MOME RESULT IS THE INFORMATIVE ONE, BECAUSE THE MECHANISM DEMONSTRABLY WORKED.** The damage
+  role fired (447 entries against 329 cells, so 118 stepping stones were retained that the
+  single-elite archive would have discarded), coverage moved a great deal (477 -> 329), and the
+  returned build was **bit-identical**. So on this build refinement converges to the same answer
+  regardless of what the archive contains. That is consistent with the older note that Borge's
+  archive score varies 17.8% between seeds while its final build is identical every time.
+  **Conclusion: for borge@73 the archive is not the binding constraint.** Every remaining
+  archive-side idea -- richer descriptors, better retention, better parent selection -- is aimed at
+  a stage that has now been shown not to decide this build's answer. Stop proposing them without
+  first disproving this measurement.
+
+- **`bossHpPercent` READS 0 FOR TWO OPPOSITE SITUATIONS AND IT BIT AGAIN, IN NEW CODE, WITHIN AN
+  HOUR OF THE ENTRY ABOVE BEING WRITTEN.** `constraintViolation` credited `(100 - hp)` as progress
+  toward the target boss. For a build stalled AT a wall that is right. For one that CLEARED a wall
+  and died in the open stages beyond it, hp is 0 because there is no fight in progress -- and
+  crediting it gives progress 1.0, violation 0, i.e. **an unreachable regime scores FEASIBLE**.
+  Caught by the decomposition smoke test on borge@35 (`maxStage 155.2, hp 0.00, kill 0`), which
+  cleared the stage-100 boss and never came near 200. The `satisfied` column said no because it is
+  computed independently from `regimeOf`; the SCORING path would have said yes.
+  Progress is now credited only when the run ended ON a `BOSS_INTERVAL` boundary, which is what
+  "stalled at a wall" means. Pinned by five cases in `describe-run-check.js` plus a separator
+  assertion, and verified with a negative control (removing the guard fails exactly the past-a-wall
+  case).
+  **This is the fourth time this field has produced a wrong answer here.** It is not a subtle field
+  and the failures are not subtle either; treat any new use of `bossHpPercent` as a defect until it
+  states which of the two zeros it handles.
+
+
 - **BORGE@73 IS A DESCRIPTOR HOLE, NOT A SEARCH FAILURE, AND THE FIRST TWO HYPOTHESES WERE BOTH
   WRONG.** Worth reading in order, because the wrong answers were each supported by a real number.
   - *Hypothesis 1, reachability: FALSIFIED.* The archive reaches the stage-300 boss, crosses 3 boss

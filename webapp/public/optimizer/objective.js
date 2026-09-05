@@ -338,8 +338,24 @@
     const cleared = regimeOf(result);
     const short = targetBosses - cleared;
     if (short <= 0) return 0;
+    // PROGRESS IS ONLY CREDITED TO A BUILD STALLED *AT* A WALL, AND THE FIRST VERSION WAS NOT, WHICH
+    // MADE IT CALL AN UNREACHABLE REGIME FEASIBLE.
+    //
+    // bossHpPercent reads 0 in two completely different situations -- objective.js records the
+    // measurement -- and only one of them means "nearly killed it":
+    //     maxStage 300.0, hp 67.44  died AT the 300 boss, removed a third of it   <- meaningful
+    //     maxStage 155.2, hp  0.00  cleared the 100 boss, died in open stages     <- meaningless
+    // Crediting the second gives progress 1.0, so `short - progress` is 0 and a build that never
+    // came near the target scores FEASIBLE. Caught on borge@35 by the decomposition smoke test:
+    // that build reads exactly those numbers, and the subproblem aimed at 2 bosses would have
+    // accepted it while `satisfied` (computed independently from regimeOf) correctly said no.
+    //
+    // A run stalled at a wall ends ON the boss stage, so the test is whether maxStage sits on a
+    // BOSS_INTERVAL boundary. Anything else died between bosses, where the HP reading describes a
+    // fight that is not the one being constrained.
+    const onBoundary = Math.abs(result.maxStage / BOSS_INTERVAL - Math.round(result.maxStage / BOSS_INTERVAL)) < 1e-6;
     const hp = Number.isFinite(result.bossHpPercent) ? result.bossHpPercent : 100;
-    const progress = Math.max(0, Math.min(1, (100 - hp) / 100));
+    const progress = onBoundary ? Math.max(0, Math.min(1, (100 - hp) / 100)) : 0;
     return short - progress;
   }
 
