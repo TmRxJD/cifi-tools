@@ -1873,7 +1873,17 @@ fixed traversal order give identical output for identical input.
   The archive key already carries a stage band, so the axis is only ever compared within one wall.
   The probe confirms it directly rather than by argument: bands 205-300 all read HP 0 and are
   separated from band 300+ by STAGE, not by this axis.
-  `bossDamageBands` is implemented and ships **OFF** pending the end-to-end A/B. **Cell count is not
+  **AND BANDING ON IT DOES NOT FIX THE BUILD -- MEASURED, HYPOTHESIS FALSIFIED.** Full pipeline,
+  borge@73, seed 9e3779b9, everything else held identical:
+      bossDamageBands off   -39.44%   cells 477   killBands 14   furthest stage 300.0
+      bossDamageBands ON    -39.48%   cells 455   killBands 14   furthest stage 300.0
+  A -0.07% arm-to-arm difference, far inside the ~7-point seed variance, and **cells went DOWN**.
+  That is the tell: an extra axis splits the same variation budget across more potential niches, so
+  each lineage gets less depth -- the identical shape as the depth-move result (coverage up,
+  champion quality flat or worse). **Per-stream depth beats stream diversity**, for the second time.
+  So the descriptor hole is a REAL measured property of the archive and is NOT the cause of this
+  build's shortfall. The two claims are separate and only the first survived. `bossDamageBands`
+  ships **OFF** -- kept rather than deleted so the measurement is not repeated. **Cell count is not
   the metric** -- this repo has already measured a variation operator that raised coverage and
   LOWERED champion quality (depth moves: 81.8 -> 92.5 cells, 9.384M -> 9.170M loot).
   `boss-parity-check.js` is the invariant the fix has to satisfy, and it is integer-valued so it has

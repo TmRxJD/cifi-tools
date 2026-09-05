@@ -1,0 +1,323 @@
+{
+ "generatedAt": "2026-09-05T19:10:27.995Z",
+ "note": "STRUCTURES ONLY. Scores depend on account sim params and must never be shipped here.",
+ "effort": "fast",
+ "seeds": [
+  {
+   "uid": "knox:KNOWN_KNOX_BUILDS#0",
+   "name": "knox@12",
+   "hunter": "knox",
+   "level": 12,
+   "mode": "loot",
+   "talentBudget": 12,
+   "attributeBudget": 36,
+   "talentSupport": [
+    "calyp",
+    "pog"
+   ],
+   "attrSupport": [
+    "dead",
+    "kraken",
+    "pl",
+    "sear",
+    "soul",
+    "spa",
+    "time"
+   ],
+   "talentAlloc": {
+    "revival": 0,
+    "calyp": 5,
+    "ua": 0,
+    "ghost": 0,
+    "omen": 0,
+    "ll": 0,
+    "pog": 7,
+    "finish": 0
+   },
+   "attrAlloc": {
+    "kraken": 1,
+    "soul": 1,
+    "dead": 4,
+    "spa": 1,
+    "pl": 1,
+    "time": 5,
+    "sear": 3,
+    "pct": 0,
+    "kot": 0,
+    "fe": 0,
+    "sop": 0
+   },
+   "talentProportions": {
+    "calyp": 0.416667,
+    "pog": 0.583333
+   },
+   "attrProportions": {
+    "kraken": 0.0625,
+    "soul": 0.0625,
+    "dead": 0.25,
+    "spa": 0.0625,
+    "pl": 0.0625,
+    "time": 0.3125,
+    "sear": 0.1875
+   },
+   "regime": "cannot-reach-boss",
+   "killsBoss": false,
+   "reachesBoss": false,
+   "secs": 47
+  },
+  {
+   "uid": "knox:KNOWN_KNOX_BUILDS#1",
+   "name": "knox@13",
+   "hunter": "knox",
+   "level": 13,
+   "mode": "loot",
+   "talentBudget": 13,
+   "attributeBudget": 39,
+   "talentSupport": [
+    "calyp",
+    "pog"
+   ],
+   "attrSupport": [
+    "dead",
+    "kraken",
+    "pl",
+    "sear",
+    "soul",
+    "spa",
+    "time"
+   ],
+   "talentAlloc": {
+    "revival": 0,
+    "calyp": 5,
+    "ua": 0,
+    "ghost": 0,
+    "omen": 0,
+    "ll": 0,
+    "pog": 8,
+    "finish": 0
+   },
+   "attrAlloc": {
+    "kraken": 2,
+    "soul": 1,
+    "dead": 5,
+    "spa": 1,
+    "pl": 1,
+    "time": 5,
+    "sear": 3,
+    "pct": 0,
+    "kot": 0,
+    "fe": 0,
+    "sop": 0
+   },
+   "talentProportions": {
+    "calyp": 0.384615,
+    "pog": 0.615385
+   },
+   "attrProportions": {
+    "kraken": 0.111111,
+    "soul": 0.055556,
+    "dead": 0.277778,
+    "spa": 0.055556,
+    "pl": 0.055556,
+    "time": 0.277778,
+    "sear": 0.166667
+   },
+   "regime": "cannot-reach-boss",
+   "killsBoss": false,
+   "reachesBoss": false,
+   "secs": 50
+  },
+  {
+   "uid": "knox:KNOWN_KNOX_BUILDS#2",
+   "name": "knox@14",
+   "hunter": "knox",
+   "level": 14,
+   "mode": "loot",
+   "talentBudget": 14,
+   "attributeBudget": 42,
+   "talentSupport": [
+    "calyp",
+    "pog",
+    "revival"
+   ],
+   "attrSupport": [
+    "dead",
+    "kraken",
+    "pl",
+    "sear",
+    "soul",
+    "spa",
+    "time"
+   ],
+   "talentAlloc": {
+    "revival": 1,
+    "calyp": 5,
+    "ua": 0,
+    "ghost": 0,
+    "omen": 0,
+    "ll": 0,
+    "pog": 8,
+    "finish": 0
+   },
+   "attrAlloc": {
+    "kraken": 1,
+    "soul": 1,
+    "dead": 7,
+    "spa": 1,
+    "pl": 1,
+    "time": 5,
+    "sear": 3,
+    "pct": 0,
+    "kot": 0,
+    "fe": 0,
+    "sop": 0
+   },
+   "talentProportions": {
+    "revival": 0.071429,
+    "calyp": 0.357143,
+    "pog": 0.571429
+   },
+   "attrProportions": {
+    "kraken": 0.052632,
+    "soul": 0.052632,
+    "dead": 0.368421,
+    "spa": 0.052632,
+    "pl": 0.052632,
+    "time": 0.263158,
+    "sear": 0.157895
+   },
+   "regime": "cannot-reach-boss",
+   "killsBoss": false,
+   "reachesBoss": false,
+   "secs": 68
+  },
+  {
+   "uid": "knox:KNOWN_KNOX_BUILDS#3",
+   "name": "knox@16",
+   "hunter": "knox",
+   "level": 16,
+   "mode": "loot",
+   "talentBudget": 16,
+   "attributeBudget": 48,
+   "talentSupport": [
+    "calyp",
+    "pog",
+    "revival"
+   ],
+   "attrSupport": [
+    "dead",
+    "kraken",
+    "pl",
+    "sear",
+    "soul",
+    "spa",
+    "time"
+   ],
+   "talentAlloc": {
+    "revival": 1,
+    "calyp": 5,
+    "ua": 0,
+    "ghost": 0,
+    "omen": 0,
+    "ll": 0,
+    "pog": 10,
+    "finish": 0
+   },
+   "attrAlloc": {
+    "kraken": 1,
+    "soul": 1,
+    "dead": 10,
+    "spa": 1,
+    "pl": 1,
+    "time": 5,
+    "sear": 3,
+    "pct": 0,
+    "kot": 0,
+    "fe": 0,
+    "sop": 0
+   },
+   "talentProportions": {
+    "revival": 0.0625,
+    "calyp": 0.3125,
+    "pog": 0.625
+   },
+   "attrProportions": {
+    "kraken": 0.045455,
+    "soul": 0.045455,
+    "dead": 0.454545,
+    "spa": 0.045455,
+    "pl": 0.045455,
+    "time": 0.227273,
+    "sear": 0.136364
+   },
+   "regime": "cannot-reach-boss",
+   "killsBoss": false,
+   "reachesBoss": false,
+   "secs": 83
+  },
+  {
+   "uid": "knox:KNOWN_KNOX_BUILDS#4",
+   "name": "knox@16b",
+   "hunter": "knox",
+   "level": 16,
+   "mode": "loot",
+   "talentBudget": 16,
+   "attributeBudget": 48,
+   "talentSupport": [
+    "calyp",
+    "pog",
+    "revival"
+   ],
+   "attrSupport": [
+    "dead",
+    "kraken",
+    "pl",
+    "sear",
+    "soul",
+    "spa",
+    "time"
+   ],
+   "talentAlloc": {
+    "revival": 1,
+    "calyp": 5,
+    "ua": 0,
+    "ghost": 0,
+    "omen": 0,
+    "ll": 0,
+    "pog": 10,
+    "finish": 0
+   },
+   "attrAlloc": {
+    "kraken": 3,
+    "soul": 1,
+    "dead": 10,
+    "spa": 1,
+    "pl": 1,
+    "time": 5,
+    "sear": 2,
+    "pct": 0,
+    "kot": 0,
+    "fe": 0,
+    "sop": 0
+   },
+   "talentProportions": {
+    "revival": 0.0625,
+    "calyp": 0.3125,
+    "pog": 0.625
+   },
+   "attrProportions": {
+    "kraken": 0.130435,
+    "soul": 0.043478,
+    "dead": 0.434783,
+    "spa": 0.043478,
+    "pl": 0.043478,
+    "time": 0.217391,
+    "sear": 0.086957
+   },
+   "regime": "cannot-reach-boss",
+   "killsBoss": false,
+   "reachesBoss": false,
+   "secs": 99
+  }
+ ]
+}
