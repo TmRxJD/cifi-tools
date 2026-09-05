@@ -1901,9 +1901,35 @@ fixed traversal order give identical output for identical input.
   stumble into: die-fast is a broad easy basin, killing needs concentrated depth, and everything
   between (fight the boss and lose slowly) is WORSE THAN BOTH. It is a valley, not a slope.
 
-- **knox@26 returns -0.48%**, above the ~0.2% comparison noise. Its archive is STABLE across seeds
-  (2.5% spread, 26-28 cells every time), so unlike Ozzy this is systematic rather than luck, and
-  points at refinement depth rather than coverage. Unsolved, and correctly a separate problem.
+- **THE KNOX "-0.48% DEFECT" NEVER EXISTED -- IT WAS THE WRONG HUNTER'S STATS.** `evalStateFor(build,
+  iterations)` takes no hunter; it reads the `currentHunter` global, which is correct for the app
+  and wrong for any bench or console script that loops over hunters. A Knox build scored with
+  OZZY's stats (and Ozzy's stage 201 rather than Knox's 100) returned a perfectly plausible number
+  -- foreign keys resolve to nothing, missing ones default, nothing throws -- and that number said
+  the optimizer was 0.48% BELOW the account's build. Measured correctly it is **18.48% ABOVE**.
+  An entire investigation into Knox refinement depth, archive coverage and richer move sets was
+  chasing a measurement bug. `AccountState.build` now REJECTS hunterStats carrying another hunter's
+  fields, at the one constructor every path funnels through, so it cannot be bypassed by writing a
+  new caller; `evalStateForHunter(hunter, build, iterations)` is the explicit form.
+- **`avgStage` IS NOT "HOW FAR THE BUILD GETS", AND READING IT AS SUCH PRODUCED TWO OPPOSITE WRONG
+  ANSWERS ABOUT THE SAME RUN.** Knox returning `avgStage 96.1, maxStage 100, bossKillRate 0,
+  bossHpPercent 99.996` was reported first as "already kills its stage-100 boss" and then as "does
+  not reach stage 100 at all". Both wrong: it REACHES the boss, does no damage, and dies there --
+  which was in `maxStage` and `bossHpPercent` all along. `Objective.describeRun()` now returns
+  stated conclusions (`regime` of cannot-reach-boss / reaches-cannot-kill / kills-boss, plus
+  `reachesBoss`, `killsBoss`, `stageMin/stageAvg/stageMax` and a one-line summary) so a report
+  quotes a labelled fact instead of paraphrasing a number. A malformed result throws.
+- **CURRENT BASELINE, all three hunters, explicit hunter, stat vocabulary confirmed per hunter,
+  Complete effort (archiveEvals 9600):**
+
+  | hunter | account build | optimizer | delta | time |
+  |---|---|---|---|---|
+  | borge@60 | 142,839,497 | 142,839,497 | 0.00% | 170s |
+  | ozzy@62 | 35,148,029 | 40,538,505 | +15.34% | 261s |
+  | knox@26 | 3,078 | 3,646 | +18.48% | 153s |
+
+  **No quality defect remains on any hunter.** Ozzy is 3 of 3 seeds since the archive budget went
+  4800 -> 9600 (see the reachability entry); the remaining open question is COST, not correctness.
 
 - **Selection strategy is `curiosity` by default because it is strictly better, not because it
   works.** 2 of 3 seeds against random's 1 of 3, and higher on both seeds where both succeed.
