@@ -702,13 +702,34 @@
   // together would report a healthy move set while it was quietly destroying structure -- which is
   // the failure mode this whole change exists to remove, so the measurement must be able to see
   // the difference.
-  function randomTransfer(defs, deps, minVal, budget, alloc, rng, pinnedIds, stats) {
+  function randomTransfer(defs, deps, minVal, budget, alloc, rng, pinnedIds, stats, clampToHeadroom) {
     const held = defs.filter((d) => (alloc[d.id] || 0) > 0 && pinnedIds.indexOf(d.id) === -1);
     if (!held.length) return null;
     for (let tries = 0; tries < 8; tries++) {
       const from = held[Math.floor(rng() * held.length)];
       const to = defs[Math.floor(rng() * defs.length)];
-      const amount = 1 + Math.floor(rng() * Math.min(12, alloc[from.id] || 1));
+      let amount = 1 + Math.floor(rng() * Math.min(12, alloc[from.id] || 1));
+      // THE UNCAPPED-SINK INTERVENTION, off by default, measured before it may ship.
+      //
+      // MEASURED BIAS: over 20,000 proposed transfers per build across all 12 gate fixtures, a
+      // transfer INTO an uncapped node is accepted 98-100% of the time and into a capped node
+      // 21-59% -- a mean gap of 60.3 points. An uncapped node can never reject for want of
+      // headroom, so it is a sink the generator cannot help filling.
+      //
+      // MEASURED CONSEQUENCE: the two builds the shipped configuration loses on both over-fund the
+      // uncapped root by ~15 points of budget against the reference (ozzy@54 39.5% -> 54.3%,
+      // borge@73 19.6% -> 35.2%), while the ten it wins on average -5.4 points.
+      //
+      // THE INTERVENTION is not a weighting constant -- it removes the CAUSE of the asymmetry.
+      // Most capped rejections are "the amount exceeds this target's remaining headroom", which is
+      // information already in the defs, so clamping the proposed amount to what the target can
+      // actually receive makes a capped target answer the same question an uncapped one does:
+      // "is this move good?", not "did the dice pick a number that happens to fit?".
+      if (clampToHeadroom && Number.isFinite(to.maxLevel)) {
+        const headroom = to.maxLevel - (alloc[to.id] || 0);
+        if (headroom <= 0) { if (stats) stats.rejected++; continue; }
+        amount = Math.min(amount, headroom);
+      }
       const next = Space.transfer(defs, deps, minVal, budget, alloc, from.id, to.id, amount);
       if (!next) { if (stats) stats.rejected++; continue; }
       if (stats) {
@@ -798,7 +819,7 @@
    * Seeded from the enumerated supports rather than from random points: the enumeration is exact
    * and already paid for, so the archive starts with real structural coverage instead of noise.
    */
-  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, structuralShare, depthShare, seedList, selection, report) {
+  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, structuralShare, depthShare, seedList, selection, clampToHeadroom, report) {
     const stats = { rejected: 0, accepted: 0, repaired: 0, nodesCleared: 0, structural: 0,
       depthAccepted: 0, depthRejected: 0, depthOpened: 0 };
     const { TALENTS, ATTRIBUTES, talentBudget, attrBudget, deps, minVal } = spaces;
@@ -994,7 +1015,7 @@
             const nx = depthMove(ATTRIBUTES, deps, minVal, attrBudget, a, rng, pinnedAttrs, stats);
             if (nx) a = nx;
           } else {
-            const nx = randomTransfer(ATTRIBUTES, deps, minVal, attrBudget, a, rng, pinnedAttrs, stats);
+            const nx = randomTransfer(ATTRIBUTES, deps, minVal, attrBudget, a, rng, pinnedAttrs, stats, clampToHeadroom);
             if (nx && pinsHeld(ATTRIBUTES, nx, pinnedAttrs)) a = nx;
           }
         }
@@ -1024,7 +1045,8 @@
     const pct = (n) => (attempted ? ((n / attempted) * 100).toFixed(1) : '0.0');
     ctx.note(`moves: ${attempted} attribute transfers -- ${pct(stats.rejected)}% rejected, `
       + `${pct(stats.repaired)}% accepted-but-stranded (${stats.nodesCleared} nodes cleared); `
-      + `${stats.structural} structural resamples at share ${structuralShare}`);
+      + `${stats.structural} structural resamples at share ${structuralShare}`
+      + `; clampToHeadroom ${clampToHeadroom ? 'ON' : 'off'}`);
     ctx.note(`illuminated from ${streams.length} stream(s)`);
     // STRUCTURED, NOT STRINGIFIED. The notes are for a human reading one run; a bench comparing
     // twenty configurations needs numbers it can sort. Every diagnosis in this file's history was
@@ -1045,6 +1067,7 @@
       structuralShare,
       depthShare,
       selection,
+      clampToHeadroom,
       moves: {
         attempted: stats.rejected + stats.accepted,
         rejected: stats.rejected,
@@ -1550,6 +1573,7 @@
         Number.isFinite(effortSpec.depthShare) ? effortSpec.depthShare : DEPTH_SHARE,
         effortSpec.seeds || (Number.isFinite(effortSpec.seed) ? [effortSpec.seed] : ARCHIVE_SEEDS),
         effortSpec.selection || DEFAULT_SELECTION,
+        effortSpec.clampToHeadroom === true,
         (f) => report('survey', f * SURVEY_REPORT_SCALE, SURVEY_REPORT_SCALE),
       );
       const surveyed = elites.map((e) => ({ ...e, mask: maskOf(e.attrAlloc) }));
