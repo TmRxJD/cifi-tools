@@ -41,6 +41,49 @@ const perGateTimeoutMs = Number(flag('timeout', '180000'));
 
 const sha = (p) => crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
 
+// THIS TOOL EDITS TRACKED SOURCE FILES, so two of it at once corrupt each other's baselines and a
+// dirty tree makes "restore" ambiguous. Both actually happened: a second run overlapping a first
+// reported two healthy gates (ship-node-gate-check, allocator-check) as failing on clean data, and
+// the proven count swung 26 -> 19 -> 21 across runs that should have been identical. Results that
+// are not reproducible are not results.
+const LOCK = path.join(require('os').tmpdir(), 'huntersim-mutation-check.lock');
+function acquireLock() {
+  if (fs.existsSync(LOCK)) {
+    const pid = fs.readFileSync(LOCK, 'utf8').trim();
+    let alive = false;
+    try { process.kill(Number(pid), 0); alive = true; } catch { alive = false; }
+    if (alive) {
+      console.error(`mutation-check: another run is active (pid ${pid}). Two runs mutate the same `
+        + 'files and corrupt each other. Wait for it, or remove ' + LOCK + ' if it is stale.');
+      process.exit(2);
+    }
+    fs.unlinkSync(LOCK);
+  }
+  fs.writeFileSync(LOCK, String(process.pid));
+  const release = () => { try { fs.unlinkSync(LOCK); } catch { /* already gone */ } };
+  process.on('exit', release);
+  process.on('SIGINT', () => { release(); process.exit(130); });
+  process.on('SIGTERM', () => { release(); process.exit(143); });
+}
+
+function requireCleanTree() {
+  let dirty = '';
+  try {
+    dirty = require('child_process')
+      .execFileSync('git', ['status', '--porcelain', 'webapp/public', 'tools/reference'],
+        { cwd: ROOT, encoding: 'utf8' })
+      .split(String.fromCharCode(10)).filter((l) => l.trim() && !l.startsWith('??')).join(String.fromCharCode(10));
+  } catch {
+    return; // no git available -- proceed rather than block the tool entirely
+  }
+  if (dirty) {
+    console.error('mutation-check: refusing to run with uncommitted changes under webapp/public or '
+      + 'tools/reference. This tool corrupts those files and restores them from a backup; with '
+      + 'local edits present a failed restore is indistinguishable from your own work.' + dirty);
+    process.exit(2);
+  }
+}
+
 // ---- discover the gates all.js runs, and what each reads -------------------------------------
 const allSrc = fs.readFileSync(path.join(DIR, 'all.js'), 'utf8');
 // all.js distinguishes GATES from REPORTS -- a report deliberately exits 0 even when it disagrees,
@@ -69,9 +112,34 @@ function inputsFor(gate) {
   for (const m of src.matchAll(/public\/([A-Za-z0-9._/-]+\.json)/g)) refs.add(`webapp/public/${m[1]}`);
   // hunterDefs.js is JS but it is a DATA TABLE -- talent caps, attribute costs, dependency lists.
   // Eleven gates read it and no JSON at all, so excluding it left them permanently unproven. Only
-  // NUMERIC LITERALS in it are mutated (see jsMutations), never structure, so a detection means the
-  // gate noticed a changed value rather than a syntax error.
+  // NUMERIC LITERALS are mutated (see jsMutations), never structure, so a detection means the gate
+  // noticed a changed value rather than a syntax error.
   if (/hunterDefs|HUNTER_DEFS/.test(src)) refs.add('webapp/public/hunterDefs.js');
+
+  // A BEHAVIOUR GATE VALIDATES A MODULE, NOT A FILE OF DATA. path-abort-test asserts that closing
+  // a modal stops work; ship-test asserts allocator invariants; boss-target-check asserts the boss
+  // arithmetic. No value in any JSON can make those fail, so data mutation left fourteen gates
+  // permanently "unproven" -- which is not the same as proven, and must not be left as a shrug.
+  //
+  // The module each gate exercises is discoverable from the API it calls, so mutate THAT.
+  const API_TO_MODULE = [
+    [/\bH\.Objective\b|\bObjective\./, 'webapp/public/optimizer/objective.js'],
+    [/\bH\.Space\b|\bSpace\./, 'webapp/public/optimizer/space.js'],
+    [/\bH\.Optimizer\b/, 'webapp/public/optimizer/search.js'],
+    [/\bsb\.HunterSim\b|\bHunterSim\./, 'webapp/public/hunterSimBrowser.js'],
+    [/\bsb\.StoreSchema\b|\bStoreSchema\./, 'webapp/public/storeSchema.js'],
+    [/\bsb\.ShipData\b|computeResourceBonuses|optimizeShipInstalls/, 'webapp/public/shipsPage.js'],
+    [/\bmapSaveToShips\b|\bshipSchema\b/, 'webapp/public/shipSchema.js'],
+    [/\bisUpgradeUnlocked\b|\bUPGRADE_GATES\b/, 'webapp/public/hunterDefs.js'],
+    [/\bcurrentRoute\b|public\/app\.js/, 'webapp/public/app.js'],
+    [/\brelicCostAtLevel\b|\bCostFormulas\b|costFormulas/, 'webapp/public/costFormulas.js'],
+  ];
+  for (const [re, mod] of API_TO_MODULE) if (re.test(src)) refs.add(mod);
+
+  // reference-schema-test validates EVERY file in tools/reference, so any one of them is a probe.
+  if (/reference-schemas|referenceSchemas|tools\/reference/.test(src) && !refs.size) {
+    refs.add('tools/reference/badge-map.json');
+  }
   return [...refs].filter((r) => fs.existsSync(path.join(ROOT, r)));
 }
 
@@ -153,13 +221,26 @@ function mutations(json) {
 function jsMutations(src) {
   const out = [];
   const skip = /^(v|version|width|height|index|id)$/i;
-  const re = /(\b[A-Za-z_][A-Za-z0-9_]*\s*:\s*)(\d+)(\s*[,}\n])/g;
   const hits = [];
-  let m;
-  while ((m = re.exec(src))) {
-    const key = m[1].split(':')[0].trim();
-    if (!skip.test(key) && Number(m[2]) !== 0) hits.push({ index: m.index, full: m[0], pre: m[1], num: m[2], post: m[3], key });
+  // TWO SHAPES carry tuned values in this codebase and BOTH must be probed:
+  //   `maxLevel: 20,`              -- table entries (hunterDefs, node defs)
+  //   `const BOSS_INTERVAL = 100;` -- module constants (objective, space, search)
+  // Matching only the first produced '0 corruptions' for objective.js, whose every tunable is a
+  // const, and so reported a healthy gate as unproven.
+  const patterns = [
+    /(\b[A-Za-z_][A-Za-z0-9_]*\s*:\s*)(\d+)(\s*[,}\n])/g,
+    /(\bconst\s+[A-Z][A-Z0-9_]*\s*=\s*)(\d+)(\s*;)/g,
+  ];
+  for (const re of patterns) {
+    let m;
+    while ((m = re.exec(src))) {
+      const key = m[1].replace(/const\s+/, '').split(/[:=]/)[0].trim();
+      if (!skip.test(key) && Number(m[2]) !== 0) {
+        hits.push({ index: m.index, full: m[0], pre: m[1], num: m[2], post: m[3], key });
+      }
+    }
   }
+  hits.sort((a, b) => a.index - b.index);
   if (!hits.length) return out;
   const step = Math.max(1, Math.floor(hits.length / 6));
   for (let i = 0; i < hits.length && out.length < 6; i += step) {
@@ -179,13 +260,22 @@ function runGate(gate) {
     const out = execFileSync(process.execPath, [path.join(DIR, `${gate}.js`)], {
       encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: perGateTimeoutMs,
     });
-    return { code: 0, skipped: /^\s*(SKIP|skip)\b/m.test(out) };
+    return { code: 0, skipped: /^\s*(SKIP|skip)\b/m.test(out), reported: false };
   } catch (e) {
     const out = `${e.stdout || ''}${e.stderr || ''}`;
     return {
       code: e.status === undefined ? 1 : e.status,
       killed: e.killed === true,
       skipped: /^\s*(SKIP|skip)\b/m.test(out),
+      // WHAT COUNTS AS A DETECTION. A gate that throws a DESCRIPTIVE error on corrupt data is
+      // detecting -- "Dependency X is not in the node list" is a finding, not an accident. What
+      // proves nothing is one of Node's OWN error types, which means the mutation broke the
+      // code rather than tripping the check.
+      //
+      // The first rule here demanded the word FAIL in the output, which rejected four gates that
+      // throw perfectly good errors and dropped the proven count from 26 to 19. Requiring a
+      // particular vocabulary tests the wording, not the behaviour.
+      reported: !/\b(TypeError|ReferenceError|SyntaxError|RangeError)\b/.test(out),
     };
   }
 }
@@ -202,6 +292,8 @@ function runGate(gate) {
     return;
   }
 
+  acquireLock();
+  requireCleanTree();
   console.log('mutation-check: a gate that passes on corrupted data is not a gate');
   console.log('');
   const results = [];
@@ -223,6 +315,13 @@ function runGate(gate) {
 
     // Baseline: the gate must PASS on clean data, or a "detection" proves nothing.
     const base = runGate(gate);
+    if (base.killed) {
+      // Slow gates (underspend-test runs the optimizer) exceed the per-gate limit and exit with
+      // a null status. Reporting that as "already fails on clean data" accuses a healthy gate.
+      results.push({ gate, status: 'TIMEOUT', detail: `exceeded ${perGateTimeoutMs}ms on clean data` });
+      console.log(`TIMEOUT    ${gate.padEnd(30)} exceeded ${perGateTimeoutMs}ms; raise --timeout= to prove it`);
+      continue;
+    }
     if (base.code !== 0) {
       results.push({ gate, status: 'ALREADY-FAILING', detail: `exits ${base.code} on clean data` });
       console.log(`BROKEN     ${gate.padEnd(30)} already fails on clean data (exit ${base.code})`);
@@ -235,6 +334,7 @@ function runGate(gate) {
     }
 
     let detected = null;
+    let crashedOnly = null;
     let tried = 0;
     outer:
     for (const rel of inputs) {
@@ -258,7 +358,11 @@ function runGate(gate) {
           const r = runGate(gate);
           // A crash is not a detection: mutating a value must make the gate REPORT a mismatch, not
           // blow up. A killed (timed-out) run proves nothing either.
-          if (r.code !== 0 && !r.killed) { detected = `${path.basename(rel)}: ${mut.what}`; }
+          if (r.code !== 0 && !r.killed && r.reported) {
+            detected = `${path.basename(rel)}: ${mut.what}`;
+          } else if (r.code !== 0 && !r.killed && !crashedOnly) {
+            crashedOnly = `${path.basename(rel)}: ${mut.what} (crashed, did not report)`;
+          }
         } finally {
           // RESTORE, AND PROVE IT. Leaving reference data corrupted would be far worse than the
           // defect being hunted, so the hash is checked and a mismatch aborts everything.
@@ -280,6 +384,9 @@ function runGate(gate) {
       // quietly excluded -- if one of these ever SHOULD be a gate, it is here to be reconsidered.
       results.push({ gate, status: 'REPORT', detail: `exits 0 by design (${tried} corruptions ignored)` });
       console.log(`REPORT     ${gate.padEnd(30)} exits 0 by design; ${tried} corruption(s) ignored, as declared`);
+    } else if (crashedOnly) {
+      results.push({ gate, status: 'CRASH-ONLY', detail: crashedOnly });
+      console.log(`CRASH-ONLY ${gate.padEnd(30)} ${crashedOnly}`);
     } else {
       // DATA mutation cannot probe a BEHAVIOUR gate. path-abort-test asserts that closing a modal
       // stops work; no value in hunterDefs.js can make that fail. Calling it BLIND would accuse a
@@ -301,7 +408,7 @@ function runGate(gate) {
   const by = (s) => results.filter((r) => r.status === s);
   console.log('');
   const proven = by('DETECTED').length;
-  const unproven = by('UNPROVEN').length + by('UNMUTATED').length;
+  const unproven = by('UNPROVEN').length + by('UNMUTATED').length + by('CRASH-ONLY').length;
   console.log(`${proven} PROVEN LIVE, ${unproven} unproven, ${by('REPORT').length} reports, `
     + `${by('NEEDS-INPUT').length} need an argument, ${by('SKIPS').length} skipping, `
     + `${by('ALREADY-FAILING').length} broken (of ${results.length})`);
@@ -316,6 +423,9 @@ function runGate(gate) {
     console.log('Each needs either a mutable input or a behavioural probe; none is excused:');
     for (const r of by('UNPROVEN')) console.log(`  ${r.gate}: ${r.detail}`);
     for (const r of by('UNMUTATED')) console.log(`  ${r.gate}: no corruptible input found`);
+    for (const r of by('CRASH-ONLY')) {
+      console.log(`  ${r.gate}: only crashed, never reported a mismatch -- ${r.detail}`);
+    }
   }
   // Only a gate that FAILS on clean data breaks the build here. "Unproven" is a to-do the audit
   // tracks, not a regression -- but it is printed every run so it cannot be forgotten.
