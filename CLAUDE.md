@@ -1865,10 +1865,41 @@ fixed traversal order give identical output for identical input.
   otherwise it returns the local optimum. And almost no progress is needed -- an archive whose best
   is kill 7 refines into a build killing at 58. **Refinement is reliable; it just needs a foothold.**
 
-  The next thing to try, and it stays inside the boss-as-descriptor rule: bosses stand every 100
-  stages, so an elite at maxStage 99 is one step from engaging one. Selecting parents on a STAGE
-  BOUNDARY is navigation in descriptor space -- frontier-pushing toward an unoccupied cell -- and
-  scores nothing on boss performance. NOT yet implemented.
+  **FRONTIER PUSHING ON STAGE BOUNDARIES WAS TRIED AND IS A REGRESSION -- and it corrected the
+  diagnosis above.** Preferentially developing elites nearest a stage boundary (bosses stand every
+  100 stages, so maxStage 99 is one variation from engaging one) does move the archive: seed a5a5,
+  which had never reached a boss cell under any configuration, reached 2 kill bands / best kill 1,
+  and champion scores rose on all three seeds. End to end it LOST:
+      seed 9e37   curiosity +15.34%  ->  curiosity + frontier  -66.27%
+      seed a5a5   curiosity -66.27%  ->  curiosity + frontier  -66.27%
+  It broke a seed that worked and rescued none.
+  **So "touching a kill > 0 cell means the run succeeds" is FALSE -- it was generalised from two
+  data points.** a5a5's archive reached kill 1 and the run still returned the local optimum, while
+  the seed that succeeds reaches kill 7. Touching a boss cell is NECESSARY BUT NOT SUFFICIENT;
+  there is a foothold threshold between kill 1 and kill 7. Reaching MORE boss-adjacent cells is not
+  the same as reaching a DEEPER one, and that is the distinction the next attempt has to respect.
+  `FRONTIER_SHARE` ships at 0 rather than deleted.
+
+- **KNOX AT LEVEL 26 ALREADY KILLS ITS BOSS, so its flat archive is CORRECT and not a defect.** Its
+  own build runs minStage 105.7 / avgStage 109.8 / maxStage 113.1 -- you cannot pass a boss without
+  killing it. The `bossKillRate 0` in its output refers to the stage-200 boss, 87 stages out of
+  reach. So every Knox build scores kill 0 against an unreachable boss, the kill-rate descriptor is
+  DEGENERATE for that hunter, and 1 kill band is the right answer. Its 28 cells are not
+  under-exploration either: maxStage spans only ~105-113, so the behaviour space really is that
+  small.
+  Confirmed by the project owner from the game side: Omen is the only Knox ATTRIBUTE that touches
+  boss performance (reduced effect against bosses), so a Knox boss build is just a push build with
+  overflow into Omen -- there is no separate boss basin to discover. Knox's -0.48% is therefore
+  purely refinement depth, with no boss component.
+
+- **THE FAILURE MODE IS A WRONG REGIME, NOT A BROKEN BUILD.** Per the project owner: you reach a
+  boss several levels before you can kill it, and until then the best play is to die to it as fast
+  as possible; once you can kill it, farming it beats Lucky Loot until you can push well past it.
+  Those are three real regimes, and the -66.27% build is the optimum of the middle one -- kill 0,
+  short runs, loot from volume. The optimizer is not returning garbage; it is returning the best
+  build in whichever regime its archive populated. That also explains why the boss cell is hard to
+  stumble into: die-fast is a broad easy basin, killing needs concentrated depth, and everything
+  between (fight the boss and lose slowly) is WORSE THAN BOTH. It is a valley, not a slope.
 
 - **knox@26 returns -0.48%**, above the ~0.2% comparison noise. Its archive is STABLE across seeds
   (2.5% spread, 26-28 cells every time), so unlike Ozzy this is systematic rather than luck, and

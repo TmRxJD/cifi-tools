@@ -552,6 +552,53 @@
   // parent happens to have. The enumeration is exact and already paid for, `gatePayingFill` knows
   // how to pay a tier threshold, and this is pure exploration -- it is not directed at the boss or
   // at any objective, so it cannot collapse the search into a basin.
+  //
+  // FRONTIER PUSHING ON STAGE BOUNDARIES -- descriptor-space navigation, not a boss objective.
+  //
+  // The whole Ozzy failure reduces to one binary event: does illumination land a single build in a
+  // kill > 0 cell. Archive-only at 4800 variations, the correlation is perfect --
+  //     seed a5a5   93 cells   1 kill band   best kill 0   -> final -66.27%
+  //     seed 1234   95 cells   3 kill bands  best kill 7   -> final  +4.77%
+  // and the foothold needed is tiny, because an archive whose best kills at 7 refines into a build
+  // killing at 58. Refinement is reliable; it was being fed by luck.
+  //
+  // Bosses stand every 100 stages, so an elite at maxStage 99 is ONE variation away from engaging
+  // one while an elite at maxStage 20 is nowhere near. That distance is computed purely from the
+  // maxStage DESCRIPTOR -- nothing here reads a kill rate, boss HP, or any boss-derived score, so
+  // it cannot collapse the search into the deceptive basin the way optimising boss performance
+  // directly would. It preferentially develops the elites ADJACENT TO AN UNOCCUPIED CELL, which is
+  // ordinary MAP-Elites frontier pushing.
+  //
+  // It is also why this is one fix rather than two. On Knox there is no separate boss basin to
+  // find at all: Omen is the only attribute that touches boss performance (reduced effect against
+  // bosses), so a Knox boss build IS a push build with overflow into Omen. Knox's archive is
+  // correspondingly flat -- 1 kill band and best kill 0 on every seed, 2.5% spread. For Ozzy,
+  // pushing the stage frontier is how a boss cell gets reached; for Knox, reaching a boss cell
+  // just IS pushing stage depth. Same lever.
+  const BOSS_STAGE_INTERVAL = 100;
+  //
+  // OFF, ON MEASUREMENT -- and it falsified the claim that motivated it.
+  //
+  // The theory was that the run's whole outcome turns on whether illumination lands ONE build in a
+  // kill > 0 cell, so preferentially developing elites near a stage boundary would make that
+  // reliable. It does move the archive: seed a5a5, which had never reached a boss cell under any
+  // configuration, went to 2 kill bands / best kill 1, and champion scores rose across all three
+  // seeds (10.47M / 10.56M / 9.61M against ~9.4M).
+  //
+  // End-to-end it is a REGRESSION. Full pipeline, level-62 Ozzy:
+  //     seed 9e37   curiosity +15.34%   -> curiosity + frontier  -66.27%
+  //     seed a5a5   curiosity -66.27%   -> curiosity + frontier  -66.27%
+  // It broke a seed that worked, and did not rescue the one that did not.
+  //
+  // WHICH ALSO CORRECTS THE DIAGNOSIS. a5a5's archive DID reach a boss cell (kill 1) and the run
+  // still returned the same local optimum, while the seed that succeeds reaches kill 7. So
+  // touching a boss cell is NECESSARY BUT NOT SUFFICIENT -- there is a foothold THRESHOLD somewhere
+  // between kill 1 and kill 7, and "any kill > 0 cell means success" was generalised from two data
+  // points. Chasing more boss-adjacent cells is not the same as chasing a DEEPER one.
+  //
+  // Kept at 0 rather than deleted: the mechanism works on its own terms (it reaches cells nothing
+  // else reached) and may matter once the threshold question is understood.
+  const FRONTIER_SHARE = 0;
   const DEFAULT_SELECTION = 'curiosity';
   const CURIOSITY_REWARD = 1;
   const CURIOSITY_PENALTY = 0.5;
@@ -765,6 +812,7 @@
           score,
           kill: meta.kill,
           hp: Number.isFinite(meta.hp) ? meta.hp : 100,
+          maxStage: meta.maxStage,
           // A brand-new elite starts curious, so an unexplored niche is developed before it has
           // had to prove anything -- which is the only way a boss cell that is reached once gets
           // the follow-up effort to become a real build.
@@ -787,6 +835,7 @@
 
     let spent = 0;
     let parentCursor = 0;
+    let frontierCursor = 0;
     let supportCursor = 0;
     let crossStride = 1;
     const streams = Array.isArray(seedList) ? seedList : [seedList];
@@ -851,15 +900,33 @@
             || (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0))
           .map(([, e]) => e);
 
+      // Distance to the NEXT boss, from the stage descriptor alone. An elite that already kills is
+      // not on the frontier -- its cell is occupied and curiosity will develop it on merit.
+      const distanceToBoss = (e) => {
+        const ms = e.maxStage;
+        if (!Number.isFinite(ms)) return Infinity;
+        return BOSS_STAGE_INTERVAL - (ms % BOSS_STAGE_INTERVAL);
+      };
+      const frontier = ordered
+        .filter((e) => !(e.kill > 0) && Number.isFinite(distanceToBoss(e)))
+        .sort((x, y) => (distanceToBoss(x) - distanceToBoss(y)) || (y.score - x.score));
+
       const batch = [];
       const parents = [];
       for (let i = 0; i < ARCHIVE_BATCH; i++) {
         // Draw from the most curious head of the list, cycling so one lineage cannot monopolise a
         // whole batch. Depth without starving everything else.
         const head = Math.max(1, Math.min(ordered.length, Math.ceil(ordered.length / 4)));
-        const parent = selection === 'random'
-          ? ordered[Math.floor(rng() * ordered.length)]
-          : ordered[(parentCursor++) % head];
+        let parent;
+        if (selection === 'random') {
+          parent = ordered[Math.floor(rng() * ordered.length)];
+        } else if (FRONTIER_SHARE > 0 && frontier.length
+          && (i % Math.round(1 / FRONTIER_SHARE)) === 0) {
+          const fhead = Math.max(1, Math.min(frontier.length, Math.ceil(frontier.length / 4)));
+          parent = frontier[(frontierCursor++) % fhead];
+        } else {
+          parent = ordered[(parentCursor++) % head];
+        }
         parents.push(parent);
         let t = { ...parent.talentAlloc };
         let a = { ...parent.attrAlloc };
