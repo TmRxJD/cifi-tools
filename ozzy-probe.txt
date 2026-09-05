@@ -1,7 +1,0 @@
-ozzy@54  uid=ozzy:KNOWN_OZZY_BUILDS#35  level=54  mode=loot
-budgets: talent 54, attribute 162
-import spend: talent 54, attribute 162
-import legal: true
-
-IMPORT  @1000 1004600   @100 998330
-IMPORT  reaches-cannot-kill: reaches stage 200.0 at best (avg 195.7), boss at 200, kill rate 0%, boss HP left 96.46%
