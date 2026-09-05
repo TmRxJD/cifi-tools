@@ -31,6 +31,10 @@ const H = require('./harness.js');
   const t0 = Date.now();
   let lastPhase = '';
   const result = await H.Optimizer.optimize(cfg, {
+    // EXPLICIT: this is a smoke test, so it asks for the cheap configuration BY NAME. Everything
+    // else in tools/bench inherits DEFAULT_EFFORT, which is the shipped default -- a bench that
+    // silently ran something cheaper is how the gate came to validate a config nobody uses.
+    effort: 'fast',
     mode: 'loot',
     scorer,
     scorerFor: H.scorerFactory(cfg),

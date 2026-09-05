@@ -107,7 +107,20 @@
     // How much search effort the user is willing to pay for. A standing preference about time,
     // validated against the optimizer's own EFFORT_LEVELS at render time so a stale or renamed
     // level falls back to the default instead of reaching a search that cannot honour it.
-    optimizeEffort: { make: () => 'complete' },
+    // DERIVED, NEVER RESTATED. This used to be a literal 'complete' while the optimizer's own
+    // DEFAULT_EFFORT said 'fast'; benches inherit the optimizer's value, so the two disagreeing
+    // meant every bench measured a configuration the app never uses. Read it from the one place
+    // that declares it, and fail loudly if that place is missing rather than inventing a fallback.
+    optimizeEffort: {
+      make: () => {
+        const opt = global.HunterOptimizer;
+        if (!opt || !opt.DEFAULT_EFFORT) {
+          throw new Error('storeSchema: HunterOptimizer.DEFAULT_EFFORT is unavailable; the '
+            + 'shipped optimize effort is declared there and must not be duplicated here');
+        }
+        return opt.DEFAULT_EFFORT;
+      },
+    },
     // Fragments are the currency relics are bought with, and they are ACCOUNT-WIDE, not
     // per-hunter and not per-build: there is one Relic #7, you buy it once, and every hunter
     // that reads it benefits. So this lives at the top level of the store alongside the other

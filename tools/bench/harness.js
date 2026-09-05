@@ -46,6 +46,11 @@ function browserSandbox() {
       };
     },
   };
+  // optimizer/search.js is in this list because storeSchema.js DERIVES the shipped optimize
+  // effort from HunterOptimizer.DEFAULT_EFFORT rather than restating it. Without it the store
+  // cannot be constructed at all -- which is the intended behaviour: the alternative was a
+  // silent second declaration that disagreed with the optimizer for who knows how long.
+  //
   // shipsPage.js owns the Fleet store shapes that storeSchema.js references, so it has to load
   // here too. It is a UI module: give it just enough of a DOM to reach its top-level exports
   // without executing any rendering (nothing here calls a render function).
@@ -79,7 +84,7 @@ function browserSandbox() {
   sb.self = sb;
   sb.globalThis = sb;
   vm.createContext(sb);
-  for (const f of ['hunterDefs.js', 'shipSchema.js', 'shipsPage.js', 'buildCode.js', 'costFormulas.js', 'hunterSimBrowser.js', 'optimizer/space.js', 'optimizer/objective.js', 'storeSchema.js', 'saveImport.js']) {
+  for (const f of ['hunterDefs.js', 'shipSchema.js', 'shipsPage.js', 'buildCode.js', 'costFormulas.js', 'hunterSimBrowser.js', 'optimizer/space.js', 'optimizer/objective.js', 'optimizer/search.js', 'storeSchema.js', 'saveImport.js']) {
     vm.runInContext(fs.readFileSync(path.join(PUBLIC, f), 'utf8'), sb, { filename: f });
   }
   sandbox = sb;

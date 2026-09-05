@@ -6,6 +6,8 @@
 //
 //   node tools/bench/schema-test.js
 
+const fs = require('fs');
+const path = require('path');
 const H = require('./harness.js');
 
 const sb = H.browserSandbox();
@@ -30,6 +32,42 @@ async function runChecks() {
 }
 
 const eq = (a, b, label) => (a === b ? null : `${label}: expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`);
+
+// THE SHIPPED DEFAULT MUST BE DECLARED ONCE. It was declared twice with different values --
+// storeSchema said 'complete', the optimizer's DEFAULT_EFFORT said 'fast' -- and because NINE of
+// thirteen optimize() call sites pass no effort and inherit the optimizer's value, every bench in
+// this directory was validating a configuration the app never runs. It was not marginal: knox@22
+// scored -0.44% (a reported QUALITY FAILURE) at Fast and +0.02% at the shipped default.
+//
+// storeSchema now derives the value; this asserts the derivation actually holds, and that the
+// value names a real effort level, so neither half can drift.
+check('the shipped optimize effort is declared exactly once', () => {
+  const opt = sb.HunterOptimizer;
+  if (!opt || !opt.DEFAULT_EFFORT) return 'HunterOptimizer.DEFAULT_EFFORT is missing';
+  const stored = S.freshStore().optimizeEffort;
+
+  // NOT a comparison of the two values -- storeSchema DERIVES from DEFAULT_EFFORT, so asserting
+  // they are equal is tautological and cannot fail. (It was written that way first, and a negative
+  // control that changed DEFAULT_EFFORT still passed. A check that cannot fail is decoration.)
+  //
+  // What can still go wrong is someone RE-INTRODUCING a literal in storeSchema, which is exactly
+  // how the two came to disagree before. So the source is the thing under test.
+  const src = fs.readFileSync(path.join(__dirname, '../../webapp/public/storeSchema.js'), 'utf8');
+  const effortNames = Object.keys(opt.EFFORT_LEVELS);
+  const block = src.slice(src.indexOf('optimizeEffort:'), src.indexOf('optimizeEffort:') + 800);
+  for (const name of effortNames) {
+    if (block.includes(`'${name}'`) || block.includes(`"${name}"`)) {
+      return `storeSchema hard-codes the effort "${name}" instead of deriving it from `
+        + 'HunterOptimizer.DEFAULT_EFFORT -- that duplication is what let the store say '
+        + '"complete" while the optimizer said "fast", invalidating every bench';
+    }
+  }
+  // And the value must name a real level, which catches a typo in DEFAULT_EFFORT itself.
+  if (!opt.EFFORT_LEVELS[stored]) {
+    return `the default effort "${stored}" is not one of ${effortNames.join(', ')}`;
+  }
+  return null;
+});
 
 check('a fresh store satisfies its own invariants', () => {
   const problems = S.validateStore(S.freshStore());

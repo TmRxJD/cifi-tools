@@ -148,7 +148,23 @@
         + 'misses, at several times the cost.',
     },
   };
-  const DEFAULT_EFFORT = 'fast';
+  //
+  // THE SHIPPED DEFAULT, DECLARED EXACTLY ONCE -- and it used to be declared twice, with two
+  // different values, which invalidated the entire bench suite without anyone noticing.
+  //
+  // `storeSchema.js` said 'complete' (what a user actually gets) while this said 'fast', and NINE
+  // of thirteen optimize() call sites pass no effort at all and inherit whatever this says. So the
+  // acceptance gate, search-quality-check, underspend-test, budget-monotonicity-check,
+  // real-account-optimizer-check and smoke were all validating a configuration nobody runs.
+  //
+  // It was not a subtle difference. On knox@22 -- a build the gate reported as a QUALITY FAILURE at
+  // -0.44% -- the shipped configuration scores +0.02%. The failure was an artefact of the gate
+  // testing Fast.
+  //
+  // storeSchema now DERIVES its default from this constant rather than restating it, and
+  // schema-test asserts they agree, so the two cannot drift apart again. A bench that wants the
+  // cheap configuration must now ask for it BY NAME, where the choice is visible in the diff.
+  const DEFAULT_EFFORT = 'complete';
   const DEFAULT_ARCHIVE_EVALS = EFFORT_LEVELS.fast.archiveEvals;
 
   // Illumination reports progress as a fraction of this: it has no natural denominator of its own,
