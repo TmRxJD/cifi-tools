@@ -1919,6 +1919,21 @@ fixed traversal order give identical output for identical input.
   stated conclusions (`regime` of cannot-reach-boss / reaches-cannot-kill / kills-boss, plus
   `reachesBoss`, `killsBoss`, `stageMin/stageAvg/stageMax` and a one-line summary) so a report
   quotes a labelled fact instead of paraphrasing a number. A malformed result throws.
+- **A FIXTURE MUST BE SCORED UNDER ITS OWN ACCOUNT STATE, NOT THE DEVELOPER'S -- AND DOING IT
+  WRONG INFLATED A LEVEL-13 BORGE 13x.** `cfgFor(hunter, build)` reads the STORE: the current
+  account's `hunterStats` and `globalUpgrades`. `cfgForImport(hunter, build)` (tools/bench) reads
+  only the BUILD's own overrides, with empty gems. They are both correct, for different questions,
+  and using the first on a community fixture answers neither.
+  A console sweep did exactly that and reported borge@13 as **+237%** over its community build. The
+  fixture's own recorded `expectedLootScore` is 119.91; that run measured its import at 1,575. The
+  optimizer was not finding a build the community missed for two years -- it was allocating 13
+  points optimally for a MAXED level-62 account's upgrades, which is a different problem with a
+  different answer.
+  **The fixtures also carry a `mode`**: 9 of 82 Borge and 5 of 66 Ozzy builds are `push`, not
+  `loot`. Judging those on loot/min fails them for succeeding at what they were built for.
+  `tools/bench/run.js` already handles both correctly (own-state config, per-build objective). The
+  lesson is not "be careful with cfgFor" -- it is that a THIRD comparison path written in a console
+  is the parallel-implementation trap this file bans, and the existing gate should have been used.
 - **CURRENT BASELINE, all three hunters, explicit hunter, stat vocabulary confirmed per hunter,
   Complete effort (archiveEvals 9600):**
 
