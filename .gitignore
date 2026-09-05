@@ -35,3 +35,4 @@ tools/bench/_realstate.json
 # Bench result artifacts written to the repo root by tools/bench/run.js --out=
 results-*.json
 ozzy-probe.txt
+webapp/public/fixture-cfgs.json

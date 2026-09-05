@@ -46,6 +46,12 @@ function browserSandbox() {
       };
     },
   };
+  // accountState.js is in this list because it owns the canonical account-state constructor AND
+  // its validation -- the guard that rejects one hunter's stats handed to another. It was absent,
+  // which meant the benches' own cfgForImport built configs that NEVER passed through that guard.
+  // A validation that only covers the app is not a validation; the benches are where a wrong
+  // config does its damage quietly.
+  //
   // optimizer/search.js is in this list because storeSchema.js DERIVES the shipped optimize
   // effort from HunterOptimizer.DEFAULT_EFFORT rather than restating it. Without it the store
   // cannot be constructed at all -- which is the intended behaviour: the alternative was a
@@ -84,7 +90,7 @@ function browserSandbox() {
   sb.self = sb;
   sb.globalThis = sb;
   vm.createContext(sb);
-  for (const f of ['hunterDefs.js', 'shipSchema.js', 'shipsPage.js', 'buildCode.js', 'costFormulas.js', 'hunterSimBrowser.js', 'optimizer/space.js', 'optimizer/objective.js', 'optimizer/search.js', 'storeSchema.js', 'saveImport.js']) {
+  for (const f of ['hunterDefs.js', 'shipSchema.js', 'shipsPage.js', 'buildCode.js', 'costFormulas.js', 'hunterSimBrowser.js', 'accountState.js', 'optimizer/space.js', 'optimizer/objective.js', 'optimizer/search.js', 'storeSchema.js', 'saveImport.js']) {
     vm.runInContext(fs.readFileSync(path.join(PUBLIC, f), 'utf8'), sb, { filename: f });
   }
   sandbox = sb;
