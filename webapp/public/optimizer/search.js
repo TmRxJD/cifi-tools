@@ -138,7 +138,16 @@
       help: 'A shorter archive pass, then refines the 3 strongest elites. Quickest.',
     },
     complete: {
-      label: 'Complete', archiveEvals: 4800, refineSupports: 8,
+      // 9600, NOT 4800, AND THE REASON IS BOSS REACHABILITY RATHER THAN GENERAL THOROUGHNESS.
+      // On the level-62 Ozzy seed that fails, archive-only:
+      //     4800 evals   93 cells  1 kill band   best kill  0   47s   -> final -66.27%
+      //     9600 evals  103 cells  3 kill bands  best kill  5   89s
+      //    19200 evals  107 cells  4 kill bands  best kill 10  170s
+      // At 4800 the archive never touches a boss cell and 0 of 98 finalists kill anything, so
+      // refinement has nothing to develop -- it is reliable but needs a foothold (it takes kill 3
+      // to kill 53). Doubling the budget produces one, and cells barely move, so this buys DEPTH
+      // per lineage rather than coverage.
+      label: 'Complete', archiveEvals: 9600, refineSupports: 8,
       help: 'A full archive pass, then refines the 8 strongest elites. Finds builds Fast '
         + 'misses, at several times the cost.',
     },
@@ -1616,6 +1625,15 @@
         unique.push(f);
       }
       const finalScores = await ctx.score(unique.map((f) => ({ talentAlloc: f.talentAlloc, attrAlloc: f.attrAlloc })), FINAL_ITERATIONS);
+      // Did refinement CREATE boss capability from the archive's foothold, or fail to? The archive
+      // reaching kill 1 vs kill 7 decides the whole run, so the question is whether a weak foothold
+      // refines up or dies. Reported, not acted on.
+      {
+        const fb = finalScores.boss || [];
+        const best = fb.reduce((m, b) => Math.max(m, (b && b.kill) || 0), 0);
+        const withKill = fb.filter((b) => b && b.kill > 0).length;
+        ctx.note(`finalists: ${unique.length}, ${withKill} kill a boss, best kill rate ${best}`);
+      }
       const ranked = unique
         .map((f, i) => ({ talentAlloc: f.talentAlloc, attrAlloc: f.attrAlloc, score: finalScores[i] }))
         .sort((a, b) => b.score - a.score);
