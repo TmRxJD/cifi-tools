@@ -36,3 +36,6 @@ tools/bench/_realstate.json
 results-*.json
 ozzy-probe.txt
 webapp/public/fixture-cfgs.json
+inputs.txt
+basin-verdicts*.json
+basin-shipped.json

@@ -105,6 +105,18 @@ const storeSchema = z.object({
   }).passthrough(),
   effectivePathMode: z.string().min(1),
 
+  // These two were added to StoreSchema and NOT here, so a real save import failed this schema
+  // with `Unrecognized keys: "lastHunter", "optimizeEffort"` -- app-schema-test had been red and
+  // nobody had run all.js to see it. That is exactly the drift the key-set guard below exists to
+  // catch, and it caught it; the fix is to declare them, not to loosen the schema.
+  //
+  // This module stays a PURE schema -- it must not reach into the sandbox, or every consumer pays
+  // to construct one. That `optimizeEffort` names a level the optimizer actually declares is
+  // asserted in schema-test ("the shipped optimize effort is declared exactly once"), which owns
+  // that relationship; duplicating it here would be a second source for one fact.
+  lastHunter: z.enum(['borge', 'ozzy', 'knox']),
+  optimizeEffort: z.string().min(1),
+
   // Fragments are ACCOUNT-WIDE, which is why they sit at the top level rather than under a hunter.
   // `perDay` is a user input the sim cannot infer; `current` comes from the save and `currentAt`
   // stamps it so accrual restarts from a real number.

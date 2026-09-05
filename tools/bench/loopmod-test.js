@@ -22,6 +22,9 @@
 
 const fs = require('fs');
 const path = require('path');
+// H was used below without ever being required -- this file crashed with "H is not defined" on
+// every run. It went unnoticed because all.js was not being run; the audit found it, not a user.
+const H = require(path.join(__dirname, 'harness.js'));
 
 const REF = path.join(__dirname, '../reference/loop-mods.json');
 const savePath = process.argv[2] || (H.latestDecodedSave() || {}).path;
