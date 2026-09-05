@@ -187,11 +187,6 @@ async function makeScorer(cfg, mode, ctxOverride) {
   };
 }
 
-// The factory optimize() needs for a mode that cross-seeds: a scorer bound to a DIFFERENT
-// objective. The browser supplies this from its worker pool; a bench builds one in-process.
-function scorerFactory(cfg) {
-  return (mode, ctxOverride) => makeScorer(cfg, mode, ctxOverride);
-}
 
 /** Score one specific allocation at full fidelity. */
 async function scoreAllocation(cfg, mode, talentAlloc, attrAlloc, iterations = Optimizer.FINAL_ITERATIONS) {
@@ -338,7 +333,7 @@ function loadKnownBuilds() {
 }
 
 module.exports = {
-  browserSandbox, parseBuildCode, hunterDefs, cfgForImport, makeScorer, scorerFactory, scoreAllocation,
+  browserSandbox, parseBuildCode, hunterDefs, cfgForImport, makeScorer, scoreAllocation,
   latestDecodedSave,
   findFixture,
   loadKnownBuilds, evaluateAllocation, Space, Optimizer, Objective,

@@ -72,7 +72,7 @@ let failures = 0;
       const scorer = await H.makeScorer(damaged, 'loot');
       let res;
       try {
-        res = await H.Optimizer.optimize(damaged, { mode: 'loot', scorer, scorerFor: H.scorerFactory(damaged) });
+        res = await H.Optimizer.optimize(damaged, { mode: 'loot', scorer });
       } catch (err) {
         failures++;
         console.log(`FAIL ${fx.uid} lvl${build.level}: optimize threw -- ${err.message}`);

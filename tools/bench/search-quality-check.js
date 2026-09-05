@@ -122,7 +122,7 @@ function stratify(fixtures, n, rand) {
     const scorer = await H.makeScorer(bare, 'loot');
     let res;
     try {
-      res = await H.Optimizer.optimize(bare, { mode: 'loot', scorer, scorerFor: H.scorerFactory(bare) });
+      res = await H.Optimizer.optimize(bare, { mode: 'loot', scorer });
     } catch (err) {
       console.log(`ERR  ${p.hunter}#${p.fx.index} lvl${p.level}: ${err.message}`);
       rows.push({ ...p, err: err.message });

@@ -89,7 +89,7 @@ const pass = (m) => console.log(`pass  ${m}`);
       const scorer = await H.makeScorer(cfg, 'loot');
       let res;
       try {
-        res = await H.Optimizer.optimize(cfg, { mode: 'loot', scorer, scorerFor: H.scorerFactory(cfg) });
+        res = await H.Optimizer.optimize(cfg, { mode: 'loot', scorer });
       } catch (err) {
         fail(`${label}: optimize threw -- ${err.message}`);
         continue;

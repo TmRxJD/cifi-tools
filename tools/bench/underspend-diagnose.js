@@ -111,7 +111,7 @@ const top = (defs, alloc, n = 6) => defs
   // Now the real search, from the damaged incumbent.
   const damagedCfg = { ...cfg, currentTalents: dT, currentAttrs: dA };
   const scorer = await H.makeScorer(damagedCfg, 'loot');
-  const res = await H.Optimizer.optimize(damagedCfg, { mode: 'loot', scorer, scorerFor: H.scorerFactory(damagedCfg) });
+  const res = await H.Optimizer.optimize(damagedCfg, { mode: 'loot', scorer });
   const winner = res.best;
   const winScore = await score(winner.talentAlloc, winner.attrAlloc);
   console.log('');

@@ -143,11 +143,10 @@
     const poolKey = `${mode}|${JSON.stringify(serializeCfg(cfg))}`;
     if (cachedPool && cachedPool.key !== poolKey) {
       cachedPool.pool.terminate();
-      for (const p of cachedPool.crossPools.values()) p.terminate();
       cachedPool = null;
     }
     if (!cachedPool) {
-      cachedPool = { key: poolKey, pool: new ScoringPool(cfg, mode, size), crossPools: new Map() };
+      cachedPool = { key: poolKey, pool: new ScoringPool(cfg, mode, size) };
     }
     const pool = cachedPool.pool;
     try {
@@ -185,7 +184,6 @@
   function releaseScoringPools() {
     if (!cachedPool) return;
     cachedPool.pool.terminate();
-    for (const p of cachedPool.crossPools.values()) p.terminate();
     cachedPool = null;
   }
 

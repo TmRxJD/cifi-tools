@@ -1,0 +1,119 @@
+[
+  {
+    "hunter": "ozzy",
+    "set": "KNOWN_OZZY_BUILDS",
+    "index": 35,
+    "mode": "loot",
+    "note": "1.01m",
+    "ok": true,
+    "parity": "match",
+    "level": 54,
+    "fixtureLevel": 54,
+    "expectedLootScore": 1010000,
+    "parityDeltaPct": -0.5347025412181047,
+    "talentBudget": 54,
+    "attributeBudget": 162,
+    "importLoot": 1004599.5043336971,
+    "importStage": 195.65709999999999,
+    "optimizedLoot": 825146.8413625567,
+    "optimizedStage": 195.6126,
+    "lootDeltaPct": -17.863104868856457,
+    "stageDeltaPct": -0.022743871804294002,
+    "evals": 16935,
+    "cacheHits": 11213,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 289,
+          "realizable": 292
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 558,
+        "killBands": 14,
+        "bestKillReached": 99,
+        "bestScore": 779420.6595084007,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "depthShare": 0,
+        "selection": "curiosity",
+        "moves": {
+          "attempted": 49418,
+          "rejected": 33619,
+          "accepted": 15799,
+          "strandedRepairs": 1805,
+          "nodesCleared": 3598,
+          "structuralResamples": 2729,
+          "depthAccepted": 0,
+          "depthRejected": 0,
+          "depthOpenedNode": 0
+        }
+      },
+      "finalists": {
+        "count": 559,
+        "killing": 439,
+        "bestKillRate": 99.9,
+        "refined": 8,
+        "refinedKillBands": 8
+      }
+    },
+    "seconds": 2498.707,
+    "optimizedTalents": {
+      "revival": 2,
+      "boon": 1,
+      "ua": 5,
+      "needles": 10,
+      "omen": 10,
+      "ll": 10,
+      "crip": 15,
+      "echo": 1
+    },
+    "optimizedAttributes": {
+      "lotl": 85,
+      "exo": 3,
+      "scorp": 5,
+      "timeless": 5,
+      "ibu": 5,
+      "exterm": 5,
+      "snek": 0,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 0,
+      "dance": 4,
+      "sisters": 0,
+      "scarab": 0,
+      "cat": 6
+    },
+    "importTalents": {
+      "revival": 2,
+      "boon": 1,
+      "ua": 5,
+      "needles": 10,
+      "omen": 10,
+      "ll": 10,
+      "crip": 15,
+      "echo": 1,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "lotl": 63,
+      "exo": 1,
+      "scorp": 5,
+      "timeless": 5,
+      "ibu": 5,
+      "exterm": 5,
+      "snek": 1,
+      "vect": 0,
+      "cycle": 1,
+      "deal": 3,
+      "medusa": 1,
+      "dance": 4,
+      "sisters": 0,
+      "scarab": 6,
+      "cat": 0
+    }
+  }
+]

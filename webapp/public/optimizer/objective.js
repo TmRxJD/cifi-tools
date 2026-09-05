@@ -180,56 +180,6 @@
     return modeOrThrow(mode).score(result, ctx);
   }
 
-  /** Attribute ids this mode requires to be held at maximum, or an empty array. */
-  /**
-   * WHY THERE IS NO CROSS-SEEDING BETWEEN OBJECTIVES.
-   *
-   * A pass used to run a `boss` search inside `loot` and enter its answer as a loot candidate,
-   * to get past builds that stall at an unkilled boss. That was wrong on the game's own terms.
-   *
-   * Node effects are ASYMMETRIC: some are weaker against bosses, some only apply to bosses. A
-   * boss build therefore deliberately funds boss-positive nodes and avoids boss-reduced ones,
-   * while a push build -- which already goes past the boss and kills mostly normal enemies --
-   * happily takes the boss-reduced nodes. So a boss-shaped allocation is not "a stronger version"
-   * of a loot or push allocation; it is tuned for a different fight. Injecting one into the loot
-   * search offers a candidate built to the wrong asymmetry, and costs a full second search to do
-   * it.
-   *
-   * If loot genuinely is capped by an unkilled boss, that shows up in `lootPerMin` on its own --
-   * the score is what we are after -- and the fix belongs in the search's ability to get there,
-   * not in borrowing an answer from an objective that wants something else.
-   */
-  // THERE IS NO CROSS-SEEDING BETWEEN OBJECTIVES, AND THERE MUST NOT BE.
-  //
-  // A pass used to run a whole `boss` search inside `loot` and enter its answer as a candidate. If
-  // `loot` needs another objective to find a build that farms more, then `loot` is broken -- a
-  // build that produces more loot per minute IS the better loot build by definition, and the
-  // search must be able to reach it on its own.
-  //
-  // What that pass was really supplying is INFORMATION the search already had and threw away:
-  // every evaluation returns bossKillRate and bossHpPercent alongside lootPerMin. Screening now
-  // keeps both, so boss-capable shapes are explored as part of the initial search rather than
-  // recovered by a second one.
-  /**
-   * Is this build STOPPED BY A BOSS, as opposed to merely failing to kill one?
-   *
-   * Bosses stand every 100 stages, so the two cases are visible in where a run ends:
-   *     Knox  lvl26  maxStage 100.0  -> pinned exactly on the stage-100 boss   BOSS-LIMITED
-   *     Ozzy  lvl62  maxStage 202.6  -> stalls just past the stage-200 boss    BOSS-LIMITED
-   *     Borge lvl60  maxStage 267.2  -> dies 67 stages past a boss             NOT boss-limited
-   *
-   * The distinction is not cosmetic. Ranking non-killing builds by boss progress fixed a Knox
-   * fixture and took borge@26 to -73%, because Borge is not held up by a boss at all -- steering
-   * it toward boss damage trades away farming for something that was never in its way. Any
-   * boss-aware behaviour has to be gated on this, and `bossKillRate === 0` is NOT the gate: Borge
-   * reports 0 kills simply because no boss is involved in how its run ends.
-   */
-  function isBossLimited(result) {
-    if (!result || !Number.isFinite(result.maxStage)) return false;
-    if (result.maxStage < BOSS_INTERVAL) return false;          // no boss reached yet at all
-    const pastLastBoss = result.maxStage % BOSS_INTERVAL;
-    return pastLastBoss <= BOSS_STALL_MARGIN;
-  }
 
   function pinnedAttrsFor(mode) {
     return modeOrThrow(mode).pinnedAttrs || [];
@@ -302,7 +252,7 @@
     };
   }
 
-  const Objective = { MODES, scoreFor, pinnedAttrsFor, pathModes, modeOrThrow, isBossLimited, bossTargetFor, contextFor, describeRun, BOSS_INTERVAL, KILL_ACHIEVED_BASE };
+  const Objective = { MODES, scoreFor, pinnedAttrsFor, pathModes, modeOrThrow, bossTargetFor, contextFor, describeRun, BOSS_INTERVAL, KILL_ACHIEVED_BASE };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Objective;
   else global.OptimizerObjective = Objective;

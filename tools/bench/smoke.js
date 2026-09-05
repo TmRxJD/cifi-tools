@@ -37,7 +37,6 @@ const H = require('./harness.js');
     effort: 'fast',
     mode: 'loot',
     scorer,
-    scorerFor: H.scorerFactory(cfg),
     onProgress: ({ phase, done, total }) => {
       if (phase !== lastPhase) { lastPhase = phase; process.stdout.write(`  [${phase} ${done}/${total}]\n`); }
     },

@@ -1244,7 +1244,32 @@
   // search itself is identical in both, so what the benchmark proves is what ships.
   // ---------------------------------------------------------------------------------------
   /** @param {OptimizerConfig} cfg @param {OptimizeOptions} [options] */
-  async function optimize(cfg, { mode = 'loot', effort = DEFAULT_EFFORT, scorer, onProgress = () => {}, shouldCancel = () => false } = /** @type {any} */ ({})) {
+  // Every option this function accepts. An option NOT on this list is rejected rather than ignored
+  // -- see the check below for why that matters.
+  const OPTIMIZE_OPTIONS = ['mode', 'effort', 'scorer', 'onProgress', 'shouldCancel'];
+
+  async function optimize(cfg, opts = /** @type {any} */ ({})) {
+    // AN IGNORED OPTION IS INDISTINGUISHABLE FROM A WORKING ONE, AND THAT IS HOW DEAD PARAMETERS
+    // SURVIVE FOR MONTHS.
+    //
+    // The cross-seed pass took a `scorerFor` factory. It was deleted; EIGHT benches went on passing
+    // `scorerFor: H.scorerFactory(cfg)` and this function silently swallowed it, so the call sites
+    // still read as though cross-seeding were wired up. Nothing failed, nothing warned, and the
+    // only way to discover it was to read the signature.
+    //
+    // It is the same shape as the shipped-effort split: two things that must agree, with nothing
+    // asserting they do. Rejecting unknown keys makes the class impossible instead of unlikely.
+    for (const k of Object.keys(opts)) {
+      if (!OPTIMIZE_OPTIONS.includes(k)) {
+        throw new Error(`optimize(): unknown option "${k}". Accepted: ${OPTIMIZE_OPTIONS.join(', ')}. `
+          + 'An option that is silently ignored is indistinguishable from one that works, which is '
+          + 'how `scorerFor` outlived the cross-seed pass it belonged to.');
+      }
+    }
+    const {
+      mode = 'loot', effort = DEFAULT_EFFORT, scorer,
+      onProgress = () => {}, shouldCancel = () => false,
+    } = opts;
     if (typeof scorer !== 'function') throw new Error('optimize() requires a scorer function');
 
     // Mode is validated HERE as well as in the worker, so an unknown mode fails before a search

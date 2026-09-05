@@ -70,7 +70,7 @@ parentPort.on('message', async (fixture) => {
 
     // ---- Quality at the import's own budget ----------------------------------------------
     const scorer = await H.makeScorer(cfg, fixture.mode);
-    const result = await H.Optimizer.optimize(cfg, { mode: fixture.mode, scorer, scorerFor: H.scorerFactory(cfg) });
+    const result = await H.Optimizer.optimize(cfg, { mode: fixture.mode, scorer });
     const optimized = await H.evaluateAllocation(cfg, result.best.talentAlloc, result.best.attrAlloc);
 
     parentPort.postMessage({
