@@ -177,6 +177,7 @@
     'structuralShare', 'depthShare',                   // variation mix
     'selection', 'seeds', 'seed',                      // parent choice + determinism
     'clampToHeadroom', 'breakpointSpending', 'bossDamageBands', // move/descriptor flags
+    'paretoDepth',                                     // MOME: solutions kept per cell
     'archiveOnly',                                     // ablation: stop after illumination
   ]);
 
@@ -925,7 +926,7 @@
    * Seeded from the enumerated supports rather than from random points: the enumeration is exact
    * and already paid for, so the archive starts with real structural coverage instead of noise.
    */
-  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, structuralShare, depthShare, seedList, selection, clampToHeadroom, breakpointSpending, bossDamageBands, report) {
+  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, structuralShare, depthShare, seedList, selection, clampToHeadroom, breakpointSpending, bossDamageBands, paretoDepth, report) {
     const stats = { rejected: 0, accepted: 0, repaired: 0, nodesCleared: 0, structural: 0,
       depthAccepted: 0, depthRejected: 0, depthOpened: 0,
       breakpointClamped: 0, breakpointBlocked: 0 };
@@ -946,26 +947,88 @@
     // dominates either way.
     const archive = new Map();
 
+    //
+    // ONE ELITE PER CELL IS WHY THE STEPPING STONE IS THROWN AWAY, AND THE FIX IS A PER-CELL PARETO
+    // FRONT (MOME -- Pierrot, Richard, Beguir & Cully 2022, arXiv:2202.03057).
+    //
+    // The failure has a name in the literature: DETACHMENT, "algorithms forgetting how to reach
+    // previously visited states" -- one of the two modes Go-Explore was built to fix (Ecoffet et
+    // al., "First return, then explore", Nature 2021). Ours happens INSIDE a cell: a build that
+    // removed 37% of the boss and one that never scratched it share a cell, the archive keeps
+    // whichever has more loot/min today, and the lineage that was making progress is forgotten.
+    //
+    // MOME keeps a Pareto front per cell instead: a new solution enters "if it belongs to the
+    // Pareto Front within the cell and replaces any solutions that it dominates". Note what this
+    // does NOT do -- it does not add cells. That distinction is the whole point, because adding a
+    // descriptor axis was measured here and FAILED: bossDamageBands moved cells 477 -> 455 and
+    // loot -39.44% -> -39.48%, because the same variation budget spread over more niches gives
+    // each lineage less depth. More per cell, not more cells.
+    //
+    // A "SUPERSET, SO IT CANNOT REGRESS" ARGUMENT WAS WRITTEN HERE AND IS FALSE. MEASURED WITHIN
+    // MINUTES OF WRITING IT. The reasoning was: the maximum-loot point is always on the Pareto
+    // front, so the 'loot' role retains exactly what the single-elite archive retained, therefore
+    // the archive can only grow. The retention RULE is indeed a superset. The RUN is not --
+    // borge@35, 900 variations, same seed:
+    //     paretoDepth 1   cells 201   entries 201
+    //     paretoDepth 2   cells 194   entries 228   <- 34 extra members, 7 FEWER cells
+    // Extra elites change what parent selection sees, so the trajectory diverges from the first
+    // divergent draw onward and the two runs explore different regions. A retention superset is
+    // only a population superset when the trajectory is identical, and adding to the population is
+    // exactly what makes it not be.
+    // So this carries the SAME depth-dilution risk as the descriptor axis, just milder (3.5%
+    // coverage lost against 4.6%). It has to be judged end to end on returned loot, like every
+    // other change here -- there is no structural free lunch.
+    //
+    // K = 2 needs no tuning parameter: with two objectives the front's two EXTREMES are the
+    // max-loot and max-damage members, and for K = 2 the extremes ARE the front. The damage role
+    // is kept only in kill-0 cells, because below a kill is the only place bossHpPercent is a
+    // gradient at all -- objective.js records the measurement showing it reads 0 both for a build
+    // that never reached the wall and one already past it. Above a kill, KILL_BANDS is already a
+    // fine-grained gradient and a second member would duplicate the first.
+    //
+    // Within a cell this implements Deb's feasibility rules (Deb 2000): every member of a cell is
+    // on the same side of the constraint (cells are keyed on kill band), so rule 2 never fires;
+    // rule 1 (both feasible -> better objective) is the loot role, and rule 3 (both infeasible ->
+    // smaller constraint violation) is the damage role, with bossHpPercent as the violation. It is
+    // parameter-free, which is why it is usable here at all.
+    //
+    // THE LOOT OBJECTIVE IS UNTOUCHED. This changes what the archive RETAINS, not what anything is
+    // scored on: refinement still ranks by the caller's objective and Stage 3 still decides on pure
+    // loot. A build is never preferred for hurting a boss; it is merely not forgotten for it.
+    const put = (key, pair, score, meta, better) => {
+      const held = archive.get(key);
+      const entry = {
+        talentAlloc: pair.talentAlloc,
+        attrAlloc: pair.attrAlloc,
+        score,
+        kill: meta.kill,
+        hp: Number.isFinite(meta.hp) ? meta.hp : 100,
+        maxStage: meta.maxStage,
+        // A brand-new elite starts curious, so an unexplored niche is developed before it has
+        // had to prove anything -- which is the only way a boss cell that is reached once gets
+        // the follow-up effort to become a real build.
+        curiosity: CURIOSITY_INITIAL,
+      };
+      if (!held || better(entry, held)) { archive.set(key, entry); return true; }
+      return false;
+    };
+    // Deterministic total orders. A tie broken by chance would make the archive depend on
+    // evaluation order, and this search's whole contract is that one seed gives one answer.
+    const betterLoot = (a, b) => a.score > b.score;
+    const betterDamage = (a, b) => (a.hp !== b.hp ? a.hp < b.hp : a.score > b.score);
+
     const consider = (pair, score, meta) => {
       if (!Number.isFinite(score)) return;
       const cell = cellOf(meta, ATTRIBUTES, pair.attrAlloc, bossDamageBands);
-      const held = archive.get(cell);
-      if (!held || score > held.score) {
-        archive.set(cell, {
-          talentAlloc: pair.talentAlloc,
-          attrAlloc: pair.attrAlloc,
-          score,
-          kill: meta.kill,
-          hp: Number.isFinite(meta.hp) ? meta.hp : 100,
-          maxStage: meta.maxStage,
-          // A brand-new elite starts curious, so an unexplored niche is developed before it has
-          // had to prove anything -- which is the only way a boss cell that is reached once gets
-          // the follow-up effort to become a real build.
-          curiosity: CURIOSITY_INITIAL,
-        });
-        return true;
+      // The suffix is a constant on every key, so with paretoDepth 1 this is the single-elite
+      // archive exactly -- same retention, and the same relative order under the key tie-break
+      // that parent selection uses. `pareto-archive-check.js` asserts that identity rather than
+      // asserting it here in a comment.
+      let improved = put(cell + '|loot', pair, score, meta, betterLoot);
+      if (paretoDepth > 1 && !(meta.kill > 0)) {
+        improved = put(cell + '|dmg', pair, score, meta, betterDamage) || improved;
       }
-      return false;
+      return improved;
     };
     // SEEDS MUST BE COMPLETE PAIRS. Screening varies attributes against a fixed talent seed, so a
     // screened row carries `attrAlloc` and no `talentAlloc` -- and `{ ...undefined }` is `{}`, so an
@@ -1154,7 +1217,12 @@
     // there was no field that answered it.
     const bestStage = [...archive.values()].reduce((m, e) => Math.max(m, e.maxStage || 0), 0);
     const bossBoundariesCrossed = Math.floor(bestStage / Objective.BOSS_INTERVAL);
-    ctx.note(`archive: ${archive.size} cells across ${bands.size} kill bands from ${spent} `
+    // CELLS AND ENTRIES ARE DIFFERENT NUMBERS ONCE paretoDepth > 1, AND REPORTING ONE AS THE OTHER
+    // WOULD BE THE EXACT KIND OF MISLEADING DIAGNOSTIC THAT STARTED TWO WRONG INVESTIGATIONS HERE.
+    // `cells` stays comparable across paretoDepth settings -- it is the descriptor coverage, which
+    // MOME deliberately does not change -- while `entries` is what the archive actually holds.
+    const cellCount = new Set([...archive.keys()].map((k) => k.slice(0, k.lastIndexOf('|')))).size;
+    ctx.note(`archive: ${cellCount} cells (${archive.size} entries) across ${bands.size} kill bands from ${spent} `
       + `variations (best kill rate reached ${bestKill}, furthest stage ${bestStage.toFixed(1)}, `
       + `${bossBoundariesCrossed} boss boundary/ies crossed)`);
     const attempted = stats.rejected + stats.accepted;
@@ -1165,6 +1233,7 @@
       + `; clampToHeadroom ${clampToHeadroom ? 'ON' : 'off'}`
       + `; breakpoint ${breakpointSpending ? 'ON' : 'off'}`
       + `; bossDamageBands ${bossDamageBands ? 'ON' : 'off'}`
+      + `; paretoDepth ${paretoDepth}`
       + (breakpointSpending ? ` (${stats.breakpointClamped} clamped, ${stats.breakpointBlocked} blocked)` : ''));
     ctx.note(`illuminated from ${streams.length} stream(s)`);
     // STRUCTURED, NOT STRINGIFIED. The notes are for a human reading one run; a bench comparing
@@ -1199,7 +1268,8 @@
     }
 
     ctx.diag.archive = {
-      cells: archive.size,
+      cells: cellCount,
+      entries: archive.size,
       killBands: bands.size,
       bestKillReached: bestKill,
       bestMaxStageReached: bestStage,
@@ -1220,6 +1290,7 @@
       clampToHeadroom,
       breakpointSpending,
       bossDamageBands,
+      paretoDepth,
       breakpointClamped: stats.breakpointClamped,
       breakpointBlocked: stats.breakpointBlocked,
       moves: {
@@ -1759,6 +1830,9 @@
         // measured a move set that raised coverage and LOWERED champion quality, so the arm that
         // wins has to win on returned loot.
         effortSpec.bossDamageBands === true,
+        // MOME depth. 1 == the single-elite archive, byte-identical. 2 keeps the max-damage
+        // member of each kill-0 cell alongside the max-loot one.
+        Number.isFinite(effortSpec.paretoDepth) ? effortSpec.paretoDepth : 1,
         (f) => report('survey', f * SURVEY_REPORT_SCALE, SURVEY_REPORT_SCALE),
       );
       const surveyed = elites.map((e) => ({ ...e, mask: maskOf(e.attrAlloc) }));

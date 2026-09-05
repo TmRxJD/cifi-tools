@@ -34,6 +34,8 @@ const ONLY = opt('only', 'borge@73');
 const SEEDS = Number(opt('seeds', 1));
 const ARCHIVE_EVALS = Number(opt('archiveEvals', 9600));
 const REFINE = Number(opt('refineSupports', 8));
+// MOME depth to compare against 1. --pareto=2 makes this the paretoDepth A/B instead.
+const PARETO = Number(opt('pareto', 0));
 
 // The shipped archive seed, so arm-to-arm differences are the FLAG and not the stream.
 const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
@@ -68,7 +70,10 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
 
     for (let s = 0; s < SEEDS; s++) {
       const seed = BASE_SEEDS[s % BASE_SEEDS.length];
-      for (const on of [false, true]) {
+      const arms = PARETO ? [1, PARETO] : [false, true];
+      for (const arm of arms) {
+        const on = PARETO ? false : arm;
+        const depth = PARETO ? arm : 1;
         const t0 = Date.now();
         const res = await H.Optimizer.optimize(bare, {
           mode: 'loot',
@@ -76,32 +81,35 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
           effort: {
             archiveEvals: ARCHIVE_EVALS, refineSupports: REFINE,
             structuralShare: 0.35, depthShare: 0, selection: 'curiosity',
-            seeds: [seed], breakpointSpending: true, bossDamageBands: on,
+            seeds: [seed], breakpointSpending: true, bossDamageBands: on, paretoDepth: depth,
           },
         });
         const got = await H.evaluateAllocation(cfg, res.best.talentAlloc, res.best.attrAlloc);
         // THE FLAG MUST BE CONFIRMED LIVE FROM THE RESULT, not from the argument we passed.
         // bossDamageBands reached three of four sites once already and was never actually applied.
         const recorded = res.diag && res.diag.archive && res.diag.archive.bossDamageBands;
-        if (recorded !== on) {
-          throw new Error(`boss-damage-ab: asked for bossDamageBands=${on} but the run recorded `
-            + `${recorded}; the flag is not reaching the archive and the A/B would be a lie`);
+        const recordedDepth = res.diag && res.diag.archive && res.diag.archive.paretoDepth;
+        if (recorded !== on || recordedDepth !== depth) {
+          throw new Error(`boss-damage-ab: asked for bossDamageBands=${on}/paretoDepth=${depth} but `
+            + `the run recorded ${recorded}/${recordedDepth}; a flag is not reaching the archive `
+            + 'and the A/B would be a lie');
         }
         const d = H.Objective.describeRun(got);
         rows.push({
-          name, seed, on, loot: got.loot,
+          name, seed, on, depth, loot: got.loot,
           pct: 100 * (got.loot - reference.loot) / reference.loot,
           regime: d.regime, killPct: d.bossKillRatePct, hpLeft: d.bossHpRemainingPct,
-          cells: res.diag.archive.cells, killBands: res.diag.archive.killBands,
+          cells: res.diag.archive.cells, entries: res.diag.archive.entries,
+          killBands: res.diag.archive.killBands,
           bestKill: res.diag.archive.bestKillReached,
           furthest: res.diag.archive.bestMaxStageReached,
           secs: Math.round((Date.now() - t0) / 1000),
         });
         const r = rows[rows.length - 1];
         console.log(`${name.padEnd(10)} seed ${seed.toString(16).padStart(8)}  `
-          + `bossDamageBands ${on ? 'ON ' : 'off'}  `
+          + (PARETO ? `paretoDepth ${depth}  ` : `bossDamageBands ${on ? 'ON ' : 'off'}  `)
           + `${(r.pct >= 0 ? '+' : '') + r.pct.toFixed(2)}%  `
-          + `cells ${String(r.cells).padStart(4)}  killBands ${String(r.killBands).padStart(2)}  `
+          + `cells ${String(r.cells).padStart(4)} entries ${String(r.entries).padStart(4)}  killBands ${String(r.killBands).padStart(2)}  `
           + `furthest ${r.furthest.toFixed(1).padStart(6)}  ${r.regime}  ${r.secs}s`);
       }
     }
@@ -116,8 +124,8 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
   let anyWin = false;
   for (const name of names) {
     for (const seed of [...new Set(rows.filter((r) => r.name === name).map((r) => r.seed))]) {
-      const off = rows.find((r) => r.name === name && r.seed === seed && !r.on);
-      const on = rows.find((r) => r.name === name && r.seed === seed && r.on);
+      const off = rows.find((r) => r.name === name && r.seed === seed && (PARETO ? r.depth === 1 : !r.on));
+      const on = rows.find((r) => r.name === name && r.seed === seed && (PARETO ? r.depth === PARETO : r.on));
       if (!off || !on) continue;
       const delta = 100 * (on.loot - off.loot) / off.loot;
       const verdict = delta > 1 ? 'WIN ' : (delta < -1 ? 'LOSS' : 'same');
