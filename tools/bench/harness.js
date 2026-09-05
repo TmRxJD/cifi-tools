@@ -194,6 +194,38 @@ async function makeScorer(cfg, mode, ctxOverride) {
 }
 
 
+/**
+ * The same scorer, backed by a worker_threads pool.
+ *
+ * IDENTICAL OUTPUT TO makeScorer BY CONSTRUCTION, and that is the point rather than a hope: the
+ * workers return the evaluator's RAW fields and the scoring happens HERE, on the main thread,
+ * through the one canonical Objective. There is no second copy of the mode rules to drift. The
+ * only thing that moved off-thread is the evaluation, which is pure per (allocation, iterations).
+ *
+ * `eval-pool-check.js` asserts the raw half is bit-identical, with no tolerance, in caller order.
+ *
+ * Returns { score, destroy }. DESTROY IT -- each worker holds its own WASM module, and leaking a
+ * pool per fixture in a sweep is how the browser side hit "Cannot allocate Wasm memory for new
+ * instance". Use try/finally.
+ */
+async function makePooledScorer(cfg, mode, ctxOverride, size) {
+  const { EvalPool } = require('./eval-pool.js');
+  const pool = await new EvalPool(cfg.hunter, cfg, size).start();
+  const ctx = { ...Objective.contextFor(cfg), ...(ctxOverride || {}) };
+  const score = async function score(pairs, iterations) {
+    const raw = await pool.evaluate(pairs, iterations);
+    const out = [];
+    const boss = [];
+    for (const r of raw) {
+      out.push(Objective.scoreFor(mode, r, ctx));
+      boss.push({ kill: r.bossKillRate, hp: r.bossHpPercent, maxStage: r.maxStage });
+    }
+    out.boss = boss;
+    return out;
+  };
+  return { score, destroy: () => pool.destroy() };
+}
+
 /** Score one specific allocation at full fidelity. */
 async function scoreAllocation(cfg, mode, talentAlloc, attrAlloc, iterations = Optimizer.FINAL_ITERATIONS) {
   const score = await makeScorer(cfg, mode);
@@ -339,7 +371,8 @@ function loadKnownBuilds() {
 }
 
 module.exports = {
-  browserSandbox, parseBuildCode, hunterDefs, cfgForImport, makeScorer, scoreAllocation,
+  browserSandbox, parseBuildCode, hunterDefs, cfgForImport, makeScorer, makePooledScorer,
+  scoreAllocation,
   latestDecodedSave,
   findFixture,
   loadKnownBuilds, evaluateAllocation, Space, Optimizer, Objective,

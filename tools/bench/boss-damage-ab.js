@@ -60,7 +60,11 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
     const bare = { ...cfg };
     delete bare.currentTalents;
     delete bare.currentAttrs;
-    const scorer = await H.makeScorer(bare, 'loot');
+    // POOLED: single-threaded node is hours per arm on a level-73 build. The pool is asserted
+    // bit-identical to the serial scorer by eval-pool-check.js, including the boss metadata the
+    // archive forms its cells from.
+    const pooled = await H.makePooledScorer(bare, 'loot');
+    const scorer = pooled.score;
 
     for (let s = 0; s < SEEDS; s++) {
       const seed = BASE_SEEDS[s % BASE_SEEDS.length];
@@ -101,6 +105,9 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
           + `furthest ${r.furthest.toFixed(1).padStart(6)}  ${r.regime}  ${r.secs}s`);
       }
     }
+    // Each worker holds its own WASM module; leaking one per fixture is how the browser side hit
+    // "Cannot allocate Wasm memory for new instance".
+    await pooled.destroy();
   }
 
   console.log('');
