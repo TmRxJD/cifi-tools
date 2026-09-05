@@ -1034,7 +1034,12 @@
       cells: archive.size,
       killBands: bands.size,
       bestKillReached: bestKill,
-      bestScore: [...archive.values()].reduce((m, e) => Math.max(m, e.score || 0), 0),
+      // NAMED FOR ITS FIDELITY, DELIBERATELY. This is a SCREEN_ITERATIONS score, and it was
+      // compared against a FINAL_ITERATIONS import score in an earlier analysis -- 779,420 against
+      // 1,004,599 -- producing the confident and wrong conclusion that "the archive never finds
+      // anything close". The two differ by ~10x in cost and are not comparable. A field called
+      // `bestScore` invites exactly that; a field that names its own fidelity does not.
+      bestScoreAtScreenIterations: [...archive.values()].reduce((m, e) => Math.max(m, e.score || 0), 0),
       variations: spent,
       streams: streams.length,
       structuralShare,
@@ -1548,6 +1553,15 @@
         (f) => report('survey', f * SURVEY_REPORT_SCALE, SURVEY_REPORT_SCALE),
       );
       const surveyed = elites.map((e) => ({ ...e, mask: maskOf(e.attrAlloc) }));
+      // Stage champions, kept so the ledger can re-score them all at ONE fidelity at the end.
+      // Without this, "where did the value go" can only be answered by comparing numbers measured
+      // at different fidelities, which is not an answer.
+      const stageChampions = [];
+      if (surveyed[0]) {
+        stageChampions.push({
+          stage: 'archive', talentAlloc: surveyed[0].talentAlloc, attrAlloc: surveyed[0].attrAlloc,
+        });
+      }
 
       // ARCHIVE-ONLY: return before refinement, for measuring the MOVE SET rather than the whole
       // pipeline. Refinement and the final polish are roughly 90% of a run's wall clock and are
@@ -1690,6 +1704,12 @@
           refinedKillBands: new Set(toRefine.map((e) => String(e.cell).split(':')[0])).size,
         };
       }
+      if (finalists.length) {
+        const bestRefined = finalists.reduce((m, f) => (f.score > m.score ? f : m), finalists[0]);
+        stageChampions.push({
+          stage: 'refined', talentAlloc: bestRefined.talentAlloc, attrAlloc: bestRefined.attrAlloc,
+        });
+      }
       const ranked = unique
         .map((f, i) => ({ talentAlloc: f.talentAlloc, attrAlloc: f.attrAlloc, score: finalScores[i] }))
         .sort((a, b) => b.score - a.score);
@@ -1775,6 +1795,50 @@
       }
 
       report('done', 1, 1);
+      if (ranked[0]) {
+        stageChampions.push({
+          stage: 'returned', talentAlloc: ranked[0].talentAlloc, attrAlloc: ranked[0].attrAlloc,
+        });
+      }
+
+      // ============================== THE VALUE-LOSS LEDGER ==============================
+      //
+      // WHY THIS EXISTS. "Where does the search lose the value?" was repeatedly answered by
+      // comparing an archive score (SCREEN_ITERATIONS) against an import score (FINAL_ITERATIONS)
+      // and reading the difference as a loss. Those numbers are ~10x apart in sampling cost and
+      // mean different things. Every entry below is re-scored at THE SAME fidelity, and the
+      // fidelity is stated in the field name and in the text.
+      //
+      // The ledger states CONCLUSIONS, not raw fields to be paraphrased. `avgStage` was read as
+      // "how far the build gets" twice in one session when `maxStage` is that number, so each
+      // entry carries `Objective.describeRun`'s labelled regime instead of stage numbers alone.
+      const ledger = [];
+      for (const c of stageChampions) {
+        const pair = { talentAlloc: c.talentAlloc, attrAlloc: c.attrAlloc };
+        const [sc] = await ctx.score([pair], FINAL_ITERATIONS);
+        const meta = ((await ctx.score([pair], FINAL_ITERATIONS)).boss || [])[0];
+        ledger.push({
+          stage: c.stage,
+          scoreAtFinalIterations: sc,
+          finalIterations: FINAL_ITERATIONS,
+          killRatePct: meta ? meta.kill : null,
+          maxStageReached: meta ? meta.maxStage : null,
+        });
+      }
+      // Deltas between consecutive stages, so a reader does not have to subtract and mislabel.
+      for (let i = 1; i < ledger.length; i++) {
+        const prev = ledger[i - 1].scoreAtFinalIterations;
+        ledger[i].gainOverPreviousStagePct = prev ? ((ledger[i].scoreAtFinalIterations - prev) / prev) * 100 : null;
+      }
+      diag.ledger = ledger;
+      diag.ledgerText = ledger.map((e, i) => {
+        const d = e.gainOverPreviousStagePct;
+        const delta = (i === 0 || d === null) ? '' : `  (${d >= 0 ? '+' : ''}${d.toFixed(2)}% vs ${ledger[i - 1].stage})`;
+        return `${e.stage.padEnd(9)} ${Math.round(e.scoreAtFinalIterations)} loot/min @${FINAL_ITERATIONS} iters`
+          + `  kill ${e.killRatePct}%  maxStage ${e.maxStageReached}${delta}`;
+      }).join('\n');
+      ctx.note(`value ledger (all at ${FINAL_ITERATIONS} iterations):\n${diag.ledgerText}`);
+
       return {
         best: ranked[0],
         ranked,

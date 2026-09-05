@@ -108,6 +108,12 @@ function stats(xs) {
   const scorer = await H.makeScorer(cfg, 'loot');
   console.log(`config-sweep: ${label}  grid=${gridName}  seeds=${seeds.length}`
     + `  ${archiveOnly ? 'ARCHIVE-ONLY' : 'FULL PIPELINE'}`);
+  // State the fidelity of the score column. The archive reports at SCREEN_ITERATIONS and the full
+  // pipeline at FINAL_ITERATIONS; printing both as "mean %" without saying which is how a 10x
+  // difference in sampling cost gets read as a difference in build quality.
+  console.log(archiveOnly
+    ? 'score column: ARCHIVE champion at SCREEN_ITERATIONS (100) -- NOT comparable to a 1000-iter score'
+    : 'score column: RETURNED build at FINAL_ITERATIONS (1000)');
   console.log(`reference (the build being compared against): ${Math.round(importScore)}\n`);
 
   const rows = [];
@@ -133,7 +139,18 @@ function stats(xs) {
       });
       const d = res.diag || {};
       const a = d.archive || {};
-      let score = a.bestScore || 0;
+      // NO SILENT FALLBACK. This used to read `a.bestScore || 0`; the field was renamed to carry
+      // its fidelity (bestScoreAtScreenIterations) and the `|| 0` would have scored every
+      // archive-only arm as ZERO -- reported as -100% against the reference, with nothing warning.
+      // A missing field is a bug in the ledger, not a score of nothing.
+      let score;
+      if (archiveOnly) {
+        if (!Number.isFinite(a.bestScoreAtScreenIterations)) {
+          throw new Error('config-sweep: diag.archive.bestScoreAtScreenIterations is missing; '
+            + 'the archive did not report a champion and a fallback would fabricate one');
+        }
+        score = a.bestScoreAtScreenIterations;
+      }
       if (!archiveOnly) {
         score = (await H.evaluateAllocation(cfg, res.best.talentAlloc, res.best.attrAlloc)).loot;
       }
