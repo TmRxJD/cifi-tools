@@ -262,7 +262,124 @@
     };
   }
 
-  const Objective = { MODES, scoreFor, pinnedAttrsFor, pathModes, modeOrThrow, bossTargetFor, contextFor, describeRun, BOSS_INTERVAL, KILL_ACHIEVED_BASE };
+  //
+  // DISJUNCTIVE REGIME DECOMPOSITION.
+  //
+  // The loot objective is PIECEWISE in how many bosses a run clears, because the first kill of a
+  // boss stage changes that stage's rewards. Measured on borge@73: the reference averages stage
+  // 300.4963 and ours 299.9032 -- a 0.197% difference in depth for a 39.44% difference in loot.
+  // That is a cliff, and one search asked to climb a flat surface will not find it. Nine different
+  // methods returned the same wrong answer on one Knox build, and three separate hypotheses about
+  // WHY were each falsified by measurement.
+  //
+  // Standard practice for a problem shaped like this is not a better hill climber, it is
+  // decomposition: "a MINLP problem can be expressed as a set of subproblems, where the global
+  // minimum is the optimal solution across all subproblems" (disjunctive programming). So instead
+  // of hoping a stochastic search stumbles across a threshold we already KNOW the location of --
+  // bosses stand every BOSS_INTERVAL stages -- solve one subproblem per regime and take the best.
+  //
+  // THIS IS NOT THE CROSS-SEED PASS THAT WAS REMOVED, and the difference is not cosmetic. The
+  // cross-seed ran a search under a DIFFERENT objective and used its answer as a seed, so the
+  // proxy decided which candidate you got. Here every subproblem maximises the TRUE objective --
+  // loot -- and the regime enters only as a CONSTRAINT on the feasible set. The winner is chosen
+  // across subproblems on pure loot. Nothing is ever scored on boss progress.
+  //
+  // The constraint is handled by Deb's feasibility rules (Deb 2000), which are parameter-free:
+  //   1. both feasible            -> better objective value wins   (that is loot, unchanged)
+  //   2. feasible beats infeasible
+  //   3. both infeasible          -> smaller constraint violation wins
+  // Rule 3 is the entire point. It supplies a gradient toward the cliff where the loot objective
+  // has none, out of numbers the evaluator already returns.
+  //
+  // THE SEPARATOR RELIES ON LOOT BEING NON-NEGATIVE, which is asserted rather than assumed. Every
+  // feasible build scores its own loot (>= 0); every infeasible one scores strictly below zero.
+  // There is no magnitude to tune -- INFEASIBLE_BASE is a separator, not a weight.
+  const INFEASIBLE_BASE = -1;
+
+  /**
+   * How many bosses the build actually CLEARS, from how far it gets.
+   *
+   * `floor(maxStage / BOSS_INTERVAL)` IS WRONG AND THE FIRST VERSION OF THIS USED IT. A run that
+   * ends at exactly stage 300 died AT the 300 boss -- it cleared two, not three. The measured
+   * borge@73 pair makes the distinction concrete, and it is the entire question for that build:
+   *     ours       maxStage 300.0  kill 0     hp left 67.44%  -> cleared 2
+   *     reference  maxStage 303.8  kill 31.7  hp left  3.43%  -> cleared 3
+   * Under `floor` both read 3 and the constraint would call our build feasible, so the subproblem
+   * aimed at the third boss would be satisfied by the build that cannot beat it -- the decomposition
+   * would silently do nothing. This is the same off-by-one describeRun had, in the same place.
+   *
+   * `ceil - 1` is right at every boundary: 303.8 -> 3, 300.0 -> 2, 299.9 -> 2, 100.0 -> 0, 99.7 -> 0.
+   *
+   * NOTE the deliberate difference from boss-parity-check.js, which floors the AVERAGE stage. That
+   * answers "how many bosses does the average run get past", which is what loot integrates. This
+   * answers "how many can this build beat at all", which is what a feasibility constraint needs.
+   * Two questions, two rules; conflating them is what the bug above was.
+   */
+  function regimeOf(result) {
+    if (!result || !Number.isFinite(result.maxStage)) {
+      throw new Error('regimeOf: result.maxStage is not a number');
+    }
+    return Math.max(0, Math.ceil(result.maxStage / BOSS_INTERVAL) - 1);
+  }
+
+  /**
+   * How far short of `targetBosses` this run falls, as a continuous quantity.
+   *
+   * Whole bosses short, less the progress made on the one it is actually fighting. So a build that
+   * reaches the boss and removes 96.6% of its HP violates by 0.034, while one that never scratches
+   * it violates by 1.0 -- and the search can tell them apart, which under pure loot it cannot.
+   *
+   * bossHpPercent is only meaningful for a run stalled AT a wall (objective.js's own measurement:
+   * it reads 0 both for a build that never reached one and one already past it). That is exactly
+   * the case here -- violation is only ever computed for a build short of the target, and such a
+   * build ends at the wall it failed to pass.
+   */
+  function constraintViolation(result, targetBosses) {
+    const cleared = regimeOf(result);
+    const short = targetBosses - cleared;
+    if (short <= 0) return 0;
+    const hp = Number.isFinite(result.bossHpPercent) ? result.bossHpPercent : 100;
+    const progress = Math.max(0, Math.min(1, (100 - hp) / 100));
+    return short - progress;
+  }
+
+  /**
+   * The objective for ONE subproblem: maximise `mode` subject to clearing `targetBosses` bosses.
+   *
+   * Feasible builds are ranked by the caller's real objective and nothing else, so within the
+   * feasible set this subproblem is exactly the search that already exists.
+   */
+  function constrainedScoreFor(mode, result, ctx, targetBosses) {
+    return constrainScore(scoreFor(mode, result, ctx), result, targetBosses);
+  }
+
+  /**
+   * THE ONE PLACE THE FEASIBILITY RULE LIVES.
+   *
+   * Takes an already-computed objective value plus whatever carries maxStage/bossHpPercent -- the
+   * full evaluator result, or the {kill, hp, maxStage} metadata a scorer rides alongside its
+   * scores. Both callers go through here so the rule cannot be implemented twice and drift, which
+   * is this codebase's most-repeated failure.
+   */
+  function constrainScore(baseScore, meta, targetBosses) {
+    if (!Number.isFinite(targetBosses)) {
+      throw new Error('constrainScore: targetBosses must be a number');
+    }
+    const shaped = { maxStage: meta.maxStage, bossHpPercent: Number.isFinite(meta.bossHpPercent) ? meta.bossHpPercent : meta.hp };
+    const violation = constraintViolation(shaped, targetBosses);
+    if (violation <= 0) {
+      if (!(baseScore >= 0)) {
+        throw new Error(`constrainScore: objective produced a negative or non-finite score `
+          + `(${baseScore}); the feasible/infeasible separator assumes a non-negative objective`);
+      }
+      return baseScore;
+    }
+    return INFEASIBLE_BASE - violation;
+  }
+
+  const Objective = { MODES, scoreFor, regimeOf, constraintViolation, constrainedScoreFor,
+    constrainScore,
+    INFEASIBLE_BASE, pinnedAttrsFor, pathModes, modeOrThrow, bossTargetFor, contextFor, describeRun, BOSS_INTERVAL, KILL_ACHIEVED_BASE };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Objective;
   else global.OptimizerObjective = Objective;

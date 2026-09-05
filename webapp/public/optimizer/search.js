@@ -2140,8 +2140,115 @@
     }
   }
 
+  //
+  // DISJUNCTIVE REGIME DECOMPOSITION -- solve one subproblem per regime, take the best on the TRUE
+  // objective.
+  //
+  // The loot objective is piecewise in how many bosses a run clears, and we KNOW where the pieces
+  // meet: bosses stand every BOSS_INTERVAL stages. Asking one stochastic search to discover a
+  // threshold whose location is already known is wasted effort, and on borge@73 it fails outright
+  // -- three separate hypotheses about why were each falsified by measurement, and nine methods on
+  // an earlier Knox build all returned the same wrong answer.
+  //
+  // Standard practice for a piecewise problem is decomposition rather than a better hill climber:
+  // express it as a set of subproblems and take the best solution across them (disjunctive
+  // programming / MINLP). Each subproblem here is "maximise the caller's objective subject to
+  // clearing k bosses", with the constraint handled by Deb's parameter-free feasibility rules.
+  //
+  // WHY THIS IS NOT THE CROSS-SEED PASS THAT WAS DELETED. That ran a search under a DIFFERENT
+  // objective and used its answer as a seed, so a proxy chose the candidate. Here every subproblem
+  // maximises the REAL objective and the regime enters only as a constraint on the feasible set;
+  // the winner is chosen across subproblems on the real objective too. Nothing is scored on boss
+  // progress at any point.
+  //
+  // COST. It is more than one search, and calling it a speed win would be a claim this has not
+  // earned. What it buys is that the expensive archive no longer has to STUMBLE onto a cliff, so
+  // each subproblem should need far less of one -- `effortPerRegime` is the dial for testing that,
+  // and until it is measured the honest description is a reliability change.
+  async function optimizeByRegime(cfg, opts = /** @type {any} */ ({})) {
+    const { mode = 'loot', scorer, regimes, effortPerRegime, onProgress, shouldCancel } = opts;
+    if (typeof scorer !== 'function') throw new Error('optimizeByRegime(): requires a scorer function');
+    const effort = effortPerRegime || opts.effort || DEFAULT_EFFORT;
+
+    // A subproblem's scorer. The base scorer's own `.boss` metadata carries everything the
+    // constraint needs, so no extra evaluation is paid for feasibility.
+    const constrained = (target) => async (pairs, iterations) => {
+      const base = await scorer(pairs, iterations);
+      if (!base.boss) {
+        throw new Error('optimizeByRegime: the scorer returned no .boss metadata, so feasibility '
+          + 'cannot be determined. A scorer that drops it silently turns every build feasible.');
+      }
+      const out = base.map((v, i) => Objective.constrainScore(v, base.boss[i], target));
+      out.boss = base.boss;
+      return out;
+    };
+
+    const runs = [];
+    // Subproblem 0 is the UNCONSTRAINED problem, which is the current search exactly. Whatever the
+    // regimes above it turn up, the answer can never be worse than solving the problem as before.
+    const t0 = Date.now();
+    const free = await optimize(cfg, { mode, scorer, effort, onProgress, shouldCancel });
+    if (free.cancelled) return free;
+    runs.push({ regime: null, label: 'unconstrained', res: free, secs: Math.round((Date.now() - t0) / 1000) });
+
+    // Which regimes to aim at. By default: the next cliff above whatever the free search reached.
+    // Aiming BELOW it is pointless -- the free search already had that feasible set available and
+    // was not restricted from it.
+    let targets = regimes;
+    if (!targets) {
+      const m = (await scorer([free.best], FINAL_ITERATIONS)).boss[0];
+      const reached = Objective.regimeOf({ maxStage: m.maxStage });
+      targets = [reached + 1];
+    }
+
+    for (const target of targets) {
+      if (shouldCancel && shouldCancel()) break;
+      const t = Date.now();
+      const res = await optimize(cfg, {
+        mode, scorer: constrained(target), effort, onProgress, shouldCancel,
+      });
+      if (res.cancelled) break;
+      runs.push({ regime: target, label: `clears ${target}`, res, secs: Math.round((Date.now() - t) / 1000) });
+    }
+
+    // THE DECISION IS ON THE TRUE OBJECTIVE, ACROSS ALL SUBPROBLEMS. A constrained run's own score
+    // is not comparable to another's -- they rank different feasible sets -- so every candidate is
+    // re-scored with the caller's own scorer before anything is chosen. This is the step that makes
+    // the decomposition sound rather than a heuristic.
+    const finalists = runs.filter((r) => r.res && r.res.best).map((r) => r.res.best);
+    if (!finalists.length) throw new Error('optimizeByRegime: no subproblem returned a build');
+    const scores = await scorer(finalists, FINAL_ITERATIONS);
+    let bestIdx = 0;
+    for (let i = 1; i < scores.length; i++) if (scores[i] > scores[bestIdx]) bestIdx = i;
+
+    const byRegime = runs.map((r, i) => ({
+      regime: r.regime,
+      label: r.label,
+      trueScore: scores[i],
+      // Did the subproblem actually satisfy its own constraint? A constrained run that returns an
+      // infeasible build has not proved the regime impossible, but it has not entered it either,
+      // and reporting that is the difference between "no such build exists" and "we did not find
+      // one" -- a distinction this project has been burned by repeatedly.
+      satisfied: r.regime === null ? null
+        : Objective.regimeOf({ maxStage: scores.boss[i].maxStage }) >= r.regime,
+      maxStage: scores.boss[i].maxStage,
+      killRate: scores.boss[i].kill,
+      secs: r.secs,
+      evals: r.res.evals,
+    }));
+
+    const winner = runs[bestIdx];
+    return {
+      ...winner.res,
+      best: finalists[bestIdx],
+      byRegime,
+      chosenRegime: winner.regime,
+      evals: runs.reduce((n, r) => n + (r.res.evals || 0), 0),
+    };
+  }
+
   const Optimizer = {
-    optimize, SCREEN_ITERATIONS, FINAL_ITERATIONS,
+    optimize, optimizeByRegime, SCREEN_ITERATIONS, FINAL_ITERATIONS,
     STEP_SIZES,
     EFFORT_LEVELS, DEFAULT_EFFORT,
     // Exposed so a bench can measure ONE support's tuning in isolation. The search's own stages
