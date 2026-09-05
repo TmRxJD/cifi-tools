@@ -1846,6 +1846,67 @@ fixed traversal order give identical output for identical input.
 
 ### Known open defects
 
+- **BORGE@73 IS A DESCRIPTOR HOLE, NOT A SEARCH FAILURE, AND THE FIRST TWO HYPOTHESES WERE BOTH
+  WRONG.** Worth reading in order, because the wrong answers were each supported by a real number.
+  - *Hypothesis 1, reachability: FALSIFIED.* The archive reaches the stage-300 boss, crosses 3 boss
+    boundaries, reaches kill rate 99, and hands refinement 488 finalists of which **348 KILL a
+    boss**. Illumination is not failing to find the boss region.
+  - *Hypothesis 2, refinement or selection: FALSIFIED.* The ledger, every number at
+    FINAL_ITERATIONS: archive 2,609,276,580 -> refined 3,032,202,766 (+16.21%) -> returned
+    3,032,202,766 (+0.00%). Refinement works and selection picks its best finalist.
+  - *What is actually missing is a build that is DEEP AND KILLING AT THE SAME TIME.* The returned
+    build is `reaches-cannot-kill` at stage 300 with **67.44% of the boss HP left**; the community
+    reference leaves **3.43%** and clears it 31.7% of the time, which is the whole 39.44% gap.
+  **CAUSE: boss damage is not a descriptor. Only kill rate is, and kill rate is 0 across the entire
+  approach to a cliff.** Measured, archive-only, 9600 variations -- kill-0 elites by stage band:
+      stage 200-205   6 cells   boss HP left 35.5%-44.4%
+      stage 205-300   5-6 each  boss HP left 0% (never engaged)
+      stage 300-305   6 cells   boss HP left 63.1%-93.8%   <- a 30.6-point spread in ONE kill band
+  So a build leaving 63% and one leaving 20% compete for a single cell, and the archive keeps
+  whichever has more loot/min TODAY -- always the one that farms fastest and hits the boss weakest.
+  The stepping stone is discarded every generation. That is precisely the failure MAP-Elites exists
+  to prevent, occurring on the one axis the descriptor does not measure.
+  **THE CONDITIONING IS WHAT MAKES THE FIX LEGITIMATE, AND objective.js ALREADY MEASURED IT.**
+  `bossHpPercent` is NOT a gradient alone -- it reads 0 both for a build that never reached the wall
+  and one already past it -- but the same measurement found it discriminating once depth is held
+  fixed ("where stage ties at a wall the HP reading is precisely what discriminates, 74.0 vs 47.0").
+  The archive key already carries a stage band, so the axis is only ever compared within one wall.
+  The probe confirms it directly rather than by argument: bands 205-300 all read HP 0 and are
+  separated from band 300+ by STAGE, not by this axis.
+  `bossDamageBands` is implemented and ships **OFF** pending the end-to-end A/B. **Cell count is not
+  the metric** -- this repo has already measured a variation operator that raised coverage and
+  LOWERED champion quality (depth moves: 81.8 -> 92.5 cells, 9.384M -> 9.170M loot).
+  `boss-parity-check.js` is the invariant the fix has to satisfy, and it is integer-valued so it has
+  no threshold to soften: **the optimizer may never clear fewer bosses than the build it is handed.**
+  Over 27 build-runs across 5 result files it isolates borge@73 as the only boss loss, and reports
+  that the other sub-1% shortfalls have a different cause (two are the ozzy@54 overshoot already
+  fixed by break-point spending).
+
+- **`describeRun` LABELLED A STAGE-303 RUN "boss at 400", CONTRADICTING THE KILL RATE PRINTED BESIDE
+  IT.** It computed the contested boss with `ceil`, so a build reaching 303.8 was reported as
+  fighting the 400 boss -- one it cannot reach -- while the same line printed `kill rate 31.7%`,
+  which is its rate against 300. `ceil` and `floor` agree for a build that dies ON a boundary and
+  for one below the first boss; they disagree exactly for the BOSS-CLEARING build, i.e. the only
+  case a boss investigation is looking at. It is now `floor`, and `describe-run-check.js` pins it
+  with 24 assertions over 5 measured runs (the old rule fails 5 of them).
+  This is the third defect found in the reporting layer rather than the search, which is the point
+  of having one: a summary that restates a number wrongly starts an investigation into the wrong
+  thing.
+
+- **A FLAG CAN REACH THREE OF FOUR SITES AND STILL BE DEAD, AND AN A/B WILL RECORD THAT AS "NO
+  EFFECT".** `bossDamageBands` was added to `cellOf`, to `illuminate`'s signature and to its diag
+  record, and was **never passed at the call site** -- the surrounding argument list used
+  `!== false` where the patch matched `=== true`, so the replacement silently did not apply. Every
+  flag is read as `effortSpec.<name>`, so an unwired or misspelled one reads `undefined`, the
+  feature stays off, and the ON arm returns the control's number.
+  `EFFORT_SPEC_KEYS` now makes an unknown effort key THROW, and `effort-option-check.js` asserts
+  BOTH directions -- a typo throws, and every whitelisted key is actually read by something. The
+  second direction is not decoration: it immediately caught `frontierShare`, which was on the list
+  while only ever being read as a module constant, so accepting it would have licensed a flag that
+  does nothing. Benches that run an A/B should assert the flag from the RESULT
+  (`diag.archive.bossDamageBands`), never from the argument they passed.
+
+
 - **THE OZZY OUTCOME IS BIMODAL AND FAILS ABOUT A THIRD OF THE TIME. This is the top defect.**
   Measured on the full pipeline, level-62 Ozzy account, three seeds per arm:
 
@@ -2036,6 +2097,10 @@ node tools/bench/node-factor-check.js  # EVERY factor in every node getter is ac
 node tools/bench/param-plumbing-check.js # every sim param is settable into its own slot
 node tools/bench/trinket-semantics-check.js [live-bundle.js] # galvTrinketsCount is a SUM, gated on creation node 5
 node tools/bench/boss-target-check.js   # the boss objective aims at the NEXT unbeaten boss
+node tools/bench/boss-parity-check.js  # optimizer never clears FEWER bosses than the reference
+node tools/bench/describe-run-check.js # describeRun's regimes + which boss a run contests
+node tools/bench/effort-option-check.js # a misspelled effort flag throws instead of no-oping
+node tools/bench/boss-damage-ab.js --only=borge@73 # does banding by boss damage help, end to end
 node tools/bench/eval-precision-check.js # how precise is a FINAL_ITERATIONS score (report)
 node tools/bench/import-legality-check.js # every import is reproducible by the optimizer
 node tools/bench/support-rank-check.js # where the import's own support ranks in screening
