@@ -702,7 +702,56 @@
   // together would report a healthy move set while it was quietly destroying structure -- which is
   // the failure mode this whole change exists to remove, so the measurement must be able to see
   // the difference.
-  function randomTransfer(defs, deps, minVal, budget, alloc, rng, pinnedIds, stats, clampToHeadroom) {
+  //
+  // UNCAPPED NODES ARE BREAK-POINT GATES, NOT CONTINUOUS SINKS.
+  //
+  // A capped node stops accepting points; an uncapped one never does. So a move generator that
+  // proposes targets uniformly keeps feeding the uncapped node, because it is always legal, always
+  // available, and always looks like progress. Measured: a transfer INTO an uncapped node is
+  // accepted 98-100% of the time against 21-59% for a capped one, a 60.3-point gap on every build
+  // and every hunter.
+  //
+  // The reason the optimizer WANTS to feed them is real, not a bug: capped nodes sit behind spend
+  // thresholds, and an uncapped cost-1 node is the cheapest way to buy that prereq spend. Ozzy's
+  // structure, derived from its own config rather than assumed:
+  //
+  //     lotl (uncapped, cost 1)  level 1 unlocks exo, ibu
+  //     exo  (uncapped, cost 1)  level 1 unlocks scorp, timeless
+  //     tier thresholds 90 / 150 / 180 points of tier-0 spend
+  //        90 unlocks deal, medusa, dance   150 unlocks scarab, cat   180 unlocks sisters
+  //
+  // Between those points the marginal value of another point is whatever the evaluator says, and
+  // nothing structural changes -- so overshooting buys nothing while starving the nodes the spend
+  // was meant to unlock. The failing ozzy@54 build holds 54.3% of its budget in lotl against the
+  // reference's 39.5%, with five capped nodes left at 0 that the reference funds.
+  //
+  // THE BREAKPOINTS ARE COMPUTED, NEVER TABULATED. They fall out of the dependency edges and the
+  // minValue tiers already in the config, so they stay correct for any hunter and any future
+  // balance change. A hard-coded list would be a second source of truth for something the game
+  // already states.
+  function nextBreakpointFor(defs, minVal, alloc, node) {
+    const cost = node.cost || 1;
+    const current = alloc[node.id] || 0;
+    // Level 1 is a breakpoint whenever anything depends on this node: it is the difference between
+    // a subtree being reachable and not.
+    if (current === 0) return 1;
+    // Otherwise the next structural event is a spend threshold this node's tier can contribute to.
+    const myTier = minVal[node.id] || 0;
+    const spendBelow = defs.reduce((sum, d) => (
+      (minVal[d.id] || 0) <= myTier ? sum + (alloc[d.id] || 0) * (d.cost || 1) : sum
+    ), 0);
+    const higher = [...new Set(defs.map((d) => minVal[d.id] || 0))]
+      .filter((t) => t > myTier)
+      .sort((a, b) => a - b);
+    for (const t of higher) {
+      if (spendBelow < t) return current + Math.ceil((t - spendBelow) / cost);
+    }
+    // Past the last threshold nothing structural remains, so there is no breakpoint to stop at and
+    // the objective alone decides -- which is the case where the node genuinely is the best buy.
+    return null;
+  }
+
+  function randomTransfer(defs, deps, minVal, budget, alloc, rng, pinnedIds, stats, clampToHeadroom, breakpointSpending) {
     const held = defs.filter((d) => (alloc[d.id] || 0) > 0 && pinnedIds.indexOf(d.id) === -1);
     if (!held.length) return null;
     for (let tries = 0; tries < 8; tries++) {
@@ -729,6 +778,15 @@
         const headroom = to.maxLevel - (alloc[to.id] || 0);
         if (headroom <= 0) { if (stats) stats.rejected++; continue; }
         amount = Math.min(amount, headroom);
+      }
+      // Break-point spending: never overshoot the next structural event in an uncapped node.
+      if (breakpointSpending && !Number.isFinite(to.maxLevel)) {
+        const bp = nextBreakpointFor(defs, minVal, alloc, to);
+        if (bp !== null) {
+          const room = bp - (alloc[to.id] || 0);
+          if (room <= 0) { if (stats) { stats.rejected++; stats.breakpointBlocked++; } continue; }
+          if (amount > room) { amount = room; if (stats) stats.breakpointClamped++; }
+        }
       }
       const next = Space.transfer(defs, deps, minVal, budget, alloc, from.id, to.id, amount);
       if (!next) { if (stats) stats.rejected++; continue; }
@@ -819,9 +877,10 @@
    * Seeded from the enumerated supports rather than from random points: the enumeration is exact
    * and already paid for, so the archive starts with real structural coverage instead of noise.
    */
-  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, structuralShare, depthShare, seedList, selection, clampToHeadroom, report) {
+  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, structuralShare, depthShare, seedList, selection, clampToHeadroom, breakpointSpending, report) {
     const stats = { rejected: 0, accepted: 0, repaired: 0, nodesCleared: 0, structural: 0,
-      depthAccepted: 0, depthRejected: 0, depthOpened: 0 };
+      depthAccepted: 0, depthRejected: 0, depthOpened: 0,
+      breakpointClamped: 0, breakpointBlocked: 0 };
     const { TALENTS, ATTRIBUTES, talentBudget, attrBudget, deps, minVal } = spaces;
     //
     // ONE ARCHIVE, SEVERAL STREAMS -- because a single stream is one sample and the spread between
@@ -1015,7 +1074,7 @@
             const nx = depthMove(ATTRIBUTES, deps, minVal, attrBudget, a, rng, pinnedAttrs, stats);
             if (nx) a = nx;
           } else {
-            const nx = randomTransfer(ATTRIBUTES, deps, minVal, attrBudget, a, rng, pinnedAttrs, stats, clampToHeadroom);
+            const nx = randomTransfer(ATTRIBUTES, deps, minVal, attrBudget, a, rng, pinnedAttrs, stats, clampToHeadroom, breakpointSpending);
             if (nx && pinsHeld(ATTRIBUTES, nx, pinnedAttrs)) a = nx;
           }
         }
@@ -1046,7 +1105,9 @@
     ctx.note(`moves: ${attempted} attribute transfers -- ${pct(stats.rejected)}% rejected, `
       + `${pct(stats.repaired)}% accepted-but-stranded (${stats.nodesCleared} nodes cleared); `
       + `${stats.structural} structural resamples at share ${structuralShare}`
-      + `; clampToHeadroom ${clampToHeadroom ? 'ON' : 'off'}`);
+      + `; clampToHeadroom ${clampToHeadroom ? 'ON' : 'off'}`
+      + `; breakpoint ${breakpointSpending ? 'ON' : 'off'}`
+      + (breakpointSpending ? ` (${stats.breakpointClamped} clamped, ${stats.breakpointBlocked} blocked)` : ''));
     ctx.note(`illuminated from ${streams.length} stream(s)`);
     // STRUCTURED, NOT STRINGIFIED. The notes are for a human reading one run; a bench comparing
     // twenty configurations needs numbers it can sort. Every diagnosis in this file's history was
@@ -1068,6 +1129,9 @@
       depthShare,
       selection,
       clampToHeadroom,
+      breakpointSpending,
+      breakpointClamped: stats.breakpointClamped,
+      breakpointBlocked: stats.breakpointBlocked,
       moves: {
         attempted: stats.rejected + stats.accepted,
         rejected: stats.rejected,
@@ -1574,6 +1638,7 @@
         effortSpec.seeds || (Number.isFinite(effortSpec.seed) ? [effortSpec.seed] : ARCHIVE_SEEDS),
         effortSpec.selection || DEFAULT_SELECTION,
         effortSpec.clampToHeadroom === true,
+        effortSpec.breakpointSpending === true,
         (f) => report('survey', f * SURVEY_REPORT_SCALE, SURVEY_REPORT_SCALE),
       );
       const surveyed = elites.map((e) => ({ ...e, mask: maskOf(e.attrAlloc) }));
