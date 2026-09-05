@@ -302,7 +302,7 @@
     };
   }
 
-  const Objective = { MODES, scoreFor, pinnedAttrsFor, pathModes, modeOrThrow, isBossLimited, bossTargetFor, contextFor, describeRun, KILL_ACHIEVED_BASE };
+  const Objective = { MODES, scoreFor, pinnedAttrsFor, pathModes, modeOrThrow, isBossLimited, bossTargetFor, contextFor, describeRun, BOSS_INTERVAL, KILL_ACHIEVED_BASE };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Objective;
   else global.OptimizerObjective = Objective;

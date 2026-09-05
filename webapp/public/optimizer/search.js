@@ -587,7 +587,12 @@
   // correspondingly flat -- 1 kill band and best kill 0 on every seed, 2.5% spread. For Ozzy,
   // pushing the stage frontier is how a boss cell gets reached; for Knox, reaching a boss cell
   // just IS pushing stage depth. Same lever.
-  const BOSS_STAGE_INTERVAL = 100;
+  // Bosses stand every N stages. DECLARED ONCE, in objective.js, which already owns boss-stage
+  // arithmetic (bossTargetFor, isBossLimited, describeRun). This file restated it as a literal 100
+  // when the frontier emitter was added -- the exact duplication that let the shipped optimize
+  // effort say 'fast' here and 'complete' in storeSchema. Two copies of one fact is how the copies
+  // get to disagree, and nothing notices until a measurement is already wrong.
+  const BOSS_STAGE_INTERVAL = Objective.BOSS_INTERVAL;
   //
   // OFF, ON MEASUREMENT -- and it falsified the claim that motivated it.
   //
