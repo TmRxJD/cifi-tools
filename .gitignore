@@ -39,3 +39,5 @@ webapp/public/fixture-cfgs.json
 inputs.txt
 basin-verdicts*.json
 basin-shipped.json
+archive-seeds.log
+ab-borge73.log
