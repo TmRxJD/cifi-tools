@@ -1638,7 +1638,15 @@
         effortSpec.seeds || (Number.isFinite(effortSpec.seed) ? [effortSpec.seed] : ARCHIVE_SEEDS),
         effortSpec.selection || DEFAULT_SELECTION,
         effortSpec.clampToHeadroom === true,
-        effortSpec.breakpointSpending === true,
+        // ON BY DEFAULT. Measured on the canonical fixture configs, helped one build badly and
+        // regressed none:
+        //     ozzy@54   -17.86% -> -0.60%   (both seeds, identical resulting build)
+        //     ozzy@31     0.00% ->  0.00%
+        //     borge@59    0.00% ->  0.00%
+        //     borge@73  -39.44% -> -39.44%  (untouched; its cause is WRONG_REGIME, not overshoot)
+        // Confirmed at the shipped effort (9600/8) as well as at 2400/4, with the same answer, so
+        // it is not a budget artefact. Opt OUT with effort.breakpointSpending === false.
+        effortSpec.breakpointSpending !== false,
         (f) => report('survey', f * SURVEY_REPORT_SCALE, SURVEY_REPORT_SCALE),
       );
       const surveyed = elites.map((e) => ({ ...e, mask: maskOf(e.attrAlloc) }));
