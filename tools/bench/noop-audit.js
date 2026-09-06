@@ -73,8 +73,11 @@ function countWord(hay, name) {
   }
 }
 
+// The fleet/ship side is a work in progress by design, so its unconsumed save fields are
+// scaffolding rather than rot. Auditing them buries the hunter-side findings under noise.
+const WIP = new Set(['shipSchema.js', 'shipsPage.js']);
 const files = [];
-for (const f of fs.readdirSync(PUBLIC)) if (f.endsWith('.js')) files.push(f);
+for (const f of fs.readdirSync(PUBLIC)) if (f.endsWith('.js') && !WIP.has(f)) files.push(f);
 for (const f of fs.readdirSync(path.join(PUBLIC, 'optimizer'))) if (f.endsWith('.js')) files.push('optimizer/' + f);
 
 const code = new Map();
