@@ -20,6 +20,12 @@ const H = require('./harness.js');
   const cfg = H.cfgForImport(hunter, build);
 
   console.log(`${hunter} #${index}  level ${build.level}  (fixture level ${fixture.level}, live loot ${fixture.expectedLootScore})`);
+  // ASSUMES THE LOOT OBJECTIVE -- refuse a push fixture rather than judging it on loot, which
+  // makes a build that succeeded at pushing look like a failure. Cheap to state, and this repo has
+  // made the wrong-objective mistake in the search, in a fixture set, and twice in reporting.
+  if ((fixture.mode || 'loot') !== 'loot') {
+    throw new Error(`${fixture.name} is a ${fixture.mode} fixture; smoke scores on loot only.`);
+  }
   console.log(`budgets: ${cfg.TALENT_BUDGET} talent / ${cfg.ATTRIBUTE_BUDGET} attribute`);
   console.log('import talents   :', JSON.stringify(build.talents));
   console.log('import attributes:', JSON.stringify(build.attributes));

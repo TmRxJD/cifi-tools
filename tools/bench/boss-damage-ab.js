@@ -66,6 +66,7 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
     const build = await H.parseBuildCode(fx.code, fx.hunter);
     const cfg = H.cfgForImport(fx.hunter, build, { budgetMode: 'spend' });
     const reference = await H.evaluateAllocation(cfg, build.talents, build.attributes);
+    const primaryOf = (r) => ((fx.mode || 'loot') === 'push' ? r.stage : r.loot);
 
     // No incumbent: the search has to FIND the build, which is the property under test. With an
     // incumbent the reference survives Stage 3 unchanged and both arms return it, measuring
@@ -88,7 +89,12 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
         const fi = FI ? arm : false;
         const t0 = Date.now();
         const res = await H.Optimizer.optimize(bare, {
-          mode: 'loot',
+          // THE FIXTURE'S OWN MODE. This said 'loot' while the scorer above was built with
+          // `fx.mode` -- so on a push fixture the scorer ranked by stage while the optimizer
+          // believed it was maximising loot. Incoherent, and it would have silently corrupted any
+          // push measurement. Every result taken so far happens to be a loot fixture, so the FI
+          // conclusions stand, but the bench was one push fixture away from lying.
+          mode: fx.mode || 'loot',
           scorer,
           effort: {
             archiveEvals: ARCHIVE_EVALS, refineSupports: REFINE,
@@ -126,7 +132,10 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
           feasibleCells: res.diag.archive.feasibleCells,
           infeasibleCells: res.diag.archive.infeasibleCells,
           bestViolation: res.diag.archive.bestViolation,
-          pct: 100 * (got.loot - reference.loot) / reference.loot,
+          // Judged on the fixture's OWN objective. Reporting a push build's loot delta as its
+          // result is the same wrong-objective error that made sweep-progress flag borge@12 push
+          // as a failure when it had beaten its import on stage.
+          pct: 100 * (primaryOf(got) - primaryOf(reference)) / primaryOf(reference),
           regime: d.regime, killPct: d.bossKillRatePct, hpLeft: d.bossHpRemainingPct,
           cells: res.diag.archive.cells, entries: res.diag.archive.entries,
           killBands: res.diag.archive.killBands,

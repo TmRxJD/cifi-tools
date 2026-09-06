@@ -27,6 +27,9 @@ const bundle = bundleArg ? bundleArg.slice('--bundle='.length) : null;
 
 // Gates that need nothing beyond the repo.
 const LOCAL = [
+  // The benches' own bench. Cheap (pure source inspection) and first, because every number the
+  // rest of this suite prints is only as trustworthy as the bench that produced it.
+  'bench-integrity-check',
   'schema-test', 'app-schema-test', 'reference-schema-test',
   'relic-cost-test', 'relic-cap-check', 'relic-tier2-check',
   'node-coefficient-check', 'node-counter-check', 'node-name-check', 'node-effect-probe',

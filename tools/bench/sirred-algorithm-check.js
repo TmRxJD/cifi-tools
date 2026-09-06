@@ -120,3 +120,11 @@ for (const [wName, weights] of Object.entries(WEIGHT_SETS)) {
 console.log(worseCount === 0
   ? '\nour allocator never scores worse than SirRed\'s own greedy algorithm at any tested budget'
   : `\nour allocator scored worse than SirRed's greedy algorithm at ${worseCount}/${total} (budget, weight) combination(s)`);
+// EXIT NON-ZERO ON A REAL DIVERGENCE. This printed the finding and exited 0, so a regression was
+// invisible to any suite runner -- catchable only by a human reading the output.
+//
+// NOT the same as sirred-ship-check, which is deliberately a report because the GAME arbitrates
+// caps and gates and failing against SirRed there would mean failing for being right. Here
+// SirRed's greedy is a reference ALGORITHM and being beaten by it is a defect in ours:
+// neutralising RUN_LENGTH_BIAS made the two agree EXACTLY, so any divergence is a regression.
+process.exit(worseCount === 0 ? 0 : 1);

@@ -1,6 +1,11 @@
 'use strict';
 // IS THERE A STRUCTURAL BIAS TOWARD THE UNCAPPED ROOT NODE?
 //
+// THIS IS A REPORT, NOT A GATE. It exits 0 whatever it finds, because it tests a HYPOTHESIS
+// and 'theory not supported' is a useful outcome rather than a failure. Declared explicitly so
+// bench-integrity-check can tell it apart from a gate that silently cannot fail -- which is the
+// far more dangerous thing and looks identical from the outside.
+//
 // THE THEORY UNDER TEST. A transfer INTO an uncapped node can never be rejected for hitting a cap;
 // a transfer into a capped node can. If the move generator proposes targets uniformly, the
 // uncapped node therefore ACCEPTS a larger share of what is proposed to it, and points accumulate

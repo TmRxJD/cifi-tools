@@ -1,6 +1,11 @@
 'use strict';
 // ARE CAPPED NODES STARVED WHILE THE UNCAPPED ROOT IS OVER-FUNDED?
 //
+// THIS IS A REPORT, NOT A GATE. It exits 0 whatever it finds, because it tests a HYPOTHESIS
+// and 'theory not supported' is a useful outcome rather than a failure. Declared explicitly so
+// bench-integrity-check can tell it apart from a gate that silently cannot fail -- which is the
+// far more dangerous thing and looks identical from the outside.
+//
 // The project owner's rule, stated twice: uncapped nodes are for OVERFLOW -- points go there once
 // the other nodes have reached their useful level, not instead of them. With the caveat, also
 // stated, that sometimes the uncapped node is genuinely the best buy (Ozzy especially), so this

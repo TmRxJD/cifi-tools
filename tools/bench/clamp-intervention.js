@@ -42,6 +42,14 @@ const SEEDS = [0x9e3779b9, 0x12345678, 0xa5a5a5a5];
   const rows = [];
   for (const name of names) {
     const fx = H.findFixture(all, name);
+    // THIS BENCH ASSUMES THE LOOT OBJECTIVE. Refuse a push fixture rather than silently judging it
+    // on the wrong metric -- a push build scored on loot/min looks like a failure for succeeding at
+    // what it was built for, which is the single most repeated measurement error in this repo.
+    if ((fx.mode || 'loot') !== 'loot') {
+      throw new Error(`${fx.name} is a ${fx.mode} fixture; this bench scores on loot and would `
+        + 'judge it on the wrong objective. Use a loot fixture, or teach this bench about modes.');
+    }
+
     const build = await H.parseBuildCode(fx.code, fx.hunter);
     const cfg = H.cfgForImport(fx.hunter, build);
     const evalFast = await H.browserSandbox().HunterSim.compileEvaluator(fx.hunter, cfg);
