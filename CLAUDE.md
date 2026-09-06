@@ -1846,6 +1846,58 @@ fixed traversal order give identical output for identical input.
 
 ### Known open defects
 
+- **THE BOSS CLIFF HAS A NAME, A MECHANISM AND A FIRST CONFIRMED FIX -- FI-MAP-ELITES.**
+  Read the four falsified attempts above first; this is what finally moved a build, and it moved it
+  because of a property the others lacked rather than by luck.
+  **The generalised problem is a CONJUNCTION.** On borge@73 the archive held 488 finalists of which
+  **348 KILL a boss**, and the search still returned a non-killer -- those killers kill SHALLOWER
+  bosses and farm less. What never exists is a build that is DEEP AND KILLING AT ONCE. Each half is
+  easy alone and everything between is worse than both, which is why more exploration, richer
+  descriptors and better retention all failed: none of them changes what the boss-progressing
+  builds are SELECTED ON.
+  **FI-2Pop (Kimbrough et al. 2008) supplies the missing half**: the infeasible population "is not
+  evaluated by the objective function", so it "is free to explore boundary regions, where the
+  optimum is likely to be found", and "selection on the infeasible population will drive the
+  population to, and eventually over, the boundary". Khalifa et al.'s **Constrained MAP-Elites**
+  combines that with MAP-Elites; the FI-MAP-Elites implementation states the rules exactly --
+  feasible archive survives on FITNESS, infeasible on FEASIBILITY SCORE, selection ALTERNATES
+  between them, and offspring route themselves by constraint satisfaction.
+  Measured on knox@30, same seed, everything else identical:
+      FI off   -84.13%   cells  6   F/I  6/0   bestViolation 89   stage 100.0  reaches-cannot-kill
+      FI ON     -1.68%   cells 96   F/I 91/5   bestViolation  5   stage 110.0  KILLS-BOSS   (faster: 152s vs 197s)
+  **`bestViolation` 89 -> 5 is the load-bearing number, not the loot.** It says the infeasible
+  archive actually walked to the constraint boundary, which is the mechanism's own claim. Had loot
+  moved while bestViolation stayed at 89, the cause would have been something else and the result
+  would be a coincidence to investigate rather than a fix.
+  **The control arm also produced a sharper diagnosis than borge@73 ever did: knox@30's archive
+  holds SIX cells.** Every build lands in kill band 0 and stage band 100, so only concentration
+  varies -- 9,600 variations feeding a 6-slot hill climber. The QD machinery was inert for that
+  build. That is also why MOME could not help it: there was nothing to keep a Pareto front OF.
+  **WHAT IS NOT ESTABLISHED.** One build, one seed. -1.68% is better, not beating the reference. It
+  is untested on borge@73, where the archive is NOT degenerate (477 cells) -- so whether FI helps
+  when diversity already exists is open, and that is the next measurement rather than an assumption.
+  Regression on passing builds is in flight. Ships OFF until both land.
+  **IF THE INFEASIBLE ARCHIVE COLLAPSES TO ONE SHAPE, the literature already has the next step**:
+  Liapis's **Constrained Novelty Search** (FINS / FI2NS) keeps the same two populations but selects
+  the infeasible one on NOVELTY rather than feasibility score, reporting larger and more diverse
+  feasible sets. Its stated motivation matches ours exactly -- plain novelty search "does not
+  distinguish between feasible and infeasible individuals and is likely to explore infeasible space
+  when the feasible space is small", and our feasible space (boss killers) is very small. Do not
+  reach for it until the infeasible archive is measured collapsing.
+
+- **SURROGATE-ASSISTED ILLUMINATION (SAIL) IS NOT THE EFFICIENCY ANSWER HERE, AND THE REASON IS
+  MEASURED.** Gaier, Asteroth & Mouret report better solutions per bin than MAP-Elites at "several
+  orders of magnitude fewer evaluations", which makes it the obvious thing to reach for when a
+  sweep costs hours. It would save almost nothing for us: `eval-cost-probe` shows per-evaluation
+  cost is pure MARGINAL in iterations (fixed per-call overhead 1.2ms at level 12, ~0 at level 60,
+  despite a fresh WASM instance per call), and the breakdown on borge@12 -- ~4,200 evaluations in
+  276s, screening at 11.9ms accounting for ~50s -- puts **~87% of wall clock in FULL-FIDELITY
+  refinement and polish**. Illumination is ~10%. A surrogate on the archive stage optimises the
+  cheap tenth.
+  Recorded so it is not attempted on reputation. The lever that matters is refinement width
+  (`refineSupports`), which `effort-sufficiency-check.js` measures against the GATE'S VERDICT.
+
+
 - **FOUR MECHANISMS HAVE NOW BEEN MEASURED ON borge@73 AND NONE OF THEM MOVES IT. The build is the
   standing open defect; the value is in what has been RULED OUT with numbers.**
 
