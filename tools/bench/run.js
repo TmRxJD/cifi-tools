@@ -253,6 +253,38 @@ async function runQueue(fixtures, concurrency, onResult, shouldStop) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const resultsFile = args.outFile;
+
+  //
+  // ONE SWEEP PER RESULTS FILE, ENFORCED. TWO CONCURRENT RUNS SILENTLY DESTROY EACH OTHER'S WORK.
+  //
+  // This happened for real, three deep: sweeps started at 17:03, 17:10 and 17:21 all wrote
+  // results-full.json. Each rewrites the WHOLE file from its own in-memory list, so a run without
+  // --resume (starting from zero) overwrites a resumed run's larger list with its own smaller one.
+  // Checking progress showed 21 rows, then 15 rows twenty minutes later -- work going BACKWARDS,
+  // with no error anywhere and the three runs quietly splitting the cores between them.
+  //
+  // The kill that was supposed to prevent it (`pkill -f "run.js --all"`) matched nothing on this
+  // platform and reported success. So the guard cannot live in the invocation; it has to be here.
+  //
+  // Stale locks are cleared automatically -- a sweep that was killed part way (which happens
+  // often, this file's own --resume exists for it) must not block the next one forever.
+  const lockFile = `${resultsFile}.lock`;
+  if (fs.existsSync(lockFile)) {
+    const holder = Number(fs.readFileSync(lockFile, 'utf8').trim());
+    let alive = false;
+    try { process.kill(holder, 0); alive = true; } catch (e) { alive = false; }
+    if (alive) {
+      console.error(`Another sweep (pid ${holder}) is already writing ${path.basename(resultsFile)}.`);
+      console.error('Two runs would overwrite each other. Stop it first, or use --out= to write elsewhere.');
+      process.exit(2);
+    }
+    console.log(`(clearing stale lock from pid ${holder}, which is no longer running)`);
+    fs.unlinkSync(lockFile);
+  }
+  fs.writeFileSync(lockFile, String(process.pid));
+  const releaseLock = () => { try { fs.unlinkSync(lockFile); } catch (e) { /* already gone */ } };
+  process.on('exit', releaseLock);
+  for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { releaseLock(); process.exit(130); });
   let fixtures = selectFixtures(args);
 
   // --resume: carry forward whatever a previous (possibly interrupted) run already finished and
