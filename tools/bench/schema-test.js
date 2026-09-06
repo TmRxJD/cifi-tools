@@ -372,12 +372,29 @@ check('below a kill, a stronger build outranks a weaker one even at bossHp% 0', 
   return null;
 });
 
-check('only bossTimeless pins Timeless Mastery', () => {
+check('only bossTimeless pins Timeless Mastery, resolved per hunter', () => {
   const Obj = sb.OptimizerObjective;
-  if (Obj.pinnedAttrsFor('bossTimeless').join() !== 'timeless') return 'bossTimeless does not pin timeless';
-  for (const m of ['loot', 'push', 'boss']) {
-    if (Obj.pinnedAttrsFor(m).length) return `mode "${m}" unexpectedly pins ${Obj.pinnedAttrsFor(m).join()}`;
+  // PINS RESOLVE BY THE GAME'S LABEL, NOT BY A FIXED ID, and this check asserted the old contract.
+  // Borge and Ozzy call the node `timeless`; KNOX CALLS IT `time`. Hard-coding `timeless` is what
+  // made bossTimeless throw `Cannot pin unknown attribute` on every Knox run, so a test demanding
+  // that id would re-enshrine the bug it is supposed to guard against.
+  const want = { borge: 'timeless', ozzy: 'timeless', knox: 'time' };
+  for (const [hunter, id] of Object.entries(want)) {
+    const attrs = sb.HUNTER_DEFS[hunter].attributes;
+    const got = Obj.pinnedAttrsFor('bossTimeless', attrs);
+    if (got.join() !== id) return `bossTimeless on ${hunter} pins [${got.join()}], expected "${id}"`;
+    const node = attrs.find((a) => a.id === id);
+    if (!node || node.label !== 'Timeless Mastery') return `${hunter}: "${id}" is not Timeless Mastery`;
+    for (const m of ['loot', 'push', 'boss']) {
+      if (Obj.pinnedAttrsFor(m, attrs).length) return `mode "${m}" unexpectedly pins something on ${hunter}`;
+    }
   }
+  // An unresolvable pin must throw rather than silently pin nothing, which would make
+  // bossTimeless identical to boss while the UI offers them as different answers.
+  let threw = false;
+  try { Obj.pinnedAttrsFor('bossTimeless', [{ id: 'x', label: 'Not It', maxLevel: 1 }]); }
+  catch (e) { threw = true; }
+  if (!threw) return 'an unresolvable pin did not throw';
   return null;
 });
 

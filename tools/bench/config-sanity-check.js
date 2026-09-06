@@ -228,10 +228,21 @@ function validateCfg(label, cfg, opts = {}) {
       const c = clone();
       corrupt(c);
       const before = problems.length;
+      // THE COUNTERS MUST BE RESTORED TOO, NOT JUST THE PROBLEM LIST.
+      //
+      // A negative control deliberately fails `must`, which increments checks.run without
+      // incrementing checks.passed. Clearing `problems` hid the findings but left the tally, so a
+      // completely clean run printed "3303/3311 checks passed" -- eight apparent failures that were
+      // the controls doing their job. A summary line that looks like a partial failure on a healthy
+      // run is exactly the kind of thing people learn to ignore, and then miss a real one.
+      const runBefore = checks.run;
+      const passedBefore = checks.passed;
       validateCfg(`NEGATIVE(${what})`, c, {});
       const detected = problems.length > before;
       // Remove the deliberate findings so they do not pollute the real report.
       problems.length = before;
+      checks.run = runBefore;
+      checks.passed = passedBefore;
       if (detected) caught++;
       console.log(`  ${detected ? 'caught  ' : 'MISSED  '} ${what}`);
     }
@@ -242,7 +253,8 @@ function validateCfg(label, cfg, opts = {}) {
   }
 
   console.log('');
-  console.log(`${checks.passed}/${checks.run} checks passed`);
+  console.log(`${checks.passed}/${checks.run} checks passed`
+    + (checks.passed === checks.run ? '' : `  (${checks.run - checks.passed} FAILED)`));
   if (problems.length) {
     console.log('');
     console.log('PROBLEMS:');

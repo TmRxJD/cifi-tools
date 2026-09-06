@@ -65,6 +65,7 @@ const NEEDS_BUNDLE = [
 // counted as gates.
 const REPORTS = ['sirred-ship-check', 'save-coverage', 'loopmod-test'];
 
+const startedAt = Date.now();
 const results = [];
 function run(name, extra) {
   const file = path.join(__dirname, `${name}.js`);
@@ -86,6 +87,15 @@ function run(name, extra) {
   const skipped = /^\s*(SKIP|skip)\b/m.test(out);
   const status = code !== 0 ? 'FAIL' : (skipped ? 'SKIP' : 'PASS');
   results.push({ name, status, line: last.trim(), out });
+  // PRINT AS IT GOES, not only in the summary at the end.
+  //
+  // This suite runs ~45 gates sequentially and several of them run the optimizer, so a full pass
+  // takes tens of minutes. Buffering everything to the end means it is silent for that whole time
+  // and indistinguishable from a hang -- the same defect the sweep had, where the silence got
+  // reported as a malfunction. The summary table below still prints; this is in addition.
+  const t = Math.round((Date.now() - startedAt) / 1000);
+  process.stdout.write(`  ${String(t).padStart(4)}s  ${status.padEnd(4)}  ${name}
+`);
 }
 
 LOCAL.forEach((n) => run(n));

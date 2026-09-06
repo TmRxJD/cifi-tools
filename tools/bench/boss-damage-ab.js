@@ -98,6 +98,19 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
             + `the run recorded ${recorded}/${recordedDepth}; a flag is not reaching the archive `
             + 'and the A/B would be a lie');
         }
+        // LEGALITY, ASSERTED. A mechanism that reaches a boss by producing an allocation the game
+        // would reject is not a win, and nothing else in this bench would notice -- the score would
+        // simply be higher. Checked against the same space the optimizer is bound by.
+        const legal = H.Space.isLegal(cfg.ATTRIBUTES, cfg.ATTRIBUTE_DEPENDENCIES,
+          cfg.ATTRIBUTE_MIN_VALUE, res.best.attrAlloc, cfg.ATTRIBUTE_BUDGET);
+        if (!legal) {
+          throw new Error(`${name}: returned an ILLEGAL attribute allocation with FI=${fi} `
+            + '-- the result is void, not a win');
+        }
+        const spentT = Object.values(res.best.talentAlloc).reduce((a, v) => a + (v || 0), 0);
+        if (spentT > cfg.TALENT_BUDGET) {
+          throw new Error(`${name}: talent spend ${spentT} exceeds budget ${cfg.TALENT_BUDGET}`);
+        }
         const d = H.Objective.describeRun(got);
         rows.push({
           name, seed, on, depth, fi, loot: got.loot,
