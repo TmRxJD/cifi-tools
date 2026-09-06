@@ -43,10 +43,29 @@ const SAMPLE = Number(opt('sample', 6));
 const SEED = Number(opt('seed', 20260905));
 const MAXLEVEL = Number(opt('max-level', 70));
 
+//
+// IS THE ARCHIVE EARNING ITS COST? Three independent measurements say it may not be:
+//   - knox@30's archive holds SIX cells. 9,600 variations feeding a 6-slot hill climber.
+//   - MOME retained 118 extra stepping stones on borge@73 and the returned build was BIT-IDENTICAL.
+//   - This repo's own note: "Borge's archive varies 17.8% between seeds and its FINAL answer is
+//     0.00% every time -- refinement recovers from any archive it is handed."
+// The QD literature agrees this is a real failure mode rather than a local quirk: MAP-Elites has
+// "lack of directed search" causing "slow convergence even in low-dimensional search spaces", and
+// its overhead "may not always justify the computational cost, particularly in scenarios with
+// limited diversity requirements" -- which is exactly a six-cell archive.
+//
+// So the arms test the STRUCTURE, not just the budget: `noarchive` nearly removes illumination,
+// and `shifted` moves that budget into refinement instead. If either holds the verdict, the
+// pipeline is carrying a stage that does not decide its answers.
+//
+// KNOWN COUNTER-EXAMPLE, which is why the sample must include boss-critical builds: archiveEvals
+// 4800 -> 9600 was required for Ozzy boss reachability (-66.27% at 4800). A cheap-archive arm that
+// looks fine on farm builds and breaks boss builds is the outcome to watch for.
 const ARMS = [
   { label: 'complete', archiveEvals: 9600, refineSupports: 8 },
   { label: 'refine4', archiveEvals: 9600, refineSupports: 4 },
-  { label: 'fast', archiveEvals: 1200, refineSupports: 3 },
+  { label: 'noarchive', archiveEvals: 400, refineSupports: 8 },
+  { label: 'shifted', archiveEvals: 400, refineSupports: 16 },
 ];
 
 function mulberry(a) {

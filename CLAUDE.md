@@ -1846,6 +1846,30 @@ fixed traversal order give identical output for identical input.
 
 ### Known open defects
 
+- **THE ARCHIVE MAY NOT BE EARNING ITS COST, AND THREE INDEPENDENT MEASUREMENTS POINT THE SAME WAY.**
+  Recorded as an open question with the evidence, not as a decision, because the answer determines
+  whether most of this pipeline should exist.
+  - knox@30's archive holds **SIX cells**. Every build lands in kill band 0 and stage band 100, so
+    only concentration varies -- 9,600 variations feeding a 6-slot hill climber.
+  - MOME retained **118 extra stepping stones** on borge@73 that the single-elite archive would have
+    discarded, moved coverage 477 -> 329, and returned a **bit-identical build**.
+  - This file's own older note: *"Borge's archive varies 17.8% between seeds and its FINAL answer is
+    0.00% every time -- refinement recovers from any archive it is handed."*
+  Together: archive CONTENTS demonstrably do not decide the answer on the builds measured, while
+  illumination costs ~10% of wall clock and the enumeration feeding it is exact and cheap.
+  **The QD literature treats this as a known failure mode rather than a local quirk.** MAP-Elites'
+  "lack of directed search can cause slow convergence even in low-dimensional search spaces", and
+  its overhead "may not always justify the computational cost, particularly in scenarios with
+  limited diversity requirements" -- which is precisely what a six-cell archive is.
+  **THE COUNTER-EXAMPLE THAT MUST NOT BE FORGOTTEN**: archiveEvals 4800 -> 9600 was REQUIRED for
+  Ozzy boss reachability (-66.27% at 4800). So the archive is load-bearing for at least one build,
+  and any simplification has to be tested against boss-critical builds, not just farm builds. A
+  cheap-archive arm that looks clean on farm builds and quietly breaks boss builds is the specific
+  failure to watch for.
+  `effort-sufficiency-check.js` now carries `noarchive` (archiveEvals 400) and `shifted` (400 evals,
+  refinement doubled) arms to answer it against the GATE'S VERDICT rather than against a score.
+
+
 - **THE BOSS CLIFF HAS A NAME, A MECHANISM AND A FIRST CONFIRMED FIX -- FI-MAP-ELITES.**
   Read the four falsified attempts above first; this is what finally moved a build, and it moved it
   because of a property the others lacked rather than by luck.
