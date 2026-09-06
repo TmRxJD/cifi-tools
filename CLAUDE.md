@@ -1846,6 +1846,32 @@ fixed traversal order give identical output for identical input.
 
 ### Known open defects
 
+- **FI-MAP-ELITES IS NOT SHIPPABLE YET AND THE knox@31 RESULT IS INCONCLUSIVE, NOT NEGATIVE.**
+  State of the evidence, kept separate from the interpretation:
+      knox@30  FI off -84.13% -> FI ON -1.68%  (fixed 50/50)   bestViolation 89 -> 5   kills-boss
+      knox@30  FI off -84.13% -> FI ON -1.75%  (pfeas)         bestViolation 89 -> 4   kills-boss
+      knox@31  FI off  +1.51% -> FI ON -0.87%  (fixed 50/50)
+      knox@31  FI off  +1.51% -> FI ON -2.72%  (pfeas)
+  The knox@30 win is reproduced on TWO different random streams (adding the pfeas draw shifts the
+  stream, so the second run is an independent sample rather than a repeat), and `bestViolation`
+  89 -> 4/5 says the infeasible archive genuinely walked to the constraint boundary -- the
+  mechanism's own claim, and the thing that separates a result from a coincidence.
+  **The knox@31 regressions are BOTH inside the ~7-point seed variance this repo has measured**, so
+  a single seed cannot tell "FI harms this build" from "the extra draw shifted the stream". That is
+  the same confusion that once turned a shifted stream into a fake +15.34%. It is therefore NOT
+  evidence that FI is harmful -- and equally not evidence that it is safe, which is why it ships
+  OFF. Multi-seed on knox@31 is what settles it; do not decide this from one seed in either
+  direction.
+  **A DOMAIN MISMATCH TO WEIGH IF THE REGRESSION SURVIVES MULTI-SEED.** In FI-2Pop's setting an
+  infeasible solution is UNUSABLE, so losing its objective quality costs nothing. Here "infeasible"
+  means "does not kill the boss it reaches" -- and 8 of 10 sampled imports do not kill their boss,
+  so infeasible builds are frequently the RIGHT ANSWER. An infeasible cell that retains its
+  lowest-violation build instead of its highest-loot one therefore discards a real candidate. If
+  multi-seed confirms harm, the fix that follows is retaining BOTH in infeasible cells (paretoDepth
+  applied to the infeasible archive), not abandoning the mechanism -- but do not build that until
+  the regression is shown to be real.
+
+
 - **THE ARCHIVE MAY NOT BE EARNING ITS COST, AND THREE INDEPENDENT MEASUREMENTS POINT THE SAME WAY.**
   Recorded as an open question with the evidence, not as a decision, because the answer determines
   whether most of this pipeline should exist.
