@@ -241,7 +241,15 @@ async function runQueue(fixtures, concurrency, onResult, shouldStop) {
       if (stopped) return;
       const i = next++;
       if (i >= fixtures.length) return;
-      const res = await runFixture(fixtures[i]);
+      // ANNOUNCE THE START, NOT JUST THE FINISH.
+      //
+      // Longest-first scheduling means the first seven builds of a full sweep are the most
+      // expensive ones in the set, so the log stays completely silent for the first several
+      // minutes -- which is indistinguishable from a hang, and was reported as one. The
+      // scheduling is right (it is what keeps the tail short); the silence was the defect.
+      const f = fixtures[i];
+      console.log(`      ... started ${f.hunter}/${f.set}#${f.index} lvl${f.level} (${f.mode})`);
+      const res = await runFixture(f);
       await onResult(res);
       if (shouldStop && shouldStop(res)) { stopped = true; return; }
     }
