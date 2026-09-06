@@ -36,6 +36,8 @@ const ARCHIVE_EVALS = Number(opt('archiveEvals', 9600));
 const REFINE = Number(opt('refineSupports', 8));
 // MOME depth to compare against 1. --pareto=2 makes this the paretoDepth A/B instead.
 const PARETO = Number(opt('pareto', 0));
+// --fi=1 makes this the feasible/infeasible A/B instead.
+const FI = opt('fi', null) !== null;
 
 // The shipped archive seed, so arm-to-arm differences are the FLAG and not the stream.
 const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
@@ -70,10 +72,11 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
 
     for (let s = 0; s < SEEDS; s++) {
       const seed = BASE_SEEDS[s % BASE_SEEDS.length];
-      const arms = PARETO ? [1, PARETO] : [false, true];
+      const arms = FI ? [false, true] : (PARETO ? [1, PARETO] : [false, true]);
       for (const arm of arms) {
-        const on = PARETO ? false : arm;
+        const on = (PARETO || FI) ? false : arm;
         const depth = PARETO ? arm : 1;
+        const fi = FI ? arm : false;
         const t0 = Date.now();
         const res = await H.Optimizer.optimize(bare, {
           mode: 'loot',
@@ -81,7 +84,7 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
           effort: {
             archiveEvals: ARCHIVE_EVALS, refineSupports: REFINE,
             structuralShare: 0.35, depthShare: 0, selection: 'curiosity',
-            seeds: [seed], breakpointSpending: true, bossDamageBands: on, paretoDepth: depth,
+            seeds: [seed], breakpointSpending: true, bossDamageBands: on, paretoDepth: depth, feasibleInfeasible: fi,
           },
         });
         const got = await H.evaluateAllocation(cfg, res.best.talentAlloc, res.best.attrAlloc);
@@ -89,14 +92,18 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
         // bossDamageBands reached three of four sites once already and was never actually applied.
         const recorded = res.diag && res.diag.archive && res.diag.archive.bossDamageBands;
         const recordedDepth = res.diag && res.diag.archive && res.diag.archive.paretoDepth;
-        if (recorded !== on || recordedDepth !== depth) {
+        const recordedFi = res.diag && res.diag.archive && res.diag.archive.feasibleInfeasible;
+        if (recorded !== on || recordedDepth !== depth || recordedFi !== fi) {
           throw new Error(`boss-damage-ab: asked for bossDamageBands=${on}/paretoDepth=${depth} but `
             + `the run recorded ${recorded}/${recordedDepth}; a flag is not reaching the archive `
             + 'and the A/B would be a lie');
         }
         const d = H.Objective.describeRun(got);
         rows.push({
-          name, seed, on, depth, loot: got.loot,
+          name, seed, on, depth, fi, loot: got.loot,
+          feasibleCells: res.diag.archive.feasibleCells,
+          infeasibleCells: res.diag.archive.infeasibleCells,
+          bestViolation: res.diag.archive.bestViolation,
           pct: 100 * (got.loot - reference.loot) / reference.loot,
           regime: d.regime, killPct: d.bossKillRatePct, hpLeft: d.bossHpRemainingPct,
           cells: res.diag.archive.cells, entries: res.diag.archive.entries,
@@ -107,9 +114,10 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
         });
         const r = rows[rows.length - 1];
         console.log(`${name.padEnd(10)} seed ${seed.toString(16).padStart(8)}  `
-          + (PARETO ? `paretoDepth ${depth}  ` : `bossDamageBands ${on ? 'ON ' : 'off'}  `)
+          + (FI ? `FI ${fi ? 'ON ' : 'off'}  ` : (PARETO ? `paretoDepth ${depth}  ` : `bossDamageBands ${on ? 'ON ' : 'off'}  `))
           + `${(r.pct >= 0 ? '+' : '') + r.pct.toFixed(2)}%  `
-          + `cells ${String(r.cells).padStart(4)} entries ${String(r.entries).padStart(4)}  killBands ${String(r.killBands).padStart(2)}  `
+          + `cells ${String(r.cells).padStart(4)} F/I ${String(r.feasibleCells).padStart(3)}/${String(r.infeasibleCells).padStart(3)}  `
+          + `bestViolation ${String(Math.round(r.bestViolation)).padStart(3)}  `
           + `furthest ${r.furthest.toFixed(1).padStart(6)}  ${r.regime}  ${r.secs}s`);
       }
     }
@@ -124,8 +132,10 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
   let anyWin = false;
   for (const name of names) {
     for (const seed of [...new Set(rows.filter((r) => r.name === name).map((r) => r.seed))]) {
-      const off = rows.find((r) => r.name === name && r.seed === seed && (PARETO ? r.depth === 1 : !r.on));
-      const on = rows.find((r) => r.name === name && r.seed === seed && (PARETO ? r.depth === PARETO : r.on));
+      const pick = (want) => rows.find((r) => r.name === name && r.seed === seed
+        && (FI ? r.fi === want : (PARETO ? r.depth === (want ? PARETO : 1) : r.on === want)));
+      const off = pick(false);
+      const on = pick(true);
       if (!off || !on) continue;
       const delta = 100 * (on.loot - off.loot) / off.loot;
       const verdict = delta > 1 ? 'WIN ' : (delta < -1 ? 'LOSS' : 'same');

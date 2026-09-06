@@ -178,6 +178,7 @@
     'selection', 'seeds', 'seed',                      // parent choice + determinism
     'clampToHeadroom', 'breakpointSpending', 'bossDamageBands', // move/descriptor flags
     'paretoDepth',                                     // MOME: solutions kept per cell
+    'feasibleInfeasible',                              // FI-MAP-Elites: two archives
     'archiveOnly',                                     // ablation: stop after illumination
   ]);
 
@@ -576,6 +577,51 @@
   // only ever compared within one wall -- exactly the conditioning that measurement licenses.
   // The probe above confirms it directly: bands 205-300 all read HP 0 (never engaged) and are
   // separated from band 300+ by stage, not by this axis.
+  //
+  // FEASIBLE-INFEASIBLE ARCHIVES (FI-MAP-Elites -- Khalifa et al.'s Constrained MAP-Elites, which
+  // is MAP-Elites combined with the FI-2Pop GA of Kimbrough et al.).
+  //
+  // WHY THIS AND NOT THE THREE THINGS ALREADY TRIED. The measured fact on borge@73 is precise: the
+  // archive held 488 finalists of which 348 KILL a boss, and the search still returned a
+  // non-killer. The killers exist -- they kill SHALLOWER bosses and farm less. What does not exist
+  // anywhere is a build that is DEEP AND KILLING AT ONCE. That is a conjunction, and each half is
+  // easy alone while everything between is worse than both halves.
+  //
+  // Every previous attempt kept the boss-progressing builds inside a loot-driven population:
+  //   - an extra descriptor axis (bossDamageBands) only split cells; -39.44% -> -39.48%
+  //   - a per-cell Pareto front (MOME) retained them but still bred them under loot pressure and
+  //     under curiosity selection, where they were a small minority; -39.44% -> -39.44%, identical
+  //     build, from an archive whose coverage moved 477 -> 329.
+  //
+  // FI-2Pop's insight is the one thing none of those did: the infeasible population "is not
+  // evaluated by the objective function", so it "is free to explore boundary regions, where the
+  // optimum is likely to be found". A deep non-killing build here is bred PURELY to remove boss HP,
+  // with no loot pressure to drag it back toward farming -- and selection ALTERNATES between the
+  // archives, so it gets about half the variation budget instead of a sliver.
+  //
+  // Offspring route themselves: a child that kills is scored on the objective and lands in the
+  // feasible archive; one that does not is scored on violation and lands in the infeasible one.
+  // Crossing the constraint IS the migration, which is exactly the event the search has been
+  // failing to produce.
+  //
+  // FEASIBLE means the build kills the boss it reaches. VIOLATION is how much boss HP it left --
+  // but only for a run that ended AT a wall. bossHpPercent reads 0 both for a build that never
+  // reached one and for one already past it (objective.js records the measurement), so a build
+  // that died between bosses is credited NO progress rather than perfect progress. Getting this
+  // wrong once already made an unreachable regime score feasible.
+  const FEASIBLE_KILL_RATE = 0;
+  function isFeasibleBuild(meta) {
+    return (meta.kill || 0) > FEASIBLE_KILL_RATE;
+  }
+  function bossViolationOf(meta) {
+    const stage = Number.isFinite(meta.maxStage) ? meta.maxStage : 0;
+    const atWall = Math.abs(stage / BOSS_STAGE_INTERVAL - Math.round(stage / BOSS_STAGE_INTERVAL)) < 1e-6
+      && stage >= BOSS_STAGE_INTERVAL;
+    if (!atWall) return 100;
+    const hp = Number.isFinite(meta.hp) ? meta.hp : 100;
+    return Math.max(0, Math.min(100, hp));
+  }
+
   const BOSS_DAMAGE_BAND = 10;
   const BOSS_DAMAGE_BANDS_MAX = 9;
   const CONCENTRATION_BANDS = 6;
@@ -926,7 +972,7 @@
    * Seeded from the enumerated supports rather than from random points: the enumeration is exact
    * and already paid for, so the archive starts with real structural coverage instead of noise.
    */
-  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, structuralShare, depthShare, seedList, selection, clampToHeadroom, breakpointSpending, bossDamageBands, paretoDepth, report) {
+  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, structuralShare, depthShare, seedList, selection, clampToHeadroom, breakpointSpending, bossDamageBands, paretoDepth, feasibleInfeasible, report) {
     const stats = { rejected: 0, accepted: 0, repaired: 0, nodesCleared: 0, structural: 0,
       depthAccepted: 0, depthRejected: 0, depthOpened: 0,
       breakpointClamped: 0, breakpointBlocked: 0 };
@@ -995,9 +1041,11 @@
     // THE LOOT OBJECTIVE IS UNTOUCHED. This changes what the archive RETAINS, not what anything is
     // scored on: refinement still ranks by the caller's objective and Stage 3 still decides on pure
     // loot. A build is never preferred for hurting a boss; it is merely not forgotten for it.
-    const put = (key, pair, score, meta, better) => {
+    const put = (key, pair, score, meta, better, feasible) => {
       const held = archive.get(key);
       const entry = {
+        feasible: feasible !== false,
+        violation: bossViolationOf(meta),
         talentAlloc: pair.talentAlloc,
         attrAlloc: pair.attrAlloc,
         score,
@@ -1016,6 +1064,9 @@
     // evaluation order, and this search's whole contract is that one seed gives one answer.
     const betterLoot = (a, b) => a.score > b.score;
     const betterDamage = (a, b) => (a.hp !== b.hp ? a.hp < b.hp : a.score > b.score);
+    // Infeasible survival: closest to killing wins. Ties break on the objective so the rule is
+    // a total order and the archive cannot depend on evaluation order.
+    const betterViolation = (a, b) => (a.violation !== b.violation ? a.violation < b.violation : a.score > b.score);
 
     const consider = (pair, score, meta) => {
       if (!Number.isFinite(score)) return;
@@ -1024,9 +1075,19 @@
       // archive exactly -- same retention, and the same relative order under the key tie-break
       // that parent selection uses. `pareto-archive-check.js` asserts that identity rather than
       // asserting it here in a comment.
-      let improved = put(cell + '|loot', pair, score, meta, betterLoot);
+      if (feasibleInfeasible) {
+        // Two archives, same cells. The suffix keeps them in one Map so every downstream reader
+        // (curiosity, diag, the elite list) works unchanged; `feasible` is what selection splits on.
+        const feasible = isFeasibleBuild(meta);
+        const key = cell + (feasible ? '|F' : '|I');
+        // Survival differs by archive, and that is the whole mechanism: the infeasible one is
+        // never judged on the objective, so it is free to walk to the constraint boundary.
+        const better = feasible ? betterLoot : betterViolation;
+        return put(key, pair, score, meta, better, feasible);
+      }
+      let improved = put(cell + '|loot', pair, score, meta, betterLoot, true);
       if (paretoDepth > 1 && !(meta.kill > 0)) {
-        improved = put(cell + '|dmg', pair, score, meta, betterDamage) || improved;
+        improved = put(cell + '|dmg', pair, score, meta, betterDamage, true) || improved;
       }
       return improved;
     };
@@ -1101,12 +1162,18 @@
       // file between arms -- which matters because the archive's own champion score turned out to
       // be an unreliable proxy for the final answer (Borge's archive varies 17.8% between seeds
       // while its final build is identical every time).
+      // Split once per batch, so the alternating pick below is O(1). `feasible` is set by
+      // consider(); entries from the non-FI paths are all flagged feasible, which makes
+      // infeasibleOrdered empty and the alternation inert -- the flag cannot change behaviour when
+      // it is off, including in the random stream.
       const ordered = selection === 'random'
         ? [...archive.values()]
         : [...archive.entries()]
           .sort((x, y) => ((y[1].curiosity || 0) - (x[1].curiosity || 0))
             || (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0))
           .map(([, e]) => e);
+      const feasibleOrdered = feasibleInfeasible ? ordered.filter((e) => e.feasible !== false) : ordered;
+      const infeasibleOrdered = feasibleInfeasible ? ordered.filter((e) => e.feasible === false) : [];
 
       // Distance to the NEXT boss, from the stage descriptor alone. An elite that already kills is
       // not on the frontier -- its cell is occupied and curiosity will develop it on merit.
@@ -1126,7 +1193,19 @@
         // whole batch. Depth without starving everything else.
         const head = Math.max(1, Math.min(ordered.length, Math.ceil(ordered.length / 4)));
         let parent;
-        if (selection === 'random') {
+        //
+        // ALTERNATING SELECTION IS HALF THE MECHANISM, NOT A DETAIL.
+        //
+        // FI-2Pop alternates between the feasible and infeasible archives when both are non-empty,
+        // which gives the infeasible population about half the variation budget. Without this the
+        // boss-progressing builds are simply a minority inside one curiosity-ordered list and get
+        // a sliver of the effort -- which is exactly what MOME did here, and it returned a
+        // bit-identical build. Retaining a stepping stone is worthless if nothing develops it.
+        if (feasibleInfeasible && infeasibleOrdered.length && feasibleOrdered.length) {
+          const pool = (i % 2 === 0) ? feasibleOrdered : infeasibleOrdered;
+          const ph = Math.max(1, Math.min(pool.length, Math.ceil(pool.length / 4)));
+          parent = pool[(parentCursor++) % ph];
+        } else if (selection === 'random') {
           parent = ordered[Math.floor(rng() * ordered.length)];
         } else if (FRONTIER_SHARE > 0 && frontier.length
           && (i % Math.round(1 / FRONTIER_SHARE)) === 0) {
@@ -1234,6 +1313,7 @@
       + `; breakpoint ${breakpointSpending ? 'ON' : 'off'}`
       + `; bossDamageBands ${bossDamageBands ? 'ON' : 'off'}`
       + `; paretoDepth ${paretoDepth}`
+      + `; feasibleInfeasible ${feasibleInfeasible ? 'ON' : 'off'}`
       + (breakpointSpending ? ` (${stats.breakpointClamped} clamped, ${stats.breakpointBlocked} blocked)` : ''));
     ctx.note(`illuminated from ${streams.length} stream(s)`);
     // STRUCTURED, NOT STRINGIFIED. The notes are for a human reading one run; a bench comparing
@@ -1270,6 +1350,16 @@
     ctx.diag.archive = {
       cells: cellCount,
       entries: archive.size,
+      // FI-MAP-Elites accounting. `feasibleCells` is the population that kills something;
+      // `bestViolation` is how close the infeasible archive got to the constraint boundary --
+      // 100 means nothing ever engaged a boss, 0 means something killed one. This is the number
+      // that says whether the infeasible archive is actually WALKING to the boundary, which is the
+      // entire claim of the mechanism. Without it a null result cannot be told from a no-op.
+      feasibleCells: [...archive.values()].filter((e) => e.feasible !== false).length,
+      infeasibleCells: [...archive.values()].filter((e) => e.feasible === false).length,
+      bestViolation: [...archive.values()].reduce(
+        (m, e) => (Number.isFinite(e.violation) ? Math.min(m, e.violation) : m), 100,
+      ),
       killBands: bands.size,
       bestKillReached: bestKill,
       bestMaxStageReached: bestStage,
@@ -1291,6 +1381,7 @@
       breakpointSpending,
       bossDamageBands,
       paretoDepth,
+      feasibleInfeasible,
       breakpointClamped: stats.breakpointClamped,
       breakpointBlocked: stats.breakpointBlocked,
       moves: {
@@ -1843,6 +1934,8 @@
         // MOME depth. 1 == the single-elite archive, byte-identical. 2 keeps the max-damage
         // member of each kill-0 cell alongside the max-loot one.
         Number.isFinite(effortSpec.paretoDepth) ? effortSpec.paretoDepth : 1,
+        // FI-MAP-Elites. OFF until measured end to end, like every other move here.
+        effortSpec.feasibleInfeasible === true,
         (f) => report('survey', f * SURVEY_REPORT_SCALE, SURVEY_REPORT_SCALE),
       );
       const surveyed = elites.map((e) => ({ ...e, mask: maskOf(e.attrAlloc) }));
