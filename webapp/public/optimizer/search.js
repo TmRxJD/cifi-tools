@@ -272,7 +272,12 @@
     for (;;) {
       if (ctx.shouldCancel()) throw new Cancelled();
       const idle = budget - Space.costOf(defs, current);
-      if (idle <= Space.MAX_IDLE_POINTS) break;
+      // SPEND EVERYTHING SPENDABLE. This stopped at Space.MAX_IDLE_POINTS (1), inheriting a
+      // tolerance that measurement shows is never needed: every talent costs 1 on all three
+      // hunters, and each hunter has an uncapped, dependency-free, cost-1 attribute, so a point is
+      // always spendable. The real and sufficient termination is the `!cands.length` break below --
+      // "nothing eligible fits" -- which is a fact about the allocation rather than a constant.
+      if (idle <= 0) break;
       const cands = [];
       for (const d of defs) {
         if (memberIds && !memberIds.includes(d.id)) continue;
@@ -2202,8 +2207,44 @@
       // spending another few hundred evaluations per run, so it lives in
       // tools/bench/local-optimality.js instead.
       const winner = ranked[0];
+      //
+      // TOP UP THE WINNER BEFORE ASSERTING IT IS SPENT -- WITHOUT THIS, `fast` EFFORT CRASHES.
+      //
+      // The assertion below demands that no eligible node could take another point. Nothing
+      // guaranteed it: greedyTopUp existed for exactly this purpose -- its own header notes that
+      // its leftover condition "is exactly the condition the Stage 3 assertion allows" -- but it
+      // was only ever wired into ONE candidate-generation path, on ATTRIBUTES, and never reached
+      // the returned build.
+      //
+      // MEASURED, and it is a user-visible crash rather than a quality issue:
+      //     ozzy@11  effort 'fast'      THROWS  left 1 talent point unspent ("revival")
+      //     ozzy@11  effort 'complete'  ok
+      // The UI ships Fast as a dropdown option, so a level-11 Ozzy player choosing it got an
+      // exception instead of a build. A thorough search happens to spend the last point; a cheaper
+      // one does not, and the backstop turned that into a hard failure.
+      //
+      // Costs nothing on a build that is already fully spent -- the loop does not run -- so the
+      // complete-effort path is untouched, which `search-identity-probe` verifies rather than
+      // assumes. Pins are re-applied afterwards because a top-up must not spend a pinned node's
+      // points elsewhere.
+      winner.talentAlloc = await greedyTopUp(
+        ctx, TALENTS, noDeps, noMin, talentBudget, winner.talentAlloc,
+        (t) => ({ talentAlloc: t, attrAlloc: winner.attrAlloc }),
+      );
+      winner.attrAlloc = await greedyTopUp(
+        ctx, ATTRIBUTES, deps, minVal, attrBudget, winner.attrAlloc,
+        (a) => ({ talentAlloc: winner.talentAlloc, attrAlloc: a }),
+      );
+      if (pinnedAttrs.length) {
+        winner.attrAlloc = applyPins(ATTRIBUTES, deps, minVal, attrBudget, winner.attrAlloc, pinnedAttrs);
+      }
       const spendable = (defs, deps, minVal, budget, alloc) => {
         const idle = budget - Space.costOf(defs, alloc);
+        // STRICT, AND IT IS RIGHT TO BE. I briefly relaxed this to Space.MAX_IDLE_POINTS (1) to
+        // stop `fast` throwing on ozzy@11, which HID A REAL DEFECT: measured on all three hunters,
+        // EVERY talent costs 1 and each has an uncapped, dependency-free, cost-1 attribute
+        // (ares / lotl / kraken), so a point is ALWAYS spendable in both blocks. There is no such
+        // thing here as an unspendable leftover, and an optimal build never leaves one.
         if (idle <= 0) return null;
         const node = defs.find((d) => (d.cost || 1) <= idle && Space.isEligible(d, defs, deps, minVal, alloc));
         return node ? { idle, node: node.id } : null;

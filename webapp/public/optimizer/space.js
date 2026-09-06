@@ -21,10 +21,24 @@
 
   // An allocation that leaves points idle is dominated: respeccing to spend them is almost
   // always better than sitting on them, so allocations with idle budget are not worth an
-  // evaluation. One point of slack is allowed because odd costs can make it genuinely
-  // unspendable (e.g. only cost-2 and cost-3 nodes remain eligible with 1 point left).
-  // Enforced at the two places an allocation can be born -- canonicalFill and transfer -- so
-  // no wasteful candidate ever reaches the evaluator.
+  // evaluation. Enforced at the two places an allocation can be born -- canonicalFill and
+  // transfer -- so no wasteful candidate ever reaches the evaluator.
+  //
+  // ONE POINT OF SLACK IS ALLOWED, AND ONLY FOR RESTRICTED NODE SETS. The original note here said
+  // odd costs "can make it genuinely unspendable (e.g. only cost-2 and cost-3 nodes remain
+  // eligible with 1 point left)". That is true ONLY while the available nodes are restricted to a
+  // SUPPORT -- a support of cost-3 attributes really cannot absorb a last point.
+  //
+  // It is FALSE for the unrestricted set, and measurement settles it: on all three hunters EVERY
+  // talent costs 1, and each hunter has an uncapped, dependency-free, cost-1 attribute
+  // (borge ares, ozzy lotl, knox kraken). With the whole node set available a point is ALWAYS
+  // spendable, so a returned build that leaves one idle is not "unspendable", it is underspent.
+  //
+  // That distinction was missing, and the tolerance leaked into places it does not belong:
+  // greedyTopUp stopped one point short of a full budget, so builds at the SHIPPED effort were
+  // returned underspent (measured: ozzy@11 and ozzy@12 both gained their last talent and attribute
+  // point once it was removed). The Stage 3 assertion on the WINNER is therefore strict -- no
+  // restriction applies there -- while construction inside a support keeps this slack.
   const MAX_IDLE_POINTS = 1;
 
   function costOf(defs, alloc) {

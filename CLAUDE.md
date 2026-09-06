@@ -1846,6 +1846,16 @@ fixed traversal order give identical output for identical input.
 
 ### Known open defects
 
+- **LOW EFFORT SETTINGS CAN HARD-FAIL, NOT DEGRADE, AND THAT CONSTRAINS EVERY "MAKE THE SWEEP
+  CHEAPER" PLAN.** At `archiveEvals: 600` on ozzy@11 the optimizer THROWS:
+  `Optimizer left 1 talent point(s) unspent while "revival" could still take one`. The invariant is
+  correct -- returning an underspent build would be worse -- but the failure mode is a THROW, so a
+  budget cut does not trade quality for speed, it can crash. `fast` (1200/3) has not been observed
+  throwing, so the shipped levels are fine; what is NOT safe is assuming an arbitrary smaller budget
+  degrades gracefully. Any archive-reduction experiment must treat a throw as a possible outcome and
+  report it, not just compare scores.
+
+
 - **FI-MAP-ELITES IS NOT SHIPPABLE YET AND THE knox@31 RESULT IS INCONCLUSIVE, NOT NEGATIVE.**
   State of the evidence, kept separate from the interpretation:
       knox@30  FI off -84.13% -> FI ON -1.68%  (fixed 50/50)   bestViolation 89 -> 5   kills-boss
