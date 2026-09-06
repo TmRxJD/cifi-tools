@@ -14,10 +14,35 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 const file = process.argv[2] || 'results-full.json';
 const abs = path.isAbsolute(file) ? file : path.join(process.cwd(), file);
-if (!fs.existsSync(abs)) { console.log(`no such file: ${abs}`); process.exit(1); }
+// A MISSING RESULTS FILE IS NOT AN ERROR WHILE A SWEEP IS STARTING. run.js schedules longest
+// first, so the first completion on a full sweep can be several minutes out and the file does not
+// exist until then. Saying "no such file" there reads like a crash -- which is exactly the wrong
+// impression to give after a session that has had several.
+if (!fs.existsSync(abs)) {
+  const lock = `${abs}.lock`;
+  if (fs.existsSync(lock)) {
+    const pid = fs.readFileSync(lock, 'utf8').trim();
+    let alive = false;
+    try { process.kill(Number(pid), 0); alive = true; } catch (e) { alive = false; }
+    const started = fs.statSync(lock).mtimeMs;
+    const mins = Math.round((Date.now() - started) / 60000);
+    console.log(`${path.basename(abs)}: not written yet`);
+    console.log(alive
+      ? `  a sweep IS running (pid ${pid}, started ${mins}m ago) and has not finished a build yet.`
+      : `  lock names pid ${pid}, which is NOT running -- the sweep died before its first result.`);
+    if (alive) {
+      console.log('  run.js schedules the most expensive builds first, so the first result on a');
+      console.log('  full sweep can take several minutes. Row counts only ever go up from here.');
+    }
+    process.exit(alive ? 0 : 1);
+  }
+  console.log(`no such file: ${abs}   (and no sweep holds a lock on it)`);
+  process.exit(1);
+}
 
 let rows;
 try { rows = JSON.parse(fs.readFileSync(abs, 'utf8')); }
@@ -29,6 +54,63 @@ const scored = rows.filter((r) => !r.error && Number.isFinite(r.lootDeltaPct));
 const other = rows.length - errored.length - scored.length;
 
 console.log(`${path.basename(abs)}: ${rows.length} row(s)`);
+
+// ---------------------------------------------------------------------------------------------
+// PROGRESS AND ETA, ESTIMATED FROM WORK RATHER THAN FROM COUNT.
+//
+// A count-based ETA (done/elapsed extrapolated) is badly wrong here for a specific reason: run.js
+// schedules LONGEST FIRST, so the builds finished early are the most expensive ones and the naive
+// rate makes the remaining work look far worse than it is. Build cost also spans more than 10x
+// across the level range (median 58s at level 10-19, 316s at 70-79).
+//
+// So: model cost by level band from the builds THIS run has actually finished, apply it to the
+// fixtures still outstanding, and divide by the number of lanes. Falls back to the overall median
+// for a band nothing has completed in yet, and says so rather than pretending to know.
+const LANES = Math.max(1, os.cpus().length - 1);   // run.js's own default concurrency
+let etaLine = null;
+try {
+  const H = require('./harness.js');
+  const known = H.loadKnownBuilds();
+  const all = [];
+  for (const h of Object.keys(known)) for (const f of known[h]) all.push(f);
+  const doneKey = new Set(rows.map((r) => `${r.hunter}/${r.set}#${r.index}`));
+  const remaining = all.filter((f) => !doneKey.has(`${f.hunter}/${f.set}#${f.index}`));
+
+  const timed = rows.filter((r) => Number.isFinite(r.seconds) && Number.isFinite(r.level));
+  if (timed.length && remaining.length) {
+    const band = (lvl) => Math.floor((lvl || 0) / 10);
+    const byBand = new Map();
+    for (const r of timed) {
+      const b = band(r.level);
+      if (!byBand.has(b)) byBand.set(b, []);
+      byBand.get(b).push(r.seconds);
+    }
+    const medianOf = (v) => v.slice().sort((a, b) => a - b)[Math.floor(v.length / 2)];
+    const overall = medianOf(timed.map((r) => r.seconds));
+    let modelled = 0;
+    let secs = 0;
+    for (const f of remaining) {
+      const v = byBand.get(band(f.level));
+      if (v && v.length) { secs += medianOf(v); modelled++; } else { secs += overall; }
+    }
+    const wall = secs / LANES;
+    const mins = Math.round(wall / 60);
+    const done = rows.length;
+    const pct = ((done / all.length) * 100).toFixed(0);
+    etaLine = `progress ${done}/${all.length} (${pct}%)   ${remaining.length} left   `
+      + `est ${mins >= 60 ? `${(mins / 60).toFixed(1)}h` : `${mins}m`} remaining on ${LANES} lanes`
+      + (modelled < remaining.length ? `   [${remaining.length - modelled} estimated from the overall median]` : '');
+  } else if (remaining.length) {
+    etaLine = `progress ${rows.length}/${all.length}   ${remaining.length} left   `
+      + '(no completed build carries a duration yet, so no ETA)';
+  } else {
+    etaLine = `progress ${rows.length}/${all.length} -- COMPLETE`;
+  }
+} catch (e) {
+  etaLine = `(fixture list unavailable, no ETA: ${e.message})`;
+}
+console.log(etaLine);
+
 console.log(`  scored  ${scored.length}`);
 console.log(`  errored ${errored.length}`);
 if (other) console.log(`  neither ${other}`);
