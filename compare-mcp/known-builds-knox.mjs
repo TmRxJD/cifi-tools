@@ -35,4 +35,7 @@ export const KNOWN_KNOX_BUILDS = [
   { level: 36, expectedLootScore: 146920, code: 'G4292Sp7thrS6EQczTjG3eTpauNFUWsEoqLDFHjULs9JmU9ntmnP', note: '146.92k' },
   { level: 36, expectedLootScore: 131460, code: 'G41tw3otTzE7N2ZsNUE7ieYUVF5Ec1XXLNZYmZoDcCymeBfVuGZ5', note: '131.46k, lower loot but +20% tess/day and +20 max stages' },
   { level: 37, expectedLootScore: 170590, code: 'G41tw3otTzE7ZeeF69PPQZpjjJNpPRo7NgpYvKeDL8Ejun5z59Xd', note: '170.59k Anchor 60' },
+  { level: 38, expectedLootScore: 201340, code: 'G41tw3qCWmJzdb71XnPaHy6CwJca7ihvdk1vpQF3ixbT5Ss6GbhH', note: 'Anchor 66' },
+  { level: 39, expectedLootScore: 296290, code: 'G41tw3qCWmJzqD7D41owzhuEdq5RxmzVybua4NGCN1m1aixU1hMR', note: 'Anchor 70, Regen 180' },
+  { level: 40, expectedLootScore: 352030, code: 'G41tw3rWZYPsu9bAhD2Pjb1uzhnDNdEWscvHKxqVho8E6AxFhrNj' },
 ];

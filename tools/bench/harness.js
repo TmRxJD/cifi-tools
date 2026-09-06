@@ -226,6 +226,40 @@ async function makePooledScorer(cfg, mode, ctxOverride, size) {
   return { score, destroy: () => pool.destroy() };
 }
 
+/**
+ * ONE pool, MANY objectives.
+ *
+ * makePooledScorer binds a mode at construction, so comparing four modes meant standing up four
+ * pools -- and each pool compiles the evaluator in every worker. Measured on a level-27 build the
+ * startup dominated the actual work.
+ *
+ * The split that makes this free is the one the pool already has: workers return the evaluator's
+ * RAW fields and scoring happens on the main thread through the canonical Objective. So a single
+ * pool can serve every mode, and there is still exactly one place the mode rules live.
+ *
+ * Returns { scorerFor(mode), destroy }.
+ */
+async function makeMultiModeScorer(cfg, size) {
+  const { EvalPool } = require('./eval-pool.js');
+  const pool = await new EvalPool(cfg.hunter, cfg, size).start();
+  const baseCtx = Objective.contextFor(cfg);
+  const scorerFor = (mode, ctxOverride) => {
+    const ctx = { ...baseCtx, ...(ctxOverride || {}) };
+    return async function score(pairs, iterations) {
+      const raw = await pool.evaluate(pairs, iterations);
+      const out = [];
+      const boss = [];
+      for (const r of raw) {
+        out.push(Objective.scoreFor(mode, r, ctx));
+        boss.push({ kill: r.bossKillRate, hp: r.bossHpPercent, maxStage: r.maxStage });
+      }
+      out.boss = boss;
+      return out;
+    };
+  };
+  return { scorerFor, destroy: () => pool.destroy() };
+}
+
 /** Score one specific allocation at full fidelity. */
 async function scoreAllocation(cfg, mode, talentAlloc, attrAlloc, iterations = Optimizer.FINAL_ITERATIONS) {
   const score = await makeScorer(cfg, mode);
@@ -371,7 +405,7 @@ function loadKnownBuilds() {
 }
 
 module.exports = {
-  browserSandbox, parseBuildCode, hunterDefs, cfgForImport, makeScorer, makePooledScorer,
+  browserSandbox, parseBuildCode, hunterDefs, cfgForImport, makeScorer, makePooledScorer, makeMultiModeScorer,
   scoreAllocation,
   latestDecodedSave,
   findFixture,

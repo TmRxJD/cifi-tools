@@ -96,4 +96,9 @@ export const KNOWN_BORGE_LATE_BUILDS = [
   { level: 77, expectedLootScore: 27070000000, code: 'TZyYHEkPkCmvoKNbvpk8Tic77oNEK8nHMVjY96UWpzzwZxgY3DhPMphjbi684tyJzoF6BAZfyeJxoeseJxwvu5', note: '27.07b' },
   { level: 78, expectedLootScore: 28730000000, code: '32GYZ4fgXgYyheV7De3TeCVj2ZAFFhvgmh2Xp8ihY8Q2jAUUgTDGkmvALZL23S8BJiesRGqwZccQieu6JteXP9Pu', note: '28.73b' },
   { level: 79, expectedLootScore: 30000000000, code: '32GYZ4fgXgZDZrZjfMwAmXfPxDp333nsb9Mk1vgCdBGfpgTHFqpBggCLN8D9MM5Dwn7yFCzyjddQiYk8tcjkrzdD', note: '30.00b' },
+  { level: 80, expectedLootScore: 33120000000, code: '9vbcGXBjURdqU34X6Y7LRjzQaRjSmMw2B5CQWXpb9AkDizwYFivK1QoTgHYLe1uPUTLsoxRh5uKuKAeduLSxiVyr7', note: 'R4-40, R16-40' },
+  { level: 81, expectedLootScore: 42910000000, code: 'gPZqJXtNmTDAWxaihP7NuEnEjE2LZHtky6dfTZBrhqd9KkKvjm1J11uhvS68CBUSSMJKpTKvjymvu2gsLymzDkKGWb', note: 'R16-41, CreaGN2' },
+  { level: 82, expectedLootScore: 56700000000, code: '3zrbvCPKm5Cgh1EL5B9gmqgwXxEav8NaadimxhSeDzjbH7Unamv7kz4BFpEQkd2yRpGumjVFfrurMGUj6CDYsCyDnKTV', note: 'R16-44, Wrench 140' },
+  { level: 83, expectedLootScore: 78060000000, code: '21PyWjrG8i3HeEGRKXjnYjUYJ5hwvBhE6YBAsLwNyfgGssq7C9S9wCwsUFBUYymWBBjpnJTDnhzmZttkKCkaNuP6W7JcY9D', note: 'R4-41, R16-46, Wrench 146' },
+  { level: 84, expectedLootScore: 110650000000, code: 'EEMxgAMCXRjy2j6Nd5h5pcvcC6H229wvGwZ5fhn2fft93rGCWPtdxXn1dBf3kKEZmP28LRf5QGbecSgSdm6HVuJkmZTfV', note: 'R4-44, R16-48, Wrench 150' },
 ];

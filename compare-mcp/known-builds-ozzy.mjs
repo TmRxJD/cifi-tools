@@ -63,6 +63,11 @@ export const KNOWN_OZZY_BUILDS = [
   { level: 69, expectedLootScore: 276220000, code: 'RLPdWkBjuWpXnY7dDygBJNye8anc8ebssHDctifr3NDQbc2bVf61eFdRf9p4MdRY7uWLpEj', note: '276.22m' },
   { level: 70, expectedLootScore: 587830000, code: '3kEeRXGb6FHe4XU2SDixLzzqYXESsgVpFyW5mWXiw8emcp5dQWoFy2E3RD1N7Z9p97URkNo8Bb2xP', note: '587.83m R17-20' },
   { level: 70, expectedLootScore: 794210000, code: 'D7qFbnygNnoYBKvW4kHGPSX4B52qs6LrPcUA6ZSPowZr2GP7tSLSrQ5yj2xLx81NWrWzuJo6cB4DQb', note: '794.21m R17-23' },
+  { level: 71, expectedLootScore: 1030000000, code: 'D7qFbnygNnoYBKvVxQu4dfbD92QDitz89ijmSMJp9FnE7PDLSXm51KxnjpFtS96qzvA1e3iBmuYc8f', note: 'R4-39, R17-24' },
+  { level: 72, expectedLootScore: 1520000000, code: 'D7qFbnzjps4UoYU37TzPwAJ7G5fVwC8an4a7Pp8MuBRHMDaC7QWgNhDvs6nt4MY949rHBBJ3pBXt79', note: 'R4-40, R17-27' },
+  { level: 73, expectedLootScore: 1920000000, code: 'D7qFbnzjps4UoYbEjPqQ3LP47aGLJ12PGbfSyncHLuFgrUGphxmAQMPpPz7JfeZQvwKAe6XaZh8e1u', note: 'R17-28' },
+  { level: 74, expectedLootScore: 3410000000, code: 'D7qFbnzjps4UoYbigwqHFe3V9BurU8XpWA3jSMMPW9a8FguNVnaPkwQUynfEdncXnbpRz6PLCr8fEo', note: 'Zap 130, R17-30' },
+  { level: 75, expectedLootScore: 4390000000, code: '3kEekE96dDhfUK2yYdaYqEAfKA8JX7qWFX8aQAGeuAD1juyyemTQc6iWNRi9KDX7DmVaVRJTYeFya', note: 'R4-44' },
 ];
 
 // Alternate "push" build progression (parallel account history).

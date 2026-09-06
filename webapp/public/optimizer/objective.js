@@ -165,7 +165,25 @@
         + 'help kill the boss — it multiplies what the kill pays — so this is the '
         + '"wait until the kill is worth the most" plan.',
       score: bossScore,
-      pinnedAttrs: ['timeless'],
+      // PINNED BY THE GAME'S OWN NAME, NOT BY AN ID -- because the ids DIFFER PER HUNTER and a
+      // hard-coded one silently broke a whole mode.
+      //
+      //     borge  timeless  cap 5  "Timeless Mastery"
+      //     ozzy   timeless  cap 5  "Timeless Mastery"
+      //     knox   time      cap 5  "Timeless Mastery"   <- same node, different id
+      //
+      // `pinnedAttrs: ['timeless']` therefore threw `Cannot pin unknown attribute "timeless"` out
+      // of applyPins for every Knox run of this mode. Nothing caught it because `boss` and
+      // `bossTimeless` had no quality coverage at all -- of 182 fixtures, 168 are `loot` and 14 are
+      // `push`.
+      //
+      // I FIRST "FIXED" THIS BY HIDING THE MODE FOR KNOX, having concluded from the id alone that
+      // Knox has no Timeless Mastery. It does. That fix would have deleted a working feature from a
+      // hunter and frozen a naming inconsistency in as though it were a fact about the game -- and
+      // the test I wrote alongside it asserted the wrong belief, which is exactly how a bug becomes
+      // an expectation. The names are identical across all three hunters; the ids are not. Bind to
+      // the thing that is actually the same.
+      pinnedAttrNames: ['Timeless Mastery'],
     },
   };
 
@@ -181,8 +199,51 @@
   }
 
 
-  function pinnedAttrsFor(mode) {
-    return modeOrThrow(mode).pinnedAttrs || [];
+  /**
+   * The modes a given hunter can actually run.
+   *
+   * `bossTimeless` pins `timeless`, and KNOX HAS NO SUCH ATTRIBUTE -- it carries 11 attributes to
+   * Borge's and Ozzy's 15. The dropdown was built from `MODES` unconditionally, so a Knox player
+   * was offered "Boss kill with Timeless maxed" and selecting it threw
+   * `Cannot pin unknown attribute "timeless"` out of applyPins. A hard crash, on one of the four
+   * modes the UI ships, for one of the three hunters.
+   *
+   * Nothing caught it because two of the four modes had no quality coverage at all: of 182
+   * fixtures 168 are `loot` and 14 are `push`, so `boss` and `bossTimeless` were never run by any
+   * gate. `mode-matrix-check.js` found it on its first execution.
+   *
+   * HIDDEN, NOT DISABLED-WITH-A-NOTE, and not silently degraded to `boss` either. Hiding matches
+   * what this app already does for gated upgrades (`visibleUpgradeItems`), and degrading would
+   * offer a mode that silently does nothing -- the same silent-no-op trap this codebase bans
+   * everywhere else. A mode whose pin cannot be honoured is not a worse choice, it is not a choice.
+   */
+  function modesForAttributes(attributes) {
+    if (!Array.isArray(attributes)) {
+      throw new Error('modesForAttributes: attributes array is required');
+    }
+    const have = new Set(attributes.map((a) => a.label));
+    return Object.fromEntries(Object.entries(MODES).filter(
+      ([, spec]) => (spec.pinnedAttrNames || []).every((name) => have.has(name)),
+    ));
+  }
+
+  function pinnedAttrsFor(mode, attributes) {
+    const spec = modeOrThrow(mode);
+    const names = spec.pinnedAttrNames || [];
+    if (!names.length) return [];
+    if (!Array.isArray(attributes)) {
+      throw new Error(`pinnedAttrsFor("${mode}"): this mode pins ${names.join(', ')}, so the `
+        + "the attribute list for this hunter is required to resolve the name to an id (ids "
+        + 'differ per hunter: Timeless Mastery is "timeless" on Borge/Ozzy, "time" on Knox)');
+    }
+    return names.map((name) => {
+      const hit = attributes.find((a) => a.label === name);
+      if (!hit) {
+        throw new Error(`pinnedAttrsFor("${mode}"): no attribute named "${name}" for this hunter. `
+          + 'A mode must not be offered where its pin cannot resolve.');
+      }
+      return hit.id;
+    });
   }
 
   /**
@@ -197,7 +258,7 @@
    * excluded automatically and a new real mode appears automatically.
    */
   function pathModes() {
-    return Object.fromEntries(Object.entries(MODES).filter(([, spec]) => !spec.pinnedAttrs));
+    return Object.fromEntries(Object.entries(MODES).filter(([, spec]) => !spec.pinnedAttrNames));
   }
 
   /**
@@ -393,7 +454,7 @@
     return INFEASIBLE_BASE - violation;
   }
 
-  const Objective = { MODES, scoreFor, regimeOf, constraintViolation, constrainedScoreFor,
+  const Objective = { MODES, modesForAttributes, scoreFor, regimeOf, constraintViolation, constrainedScoreFor,
     constrainScore,
     INFEASIBLE_BASE, pinnedAttrsFor, pathModes, modeOrThrow, bossTargetFor, contextFor, describeRun, BOSS_INTERVAL, KILL_ACHIEVED_BASE };
 

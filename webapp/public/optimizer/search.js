@@ -1529,7 +1529,10 @@
     // runs rather than silently scoring as loot. Pins come from the mode definition, never from
     // a caller-supplied list -- there is one place that decides what a mode means.
     Objective.modeOrThrow(mode);
-    const pinnedAttrs = Objective.pinnedAttrsFor(mode);
+    // NOTE: pins are resolved AFTER the config is validated and ATTRIBUTES is bound, because a pin
+    // is now resolved against this hunter's own attribute list (ids differ per hunter -- Timeless
+    // Mastery is `timeless` on Borge/Ozzy and `time` on Knox). Resolving it here, above the
+    // declaration, threw `Cannot access 'ATTRIBUTES' before initialization` for EVERY build.
 
     // Validate the config up front rather than defaulting missing pieces away. A missing
     // dependency table would silently make every gated attribute look freely available and
@@ -1549,6 +1552,13 @@
     let cacheHits = 0;
 
     const { TALENTS, ATTRIBUTES, TALENT_BUDGET, ATTRIBUTE_BUDGET } = cfg;
+
+    // Pins come from the mode definition, never from a caller-supplied list -- there is one place
+    // that decides what a mode means -- and they resolve against THIS hunter's own ids, because
+    // the ids differ: Timeless Mastery is `timeless` on Borge/Ozzy and `time` on Knox. Resolved
+    // HERE rather than beside modeOrThrow above, since that is before ATTRIBUTES is bound and
+    // doing it there threw `Cannot access 'ATTRIBUTES' before initialization` for every build.
+    const pinnedAttrs = Objective.pinnedAttrsFor(mode, ATTRIBUTES);
 
     // Exact memoization, keyed by the allocation pair and fidelity.
     //

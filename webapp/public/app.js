@@ -1653,6 +1653,13 @@ function switchHunter(h, skipNav) {
   // value that quietly disagrees with the value in effect.
   const iterInput = document.getElementById('baseIterations');
   if (iterInput) iterInput.value = currentIterations();
+  // WHICH OPTIMIZE MODES EXIST IS PER HUNTER, so the dropdown has to follow the hunter too.
+  // renderOptimizeModes() ran exactly once at module load, so a page opened on Borge kept offering
+  // "Boss kill with Timeless maxed" after switching to Knox -- which has no `timeless` attribute
+  // and throws out of applyPins when the mode is run. Rebuilding it here is the same reason the
+  // iterations input above is refreshed: a control left showing the previous hunter's options is a
+  // displayed value that disagrees with what the engine will accept.
+  if (document.getElementById('optimizeMode')) renderOptimizeModes();
   if (currentRoute() === 'sim') { renderCategoryTabs(); renderBuildList(); }
   else render();
   updateNavGating();
@@ -3442,10 +3449,20 @@ function readImportSaveFile(file) {
 function renderOptimizeModes() {
   const select = document.getElementById('optimizeMode');
   const help = document.getElementById('optimizeModeHelp');
-  const MODES = window.OptimizerObjective.MODES;
+  // PER HUNTER, because `bossTimeless` pins an attribute Knox does not have and selecting it there
+  // threw out of applyPins. The dropdown used to be built from the full MODES table for everyone.
+  const defs = HUNTER_DEFS[currentHunter];
+  if (!defs) throw new Error(`renderOptimizeModes: no defs for hunter "${currentHunter}"`);
+  const MODES = window.OptimizerObjective.modesForAttributes(defs.attributes);
+  const keys = Object.keys(MODES);
+  if (!keys.length) throw new Error(`renderOptimizeModes: no modes available for ${currentHunter}`);
+  const previous = select.value;
   select.innerHTML = Object.entries(MODES)
     .map(([key, spec]) => `<option value="${key}">${escapeHtml(spec.label)}</option>`)
     .join('');
+  // A selection can become invalid by switching hunter -- exactly the shape of the unknown-route
+  // bug, where a stale value survived into code that assumed it was valid. Fall back explicitly.
+  select.value = keys.includes(previous) ? previous : keys[0];
   // Label AND explanation both come from the mode table, so a new mode cannot ship with a
   // dropdown entry and no description (or a description left behind by a renamed mode).
   const showHelp = () => { help.textContent = MODES[select.value].help; };
