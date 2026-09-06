@@ -1103,6 +1103,17 @@
     }
 
     let spent = 0;
+    // WHEN DID THE ARCHIVE LAST LEARN ANYTHING?
+    //
+    // Instrumentation before optimisation, deliberately. The archive is visibly over-provisioned on
+    // some builds -- knox@30 fills SIX cells from 9,600 variations -- so stopping early looks like
+    // free money. It is not obviously safe: the Ozzy boss cell that decides that build's entire
+    // outcome is found LATE, which is exactly why archiveEvals had to go 4800 -> 9600. A patience
+    // value guessed from intuition would silently re-break that.
+    //
+    // So record the variation index of the last archive change and report it. Once the distribution
+    // is known across builds, a patience threshold can be set from data rather than from hope.
+    let lastImprovementAt = 0;
     let parentCursor = 0;
     let frontierCursor = 0;
     let supportCursor = 0;
@@ -1275,6 +1286,7 @@
       const meta = scores.boss || [];
       for (let i = 0; i < batch.length; i++) {
         const improved = consider(batch[i], scores[i], meta[i]);
+        if (improved) lastImprovementAt = spent;
         // Reward the PARENT, which is what makes this a lineage signal rather than a cell score.
         const par = parents[i];
         if (par) {
@@ -1357,6 +1369,11 @@
       // entire claim of the mechanism. Without it a null result cannot be told from a no-op.
       feasibleCells: [...archive.values()].filter((e) => e.feasible !== false).length,
       infeasibleCells: [...archive.values()].filter((e) => e.feasible === false).length,
+      // Variations since the archive last changed. `idleSince` is the headroom an early stop
+      // would have had; a build whose last improvement lands near the budget is one an early
+      // stop would have damaged.
+      lastImprovementAt,
+      idleVariations: spent - lastImprovementAt,
       bestViolation: [...archive.values()].reduce(
         (m, e) => (Number.isFinite(e.violation) ? Math.min(m, e.violation) : m), 100,
       ),

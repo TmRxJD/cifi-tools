@@ -27,6 +27,15 @@
 
 const H = require('./harness.js');
 
+// POOL SIZE, so an experiment can share the machine with a running sweep instead of waiting hours
+// for it. Oversubscribing cores does not corrupt anything -- the evaluator is deterministic and
+// the pool is asserted bit-identical to serial -- but it slows BOTH jobs, so a background
+// experiment should take the spare capacity rather than a full pool.
+const POOL = (() => {
+  const f = process.argv.find((a) => a.startsWith('--pool='));
+  return f ? Number(f.slice('--pool='.length)) : undefined;
+})();
+
 const args = process.argv.slice(2);
 const opt = (n, d) => { const h = args.find((a) => a.startsWith('--' + n + '=')); return h ? h.slice(n.length + 3) : d; };
 const ONLY = opt('only', null);
@@ -86,7 +95,7 @@ function mulberry(a) {
     const imported = await H.evaluateAllocation(cfg, build.talents, build.attributes);
     const mode = fx.mode || 'loot';
     const primary = (r) => (mode === 'push' ? r.stage : r.loot);
-    const multi = await H.makeMultiModeScorer(cfg);
+    const multi = await H.makeMultiModeScorer(cfg, POOL);
     try {
       const per = {};
       for (const arm of ARMS) {

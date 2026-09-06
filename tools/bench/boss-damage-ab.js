@@ -25,6 +25,15 @@
 
 const H = require('./harness.js');
 
+// POOL SIZE, so an experiment can share the machine with a running sweep instead of waiting hours
+// for it. Oversubscribing cores does not corrupt anything -- the evaluator is deterministic and
+// the pool is asserted bit-identical to serial -- but it slows BOTH jobs, so a background
+// experiment should take the spare capacity rather than a full pool.
+const POOL = (() => {
+  const f = process.argv.find((a) => a.startsWith('--pool='));
+  return f ? Number(f.slice('--pool='.length)) : undefined;
+})();
+
 const args = process.argv.slice(2);
 const opt = (n, d) => {
   const hit = args.find((a) => a.startsWith(`--${n}=`));
@@ -67,7 +76,7 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
     // POOLED: single-threaded node is hours per arm on a level-73 build. The pool is asserted
     // bit-identical to the serial scorer by eval-pool-check.js, including the boss metadata the
     // archive forms its cells from.
-    const pooled = await H.makePooledScorer(bare, 'loot');
+    const pooled = await H.makePooledScorer(bare, fx.mode || 'loot', undefined, POOL);
     const scorer = pooled.score;
 
     for (let s = 0; s < SEEDS; s++) {
