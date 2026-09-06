@@ -1213,7 +1213,27 @@
         // a sliver of the effort -- which is exactly what MOME did here, and it returned a
         // bit-identical build. Retaining a stepping stone is worthless if nothing develops it.
         if (feasibleInfeasible && infeasibleOrdered.length && feasibleOrdered.length) {
-          const pool = (i % 2 === 0) ? feasibleOrdered : infeasibleOrdered;
+          //
+          // SHARE BY FEASIBILITY RATE, NOT A FIXED 50/50 -- MEASURED, BECAUSE FIXED ALTERNATION
+          // REGRESSED A BUILD THAT WAS ALREADY WINNING.
+          //
+          //   knox@30  FI off -84.13% -> FI ON -1.68%   cells   6 -> 96   WIN
+          //   knox@31  FI off  +1.51% -> FI ON -0.87%   cells 157 -> 154  LOSS
+          //
+          // knox@31 already kills its boss from a healthy 157-cell archive. Handing half the
+          // variation budget to an infeasible archive of 13 cells spends it where the constraint
+          // is not binding. FI-2Pop's premise is a HARD-TO-REACH feasible region; when feasible
+          // solutions are abundant the premise does not hold and the alternation is pure cost.
+          //
+          // The constrained-EA literature allocates between the populations by FEASIBILITY RATE
+          // rather than statically, and that is self-regulating here: early in a run nothing kills
+          // a boss, so pfeas is ~0 and almost every parent comes from the infeasible archive --
+          // the knox@30 case, where the boundary walk is the whole point. As killers appear pfeas
+          // rises and the share collapses on its own -- the knox@31 case. No build-specific tuning
+          // and nothing keyed off a hunter name.
+          const pfeas = feasibleOrdered.length / (feasibleOrdered.length + infeasibleOrdered.length);
+          const useInfeasible = rng() >= pfeas;
+          const pool = useInfeasible ? infeasibleOrdered : feasibleOrdered;
           const ph = Math.max(1, Math.min(pool.length, Math.ceil(pool.length / 4)));
           parent = pool[(parentCursor++) % ph];
         } else if (selection === 'random') {
