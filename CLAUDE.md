@@ -1846,6 +1846,46 @@ fixed traversal order give identical output for identical input.
 
 ### Known open defects
 
+- **OCBA IS THE PRINCIPLED ANSWER TO "HOW MANY ITERATIONS PER CANDIDATE", AND IT IS THE STRONGEST
+  UNEXPLORED LEVER FOR BOTH SPEED AND CONSISTENCY. Not implemented.**
+  Optimal Computing Budget Allocation (Chen, mid-1990s) is the ranking-and-selection method for
+  exactly our situation: choose the best of several designs whose values come from a stochastic
+  simulation, under a fixed simulation budget. Reported to reach "the same simulation quality with
+  only one-tenth of the computational effort compared to traditional methods".
+  The rule, with `d` the gap from the apparent best and `s` that design's spread:
+      N_i  proportional to  (s_i / d_i)^2
+  Sequentially: sample everything cheaply, identify the leader, compute gaps, then spend the
+  remaining budget where (s/d)^2 is largest, and repeat.
+  **WHY IT FITS.** The polish evaluates EVERY candidate move in the neighbourhood at
+  FINAL_ITERATIONS -- textbook EQUAL ALLOCATION, the thing OCBA exists to improve on. Most
+  candidates are plainly worse and need very few samples to rule out; a handful sit on a 0.32% ridge
+  and need many. Equal allocation overspends on the first group and underspends on the second, which
+  is the worst possible split for both cost and correctness.
+  **WHY IT IS NOT THE SHORTLIST THIS REPO ALREADY REJECTED.** That shortlist ranked the
+  neighbourhood at SCREEN_ITERATIONS and DISCARDED all but the top few -- and a 100-iteration score
+  was measured ordering a 0.32% ridge BACKWARDS by 1.7%, costing 1.64M on ozzy@62. The literature
+  names the distinction: "top-K screening selects promising candidates early but lacks the
+  principled reallocation mechanism". OCBA discards NOTHING; it spends less on candidates that are
+  far behind and more where the decision is genuinely uncertain. A candidate that looks bad cheaply
+  can still be sampled again if its gap is small relative to its spread.
+  **IT ALSO TARGETS THE CONSISTENCY PROBLEM.** OCBA maximises the probability of CORRECT SELECTION,
+  and the ~7-point seed variance recorded above is largely "which build got picked" -- so raising
+  correct-selection probability attacks the variance directly rather than averaging it away, which
+  is what merging seeds tried and lost at.
+  **INPUTS WE ALREADY HAVE**: the spread is measurable from the precision ladder (error is ~c/sqrt(n)
+  with c ~ 3.0 from the 250/500/1000/2000 measurements), and gaps come free from the scores already
+  being computed. Variances are similar across candidates on one build, so with equal spreads the
+  rule collapses to N_i proportional to 1/d_i^2 -- implementable without estimating per-candidate
+  variance at all.
+
+- **A GLOBAL FIDELITY CUT IS THE CRUDE VERSION OF THE SAME IDEA, AND IT IS BEING MEASURED.**
+  finalIterations 1000 -> 250 on borge@35: identical result (0.00% both), 207s -> 125s, a 1.66x
+  speedup. Not the 3x a naive reading of the cost model predicts, because archive evaluations run at
+  SCREEN_ITERATIONS and are untouched -- only the full-fidelity portion shrinks. One build so far.
+  If OCBA is implemented this dial becomes unnecessary: a global cut lowers fidelity for the close
+  calls too, which is exactly where it must not be lowered.
+
+
 - **FIVE MEASURED-DEAD SEARCH FLAGS ARE DELETED, AND THE DELETION IS VERIFIED BIT-IDENTICAL.**
   Each had a measurement behind it, so none was removed on taste:
       bossDamageBands (extra descriptor axis)   -39.44% -> -39.48%, cells 477 -> 455
