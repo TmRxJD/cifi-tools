@@ -25,6 +25,11 @@
 // different-but-still-passing build is not a regression in the gate's terms; one that drops below
 // its import where the full arm cleared it is.
 
+
+// NOISE FLOOR, stated because a delta without one invites reading noise as signal:
+//   a comparison of two FINAL_ITERATIONS scores carries ~0.3% (measured: 0.12% mean error each),
+//   and the SEARCH varies ~7 percentage points across seeds -- one seed is ONE SAMPLE.
+// A single-seed difference narrower than ~7 points is not evidence about a mechanism.
 const H = require('./harness.js');
 
 // POOL SIZE, so an experiment can share the machine with a running sweep instead of waiting hours

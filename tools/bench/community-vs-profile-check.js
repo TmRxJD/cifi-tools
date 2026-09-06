@@ -22,6 +22,11 @@
 // Levels are the account's own per hunter, so the comparison sits where the player actually is
 // rather than being dominated by fixture levels they are nowhere near.
 
+
+// NOISE FLOOR, stated because a delta without one invites reading noise as signal:
+//   a comparison of two FINAL_ITERATIONS scores carries ~0.3% (measured: 0.12% mean error each),
+//   and the SEARCH varies ~7 percentage points across seeds -- one seed is ONE SAMPLE.
+// A single-seed difference narrower than ~7 points is not evidence about a mechanism.
 const fs = require('fs');
 const path = require('path');
 const H = require('./harness.js');

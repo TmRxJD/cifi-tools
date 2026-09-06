@@ -30,6 +30,11 @@
 //
 //   node tools/bench/uncapped-bias-check.js --results=results-shipped.json
 
+
+// NOISE FLOOR, stated because a delta without one invites reading noise as signal:
+//   a comparison of two FINAL_ITERATIONS scores carries ~0.3% (measured: 0.12% mean error each),
+//   and the SEARCH varies ~7 percentage points across seeds -- one seed is ONE SAMPLE.
+// A single-seed difference narrower than ~7 points is not evidence about a mechanism.
 const path = require('path');
 const fs = require('fs');
 const H = require(path.join(__dirname, 'harness.js'));

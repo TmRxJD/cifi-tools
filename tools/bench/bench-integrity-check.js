@@ -89,6 +89,63 @@ for (const f of files) {
 }
 console.log(`ok    ${modeAware.length} fixture-judging bench(es) respect the fixture's own mode`);
 
+// --- PROPERTY 3: an A/B must assert its flag from the RESULT, not the argument ------------------
+// bossDamageBands reached cellOf, illuminate's signature and its diag record and was NEVER passed
+// at the call site. Unnoticed, the ON arm returns the control's number and it is written down as
+// "measured, no effect" -- a false negative indistinguishable from a real one. Any bench that
+// toggles an effort flag between arms must read it back from res.diag and refuse to report if it
+// disagrees.
+console.log('');
+const abBenches = [];
+for (const f of files) {
+  const src = fs.readFileSync(path.join(DIR, f), 'utf8');
+  // An A/B is a bench that sets an effort flag from a variable rather than a literal.
+  const togglesFlag = /effort:\s*\{[^}]*(bossDamageBands|feasibleInfeasible|ocbaPolish|betAndRun|paretoDepth|finalIterations):\s*[a-z]/i.test(src);
+  if (!togglesFlag) continue;
+  checked++;
+  abBenches.push(f);
+  const readsBack = /diag[\s\S]{0,80}(archive|betAndRun|ocbaPolish)/.test(src)
+    && /(recorded|readBack|!==\s*(on|fi|depth|k))/.test(src);
+  if (!readsBack) {
+    fail(`${f} toggles an effort flag between arms but never asserts it from res.diag `
+      + '-- an unwired flag would make the ON arm silently report the control');
+  }
+}
+if (abBenches.length) console.log(`ok    ${abBenches.length} A/B bench(es) assert their flag from the result`);
+
+// --- PROPERTY 4: a bench comparing scores must state its noise floor ----------------------------
+// The search varies ~7 percentage points across seeds and a comparison of two FINAL_ITERATIONS
+// scores carries ~0.3%. A bench that prints a delta without referencing either invites a reader to
+// treat noise as signal -- which is exactly what happened to knox@31's "regression".
+console.log('');
+let noisy = 0;
+for (const f of files) {
+  const src = fs.readFileSync(path.join(DIR, f), 'utf8');
+  const printsDelta = /(pct|delta|Delta)[\s\S]{0,40}toFixed\(2\)/.test(src);
+  if (!printsDelta) continue;
+  checked++;
+  const statesFloor = /noise|variance|seed variance|comparison floor|NOISE_PCT|one sample|ONE SAMPLE/i.test(src);
+  if (!statesFloor) { noisy++; fail(`${f} prints a score delta but never states a noise floor or seed variance`); }
+}
+if (!noisy) console.log('ok    every delta-printing bench states its noise floor');
+
+// --- PROPERTY 5: no constructed regexes with escapes in bench tooling ---------------------------
+// Five patches this session had a backslash level eaten by the heredoc that wrote them, turning an
+// escaped word-boundary into a literal backspace that matches nothing. Two benches were historically
+// disabled that way and passed on empty matches.
+console.log('');
+let backspaces = 0;
+for (const f of files) {
+  const raw = fs.readFileSync(path.join(DIR, f), 'utf8');
+  checked++;
+  // An actual 0x08 in the source is always a mistake.
+  if (raw.includes(String.fromCharCode(8))) {
+    backspaces++;
+    fail(`${f} contains a literal BACKSPACE byte -- almost certainly an eaten regex escape`);
+  }
+}
+if (!backspaces) console.log('ok    no bench contains a literal backspace byte');
+
 console.log('');
 if (!checked) { console.log('FAIL  bench-integrity-check inspected nothing'); process.exit(1); }
 if (failures) { console.log(`FAIL  ${failures} bench integrity problem(s) across ${files.length} files`); process.exit(1); }

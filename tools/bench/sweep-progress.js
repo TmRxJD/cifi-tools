@@ -12,6 +12,11 @@
 // So: errored rows are counted and shown SEPARATELY from scored rows, and a file with no scored
 // rows at all reports NOTHING MEASURED rather than a pass.
 
+
+// NOISE FLOOR, stated because a delta without one invites reading noise as signal:
+//   a comparison of two FINAL_ITERATIONS scores carries ~0.3% (measured: 0.12% mean error each),
+//   and the SEARCH varies ~7 percentage points across seeds -- one seed is ONE SAMPLE.
+// A single-seed difference narrower than ~7 points is not evidence about a mechanism.
 const fs = require('fs');
 const path = require('path');
 const os = require('os');

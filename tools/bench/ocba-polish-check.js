@@ -55,6 +55,17 @@ const NOISE_PCT = 0.3;
             breakpointSpending: true, ocbaPolish: ocba,
           },
         });
+        // ASSERT THE FLAG FROM THE RESULT, NEVER FROM THE ARGUMENT WE PASSED. bossDamageBands once
+        // reached three of four wiring sites and looked connected; an unwired flag makes the ON arm
+        // silently report the control's number, which is written down as "measured, no effect".
+        const recorded = res.diag && res.diag.ocbaPolish;
+        if (ocba && !recorded) {
+          throw new Error(`${name}: asked for ocbaPolish but the run recorded no ocbaPolish stats `
+            + '-- the flag is not reaching the polish and this comparison would be a lie');
+        }
+        if (!ocba && recorded) {
+          throw new Error(`${name}: ocbaPolish was OFF but the run recorded OCBA stats`);
+        }
         const got = await H.evaluateAllocation(cfg, res.best.talentAlloc, res.best.attrAlloc, JUDGE_ITERS);
         per[ocba ? 'on' : 'off'] = {
           value: primary(got),

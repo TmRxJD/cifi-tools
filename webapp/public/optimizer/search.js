@@ -219,6 +219,7 @@
     'finalIterations',                                 // decision fidelity; A/B only
     'ocbaPolish',                                      // OCBA allocation in the final polish
     'betAndRun',                                       // k independent archives, refine the best
+    'bossDamageBands',                                 // split kill-0 cells by boss damage
     'skipPolish',                                      // ablation
   ]);
 
@@ -713,6 +714,10 @@
     return Math.max(0, Math.min(100, hp));
   }
 
+  // Width of a boss-damage band, and the cap on how many. Only applies below a kill, where
+  // KILL_BANDS provides no gradient at all.
+  const BOSS_DAMAGE_BAND = 10;
+  const BOSS_DAMAGE_BANDS_MAX = 9;
   const CONCENTRATION_BANDS = 6;
   const ARCHIVE_BATCH = 48;            // large enough to keep the worker pool saturated
   const ARCHIVE_CROSSOVER = 0.25;
@@ -851,7 +856,7 @@
     return Math.min(CONCENTRATION_BANDS - 1, Math.floor(share * CONCENTRATION_BANDS));
   }
 
-  function cellOf(meta, defs, attrAlloc) {
+  function cellOf(meta, defs, attrAlloc, bossDamageBands) {
     // A missing descriptor is a PLUMBING FAULT, not a niche. Returning a placeholder cell for it
     // makes every candidate a neighbour of every other and turns the archive into a hill climb
     // that still returns a plausible-looking build -- the exact failure this replaced. Throw.
@@ -860,7 +865,32 @@
     }
     let killBand = 0;
     for (let i = 0; i < KILL_BANDS.length; i++) if (meta.kill >= KILL_BANDS[i]) killBand = i;
-    return killBand + ':' + Math.floor(meta.maxStage / ARCHIVE_STAGE_BAND)
+    //
+    // BOSS DAMAGE AS A DESCRIPTOR AXIS, RESTORED -- AND THE REASON IT WAS DELETED WAS A TESTING
+    // ERROR, NOT A RESULT.
+    //
+    // It was measured ONCE, on borge@73, where it did nothing (-39.44% -> -39.48%, cells 477 -> 455)
+    // and was deleted as measured-dead. borge@73's archive fills 477 CELLS: its descriptor already
+    // discriminates, so an extra axis can only fragment what is working.
+    //
+    // knox@30 is the opposite build and the one this axis is actually for. Its archive fills SIX
+    // cells, because every build lands in kill band 0 at stage ~100, leaving concentration as the
+    // only varying term. 9,600 variations feed a 6-slot hill climber. There, splitting kill-0 by
+    // how much boss HP a build removed is the difference between a descriptor that discriminates
+    // and one that does not -- and it was never tested there.
+    //
+    // The conditioning is what makes it legitimate, and objective.js already measured it:
+    // bossHpPercent is meaningless alone (0 both for never-reached and already-past) but IS
+    // discriminating once depth is held fixed, which the stage band in this key does.
+    let damageBand = 0;
+    if (bossDamageBands && killBand === 0) {
+      if (!Number.isFinite(meta.hp)) {
+        throw new Error('cellOf: boss damage banding is on but the scorer returned no bossHpPercent');
+      }
+      damageBand = Math.max(0, Math.min(BOSS_DAMAGE_BANDS_MAX,
+        Math.floor((100 - meta.hp) / BOSS_DAMAGE_BAND)));
+    }
+    return killBand + ':' + damageBand + ':' + Math.floor(meta.maxStage / ARCHIVE_STAGE_BAND)
       + ':' + concentrationBand(defs, attrAlloc);
   }
 
@@ -979,7 +1009,7 @@
    * Seeded from the enumerated supports rather than from random points: the enumeration is exact
    * and already paid for, so the archive starts with real structural coverage instead of noise.
    */
-  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, structuralShare, seedList, selection, breakpointSpending, feasibleInfeasible, report) {
+  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, structuralShare, seedList, selection, breakpointSpending, feasibleInfeasible, bossDamageBands, report) {
     const stats = { rejected: 0, accepted: 0, repaired: 0, nodesCleared: 0, structural: 0,
       breakpointClamped: 0, breakpointBlocked: 0 };
     const { TALENTS, ATTRIBUTES, talentBudget, attrBudget, deps, minVal } = spaces;
@@ -1075,7 +1105,7 @@
 
     const consider = (pair, score, meta) => {
       if (!Number.isFinite(score)) return;
-      const cell = cellOf(meta, ATTRIBUTES, pair.attrAlloc);
+      const cell = cellOf(meta, ATTRIBUTES, pair.attrAlloc, bossDamageBands);
       // The '|F'/'|I' or '|loot' suffix is a constant on every key, so it does not change the
       // relative order under the key tie-break that parent selection uses.
       if (feasibleInfeasible) {
@@ -1373,6 +1403,7 @@
       selection,
       breakpointSpending,
       feasibleInfeasible,
+      bossDamageBands,
       breakpointClamped: stats.breakpointClamped,
       breakpointBlocked: stats.breakpointBlocked,
       moves: {
@@ -1944,6 +1975,7 @@
         effortSpec.breakpointSpending !== false,
         // FI-MAP-Elites. OFF until measured end to end, like every other move here.
         effortSpec.feasibleInfeasible === true,
+        effortSpec.bossDamageBands === true,
         (f) => report('survey', f * SURVEY_REPORT_SCALE, SURVEY_REPORT_SCALE),
       );
 

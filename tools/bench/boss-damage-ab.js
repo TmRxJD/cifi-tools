@@ -43,10 +43,14 @@ const ONLY = opt('only', 'borge@73');
 const SEEDS = Number(opt('seeds', 1));
 const ARCHIVE_EVALS = Number(opt('archiveEvals', 9600));
 const REFINE = Number(opt('refineSupports', 8));
-// MOME depth to compare against 1. --pareto=2 makes this the paretoDepth A/B instead.
-const PARETO = Number(opt('pareto', 0));
 // --fi=1 makes this the feasible/infeasible A/B instead.
 const FI = opt('fi', null) !== null;
+// --both turns on BOTH the descriptor axis and the feasible/infeasible archives in the ON arm.
+// They compose rather than compete: the axis lets the archive SEE boss progress below a kill (on a
+// degenerate archive every build collapses into one cell), and FI gives those cells breeding budget
+// with no loot pressure. Preservation without development was already measured inert (MOME returned
+// a bit-identical build), so seeing the difference is only useful if something then develops it.
+const BOTH = args.includes('--both');
 
 // The shipped archive seed, so arm-to-arm differences are the FLAG and not the stream.
 const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
@@ -82,11 +86,11 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
 
     for (let s = 0; s < SEEDS; s++) {
       const seed = BASE_SEEDS[s % BASE_SEEDS.length];
-      const arms = FI ? [false, true] : (PARETO ? [1, PARETO] : [false, true]);
+      const arms = [false, true];
       for (const arm of arms) {
-        const on = (PARETO || FI) ? false : arm;
-        const depth = PARETO ? arm : 1;
-        const fi = FI ? arm : false;
+        // `on` drives bossDamageBands, `fi` drives the feasible/infeasible archives.
+        const on = (BOTH || !FI) ? arm : false;
+        const fi = (BOTH || FI) ? arm : false;
         const t0 = Date.now();
         const res = await H.Optimizer.optimize(bare, {
           // THE FIXTURE'S OWN MODE. This said 'loot' while the scorer above was built with
@@ -98,20 +102,19 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
           scorer,
           effort: {
             archiveEvals: ARCHIVE_EVALS, refineSupports: REFINE,
-            structuralShare: 0.35, depthShare: 0, selection: 'curiosity',
-            seeds: [seed], breakpointSpending: true, bossDamageBands: on, paretoDepth: depth, feasibleInfeasible: fi,
+            structuralShare: 0.35, selection: 'curiosity',
+            seeds: [seed], breakpointSpending: true, bossDamageBands: on, feasibleInfeasible: fi,
           },
         });
         const got = await H.evaluateAllocation(cfg, res.best.talentAlloc, res.best.attrAlloc);
         // THE FLAG MUST BE CONFIRMED LIVE FROM THE RESULT, not from the argument we passed.
         // bossDamageBands reached three of four sites once already and was never actually applied.
         const recorded = res.diag && res.diag.archive && res.diag.archive.bossDamageBands;
-        const recordedDepth = res.diag && res.diag.archive && res.diag.archive.paretoDepth;
         const recordedFi = res.diag && res.diag.archive && res.diag.archive.feasibleInfeasible;
-        if (recorded !== on || recordedDepth !== depth || recordedFi !== fi) {
-          throw new Error(`boss-damage-ab: asked for bossDamageBands=${on}/paretoDepth=${depth} but `
-            + `the run recorded ${recorded}/${recordedDepth}; a flag is not reaching the archive `
-            + 'and the A/B would be a lie');
+        if (recorded !== on || recordedFi !== fi) {
+          throw new Error(`boss-damage-ab: asked for bossDamageBands=${on}/FI=${fi} but the run `
+            + `recorded ${recorded}/${recordedFi}; a flag is not reaching the archive and the A/B `
+            + 'would be a lie');
         }
         // LEGALITY, ASSERTED. A mechanism that reaches a boss by producing an allocation the game
         // would reject is not a win, and nothing else in this bench would notice -- the score would
@@ -128,7 +131,7 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
         }
         const d = H.Objective.describeRun(got);
         rows.push({
-          name, seed, on, depth, fi, loot: got.loot,
+          name, seed, on, fi, loot: got.loot,
           feasibleCells: res.diag.archive.feasibleCells,
           infeasibleCells: res.diag.archive.infeasibleCells,
           bestViolation: res.diag.archive.bestViolation,
@@ -145,7 +148,7 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
         });
         const r = rows[rows.length - 1];
         console.log(`${name.padEnd(10)} seed ${seed.toString(16).padStart(8)}  `
-          + (FI ? `FI ${fi ? 'ON ' : 'off'}  ` : (PARETO ? `paretoDepth ${depth}  ` : `bossDamageBands ${on ? 'ON ' : 'off'}  `))
+          + (BOTH ? `axis+FI ${arm ? 'ON ' : 'off'}  ` : (FI ? `FI ${fi ? 'ON ' : 'off'}  ` : `bossDamageBands ${on ? 'ON ' : 'off'}  `))
           + `${(r.pct >= 0 ? '+' : '') + r.pct.toFixed(2)}%  `
           + `cells ${String(r.cells).padStart(4)} F/I ${String(r.feasibleCells).padStart(3)}/${String(r.infeasibleCells).padStart(3)}  `
           + `bestViolation ${String(Math.round(r.bestViolation)).padStart(3)}  `
@@ -164,7 +167,7 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
   for (const name of names) {
     for (const seed of [...new Set(rows.filter((r) => r.name === name).map((r) => r.seed))]) {
       const pick = (want) => rows.find((r) => r.name === name && r.seed === seed
-        && (FI ? r.fi === want : (PARETO ? r.depth === (want ? PARETO : 1) : r.on === want)));
+        && (BOTH ? (r.on === want && r.fi === want) : (FI ? r.fi === want : r.on === want)));
       const off = pick(false);
       const on = pick(true);
       if (!off || !on) continue;

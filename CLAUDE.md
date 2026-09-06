@@ -9,6 +9,20 @@ re-derive decisions that were already made and validated.
 
 ---
 
+## Read MEASUREMENT.md first
+
+**Every wrong conclusion in this project's recent history came from a broken MEASUREMENT, not a
+broken algorithm. Not one.** Wrong fixture, wrong objective, wrong test build, an unverified flag,
+a stale results file, error bars wider than the effect being chased, and audit tools carrying the
+defects they hunt.
+
+`MEASUREMENT.md` is the contract, with each rule traced to the real failure that produced it.
+`tools/bench/bench-integrity-check.js` enforces the statically checkable half and runs FIRST in
+`all.js`, because every number the suite prints depends on it.
+
+The meta-rule, learned three times over: **a new measurement tool is not trusted until it has been
+shown to FAIL on a known-bad input.**
+
 ## Non-negotiable principles
 
 These are the standard every change is held to. They are listed first because they are the

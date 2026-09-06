@@ -23,6 +23,11 @@
 // that fails on a known-open problem is a gate people learn to ignore. Pass --max-shortfall=N to
 // make it a gate once the distribution is good enough to hold a line.
 
+
+// NOISE FLOOR, stated because a delta without one invites reading noise as signal:
+//   a comparison of two FINAL_ITERATIONS scores carries ~0.3% (measured: 0.12% mean error each),
+//   and the SEARCH varies ~7 percentage points across seeds -- one seed is ONE SAMPLE.
+// A single-seed difference narrower than ~7 points is not evidence about a mechanism.
 const H = require('./harness.js');
 
 const args = process.argv.slice(2);
