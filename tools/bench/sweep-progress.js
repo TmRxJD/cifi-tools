@@ -49,17 +49,54 @@ if (!scored.length) {
   process.exit(0);
 }
 
-const by = (m) => scored.map((r) => r[m]).filter(Number.isFinite).sort((a, b) => a - b);
-const loot = by('lootDeltaPct');
-const med = loot[Math.floor(loot.length / 2)];
-const short = scored.filter((r) => r.lootDeltaPct < -0.5);
+// EACH BUILD IS JUDGED ON ITS OWN OBJECTIVE, AND THE FIRST VERSION OF THIS FILE WAS NOT.
+//
+// It ranked every build on lootDeltaPct, so a PUSH build that gained 2.79% average stage while
+// spending 5.69% loot was reported as a shortfall -- when it had beaten its import at the thing it
+// was built for, and run.js had correctly marked it PASS. Pushing deeper costs loot/min; that is
+// the trade, not a defect.
+//
+// 14 of the 195 fixtures are push builds, so this would have produced a steady drip of false
+// alarms across the sweep. Same "measured against the wrong objective" error this project has now
+// hit in the search, in a fixture set, and here in the reporting.
+const primaryOf = (r) => (r.mode === 'push' ? r.stageDeltaPct : r.lootDeltaPct);
+const primaryName = (r) => (r.mode === 'push' ? 'stage' : 'loot');
+
+const withPrimary = scored.filter((r) => Number.isFinite(primaryOf(r)));
+const vals = withPrimary.map(primaryOf).sort((a, b) => a - b);
+const med = vals[Math.floor(vals.length / 2)];
+const short = withPrimary.filter((r) => primaryOf(r) < -0.5);
+
+const modes = {};
+for (const r of withPrimary) modes[r.mode] = (modes[r.mode] || 0) + 1;
+
 console.log('');
-console.log(`loot delta: median ${med.toFixed(2)}%  worst ${loot[0].toFixed(2)}%  best ${loot[loot.length - 1].toFixed(2)}%`);
-console.log(`met or beat (>= -0.5%): ${scored.length - short.length}/${scored.length}`);
+console.log(`judged on each build's OWN objective (${Object.entries(modes).map(([m, n]) => `${n} ${m}`).join(', ')})`);
+console.log(`  median ${med.toFixed(2)}%   worst ${vals[0].toFixed(2)}%   best ${vals[vals.length - 1].toFixed(2)}%`);
+console.log(`  met or beat (>= -0.5%): ${withPrimary.length - short.length}/${withPrimary.length}`);
+
 if (short.length) {
-  console.log(`\nshort by more than 0.5%:`);
-  for (const r of short.sort((a, b) => a.lootDeltaPct - b.lootDeltaPct)) {
-    console.log(`  ${r.hunter}@${r.level} ${String(r.mode || '').padEnd(5)} ${r.lootDeltaPct.toFixed(2)}%`
-      + `  stage ${Number(r.importStage).toFixed(1)} -> ${Number(r.optimizedStage).toFixed(1)}`);
+  console.log('');
+  console.log('short on its OWN objective by more than 0.5%:');
+  for (const r of short.sort((a, b) => primaryOf(a) - primaryOf(b))) {
+    console.log(`  ${r.hunter}@${r.level} ${String(r.mode).padEnd(5)} `
+      + `${primaryName(r)} ${primaryOf(r).toFixed(2)}%`
+      + `   stage ${Number(r.importStage).toFixed(1)} -> ${Number(r.optimizedStage).toFixed(1)}`
+      + `   loot ${Number(r.lootDeltaPct).toFixed(2)}%`);
   }
+} else {
+  console.log('  (none short on its own objective)');
 }
+
+// The secondary metric is REPORTED, never gated -- a push build trading loot for depth is doing
+// its job. Shown so a real regression in the other metric is still visible.
+const secondaryDown = withPrimary.filter((r) => {
+  const sec = r.mode === 'push' ? r.lootDeltaPct : r.stageDeltaPct;
+  return Number.isFinite(sec) && sec < -0.5;
+});
+console.log('');
+console.log(`secondary metric down >0.5% on ${secondaryDown.length} build(s) -- reported, not gated`);
+
+const errRows = rows.filter((r) => r.error);
+if (errRows.length) console.log(`
+WARNING: ${errRows.length} errored row(s) are excluded from every figure above`);

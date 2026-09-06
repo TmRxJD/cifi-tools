@@ -215,14 +215,39 @@ function describe(res) {
     + (warn ? `  [secondary down: ${warn}]` : '');
 }
 
-/** Run one batch of fixtures concurrently, one worker per fixture. */
-function runBatch(fixtures) {
-  return Promise.all(fixtures.map((fixture) => new Promise((resolve, reject) => {
+/** Run one fixture in its own worker. */
+function runFixture(fixture) {
+  return new Promise((resolve, reject) => {
     const worker = new Worker(WORKER_FILE);
     worker.on('message', (res) => { worker.terminate(); resolve(res); });
     worker.on('error', (err) => { worker.terminate(); reject(err); });
     worker.postMessage(fixture);
-  })));
+  });
+}
+
+//
+// A ROLLING QUEUE, NOT FIXED BATCHES -- because build times differ by more than 10x and a batch
+// runs at the speed of its slowest member.
+//
+// Measured on the first batch of a real sweep: 26s, 254s, 336s, 29s, 52s, 464s, 275s. Under
+// Promise.all across the whole batch that is 464s of wall clock for 1,436s of work, with six cores
+// idle for most of it. A queue that hands a worker the next fixture the moment it finishes keeps
+// every core busy instead.
+async function runQueue(fixtures, concurrency, onResult, shouldStop) {
+  let next = 0;
+  let stopped = false;
+  const lane = async () => {
+    for (;;) {
+      if (stopped) return;
+      const i = next++;
+      if (i >= fixtures.length) return;
+      const res = await runFixture(fixtures[i]);
+      await onResult(res);
+      if (shouldStop && shouldStop(res)) { stopped = true; return; }
+    }
+  };
+  const lanes = Math.max(1, Math.min(concurrency, fixtures.length));
+  await Promise.all(Array.from({ length: lanes }, lane));
 }
 
 async function main() {
@@ -265,25 +290,29 @@ async function main() {
   const startedAt = Date.now();
   let aborted = false;
 
-  for (let i = 0; i < fixtures.length && !aborted; i += args.batchSize) {
-    const batch = fixtures.slice(i, i + args.batchSize);
-    const batchResults = await runBatch(batch);
-    batchResults.sort((a, b) => (a.level || 0) - (b.level || 0));
-    for (const res of batchResults) {
-      results.push(res);
-      console.log(`[${results.length}/${totalTarget}] ${describe(res)}`);
-    }
-    // Persist after EVERY batch, not just at the end. A full sweep is ~2 hours; losing all of it
-    // because the process was interrupted at build 150 is avoidable, and stdout redirected to a
-    // file is block-buffered, so a killed run leaves a truncated log and nothing else. Now the
-    // completed work is always on disk and readable with `node tools/bench/show.js`.
-    fs.writeFileSync(resultsFile, JSON.stringify(results, null, 2));
+  // Expensive builds first, so the cheap ones fill the tail instead of the other way round.
+  // Fail-fast keeps SOURCE order: stopping at "the first failure" should mean the first in the
+  // list the user asked for, not whichever slow build happened to be scheduled first.
+  const queue = args.runAll
+    ? fixtures.slice().sort((a, b) => (b.level || 0) - (a.level || 0))
+    : fixtures;
 
-    if (!args.runAll && batchResults.some((r) => failureOf(r))) {
-      aborted = true;
-      console.log('\nStopping early: this batch contained a failure. Re-run with --all for the full picture.');
-    }
-  }
+  await runQueue(queue, args.batchSize, async (res) => {
+    results.push(res);
+    console.log(`[${results.length}/${totalTarget}] ${describe(res)}`);
+    // Persist after EVERY result, not just at the end. A full sweep is hours; losing all of it
+    // because the process was interrupted at build 150 is avoidable, and stdout redirected to a
+    // file is block-buffered, so a killed run leaves a truncated log and nothing else. Sorted on
+    // write so the file is stable regardless of completion order.
+    const ordered = results.slice().sort((a, b) => (a.hunter || '').localeCompare(b.hunter || '')
+      || (a.level || 0) - (b.level || 0) || (a.index || 0) - (b.index || 0));
+    fs.writeFileSync(resultsFile, JSON.stringify(ordered, null, 2));
+  }, (res) => {
+    if (args.runAll || !failureOf(res)) return false;
+    aborted = true;
+    console.log('Stopping early: a build failed. Re-run with --all for the full picture.');
+    return true;
+  });
 
   const failures = results.map((r) => ({ res: r, why: failureOf(r) })).filter((x) => x.why);
   const warnings = results.map((r) => ({ res: r, why: secondaryWarningOf(r) })).filter((x) => x.why);
