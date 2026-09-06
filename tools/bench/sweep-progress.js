@@ -70,7 +70,10 @@ console.log(`${path.basename(abs)}: ${rows.length} row(s)`);
 // So: model cost by level band from the builds THIS run has actually finished, apply it to the
 // fixtures still outstanding, and divide by the number of lanes. Falls back to the overall median
 // for a band nothing has completed in yet, and says so rather than pretending to know.
-const LANES = Math.max(1, os.cpus().length - 1);   // run.js's own default concurrency
+const LANES = Math.max(1, os.cpus().length - 1);
+// Populated from the fixture list below; used by the shortfall report, which must name the exact
+// fixture rather than hunter@level (two fixtures can share a level).
+const nameByUid = new Map();   // run.js's own default concurrency
 let etaLine = null;
 try {
   const H = require('./harness.js');
@@ -78,6 +81,7 @@ try {
   const all = [];
   for (const h of Object.keys(known)) for (const f of known[h]) all.push(f);
   const doneKey = new Set(rows.map((r) => `${r.hunter}/${r.set}#${r.index}`));
+  for (const f of all) nameByUid.set(`${f.hunter}/${f.set}#${f.index}`, f.name);
   // RESPECT THE LEVEL CAP THE SWEEP WAS LAUNCHED WITH, or both the count and the estimate include
   // builds this run will never attempt -- and they are the most expensive ones in the set, so the
   // ETA is inflated by more than their share. Read from the sweep's own log rather than asked for,
@@ -216,7 +220,15 @@ if (short.length) {
   console.log('');
   console.log('short on its OWN objective by more than 0.5%:');
   for (const r of short.sort((a, b) => primaryOf(a) - primaryOf(b))) {
-    console.log(`  ${r.hunter}@${r.level} ${String(r.mode).padEnd(5)} `
+    // THE UNIQUE FIXTURE NAME, NOT hunter@level -- TWO FIXTURES CAN SHARE A LEVEL.
+    //
+    // knox has two level-35 builds: knox@35 (+0.04%, healthy) and knox@35b (-0.69%, the failing
+    // one). This line printed "knox@35" for the failing one, and that ambiguous label was fed
+    // straight into a spot check, which then measured the HEALTHY build and reported it as fine.
+    // A report that cannot name what it is reporting on sends the next investigation to the wrong
+    // place -- which is exactly what it did.
+    const uid = `${r.hunter}/${r.set}#${r.index}`;
+    console.log(`  ${(nameByUid.get(uid) || `${r.hunter}@${r.level}`).padEnd(10)} ${String(r.mode).padEnd(5)} `
       + `${primaryName(r)} ${primaryOf(r).toFixed(2)}%`
       + `   stage ${Number(r.importStage).toFixed(1)} -> ${Number(r.optimizedStage).toFixed(1)}`
       + `   loot ${Number(r.lootDeltaPct).toFixed(2)}%`);
