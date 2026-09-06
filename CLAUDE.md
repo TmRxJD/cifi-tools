@@ -1860,6 +1860,43 @@ fixed traversal order give identical output for identical input.
 
 ### Known open defects
 
+- **THE BOSS-DAMAGE DESCRIPTOR AXIS IS REDUNDANT *GIVEN FI*, AND THE ORIGINAL DELETION WAS RIGHT FOR
+  THE WRONG REASON.** knox@30, one seed, everything else identical:
+      axis+FI off   -84.13%   cells   6   F/I  6/0    bestViolation 89   reaches-cannot-kill
+      axis+FI ON     -1.75%   cells 133   F/I 82/51   bestViolation  6   KILLS-BOSS
+  Against FI ALONE on the same build: -1.68% and -1.75%, at 96-105 cells. So the axis really does
+  give the infeasible archive far more niches (51 infeasible cells against 5) and the returned build
+  does not change. FI already produces the diversity by exploring deeper; the axis adds coverage
+  that nothing needs.
+  **The first deletion cited a null result on borge@73, which was the wrong evidence** -- that build
+  fills 477 cells, so its descriptor was never the binding constraint and an extra axis could only
+  fragment something already working. knox@30 fills SIX. The right justification is the one measured
+  here, not that one, and the difference matters because the justification is what the next person
+  inherits.
+
+- **FI-MAP-ELITES ON knox@30 IS REPRODUCIBLE: -1.68%, -1.75%, -1.75% ACROSS THREE DIFFERENT RANDOM
+  STREAMS** (fixed alternation, pfeas weighting, and pfeas+axis). Every run reports bestViolation
+  falling from ~89 to 4-6 and the regime changing from `reaches-cannot-kill` to `kills-boss`, which
+  is the mechanism's own claim rather than an outcome that could coincide. Against a baseline of
+  -84.13% reproduced on every arm.
+  **What is still NOT established**: knox@31 (+1.51% -> -0.87% / -2.72%) remains single-seed, and
+  both figures sit inside the ~7-point seed variance, so they are neither evidence of harm nor of
+  safety. The multi-seed run that would settle it was started and killed for CPU, twice. Until it
+  lands, FI ships OFF.
+
+- **BET-AND-RUN CANNOT HELP knox@30, AND THAT IS A FINDING ABOUT THE BUILD.** Three independent
+  archives at the full budget:
+      1234(cells 6, kill 0, viol 88)  9e3779b9(cells 6, kill 0, viol 89)  a5a5a5a5(cells 6, kill 0, viol 90)
+  Identical. There is nothing for a portfolio to select between, so it returned +0.00 points for
+  1.70x the time -- exactly what the theory predicts when there is no variance to exploit.
+  **So knox@30's failure is SYSTEMATIC, not seed-dependent**, and no restart schedule, portfolio or
+  re-run will ever fix it. It needs a mechanism, and FI is the one that moves it. Bet-and-run remains
+  untested against the case it was built for -- the ozzy@62 bimodal failure (+15.34% / -66.27% from
+  one configuration), which is not in the fixture set at that level.
+  Cost note: k=3 measured **1.70x**, not the ~1.2x estimated from "illumination is ~10% of wall
+  clock". That ratio holds for a level-60+ Borge and not for a cheap build where refinement is short.
+
+
 - **BET-AND-RUN IS THE BACKUP IF NO MECHANISM FIXES THE BOSS CLIFF, AND IT IS CHEAP HERE.**
   Not implemented; recorded with the cost analysis so it can be picked up directly.
   The failure this repo keeps hitting on Ozzy is BIMODAL -- +15.34% on one seed, -66.27% on another,
