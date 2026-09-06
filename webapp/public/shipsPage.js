@@ -2507,9 +2507,24 @@ function openOptimizeShipModal(shipId) {
     }
     return el;
   })();
-  const warnings = growthCounterWarnings(shipId);
+  //
+  // THE UNMODELLED-TERM REPORTERS ARE WIRED HERE, BECAUSE UNTIL NOW THEY REPORTED TO NOBODY.
+  //
+  // unmodelledInstallBonusTerms(), unmodelledEvolutionTerms() and unmodelledCrewRankTerms() were
+  // all defined -- one of them even exported to window -- and NONE was ever called. CLAUDE.md
+  // stated as fact that they "report" the gaps "rather than dropping them silently". They dropped
+  // them silently: an account owning PowerGU1 quality 2+, RU83/RU96, or AttractionGU6 saw fleet
+  // numbers computed without those factors and was told nothing.
+  //
+  // A dead honesty feature is worse than none, because the documentation is then a false claim
+  // about what the user has been shown. They surface next to the growth-counter warning, which is
+  // the one warning that was already wired, so there is a single place a user looks for "what this
+  // page cannot compute for you".
+  const warnings = growthCounterWarnings(shipId).map((w) => w.message)
+    .concat(unmodelledInstallBonusTerms())
+    .concat(unmodelledEvolutionTerms());
   warnHost.className = warnings.length ? 'mb-3 rounded border border-amber-500/60 bg-amber-900/20 p-2' : '';
-  warnHost.innerHTML = warnings.map((w) => `<p class="text-xs text-amber-200">${escapeHtml(w.message)}</p>`).join('');
+  warnHost.innerHTML = warnings.map((m) => `<p class="text-xs text-amber-200">${escapeHtml(m)}</p>`).join('');
   renderFocusWeightSliders(document.getElementById('optimizeShipFocusWeights'), gear.focusWeights, document.getElementById('optimizeShipWeightPresetBtn'));
   document.getElementById('optimizeShipModal').classList.remove('hidden');
 }

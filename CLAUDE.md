@@ -310,7 +310,7 @@ think one is wrong, disprove it with a test.
   **Crew multiplies every install node's bonus linearly, so importing the raw field understated
   every fleet number** -- on the reference save Cradle crew 600 -> 680 (~13% on all its install
   bonuses) and rank 106 -> 114. `shipSchema.js` now adds the free grants and records
-  `purchasedCrewLevel`/`freeCrew` alongside the total. `unmodelledCrewRankTerms()` reports the two
+  `purchasedCrewLevel`/`freeCrew` alongside the total. `unmodelledCrewRankTerms()` EXISTS to report the two
   terms still missing (LM239/LM240 -- loop-mods.json has their costs but not their per-level
   Bonus -- and `FinalAllShipsRanksBonus`) rather than dropping them silently.
 - **Ship EVOLUTION is a HUGE production multiplier and the tool does not model it.** It does not
@@ -349,7 +349,7 @@ think one is wrong, disprove it with a test.
   FinalRU96InstallsBonus`). The last two are uniform across a ship's nodes, so they cannot reorder
   the optimizer. **Their unowned case is now modelled exactly** -- `PowerGU1BonusCalc` returns a
   literal 1 when `PowerGU1Level <= 0`, and the research product is 1 at level 0, which is the
-  reference account -- and `unmodelledInstallBonusTerms()` reports when an account owns them.
+  reference account -- and `unmodelledInstallBonusTerms()` now reports when an account owns them (it did NOT until it was wired -- see below).
   **PowerGU1 is now fully modelled**, because the type-tree enum bug below was fixed and GemPerks
   became readable: `PowerGU1BonusCalc` = `Pow(Pow(1 + 0.0012*L, FinalCradleCrew) *
   Pow(1 + 0.02*L, FinalCradleRank), PowerQualityPower)`, using CRADLE's crew and rank even though
@@ -1845,6 +1845,26 @@ fixed traversal order give identical output for identical input.
   arguments are all named. The DAG the move algebra reasons about is the game's own.
 
 ### Known open defects
+
+- **THE WHOLE "HONEST REPORTING OF UNMODELLED TERMS" SYSTEM WAS DEAD, AND THIS FILE ASSERTED IT
+  WORKED.** Three functions existed to tell a user which factors the fleet model cannot compute for
+  their account -- `unmodelledCrewRankTerms()` (defined AND exported to `window`),
+  `unmodelledInstallBonusTerms()` and `unmodelledEvolutionTerms()`. **None of them was ever
+  called.** An account owning PowerGU1 quality 2+, RU83/RU96 or AttractionGU6 saw fleet numbers
+  computed without those factors and was told nothing, while this document stated as fact that the
+  gaps were reported "rather than dropping them silently". They were dropped silently.
+  A dead honesty feature is worse than no honesty feature, because the documentation then makes a
+  false claim about what the user has been shown. Two are now wired into the ship optimize modal
+  beside the growth-counter warning -- the one warning that WAS wired -- so there is a single place
+  a user looks for "what this page cannot compute".
+  **`installBonusGlobalMultiplier()` IS STILL DEAD AND IS A DIFFERENT KIND OF PROBLEM.** It computes
+  the PowerGU1 multiplier applied to every install node's bonus, and nothing calls it, so the model
+  does not apply it. It returns a literal 1 whenever `powerGU1Level()` is 0 -- and the gem store
+  carries no per-GU level, so it reads 0 for every account today, which is why nothing has been
+  visibly wrong. It becomes a real modelling gap the moment that input exists. Wiring it changes
+  NUMBERS rather than notes, so it is left as a decision rather than quietly switched on.
+  Found by `dead-symbol-audit.js`, which is a REPORT: some findings are legitimate.
+
 
 - **THE UNSPENT-POINT FIX CHANGED NONE OF THE FAILING BUILDS. Measured, so it is not retried.**
       knox@30   -84.13% -> -84.13%   spend  30/30   90/90   reaches-cannot-kill
