@@ -70,6 +70,7 @@ function parseArgs(argv) {
   const batchFlag = flags.find((f) => f.startsWith('--batch='));
   const outFlag = flags.find((f) => f.startsWith('--out='));
   const sampleFlag = flags.find((f) => f.startsWith('--sample='));
+  const maxLevelFlag = flags.find((f) => f.startsWith('--max-level='));
   const seedFlag = flags.find((f) => f.startsWith('--seed='));
   const sample = sampleFlag ? Number(sampleFlag.split('=')[1]) : 0;
   if (sampleFlag && !(Number.isInteger(sample) && sample > 0)) {
@@ -89,6 +90,11 @@ function parseArgs(argv) {
     // one hunter's results into another's run.
     outFile: outFlag ? outFlag.slice('--out='.length) : DEFAULT_RESULTS_FILE,
     batchSize: batchFlag ? Number(batchFlag.split('=')[1]) : Math.max(1, os.cpus().length - 1),
+    // Cap the level so a sweep can skip the expensive tail. The top builds dominate wall clock --
+    // measured medians run 58s at level 10-19 against 316s at 70-79, and the level 80+ fixtures are
+    // slower still -- so excluding them turns a many-hour sweep into a much shorter one covering
+    // the great majority of builds. The excluded ones are REPORTED, never silently dropped.
+    maxLevel: maxLevelFlag ? Number(maxLevelFlag.slice('--max-level='.length)) : null,
     hunter: positional[0],
     from: positional[1] !== undefined ? Number(positional[1]) : 0,
     to: positional[2] !== undefined ? Number(positional[2]) : undefined,
@@ -106,6 +112,14 @@ function selectFixtures(args) {
   // Cheapest (lowest level) first, so a systemic problem surfaces in seconds rather than after
   // the slowest high-level builds have run.
   all.sort((a, b) => (a.level || 0) - (b.level || 0));
+  // Level cap, applied BEFORE sampling so a capped sample stratifies over the range it will
+  // actually run. Excluded builds are reported by the caller, never dropped silently -- a sweep
+  // that quietly skipped its hardest cases would be the most flattering possible bug.
+  if (Number.isFinite(args.maxLevel)) {
+    const before = all.length;
+    all = all.filter((f) => (f.level || 0) <= args.maxLevel);
+    args.excludedByLevel = before - all.length;
+  }
   if (args.sample) return stratifiedSample(all, hunters, args.sample, args.seed);
   return all.slice(args.from, args.to === undefined ? all.length : args.to);
 }
@@ -333,8 +347,15 @@ async function main() {
   // Expensive builds first, so the cheap ones fill the tail instead of the other way round.
   // Fail-fast keeps SOURCE order: stopping at "the first failure" should mean the first in the
   // list the user asked for, not whichever slow build happened to be scheduled first.
+  // ASCENDING BY LEVEL.
+  //
+  // This was longest-first (LPT), which minimises the tail -- but it puts the seven most expensive
+  // builds in the set on the seven lanes at the start, so a full sweep produced no result at all
+  // for the first several minutes and looked exactly like a hang. Cheap builds first means results
+  // start landing in seconds and the whole low-level range is confirmed before anything expensive
+  // is attempted, which is worth more than a shorter tail on a run people watch.
   const queue = args.runAll
-    ? fixtures.slice().sort((a, b) => (b.level || 0) - (a.level || 0))
+    ? fixtures.slice().sort((a, b) => (a.level || 0) - (b.level || 0))
     : fixtures;
 
   await runQueue(queue, args.batchSize, async (res) => {
