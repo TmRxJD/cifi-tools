@@ -1846,6 +1846,39 @@ fixed traversal order give identical output for identical input.
 
 ### Known open defects
 
+- **BET-AND-RUN IS THE BACKUP IF NO MECHANISM FIXES THE BOSS CLIFF, AND IT IS CHEAP HERE.**
+  Not implemented; recorded with the cost analysis so it can be picked up directly.
+  The failure this repo keeps hitting on Ozzy is BIMODAL -- +15.34% on one seed, -66.27% on another,
+  with nothing in between. That is a HEAVY-TAILED outcome distribution, and restart portfolios are
+  the standard answer to heavy tails in stochastic search.
+  **Bet-and-run** (Fischetti & Monaci; generic version, AAAI): run k short streams, then continue
+  ONLY the most promising for the remaining budget. Our cost structure makes it unusually cheap --
+  illumination is ~10% of wall clock and refinement ~87%, so three archives plus ONE refinement is
+  about **1.2x**, against 3x for best-of-three full runs.
+  **IT IS NOT THE MULTI-SEED MERGE THAT WAS ALREADY MEASURED AND LOST.** That split ONE budget three
+  ways, leaving each stream too shallow -- the recorded conclusion was "per-stream depth beats
+  stream diversity". Bet-and-run does not split: each stream gets the full archiveEvals and the
+  choice is made BETWEEN them. The objection does not transfer.
+  **THE DECISION MAKER MUST NOT BE ARCHIVE SCORE.** The literature notes a naive decision maker
+  picks best-so-far, and better ones "discriminate between good and bad sample runs". Here archive
+  score is known to be a bad proxy -- Borge's archive score varies 17.8% between seeds while its
+  final build is identical every time. The signal that actually separates a winning Ozzy stream from
+  a losing one is BOSS REACH (`bestKillReached`, or `bestViolation` from the FI archives), which is
+  already recorded in diag. Select on that, tie-break on score.
+  Expected effect, from the recorded Ozzy seeds: curiosity succeeds on 2 of 3 seeds, so selecting
+  the best of three streams should convert a ~1-in-3 catastrophic failure into something far rarer,
+  without changing the search mechanism at all -- which is its main advantage over every mechanism
+  tried so far.
+
+- **OCBA IN THE POLISH: FIRST MEASUREMENT, IDENTICAL BUILD AT 1.46x.**
+      borge@35   off 0.00% 160s   OCBA 0.00% 109s   1.46x
+                 polish verified 224/1291 -- 83% of full-fidelity polish work skipped
+  The polish skipped 83% of its expensive evaluations and returned the SAME build. Overall speedup
+  is 1.46x rather than 6x because polish is only part of a run; the archive and refinement stages are
+  untouched. One build so far, with knox@35b and borge@32 in flight; quality is the gate and speed
+  is the report, because a cheaper polish returning a worse build is not a win at any speed.
+
+
 - **OCBA IS THE PRINCIPLED ANSWER TO "HOW MANY ITERATIONS PER CANDIDATE", AND IT IS THE STRONGEST
   UNEXPLORED LEVER FOR BOTH SPEED AND CONSISTENCY. Not implemented.**
   Optimal Computing Budget Allocation (Chen, mid-1990s) is the ranking-and-selection method for
