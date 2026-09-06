@@ -1846,6 +1846,37 @@ fixed traversal order give identical output for identical input.
 
 ### Known open defects
 
+- **THE UNSPENT-POINT FIX CHANGED NONE OF THE FAILING BUILDS. Measured, so it is not retried.**
+      knox@30   -84.13% -> -84.13%   spend  30/30   90/90   reaches-cannot-kill
+      borge@32   -0.65% ->  -0.65%   spend  32/32   96/96   reaches-cannot-kill
+      knox@35b   -0.69% ->  -0.69%   spend  35/35  105/105  kills-boss
+  Identical to two decimal places, and the spend column says why: these builds were ALREADY fully
+  spending at the shipped effort. The underspend bug was real and worth fixing -- it was a shipped
+  CRASH on `fast` and genuinely underspent builds (ozzy@11, ozzy@12) -- but it was not the cause of
+  any known shortfall.
+
+- **THE SIX FAILING BUILDS ARE THREE DIFFERENT PROBLEMS, NOT ONE.** Reading the regime label alone
+  got this wrong once already (borge@32 reports `reaches-cannot-kill`, which I read as "same as
+  knox@30" -- but its REFERENCE does not kill either, and our build actually goes FURTHER while
+  earning slightly less). Compare the stages, not the label:
+      knox@30   -84.13%  ref 102.2 -> ours 100.0   STOPS EXACTLY ON THE BOSS BOUNDARY
+      borge@32   -0.65%  ref 102.1 -> ours 102.3   ours goes FURTHER
+      borge@42   -0.68%  ref 188.4 -> ours 188.7   ours goes FURTHER
+      knox@35b   -0.69%  ref 103.3 -> ours 102.6   marginally shorter, and it KILLS its boss
+      knox@37    -1.23%  ref 127.9 -> ours 103.7   24 stages shallower
+      knox@38    -3.96%  ref 130.6 -> ours 119.8   11 stages shallower
+  1. **knox@30 alone is a boss cliff.** It is the only build that stops on a boundary, and the only
+     one FI-MAP-Elites addresses. One of six.
+  2. **borge@32 / borge@42 / knox@35b are sub-1% residuals** with both sides in the same regime, at
+     roughly 3x the measured 0.2% comparison noise floor. Ordinary search slack, not a mechanism.
+  3. **knox@37 / knox@38 are DEPTH shortfalls** -- ours lands 11 and 24 stages shallower. That
+     matches the recorded finding that Knox is a knapsack/depth problem (budget/capacity 0.20,
+     `soul` alone costing 128% of the budget), not a structure-selection one. A boss mechanism will
+     not touch these.
+  **So "the boss problem" is one build of six, and the other five need two different answers.**
+  Do not evaluate a boss fix on the aggregate shortfall count; it can only move one of them.
+
+
 - **LOW EFFORT SETTINGS CAN HARD-FAIL, NOT DEGRADE, AND THAT CONSTRAINS EVERY "MAKE THE SWEEP
   CHEAPER" PLAN.** At `archiveEvals: 600` on ozzy@11 the optimizer THROWS:
   `Optimizer left 1 talent point(s) unspent while "revival" could still take one`. The invariant is
