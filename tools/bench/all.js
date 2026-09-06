@@ -55,7 +55,7 @@ const LOCAL = [
   //   boss-parity-check   -- the optimizer must never clear fewer bosses than the build it is given
   'describe-run-check', 'effort-option-check', 'boss-parity-check',
   // Structural/self-audit gates that existed but were in no list, so nothing ran them.
-  'config-sanity-check', 'guard-liveness-check',
+  'config-sanity-check', 'guard-liveness-check', 'dead-symbol-audit',
 ];
 
 // Gates that compare against the live cifi-tools bundle; they need --bundle=.

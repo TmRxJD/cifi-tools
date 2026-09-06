@@ -1846,6 +1846,37 @@ fixed traversal order give identical output for identical input.
 
 ### Known open defects
 
+- **FIVE MEASURED-DEAD SEARCH FLAGS ARE DELETED, AND THE DELETION IS VERIFIED BIT-IDENTICAL.**
+  Each had a measurement behind it, so none was removed on taste:
+      bossDamageBands (extra descriptor axis)   -39.44% -> -39.48%, cells 477 -> 455
+      paretoDepth / MOME (per-cell Pareto)      bit-identical build on borge@73
+      FRONTIER_SHARE + the frontier emitter     broke a working seed on ozzy@62
+      DEPTH_SHARE + depthMove()                 coverage up, champion quality flat or worse
+      clampToHeadroom                           superseded by break-point spending
+  `illuminate()` drops from SIXTEEN positional parameters to twelve and the effort whitelist from
+  15 keys to 11. The MEASUREMENTS stay in this file so nobody re-runs them; only the code went,
+  which is what "git history is the archive" means.
+  **VERIFIED, NOT ASSUMED.** `search-identity-probe.js` fingerprints the returned ALLOCATION (not
+  just a score, which could coincide) before and after: ozzy@11 and knox@12 came back byte-for-byte
+  identical -- same evals, same cells, same loot to six decimals. That check exists because "inert
+  when off" is precisely the claim this repo has watched fail: one `rng()` call taken for a check
+  that could never pass shifted every later draw and moved a result 7 points.
+  The whitelist gate also earned its place during the deletion -- it FAILED the moment
+  `effort-option-check` still named the deleted `bossDamageBands` as valid.
+
+- **THE SEARCH RE-PROPOSES THE SAME ALLOCATION 54% OF THE TIME, AND THAT IS NOT OVER-PROVISIONING.**
+  Across 103 builds: 1,821,830 evaluation REQUESTS, 986,746 served from the memo (54.2%), 835,084
+  actually evaluated. Median duplicate rate 56.2%, worst 88.1%.
+  Memoization is exact, so a duplicate costs a proposal, a legality check and a hash lookup -- not
+  an evaluation, and evaluation is ~87% of wall clock. So this is NOT wasted time. What it does
+  mean is that `archiveEvals: 9600` delivers roughly **4,400 distinct evaluations**: the budget
+  number overstates exploration by about 2x, which matters when reading any archive-size result.
+  **The obvious explanation is wrong and was tested**: archives under 100 cells duplicate 58.7%,
+  archives over 300 cells duplicate 50.7%, and knox@28 with SIX cells duplicates only 19.1%. The
+  rate is roughly constant across archive sizes, so it is inherent to the variation operators
+  rather than a saturation effect. Do not go looking for a cheap win here.
+
+
 - **THE WHOLE "HONEST REPORTING OF UNMODELLED TERMS" SYSTEM WAS DEAD, AND THIS FILE ASSERTED IT
   WORKED.** Three functions existed to tell a user which factors the fleet model cannot compute for
   their account -- `unmodelledCrewRankTerms()` (defined AND exported to `window`),

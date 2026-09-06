@@ -171,13 +171,11 @@
   const EFFORT_SPEC_KEYS = new Set([
     'label', 'help',                                   // shipped-level metadata
     'archiveEvals', 'refineSupports',                  // the two budget dials
-    // frontierShare is deliberately ABSENT: FRONTIER_SHARE is a module constant and is not read
-    // from the spec, so accepting the key would permit a flag that silently does nothing -- the
-    // exact failure this whitelist exists to catch.
-    'structuralShare', 'depthShare',                   // variation mix
+    // Adding a flag to the search means adding it here, and that friction is the point: an
+    // unlisted key throws instead of silently disabling the thing being measured.
+    'structuralShare',                                 // variation mix
     'selection', 'seeds', 'seed',                      // parent choice + determinism
-    'clampToHeadroom', 'breakpointSpending', 'bossDamageBands', // move/descriptor flags
-    'paretoDepth',                                     // MOME: solutions kept per cell
+    'breakpointSpending',                              // move flags
     'feasibleInfeasible',                              // FI-MAP-Elites: two archives
     'archiveOnly',                                     // ablation: stop after illumination
   ]);
@@ -627,8 +625,6 @@
     return Math.max(0, Math.min(100, hp));
   }
 
-  const BOSS_DAMAGE_BAND = 10;
-  const BOSS_DAMAGE_BANDS_MAX = 9;
   const CONCENTRATION_BANDS = 6;
   const ARCHIVE_BATCH = 48;            // large enough to keep the worker pool saturated
   const ARCHIVE_CROSSOVER = 0.25;
@@ -705,7 +701,6 @@
   //
   // Kept at 0 rather than deleted: the mechanism works on its own terms (it reaches cells nothing
   // else reached) and may matter once the threshold question is understood.
-  const FRONTIER_SHARE = 0;
   const DEFAULT_SELECTION = 'curiosity';
   const CURIOSITY_REWARD = 1;
   const CURIOSITY_PENALTY = 0.5;
@@ -729,7 +724,6 @@
   // that replacement, and it did not win. The operator is kept because it is proven non-stranding
   // (81.7% acceptance against 28%, zero repairs by construction) and may matter under a different
   // refinement or fidelity regime -- but it ships off until something measures it winning.
-  const DEPTH_SHARE = 0;
   // A BOSS-DIRECTED EMITTER WAS TRIED HERE AND MEASURED USELESS. Recorded so it is not retried.
   //
   // The idea was to draw a third of parents from the elites nearest a kill, on the theory that the
@@ -769,7 +763,7 @@
     return Math.min(CONCENTRATION_BANDS - 1, Math.floor(share * CONCENTRATION_BANDS));
   }
 
-  function cellOf(meta, defs, attrAlloc, bossDamageBands) {
+  function cellOf(meta, defs, attrAlloc) {
     // A missing descriptor is a PLUMBING FAULT, not a niche. Returning a placeholder cell for it
     // makes every candidate a neighbour of every other and turns the archive into a hill climb
     // that still returns a plausible-looking build -- the exact failure this replaced. Throw.
@@ -778,17 +772,7 @@
     }
     let killBand = 0;
     for (let i = 0; i < KILL_BANDS.length; i++) if (meta.kill >= KILL_BANDS[i]) killBand = i;
-    // Only below a kill. Once a build kills, KILL_BANDS is already a fine-grained gradient and a
-    // second axis would split niches that the kill rate has finished distinguishing.
-    let damageBand = 0;
-    if (bossDamageBands && killBand === 0) {
-      if (!Number.isFinite(meta.hp)) {
-        throw new Error('cellOf: boss damage banding is on but the scorer returned no bossHpPercent');
-      }
-      damageBand = Math.max(0, Math.min(BOSS_DAMAGE_BANDS_MAX,
-        Math.floor((100 - meta.hp) / BOSS_DAMAGE_BAND)));
-    }
-    return killBand + ':' + damageBand + ':' + Math.floor(meta.maxStage / ARCHIVE_STAGE_BAND)
+    return killBand + ':' + Math.floor(meta.maxStage / ARCHIVE_STAGE_BAND)
       + ':' + concentrationBand(defs, attrAlloc);
   }
 
@@ -851,7 +835,7 @@
     return null;
   }
 
-  function randomTransfer(defs, deps, minVal, budget, alloc, rng, pinnedIds, stats, clampToHeadroom, breakpointSpending) {
+  function randomTransfer(defs, deps, minVal, budget, alloc, rng, pinnedIds, stats, breakpointSpending) {
     const held = defs.filter((d) => (alloc[d.id] || 0) > 0 && pinnedIds.indexOf(d.id) === -1);
     if (!held.length) return null;
     for (let tries = 0; tries < 8; tries++) {
@@ -874,11 +858,6 @@
       // information already in the defs, so clamping the proposed amount to what the target can
       // actually receive makes a capped target answer the same question an uncapped one does:
       // "is this move good?", not "did the dice pick a number that happens to fit?".
-      if (clampToHeadroom && Number.isFinite(to.maxLevel)) {
-        const headroom = to.maxLevel - (alloc[to.id] || 0);
-        if (headroom <= 0) { if (stats) stats.rejected++; continue; }
-        amount = Math.min(amount, headroom);
-      }
       // Break-point spending: never overshoot the next structural event in an uncapped node.
       if (breakpointSpending && !Number.isFinite(to.maxLevel)) {
         const bp = nextBreakpointFor(defs, minVal, alloc, to);
@@ -906,80 +885,14 @@
     return null;
   }
 
-  //
-  // THE DEPTH OPERATORS, and the measurement that specified them.
-  //
-  // Sweeping the structural share on a real level-62 Ozzy account, 2400 variations each:
-  //     share 0.00   52 cells   2 kill bands   best kill 1
-  //     share 0.35   86 cells   2 kill bands   best kill 2
-  //     share 0.70   87 cells   2 kill bands   best kill 2
-  //     share 1.00   87 cells   1 kill band    best kill 0
-  // Support resampling SATURATES at ~35%: it draws from a fixed pool of enumerated supports at two
-  // fill patterns, so once those are sampled there is nothing left for it to say. And at 100% the
-  // BOSS BAND IS LOST, because going fully structural means no point transfers, and those were the
-  // only source of DEPTH variation. The boss-engaging build needs depth a canonical fill does not
-  // have.
-  //
-  // So "replace the flat nudges with DAG-native moves" is right, but it cannot be done by removing
-  // the nudges -- the replacement has to exist first, and removing them early is a regression.
-  // These are the replacement. Both change DEPTH while holding the SUPPORT fixed or growing it by
-  // one legally-openable node, and neither can strand anything: the donor is required to keep at
-  // least one point, so no funded node is ever emptied, so no descendant is ever orphaned and
-  // clearInvalidDescendants has nothing to clear.
-  //
-  // Threshold gates are the one thing this still has to CHECK rather than guarantee, because a
-  // tier gate counts points in strictly-lower-threshold nodes and a legal depth shift can drop one
-  // below its gate. That is a rejection, not a repair -- the cheap failure, not the destructive one.
-  function depthMove(defs, deps, minVal, budget, alloc, rng, pinnedIds, stats) {
-    const costOf = (d) => d.cost || 1;
-    const capOf = (d) => (Number.isFinite(d.maxLevel) ? d.maxLevel : Infinity);
-    // Donors must keep a point, which is what makes stranding impossible by construction.
-    const donors = defs.filter((d) => (alloc[d.id] || 0) > 1 && pinnedIds.indexOf(d.id) === -1);
-    if (!donors.length) return null;
-    const funded = (id) => (alloc[id] || 0) > 0;
-    // Targets: already-funded nodes (pure depth shift), or one unfunded node whose parents are all
-    // funded (deepen the path by opening exactly one legal step -- never a stranded orphan).
-    const targets = defs.filter((d) => {
-      if ((alloc[d.id] || 0) >= capOf(d)) return false;
-      if (funded(d.id)) return true;
-      const parents = deps[d.id] || [];
-      return parents.every(funded);
-    });
-    if (!targets.length) return null;
-
-    for (let tries = 0; tries < 8; tries++) {
-      const from = donors[Math.floor(rng() * donors.length)];
-      const to = targets[Math.floor(rng() * targets.length)];
-      if (from.id === to.id) continue;
-      const maxOut = (alloc[from.id] || 0) - 1;                       // never empty the donor
-      const maxIn = capOf(to) - (alloc[to.id] || 0);
-      if (maxOut < 1 || maxIn < 1) continue;
-      const take = 1 + Math.floor(rng() * Math.min(maxOut, 12));
-      // Convert the donated spend into levels of the target, which may cost differently.
-      const give = Math.max(1, Math.min(maxIn, Math.floor((take * costOf(from)) / costOf(to))));
-      const next = { ...alloc };
-      next[from.id] = (next[from.id] || 0) - take;
-      next[to.id] = (next[to.id] || 0) + give;
-      if (Space.costOf(defs, next) > budget) continue;
-      // Legality is CHECKED, never repaired: an illegal proposal is discarded whole, so no
-      // candidate can enter the archive with structure silently deleted out of it.
-      if (!Space.isLegal(defs, deps, minVal, next, budget)) { if (stats) stats.depthRejected++; continue; }
-      if (!pinsHeld(defs, next, pinnedIds)) continue;
-      if (stats) { stats.depthAccepted++; if (!funded(to.id)) stats.depthOpened++; }
-      return next;
-    }
-    return null;
-  }
-
   /**
    * Illuminate the behaviour space and return the elites, best score first.
    *
    * Seeded from the enumerated supports rather than from random points: the enumeration is exact
    * and already paid for, so the archive starts with real structural coverage instead of noise.
    */
-  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, structuralShare, depthShare, seedList, selection, clampToHeadroom, breakpointSpending, bossDamageBands, paretoDepth, feasibleInfeasible, report) {
+  async function illuminate(ctx, spaces, seeds, supports, pinnedAttrs, evalBudget, structuralShare, seedList, selection, breakpointSpending, feasibleInfeasible, report) {
     const stats = { rejected: 0, accepted: 0, repaired: 0, nodesCleared: 0, structural: 0,
-      depthAccepted: 0, depthRejected: 0, depthOpened: 0,
       breakpointClamped: 0, breakpointBlocked: 0 };
     const { TALENTS, ATTRIBUTES, talentBudget, attrBudget, deps, minVal } = spaces;
     //
@@ -1068,18 +981,15 @@
     // Deterministic total orders. A tie broken by chance would make the archive depend on
     // evaluation order, and this search's whole contract is that one seed gives one answer.
     const betterLoot = (a, b) => a.score > b.score;
-    const betterDamage = (a, b) => (a.hp !== b.hp ? a.hp < b.hp : a.score > b.score);
     // Infeasible survival: closest to killing wins. Ties break on the objective so the rule is
     // a total order and the archive cannot depend on evaluation order.
     const betterViolation = (a, b) => (a.violation !== b.violation ? a.violation < b.violation : a.score > b.score);
 
     const consider = (pair, score, meta) => {
       if (!Number.isFinite(score)) return;
-      const cell = cellOf(meta, ATTRIBUTES, pair.attrAlloc, bossDamageBands);
-      // The suffix is a constant on every key, so with paretoDepth 1 this is the single-elite
-      // archive exactly -- same retention, and the same relative order under the key tie-break
-      // that parent selection uses. `pareto-archive-check.js` asserts that identity rather than
-      // asserting it here in a comment.
+      const cell = cellOf(meta, ATTRIBUTES, pair.attrAlloc);
+      // The '|F'/'|I' or '|loot' suffix is a constant on every key, so it does not change the
+      // relative order under the key tie-break that parent selection uses.
       if (feasibleInfeasible) {
         // Two archives, same cells. The suffix keeps them in one Map so every downstream reader
         // (curiosity, diag, the elite list) works unchanged; `feasible` is what selection splits on.
@@ -1090,11 +1000,7 @@
         const better = feasible ? betterLoot : betterViolation;
         return put(key, pair, score, meta, better, feasible);
       }
-      let improved = put(cell + '|loot', pair, score, meta, betterLoot, true);
-      if (paretoDepth > 1 && !(meta.kill > 0)) {
-        improved = put(cell + '|dmg', pair, score, meta, betterDamage, true) || improved;
-      }
-      return improved;
+      return put(cell + '|loot', pair, score, meta, betterLoot, true);
     };
     // SEEDS MUST BE COMPLETE PAIRS. Screening varies attributes against a fixed talent seed, so a
     // screened row carries `attrAlloc` and no `talentAlloc` -- and `{ ...undefined }` is `{}`, so an
@@ -1120,7 +1026,6 @@
     // is known across builds, a patience threshold can be set from data rather than from hope.
     let lastImprovementAt = 0;
     let parentCursor = 0;
-    let frontierCursor = 0;
     let supportCursor = 0;
     let crossStride = 1;
     const streams = Array.isArray(seedList) ? seedList : [seedList];
@@ -1243,10 +1148,6 @@
           parent = pool[(parentCursor++) % ph];
         } else if (selection === 'random') {
           parent = ordered[Math.floor(rng() * ordered.length)];
-        } else if (FRONTIER_SHARE > 0 && frontier.length
-          && (i % Math.round(1 / FRONTIER_SHARE)) === 0) {
-          const fhead = Math.max(1, Math.min(frontier.length, Math.ceil(frontier.length / 4)));
-          parent = frontier[(frontierCursor++) % fhead];
         } else {
           parent = ordered[(parentCursor++) % head];
         }
@@ -1295,12 +1196,8 @@
           // taken for a check that can never pass still shifts every later draw, which is exactly
           // how the "identical configuration" that returned +15.34% and +8.24% differed at all.
           // A flag that is off must be inert, including in the random stream.
-          } else if (depthShare > 0 && rng() < depthShare) {
-            // DAG-native depth: hold the support, change how deep it goes.
-            const nx = depthMove(ATTRIBUTES, deps, minVal, attrBudget, a, rng, pinnedAttrs, stats);
-            if (nx) a = nx;
           } else {
-            const nx = randomTransfer(ATTRIBUTES, deps, minVal, attrBudget, a, rng, pinnedAttrs, stats, clampToHeadroom, breakpointSpending);
+            const nx = randomTransfer(ATTRIBUTES, deps, minVal, attrBudget, a, rng, pinnedAttrs, stats, breakpointSpending);
             if (nx && pinsHeld(ATTRIBUTES, nx, pinnedAttrs)) a = nx;
           }
         }
@@ -1346,10 +1243,7 @@
     ctx.note(`moves: ${attempted} attribute transfers -- ${pct(stats.rejected)}% rejected, `
       + `${pct(stats.repaired)}% accepted-but-stranded (${stats.nodesCleared} nodes cleared); `
       + `${stats.structural} structural resamples at share ${structuralShare}`
-      + `; clampToHeadroom ${clampToHeadroom ? 'ON' : 'off'}`
       + `; breakpoint ${breakpointSpending ? 'ON' : 'off'}`
-      + `; bossDamageBands ${bossDamageBands ? 'ON' : 'off'}`
-      + `; paretoDepth ${paretoDepth}`
       + `; feasibleInfeasible ${feasibleInfeasible ? 'ON' : 'off'}`
       + (breakpointSpending ? ` (${stats.breakpointClamped} clamped, ${stats.breakpointBlocked} blocked)` : ''));
     ctx.note(`illuminated from ${streams.length} stream(s)`);
@@ -1417,12 +1311,8 @@
       variations: spent,
       streams: streams.length,
       structuralShare,
-      depthShare,
       selection,
-      clampToHeadroom,
       breakpointSpending,
-      bossDamageBands,
-      paretoDepth,
       feasibleInfeasible,
       breakpointClamped: stats.breakpointClamped,
       breakpointBlocked: stats.breakpointBlocked,
@@ -1433,13 +1323,8 @@
         strandedRepairs: stats.repaired,
         nodesCleared: stats.nodesCleared,
         structuralResamples: stats.structural,
-        depthAccepted: stats.depthAccepted,
-        depthRejected: stats.depthRejected,
-        depthOpenedNode: stats.depthOpened,
       },
     };
-    ctx.note(`depth moves: ${stats.depthAccepted} accepted (${stats.depthOpened} opened a new node), `
-      + `${stats.depthRejected} rejected -- NONE stranded, by construction; share ${depthShare}`);
     return [...archive.entries()]
       .map(([cell, e]) => ({ ...e, cell }))
       .sort((x, y) => y.score - x.score);
@@ -1956,10 +1841,8 @@
         // Sweepable through the effort-object form, so the DAG-native fraction can be measured
         // without editing constants -- the same convention the ablation hooks already use.
         Number.isFinite(effortSpec.structuralShare) ? effortSpec.structuralShare : STRUCTURAL_SHARE,
-        Number.isFinite(effortSpec.depthShare) ? effortSpec.depthShare : DEPTH_SHARE,
         effortSpec.seeds || (Number.isFinite(effortSpec.seed) ? [effortSpec.seed] : ARCHIVE_SEEDS),
         effortSpec.selection || DEFAULT_SELECTION,
-        effortSpec.clampToHeadroom === true,
         // ON BY DEFAULT. Measured on the canonical fixture configs, helped one build badly and
         // regressed none:
         //     ozzy@54   -17.86% -> -0.60%   (both seeds, identical resulting build)
@@ -1972,10 +1855,8 @@
         // OFF until measured end-to-end. Cell count is NOT the metric -- this repo has already
         // measured a move set that raised coverage and LOWERED champion quality, so the arm that
         // wins has to win on returned loot.
-        effortSpec.bossDamageBands === true,
         // MOME depth. 1 == the single-elite archive, byte-identical. 2 keeps the max-damage
         // member of each kill-0 cell alongside the max-loot one.
-        Number.isFinite(effortSpec.paretoDepth) ? effortSpec.paretoDepth : 1,
         // FI-MAP-Elites. OFF until measured end to end, like every other move here.
         effortSpec.feasibleInfeasible === true,
         (f) => report('survey', f * SURVEY_REPORT_SCALE, SURVEY_REPORT_SCALE),

@@ -72,12 +72,12 @@ async function behaviour() {
   };
 
   checked++;
-  const bad = await call({ archiveEvals: 8, refineSupports: 1, bossDamageBandz: true });
+  const bad = await call({ archiveEvals: 8, refineSupports: 1, breakpointSpendinggg: true });
   if (bad && /unknown effort option/i.test(bad)) ok('a misspelled effort key throws: ' + bad.split(';')[0]);
   else fail('a misspelled effort key did NOT throw (got: ' + bad + ')');
 
   checked++;
-  const good = await call({ archiveEvals: 8, refineSupports: 1, bossDamageBands: true });
+  const good = await call({ archiveEvals: 8, refineSupports: 1, breakpointSpending: true });
   if (good && /unknown effort option/i.test(good)) fail('a VALID effort key was rejected: ' + good);
   else ok('a valid effort key is accepted');
 }
