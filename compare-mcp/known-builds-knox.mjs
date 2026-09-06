@@ -20,7 +20,6 @@ export const KNOWN_KNOX_BUILDS = [
   { level: 26, expectedLootScore: 4030, code: '4QnobRp1Bycu87nYUvh4ufFAN8m9DsQTL6zP2PYCN2jC2M8tGAs', note: '4.03k Anchor 30' },
   { level: 27, expectedLootScore: 4640, code: '4QnobRp1Byd6bLnipp8JRf6BNHkUX99QBvnfp9khMYgVZ4qRks1', note: '4.64k' },
   { level: 28, expectedLootScore: 4950, code: 'G41AexXmtE1G2YcEoySLxSrc6cX8A7Dve3E24NsDQgdWvbkyvkwH', note: '4.95k' },
-  { level: 28, expectedLootScore: 5370, code: 'mp7qUpmiHfj84GyyXor4ugL5k7FewzMycxo8yLD2BMRL4S8ET', note: '5.37k boss kill stage 100, Anchor 40 required' },
   { level: 30, expectedLootScore: 41470, code: 'mp7qUpyRWcAiaDYYVCsy6ksBwcNt6fM1ythNq3RDxyqVUpJ5m', note: '41.47k immediately after stage 100 kill' },
   { level: 31, expectedLootScore: 56470, code: '4QnyAypk3BgRWVMwA5Z2Xr3maM4wUATZPwuMLMNJ7hzTATPcxgP', note: '56.47k' },
   { level: 31, expectedLootScore: 63290, code: '4QnyAypk3BgRWUAjdd6gf7K2TU2hpEw9dw7XFRMtpFkRHhgvBuR', note: '63.29k, 5 Timeless stats swap' },
@@ -38,4 +37,19 @@ export const KNOWN_KNOX_BUILDS = [
   { level: 38, expectedLootScore: 201340, code: 'G41tw3qCWmJzdb71XnPaHy6CwJca7ihvdk1vpQF3ixbT5Ss6GbhH', note: 'Anchor 66' },
   { level: 39, expectedLootScore: 296290, code: 'G41tw3qCWmJzqD7D41owzhuEdq5RxmzVybua4NGCN1m1aixU1hMR', note: 'Anchor 70, Regen 180' },
   { level: 40, expectedLootScore: 352030, code: 'G41tw3rWZYPsu9bAhD2Pjb1uzhnDNdEWscvHKxqVho8E6AxFhrNj' },
+];
+
+// KNOX PUSH / BOSS-KILL BUILDS.
+//
+// Judged on average stage, not loot per minute, because that is what they are built for -- the
+// bench derives mode from the export name (/_PUSH_/). This build was sitting in KNOWN_KNOX_BUILDS,
+// where it was scored on loot/min, so it would have been marked a failure for succeeding at
+// killing the stage-100 boss. Borge's and Ozzy's boss-kill builds were already in their push sets;
+// Knox simply had no push set, so its one boss build had nowhere else to go.
+//
+// Per the project owner: there is no reason to run Timeless for this boss. Timeless multiplies
+// what a kill PAYS rather than helping land it (measured: kill rate and remaining boss HP are
+// bit-identical at Timeless 0 and 5), so at the first boss the kill itself is the whole objective.
+export const KNOWN_KNOX_PUSH_BUILDS = [
+  { level: 28, expectedLootScore: 5370, code: 'mp7qUpmiHfj84GyyXor4ugL5k7FewzMycxo8yLD2BMRL4S8ET', note: 'BOSS KILL stage 100, Anchor 40 required' },
 ];
