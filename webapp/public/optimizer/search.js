@@ -218,6 +218,7 @@
     'archiveOnly',                                     // ablation: stop after illumination
     'finalIterations',                                 // decision fidelity; A/B only
     'ocbaPolish',                                      // OCBA allocation in the final polish
+    'betAndRun',                                       // k independent archives, refine the best
     'skipPolish',                                      // ablation
   ]);
 
@@ -627,6 +628,9 @@
   // defect rather than papered over with a change that does not fix it. `seeds` stays available
   // for benches, which is what it is genuinely for.
   const ARCHIVE_SEEDS = [ARCHIVE_SEED];
+  // Distinct streams for bet-and-run. Fixed and ordered, so a k=3 run is reproducible and a k=2 run
+  // is a prefix of it rather than a different experiment.
+  const BET_AND_RUN_SEEDS = [ARCHIVE_SEED, 0x1234, 0xa5a5a5a5, 0x2545f491, 0x9e3779b1];
   // Behaviour space. Kill rate says whether a build can pass a boss at all; the stage band says how
   // far it gets. Bands rather than raw values because cells are niches, not points.
   //
@@ -1888,7 +1892,33 @@
         (m, d, k) => ((alloc[d.id] || 0) > 0 ? (m | (1 << k)) : m), 0,
       );
       const spaces = { TALENTS, ATTRIBUTES, talentBudget, attrBudget, deps, minVal };
-      const elites = await illuminate(
+      //
+      // BET-AND-RUN: k INDEPENDENT ARCHIVES, THEN REFINE ONLY THE MOST PROMISING.
+      //
+      // The failure this targets is BIMODAL rather than gradual: on ozzy@62 one seed returns
+      // +15.34% and another -66.27%, with nothing in between. That is a heavy-tailed outcome
+      // distribution, and restart portfolios are the standard answer to heavy tails. Bet-and-run
+      // (Fischetti & Monaci) runs k short streams and continues only the most promising.
+      //
+      // IT IS CHEAP HERE BECAUSE OF WHERE THE TIME GOES. Illumination is ~10% of wall clock and
+      // refinement ~87%, so k archives plus ONE refinement costs about 1.2x at k=3 -- against 3x
+      // for best-of-three full runs.
+      //
+      // IT IS NOT THE MULTI-SEED MERGE ALREADY MEASURED AND LOST. That split ONE budget across
+      // three streams, leaving each too shallow; the recorded conclusion was "per-stream depth
+      // beats stream diversity". Here each stream gets the FULL archiveEvals and the choice is made
+      // BETWEEN completed archives, so that objection does not transfer.
+      //
+      // THE DECISION MAKER IS BOSS REACH, NOT ARCHIVE SCORE. The literature warns that a naive
+      // decision maker just takes best-so-far, and archive score is known to be a bad proxy here:
+      // Borge's archive score varies 17.8% between seeds while its final build is identical every
+      // time. What separates a winning Ozzy stream from a losing one is whether any lineage got
+      // deep enough to engage a boss, so streams are ranked on kill reach first, then on how little
+      // boss HP the closest build left, and only then on score.
+      const betAndRun = Number.isFinite(effortSpec.betAndRun) ? Math.max(1, effortSpec.betAndRun) : 1;
+      const streamSeeds = effortSpec.seeds
+        || (Number.isFinite(effortSpec.seed) ? [effortSpec.seed] : ARCHIVE_SEEDS);
+      const runArchive = async (seedsForRun) => illuminate(
         ctx, spaces,
         // Screening only varies attributes, so pair each row back up with the talent seed it was
         // actually measured against before it becomes an archive elite.
@@ -1901,7 +1931,7 @@
         // Sweepable through the effort-object form, so the DAG-native fraction can be measured
         // without editing constants -- the same convention the ablation hooks already use.
         Number.isFinite(effortSpec.structuralShare) ? effortSpec.structuralShare : STRUCTURAL_SHARE,
-        effortSpec.seeds || (Number.isFinite(effortSpec.seed) ? [effortSpec.seed] : ARCHIVE_SEEDS),
+        seedsForRun,
         effortSpec.selection || DEFAULT_SELECTION,
         // ON BY DEFAULT. Measured on the canonical fixture configs, helped one build badly and
         // regressed none:
@@ -1912,15 +1942,44 @@
         // Confirmed at the shipped effort (9600/8) as well as at 2400/4, with the same answer, so
         // it is not a budget artefact. Opt OUT with effort.breakpointSpending === false.
         effortSpec.breakpointSpending !== false,
-        // OFF until measured end-to-end. Cell count is NOT the metric -- this repo has already
-        // measured a move set that raised coverage and LOWERED champion quality, so the arm that
-        // wins has to win on returned loot.
-        // MOME depth. 1 == the single-elite archive, byte-identical. 2 keeps the max-damage
-        // member of each kill-0 cell alongside the max-loot one.
         // FI-MAP-Elites. OFF until measured end to end, like every other move here.
         effortSpec.feasibleInfeasible === true,
         (f) => report('survey', f * SURVEY_REPORT_SCALE, SURVEY_REPORT_SCALE),
       );
+
+      let elites;
+      if (betAndRun > 1) {
+        const candidates = [];
+        for (let k = 0; k < betAndRun; k++) {
+          if (shouldCancel()) throw new Cancelled();
+          const seedForStream = [BET_AND_RUN_SEEDS[k % BET_AND_RUN_SEEDS.length]];
+          const got = await runArchive(seedForStream);
+          candidates.push({ elites: got, archive: { ...ctx.diag.archive }, seed: seedForStream[0] });
+        }
+        // Rank: deepest boss engagement first, then closest to a kill, then champion score.
+        candidates.sort((a, b) => (b.archive.bestKillReached || 0) - (a.archive.bestKillReached || 0)
+          || (a.archive.bestViolation ?? 100) - (b.archive.bestViolation ?? 100)
+          || (b.archive.bestScoreAtScreenIterations || 0) - (a.archive.bestScoreAtScreenIterations || 0));
+        const winner = candidates[0];
+        elites = winner.elites;
+        ctx.diag.archive = winner.archive;
+        ctx.diag.betAndRun = {
+          streams: candidates.length,
+          chosenSeed: winner.seed,
+          perStream: candidates.map((c) => ({
+            seed: c.seed,
+            cells: c.archive.cells,
+            bestKillReached: c.archive.bestKillReached,
+            bestViolation: c.archive.bestViolation,
+          })),
+        };
+        ctx.note(`bet-and-run: ${candidates.length} archives, chose seed `
+          + `${winner.seed.toString(16)} (kill ${winner.archive.bestKillReached}, `
+          + `violation ${Math.round(winner.archive.bestViolation ?? 100)}) from `
+          + candidates.map((c) => `${c.seed.toString(16)}:kill${c.archive.bestKillReached}`).join(' '));
+      } else {
+        elites = await runArchive(streamSeeds);
+      }
       const surveyed = elites.map((e) => ({ ...e, mask: maskOf(e.attrAlloc) }));
       // Stage champions, kept so the ledger can re-score them all at ONE fidelity at the end.
       // Without this, "where did the value go" can only be answered by comparing numbers measured
