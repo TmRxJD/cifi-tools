@@ -282,7 +282,10 @@
    * another in the same regime -- that is what made the -66.27% Ozzy builds look broken when they
    * were the optimum of a different regime.
    */
-  function describeRun(result, highestStageReached) {
+  // Takes ONLY the run result. It used to declare a second `highestStageReached` parameter that
+  // the body never referenced -- a signature promising an input it ignored, which is how a caller
+  // comes to believe it passed something that mattered.
+  function describeRun(result) {
     if (!result) throw new Error('describeRun: result is required');
     for (const f of ['avgStage', 'maxStage', 'minStage', 'bossKillRate', 'bossHpPercent']) {
       if (!Number.isFinite(result[f])) throw new Error(`describeRun: result.${f} is not a number`);

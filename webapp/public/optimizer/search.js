@@ -217,6 +217,8 @@
     'feasibleInfeasible',                              // FI-MAP-Elites: two archives
     'archiveOnly',                                     // ablation: stop after illumination
     'finalIterations',                                 // decision fidelity; A/B only
+    'ocbaPolish',                                      // OCBA allocation in the final polish
+    'skipPolish',                                      // ablation
   ]);
 
   const DEFAULT_ARCHIVE_EVALS = EFFORT_LEVELS.fast.archiveEvals;
@@ -455,7 +457,16 @@
   // full affordable at all.
   const POLISH_VERIFY = Infinity;
 
-  async function polishWinner(ctx, cfg, talentAlloc, attrAlloc, startScore, pinnedAttrs, report) {
+  // The band, in relative score, inside which a candidate is treated as "the decision is still
+  // open" and gets a full-fidelity evaluation. Set from MEASURED error rather than taste: a
+  // SCREEN_ITERATIONS score has been observed ordering a 0.32% ridge backwards by 1.7%, so the band
+  // is several times that. Widening it costs evaluations; narrowing it risks the ridge failure the
+  // rejected shortlist produced.
+  const OCBA_UNCERTAIN_BAND = 0.05;
+  // Floor on how many get verified, so a degenerate neighbourhood cannot collapse the decision.
+  const OCBA_MIN_VERIFY = 8;
+
+  async function polishWinner(ctx, cfg, talentAlloc, attrAlloc, startScore, pinnedAttrs, report, ocba, stats) {
     const { TALENTS, ATTRIBUTES, TALENT_BUDGET, ATTRIBUTE_BUDGET } = cfg;
     const deps = cfg.ATTRIBUTE_DEPENDENCIES;
     const minVal = cfg.ATTRIBUTE_MIN_VALUE;
@@ -503,8 +514,42 @@
       const order = moves.map((m, i) => ({ m, s: cheap[i] }))
         .sort((a, b) => b.s - a.s)
         .slice(0, verifyWidth);
+
+      //
+      // OCBA: SPEND FULL FIDELITY WHERE THE DECISION IS UNCERTAIN, NOT EVERYWHERE.
+      //
+      // With verifyWidth Infinity -- the shipped value -- the cheap pass above sorts the moves and
+      // then EVERY move is scored at FINAL_ITERATIONS regardless, so the sort changes nothing and
+      // the whole cheap pass is dead work. What remains is textbook EQUAL ALLOCATION: the same
+      // budget to a move that is plainly terrible and to one sitting on a 0.32% ridge.
+      //
+      // Optimal Computing Budget Allocation (Chen) is the ranking-and-selection answer: give design
+      // i replications proportional to (spread_i / gap_i)^2, so effort concentrates where the gap
+      // is small relative to the noise. Reported to reach the same selection quality at a tenth of
+      // the computational effort.
+      //
+      // THIS IS NOT THE TOP-K SHORTLIST THAT WAS MEASURED AND REJECTED HERE. That ranked at
+      // SCREEN_ITERATIONS and DISCARDED everything below the cut -- and a 100-iteration score has
+      // been measured ordering a 0.32% ridge BACKWARDS by 1.7%, which cost 1.64M on ozzy@62. The
+      // literature names the difference exactly: top-K screening "lacks the principled reallocation
+      // mechanism". Nothing is discarded here. A move outside the band keeps its cheap estimate and
+      // can still win if it is genuinely ahead; it simply does not get re-sampled while it sits far
+      // behind. The band is what makes that safe, so it is set from MEASURED error, not taste:
+      // a 100-iteration score has been seen wrong by 1.7%, so the default band is several times
+      // that rather than a tight cut.
+      const band = OCBA_UNCERTAIN_BAND;
+      let toVerify = order;
+      if (ocba && order.length) {
+        const leader = order[0].s;
+        const floorScore = leader - Math.abs(leader) * band;
+        const near = order.filter((o) => o.s >= floorScore);
+        // Always verify at least a few, so a degenerate neighbourhood (every move scoring alike, or
+        // a leader of 0) cannot collapse the decision onto a single cheap estimate.
+        toVerify = near.length >= OCBA_MIN_VERIFY ? near : order.slice(0, OCBA_MIN_VERIFY);
+        if (stats) { stats.ocbaConsidered += order.length; stats.ocbaVerified += toVerify.length; }
+      }
       // ...decide expensively.
-      const exact = await ctx.score(order.map((o) => o.m), FINAL_ITERATIONS);
+      const exact = await ctx.score(toVerify.map((o) => o.m), FINAL_ITERATIONS);
       let bestIdx = -1;
       for (let i = 0; i < exact.length; i++) {
         if (exact[i] > curScore && (bestIdx === -1 || exact[i] > exact[bestIdx])) bestIdx = i;
@@ -515,8 +560,8 @@
         if (tier < POLISH_TIERS.length - 1) { tier += 1; continue; }
         break;
       }
-      curT = order[bestIdx].m.talentAlloc;
-      curA = order[bestIdx].m.attrAlloc;
+      curT = toVerify[bestIdx].m.talentAlloc;
+      curA = toVerify[bestIdx].m.attrAlloc;
       curScore = exact[bestIdx];
     }
     return { talentAlloc: curT, attrAlloc: curA, score: curScore };
@@ -1290,33 +1335,6 @@
     // twenty configurations needs numbers it can sort. Every diagnosis in this file's history was
     // delayed by a measurement that could not see the field in question, so the record carries
     // every counter the archive keeps -- not the ones that seem interesting today.
-    // IS THE KILL-0 BAND ONE NICHE OR MANY? The archive collapses every non-killing build into
-    // kill band 0 no matter how much of the boss it removed, so a build leaving 5% of the boss HP
-    // and one that never scratched it compete for a single cell and the loser is discarded. Whether
-    // that actually throws away stepping stones is an empirical question about THIS archive, not a
-    // thing to assume -- so report the spread rather than reason about it.
-    //
-    // Reported PER STAGE BAND because bossHpPercent is only meaningful conditioned on depth:
-    // objective.js records the measurement showing it reads 0 both for a build that never reached
-    // the wall and one already past it. Within one stage band every build is at the same wall,
-    // which is exactly the case where that same measurement found it discriminating (74.0 vs 47.0).
-    const hpByStageBand = {};
-    for (const e of archive.values()) {
-      if (!Number.isFinite(e.kill) || e.kill > 0) continue;
-      const band = Math.floor((e.maxStage || 0) / ARCHIVE_STAGE_BAND);
-      const hp = Number.isFinite(e.hp) ? e.hp : 100;
-      const b = hpByStageBand[band] || (hpByStageBand[band] = { n: 0, minHp: Infinity, maxHp: -Infinity });
-      b.n++; b.minHp = Math.min(b.minHp, hp); b.maxHp = Math.max(b.maxHp, hp);
-    }
-    const deepestBand = Object.keys(hpByStageBand).map(Number).sort((a, b) => b - a)[0];
-    const deepest = deepestBand === undefined ? null : Object.assign(
-      { stageBand: deepestBand, stageFrom: deepestBand * ARCHIVE_STAGE_BAND }, hpByStageBand[deepestBand]);
-    if (deepest) {
-      ctx.note(`archive kill-0 depth: deepest stage band ${deepest.stageFrom}+ holds ${deepest.n} `
-        + `cell(s), boss HP left ranging ${deepest.minHp.toFixed(1)}%-${deepest.maxHp.toFixed(1)}% `
-        + `(spread ${(deepest.maxHp - deepest.minHp).toFixed(1)} points)`);
-    }
-
     ctx.diag.archive = {
       cells: cellCount,
       entries: archive.size,
@@ -1339,8 +1357,6 @@
       bestKillReached: bestKill,
       bestMaxStageReached: bestStage,
       bossBoundariesCrossed,
-      killZeroHpByStageBand: hpByStageBand,
-      killZeroDeepest: deepest,
       // NAMED FOR ITS FIDELITY, DELIBERATELY. This is a SCREEN_ITERATIONS score, and it was
       // compared against a FINAL_ITERATIONS import score in an earlier analysis -- 779,420 against
       // 1,004,599 -- producing the confident and wrong conclusion that "the archive never finds
@@ -2092,10 +2108,19 @@
       // champion on the same FINAL_ITERATIONS measurement and only replaces it if it truly wins.
       if (ranked.length && !effortSpec.skipPolish) {
         const champion = ranked[0];
+        const polishStats = { ocbaConsidered: 0, ocbaVerified: 0 };
         const polished = await polishWinner(
           ctx, budgets, champion.talentAlloc, champion.attrAlloc, champion.score, pinnedAttrs,
           (f) => report('final', f, 1),
+          effortSpec.ocbaPolish === true, polishStats,
         );
+        if (effortSpec.ocbaPolish === true) {
+          diag.ocbaPolish = polishStats;
+          const saved = polishStats.ocbaConsidered
+            ? (1 - polishStats.ocbaVerified / polishStats.ocbaConsidered) * 100 : 0;
+          ctx.note(`OCBA polish: ${polishStats.ocbaVerified}/${polishStats.ocbaConsidered} candidates `
+            + `verified at ${FINAL_ITERATIONS} iterations (${saved.toFixed(1)}% of full-fidelity work skipped)`);
+        }
         if (polished.score > champion.score) {
           ranked.unshift({
             talentAlloc: polished.talentAlloc, attrAlloc: polished.attrAlloc, score: polished.score,
