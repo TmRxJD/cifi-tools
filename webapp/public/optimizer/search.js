@@ -100,7 +100,45 @@
   // displays. Optimizing one number and reporting another is what produced the old "the search
   // said it was better but nothing changed" dialog.
   const SCREEN_ITERATIONS = 100;
-  const FINAL_ITERATIONS = 1000;
+  //
+  // THE FIDELITY EVERY DECISION IS MADE AT, AND THE SINGLE LARGEST COST IN A RUN.
+  //
+  // Evaluation cost is PURE MARGINAL in iterations -- measured, fixed per-call overhead is 1.2ms at
+  // level 12 and ~0 at level 60 despite a fresh WASM instance per call -- and roughly 87% of wall
+  // clock is spent at this fidelity in refinement and polish. So this constant scales the whole
+  // run linearly, and it is the only dial that does.
+  //
+  // Measured precision against a 16,000-iteration reference, on each fixture's own import:
+  //      250 iters   mean |error| 0.19%   worst 0.39%    1x cost
+  //      500 iters   mean |error| 0.18%   worst 0.50%    2x cost
+  //     1000 iters   mean |error| 0.12%   worst 0.35%    4x cost   <- shipped
+  //     2000 iters   mean |error| 0.07%   worst 0.13%    8x cost
+  //
+  // It is TEMPTING to read that as "250 is nearly as good for a quarter of the price". Do not ship
+  // that on the table alone: polish DECIDES moves at this fidelity, and a cheap ranking has already
+  // been measured mis-ordering a 0.32% ridge by 1.7% and costing 1.64M on ozzy@62. The error table
+  // bounds what a COMPARISON can claim; it says nothing about how often a noisier ranking picks the
+  // wrong move. That is an end-to-end question.
+  //
+  // Overridable per run ONLY so it can be A/B'd end to end. Shipped value unchanged.
+  const DEFAULT_FINAL_ITERATIONS = 1000;
+  let FINAL_ITERATIONS = DEFAULT_FINAL_ITERATIONS;
+  // Concurrent optimize() calls in one process share this module, so two runs asking for different
+  // fidelities would silently corrupt each other's decisions. Refuse rather than interleave.
+  let finalIterationsOwner = 0;
+  function setFinalIterations(n) {
+    if (!Number.isFinite(n) || n <= 0) throw new Error(`finalIterations must be a positive number, got ${n}`);
+    if (finalIterationsOwner > 0 && n !== FINAL_ITERATIONS) {
+      throw new Error(`optimize(): another run in this process is using finalIterations `
+        + `${FINAL_ITERATIONS}; two concurrent runs cannot disagree about decision fidelity`);
+    }
+    FINAL_ITERATIONS = n;
+    finalIterationsOwner++;
+  }
+  function releaseFinalIterations() {
+    finalIterationsOwner = Math.max(0, finalIterationsOwner - 1);
+    if (finalIterationsOwner === 0) FINAL_ITERATIONS = DEFAULT_FINAL_ITERATIONS;
+  }
 
   // A single WASM evaluation costs ~11ms on a mid-level build and rises with level (it scales with
   // how far the build progresses), so EVALUATION COUNT is the binding constraint on wall clock.
@@ -178,6 +216,7 @@
     'breakpointSpending',                              // move flags
     'feasibleInfeasible',                              // FI-MAP-Elites: two archives
     'archiveOnly',                                     // ablation: stop after illumination
+    'finalIterations',                                 // decision fidelity; A/B only
   ]);
 
   const DEFAULT_ARCHIVE_EVALS = EFFORT_LEVELS.fast.archiveEvals;
@@ -1520,6 +1559,7 @@
   const OPTIMIZE_OPTIONS = ['mode', 'effort', 'scorer', 'onProgress', 'shouldCancel'];
 
   async function optimize(cfg, opts = /** @type {any} */ ({})) {
+    let fidelityClaimed = false;
     // AN IGNORED OPTION IS INDISTINGUISHABLE FROM A WORKING ONE, AND THAT IS HOW DEAD PARAMETERS
     // SURVIVE FOR MONTHS.
     //
@@ -1806,6 +1846,10 @@
       //
       // The top-level options object is already whitelisted for exactly this reason
       // (OPTIMIZE_OPTIONS); the effort spec is the other half and had no such check.
+      if (Number.isFinite(effortSpec.finalIterations)) {
+        setFinalIterations(effortSpec.finalIterations);
+        fidelityClaimed = true;
+      }
       if (effort && typeof effort === 'object') {
         const unknown = Object.keys(effortSpec).filter((k) => !EFFORT_SPEC_KEYS.has(k));
         if (unknown.length) {
@@ -2199,6 +2243,11 @@
     } catch (err) {
       if (err instanceof Cancelled) return { best: null, ranked: [], evals, cacheHits, notes, cancelled: true, diag };
       throw err;
+    } finally {
+      // Always restore, including on cancel and on throw. A run that left the module holding a
+      // reduced fidelity would silently degrade every LATER run in the same process, which is the
+      // hardest kind of contamination to trace back.
+      if (fidelityClaimed) releaseFinalIterations();
     }
   }
 
