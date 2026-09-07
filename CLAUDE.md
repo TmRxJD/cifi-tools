@@ -124,7 +124,7 @@ or "fixing" it.
 | `webapp/public/optimizer/` | The build optimizer — see below. |
 | `tools/bench/` | The optimizer acceptance gate and schema tests. Runs under Node against the **shipped** browser files. |
 | `compare-mcp/` | MCP server + fixtures for comparing the clone against the live cifi-tools.com site. |
-| `bridge/` | `cifi-bridge`, published to npm separately: pulls a save off an Android device over ADB. |
+| `bridge/` | **SUPERSEDED.** The old single-game `cifi-bridge`. The shipped bridge is now `adb-bridge` (`C:\Users\jdion\Projects\adb-bridge`, npm `adb-bridge`, TmRxJD/adb-bridge) — one process serving many games from JSON profiles, with CIFI on port 43791. **Fix bridge bugs THERE, not here**; the site's own dialog tells users `npx adb-bridge cifi`. This directory's `waitForAndroidBoot` / `dedupeSameDevice` fixes were ported upstream in adb-bridge 0.2.4. |
 
 Run it: `node webapp/server.js` → http://localhost:5173
 

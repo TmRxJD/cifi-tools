@@ -214,7 +214,10 @@ export async function resolveOnlineEmulatorTargets(customPort) {
     }
   }
 
-  return orderSerialsForPullAttempts(targets, hostPriority)
+  // DEDUPE HERE, NOT IN THE CALLER. One emulator commonly answers to two serials
+  // (127.0.0.1:port and emulator-NNNN), and doing this inside pullCifiSave left every OTHER caller
+  // -- status probes, the console UI, anything that lists devices -- still seeing one device twice.
+  return orderSerialsForPullAttempts(await dedupeSameDevice(targets), hostPriority)
 }
 
 async function getDeviceState(serial) {
@@ -591,6 +594,91 @@ async function tryPullOnSerialWithRetries(serial, options = {}) {
  * Connect known emulator ports, use any online device, pull from each candidate path until
  * one succeeds.
  */
+/**
+ * ADB SAYS "device" LONG BEFORE ANDROID HAS FINISHED BOOTING, and that gap is the whole bug.
+ *
+ * adbd comes up early in boot, so `adb devices` lists the emulator as `device` while the system is
+ * still starting: shell commands work, but app data directories are not populated yet, so the save
+ * probe finds nothing and the pull reports "no save" on a device that will be perfectly fine thirty
+ * seconds later. The user's workaround was to wait and retry by hand.
+ *
+ * MuMu states it plainly -- `MuMuManager.exe info -v 0` returns
+ *     "is_process_started": true, "is_android_started": false, "player_state": "starting_rom"
+ * while port 16384 is already accepting ADB connections.
+ *
+ * `sys.boot_completed` is the property Android sets when the system is actually up, and
+ * `init.svc.bootanim` stops when the boot animation finishes. Waiting on those turns a spurious
+ * "no save found" into a short, explained wait.
+ *
+ * Returns true if the device booted within the budget, false if it did not -- the caller decides
+ * whether to try anyway rather than this silently blocking forever.
+ */
+async function waitForAndroidBoot(serial, { timeoutMs = 90_000, onProgress } = {}) {
+  const started = Date.now()
+  let announced = false
+  while (Date.now() - started < timeoutMs) {
+    let booted = false
+    try {
+      const out = await runAdb(serial, ['shell', 'getprop', 'sys.boot_completed'], 5_000)
+      booted = String(out).trim().startsWith('1')
+    } catch {
+      booted = false
+    }
+    if (booted) {
+      // The boot animation can still be running with boot_completed already set; app data is
+      // reliably in place once it stops. Best-effort only -- some builds never report it.
+      try {
+        const anim = await runAdb(serial, ['shell', 'getprop', 'init.svc.bootanim'], 5_000)
+        if (String(anim).trim() === 'running') {
+          await delay(1_000)
+          continue
+        }
+      } catch { /* property unavailable: boot_completed is enough */ }
+      if (announced) onProgress?.('Emulator finished booting')
+      return true
+    }
+    if (!announced) {
+      announced = true
+      onProgress?.('Emulator is still booting — waiting for Android to come up')
+    }
+    await delay(1_500)
+  }
+  return false
+}
+
+/**
+ * The SAME emulator commonly appears twice -- once as 127.0.0.1:port and once as emulator-NNNN.
+ * Measured on MuMu: both entries report product:dm1q model:SM_S9110, one device wearing two names.
+ * Trying both wastes a full pull attempt (path probes, timeouts) on a device already known to have
+ * failed, which is time the user spends watching nothing happen.
+ */
+async function dedupeSameDevice(serials) {
+  if (serials.length < 2) return serials
+  const kept = []
+  const seenFingerprints = new Map()
+  for (const serial of serials) {
+    // FINGERPRINT ON boot_id, NOT ro.serialno. The first version used `getprop ro.serialno`, which
+    // is EMPTY on this emulator -- so the dedupe silently matched nothing and was dead code that
+    // looked correct. /proc/sys/kernel/random/boot_id is set per running kernel, so two serials
+    // reaching the same booted system report the same value (measured: both 127.0.0.1:16384 and
+    // emulator-5554 return 3f640297..., while ro.serialno returns nothing for either).
+    let fingerprint = null
+    for (const probe of [
+      ['shell', 'cat', '/proc/sys/kernel/random/boot_id'],
+      ['shell', 'getprop', 'ro.serialno'],
+    ]) {
+      try {
+        const raw = String(await runAdb(serial, probe, 5_000)).trim()
+        if (raw) { fingerprint = raw; break }
+      } catch { /* try the next probe */ }
+    }
+    if (fingerprint && seenFingerprints.has(fingerprint)) continue
+    if (fingerprint) seenFingerprints.set(fingerprint, serial)
+    kept.push(serial)
+  }
+  return kept
+}
+
 export async function pullCifiSave(options = {}) {
   const preferPhysical = Boolean(options.preferPhysicalDevice)
   const consoleUi = options.console
@@ -612,6 +700,17 @@ export async function pullCifiSave(options = {}) {
 
   for (const serial of candidates) {
     lastTried = serial
+    // WAIT FOR THE SYSTEM, NOT JUST FOR adbd. Without this the pull runs against a half-booted
+    // emulator, finds no save, and reports "no save found" for a device that is simply not ready --
+    // which is indistinguishable, to the user, from the game not being installed.
+    if (isEmulatorAdbSerial(serial)) {
+      const booted = await waitForAndroidBoot(serial, {
+        onProgress: msg => consoleUi?.log(msg, 0.25),
+      })
+      if (!booted) {
+        consoleUi?.log('Emulator did not report a completed boot — trying the pull anyway', 0.3)
+      }
+    }
     const result = await tryPullOnSerialWithRetries(serial, options)
     if (result) {
       const deviceLabel = await resolveDeviceDisplayName(result.deviceSerial)
