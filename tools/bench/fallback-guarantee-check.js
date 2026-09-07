@@ -27,6 +27,12 @@ const R = require('./refit.js');
 const args = process.argv.slice(2);
 const opt = (n, d) => { const h = args.find((a) => a.startsWith(`--${n}=`)); return h ? h.slice(n.length + 3) : d; };
 const ONLY = opt('only', 'knox@30,borge@42,ozzy@46,knox@12');
+// THE SHIPPED LEVEL, BY NAME. This used to pass a hand-built spec (`{archiveEvals: 1200,
+// refineSupports: 3, seeds: [...]}`) chosen to resemble `fast`. It is not `fast`: the shipped level
+// carries no `seeds`, and one extra draw is enough to shift the whole random stream -- this repo has
+// already measured that moving a result seven points. Testing a lookalike is how the default-effort
+// mismatch invalidated the entire bench suite once before. Ask for the level by name.
+const EFFORT = opt('effort', 'fast');
 const ITERS = 1000;
 const NOISE = 0.3;
 const capOf = (d) => (d.maxLevel === null || d.maxLevel === undefined ? Infinity : d.maxLevel);
@@ -66,7 +72,7 @@ const capOf = (d) => (d.maxLevel === null || d.maxLevel === undefined ? Infinity
       ds.forEach((v, i) => { if (v > bestDonor) { bestDonor = v; bestName = shaped[i].name; } });
 
       const res = await H.Optimizer.optimize(cfg, {
-        mode, scorer: pooled.score, effort: { archiveEvals: 1200, refineSupports: 3, seeds: [0x9e3779b9] },
+        mode, scorer: pooled.score, effort: EFFORT,
       });
       const got = primary(await H.evaluateAllocation(cfg, res.best.talentAlloc, res.best.attrAlloc, ITERS));
       checked++;
@@ -85,5 +91,5 @@ const capOf = (d) => (d.maxLevel === null || d.maxLevel === undefined ? Infinity
   console.log('');
   if (!checked) { console.log('NOTHING MEASURED -- zero comparisons is a failure'); process.exit(1); }
   if (failures) { console.log(`FAIL  ${failures} build(s) returned worse than a corpus donor`); process.exit(1); }
-  console.log(`PASS  ${checked} build(s): the optimizer never returned worse than the best known build`);
+  console.log(`PASS  ${checked} build(s) at effort=${EFFORT}: never returned worse than the best known build`);
 })().catch((e) => { console.error('FAIL ' + ((e && e.stack) || e)); process.exit(1); });

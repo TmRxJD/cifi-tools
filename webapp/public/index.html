@@ -39,6 +39,11 @@
     </nav>
     <div class="flex items-center gap-2 flex-shrink-0">
       <button id="importSaveBtn" class="flex items-center space-x-1 px-3 py-1.5 rounded-full bg-gradient-to-r from-green-600 to-green-800 hover:from-green-700 hover:to-green-900 text-white font-semibold shadow-lg transition-colors duration-200 text-xs sm:text-sm"><span id="importSaveBtnIcon"></span><span class="hidden xs:inline">Import Save</span></button>
+      <!-- CLOUD SAVE LIVES IN THE HEADER, matching the original tool: an account button with a
+           dropdown holding the sync controls, NOT a Settings section. A backup control buried a
+           page deep is one people forget to use, which defeats the point of having it.
+           Populated by renderCloudAccountButton() in app.js. -->
+      <div id="cloudAccount" class="relative flex-shrink-0"></div>
       <!-- Mobile menu toggle: same destinations as the desktop nav, just reachable on a phone
            viewport instead of hidden off-screen. -->
       <button id="mobileNavToggle" class="md:hidden w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-lg bg-gray-700 hover:bg-gray-600 text-white" aria-label="Open menu" aria-expanded="false">
@@ -587,16 +592,22 @@
      re-fitting a real build reaches +2.37% / +1.33% WITH the boss kill. -->
 <script src="optimizer/refit.js?v=20260907a-corpus"></script>
 <script src="optimizer/corpus.js?v=20260907s-modes"></script>
-<script src="optimizer/search.js?v=20260907r-timecap"></script>
+<script src="optimizer/search.js?v=20260907v-timecap2"></script>
 <script src="optimizer/runner.js?v=20260907a"></script>
-<script src="saveImport.js?v=20260903a"></script>
+<script src="saveImport.js?v=20260907a-ultima"></script>
 <script src="buildCode.js?v=20260810p"></script>
 <script src="costFormulas.js?v=20260907q-guards"></script>
 <script src="incomeModel.js?v=20260810r"></script>
 <script src="hunterStatPath.js?v=20260810p"></script>
 <script src="hunterStatPathBrowser.js?v=20260810r"></script>
 <script src="hunterStatPathPage.js?v=20260810r"></script>
-<script src="app.js?v=20260907a"></script>
+<!-- Appwrite web SDK, from a CDN as a plain script: this project deliberately has no build
+     step, and the IIFE build exposes window.Appwrite. cloudSync.js degrades to
+     "unavailable" rather than throwing if this fails to load, so an offline or
+     CDN-blocked user still gets the whole tool minus cloud saves. -->
+<script src="https://cdn.jsdelivr.net/npm/appwrite@27.0.0/dist/iife/sdk.js"></script>
+<script src="cloudSync.js?v=20260907b-discord"></script>
+<script src="app.js?v=20260907d-cloudmodal"></script>
 <script>
   // Custom (non-Tabler) sidebar icons: real game-asset SVG paths copied verbatim from the
   // live site's rendered DOM (Relics/Loop Mods/Milestones use bespoke icons, not Tabler's).

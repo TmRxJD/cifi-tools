@@ -77,6 +77,7 @@ function parseArgs(argv) {
   const onlyFlag = flags.find((f) => f.startsWith('--only='));
   const maxLevelFlag = flags.find((f) => f.startsWith('--max-level='));
   const seedFlag = flags.find((f) => f.startsWith('--seed='));
+  const effortFlag = flags.find((f) => f.startsWith('--effort='));
   const sample = sampleFlag ? Number(sampleFlag.split('=')[1]) : 0;
   if (sampleFlag && !(Number.isInteger(sample) && sample > 0)) {
     throw new Error(`--sample must be a positive integer, got "${sampleFlag.split('=')[1]}"`);
@@ -87,6 +88,10 @@ function parseArgs(argv) {
     // Varies per run by default so repeated gates cover different builds over time; always
     // reported, so any failure can be replayed exactly with --seed=.
     seed: seedFlag ? Number(seedFlag.split('=')[1]) : (Date.now() % 2147483647),
+    // Which shipped effort level to grade. Omitted means the optimizer's own default, which is
+    // what a user gets; naming one lets the CHEAP level be graded, and it had no quality coverage
+    // at all before this -- only a check that it returns something legal.
+    effort: effortFlag ? effortFlag.slice('--effort='.length) : null,
     runAll: flags.includes('--all'),
     // Print the chosen fixtures and exit. Lets you see what a seed selects (and confirm a seed
     // reproduces) without paying for the run.
@@ -215,12 +220,16 @@ function describe(res) {
 }
 
 /** Run one fixture in its own worker. */
-function runFixture(fixture) {
+function runFixture(fixture, effort) {
   return new Promise((resolve, reject) => {
     const worker = new Worker(WORKER_FILE);
     worker.on('message', (res) => { worker.terminate(); resolve(res); });
     worker.on('error', (err) => { worker.terminate(); reject(err); });
-    worker.postMessage(fixture);
+    // `effort` rides along with the fixture rather than being a worker option, so a resumed run
+    // records which level produced each row -- comparing a `fast` row against a `complete` one
+    // would be the same category of mistake as the default-effort mismatch that once invalidated
+    // every quality gate in this suite.
+    worker.postMessage(effort ? { ...fixture, effort } : fixture);
   });
 }
 
@@ -248,7 +257,7 @@ async function runQueue(fixtures, concurrency, onResult, shouldStop) {
       // scheduling is right (it is what keeps the tail short); the silence was the defect.
       const f = fixtures[i];
       console.log(`      ... started ${f.hunter}/${f.set}#${f.index} lvl${f.level} (${f.mode})`);
-      const res = await runFixture(f);
+      const res = await runFixture(f, f.effort);
       await onResult(res);
       if (shouldStop && shouldStop(res)) { stopped = true; return; }
     }
@@ -293,6 +302,11 @@ async function main() {
   process.on('exit', releaseLock);
   for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { releaseLock(); process.exit(130); });
   let fixtures = selectFixtures(args);
+  // Stamp the chosen effort onto every fixture, so the level travels with the row into the
+  // worker AND into the results file. Threading it as a separate argument put it out of scope
+  // in the queue and, worse, would have let a resumed run mix rows produced at two different
+  // levels while looking like one sweep.
+  if (args.effort) fixtures = fixtures.map((f) => ({ ...f, effort: args.effort }));
 
   // --resume: carry forward whatever a previous (possibly interrupted) run already finished and
   // only run what is left. A full sweep takes hours and has been observed dying partway through

@@ -40,11 +40,15 @@ const FLOOR_SECONDS = 60;   // one indivisible refinement elite at the most expe
   const cfg = H.cfgForImport(fx.hunter, build, { budgetMode: 'spend' });
   const scorer = await H.makeScorer(cfg, 'loot');
 
-  // The MOST expensive shipped tier, deliberately: a cap that bounds only cheap runs is untested
-  // where it is actually needed.
+  // A DELIBERATELY OVER-BUDGET SPEC, because a cap that bounds only cheap runs is untested where it
+  // is actually needed. This used to ask for the shipped `exhaustive` tier; that tier was removed
+  // (it never beat `complete` and cost several times more), so the workload is spelled out inline
+  // rather than pointing at whatever happens to be the most expensive level -- which would silently
+  // get cheaper the next time the levels are retuned, and quietly stop testing anything.
+  const OVER_BUDGET = { archiveEvals: 19200, refineSupports: 16, crossBlock: true };
   const t0 = Date.now();
   const res = await H.Optimizer.optimize(cfg, {
-    mode: 'loot', scorer, effort: 'exhaustive', maxSeconds: CAP,
+    mode: 'loot', scorer, effort: OVER_BUDGET, maxSeconds: CAP,
   });
   const secs = (Date.now() - t0) / 1000;
 

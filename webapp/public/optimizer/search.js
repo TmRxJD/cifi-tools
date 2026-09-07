@@ -214,29 +214,23 @@
       help: 'A full archive pass, then refines the 8 strongest elites. Finds builds Fast '
         + 'misses, at several times the cost.',
     },
-    exhaustive: {
-      // FOR SOMEONE WILLING TO WAIT. Every number here is the next measured step, not a round
-      // multiple of Complete.
-      //
-      // archiveEvals 19200 is the rung already measured above Complete on the ozzy@62 seed:
-      //     9600  -> 103 cells, 3 kill bands, best kill  5,  89s
-      //    19200  -> 107 cells, 4 kill bands, best kill 10, 170s
-      // Cells barely move, so this buys DEPTH per lineage rather than coverage -- and depth is what
-      // produces a boss foothold, which is the difference between -66% and a working build there.
-      //
-      // crossBlock is FORCED ON rather than left to the donor-distance gate. At Complete the pass is
-      // skipped when a donor sits within 2 levels, because it was measured finding nothing there for
-      // +31% runtime. Someone who has chosen to wait is buying exactly that kind of low-probability
-      // check, so the cost/benefit inverts.
-      //
-      // HONEST COST: expect several times Complete. borge@73 runs ~226s at Complete, and this
-      // roughly doubles the archive, doubles refinement and adds the cross-block pass on top --
-      // comfortably past the 5-minute mark on high-level builds. That is the deal being offered,
-      // not a regression.
-      label: 'Exhaustive', archiveEvals: 19200, refineSupports: 16, crossBlock: true,
-      help: 'Doubles the archive and refinement over Complete and forces the cross-block pass. '
-        + 'Several times slower; use it when you would rather wait than wonder.',
-    },
+    // EXHAUSTIVE IS REMOVED, ON EVIDENCE FROM REAL USE RATHER THAN A PREFERENCE.
+    //
+    // It was `{ archiveEvals: 19200, refineSupports: 16, crossBlock: true }` -- double Complete's
+    // archive and refinement with the cross-block pass forced on. The archive rungs that justified
+    // it are real (ozzy@62: 9600 -> 103 cells / best kill 5 / 89s, 19200 -> 107 cells / kill 10 /
+    // 170s), but cells barely moved and the DEPTH it bought never turned into a better answer.
+    //
+    // Reported by the project owner after testing with real accounts: it "truly is what it says and
+    // takes an eternity and has yet to produce results better than what complete finds". That
+    // matches every measurement here -- borge@73 and knox@30 returned byte-identical builds to
+    // top-1 donors, and the ablation found refinement width buys nothing once the corpus climb has
+    // converged. An option that costs several times more and has never won is not a choice, it is
+    // a trap: it makes the tool look slow and teaches users to distrust the fast paths.
+    //
+    // A level nobody should pick should not be in the dropdown. The UI renders straight from this
+    // table, so deleting the entry removes the option -- there is no second list to update. If a
+    // future mechanism genuinely needs a bigger budget, add it back WITH the build it wins on.
   };
   //
   // THE SHIPPED DEFAULT, DECLARED EXACTLY ONCE -- and it used to be declared twice, with two
@@ -2573,6 +2567,16 @@
           // whose `.attributes` is undefined, every donor is skipped, and the whole feature does
           // nothing while looking perfectly wired. That is the exact failure mode this file records
           // for `optimizeByRegime` and for a flag that reached three of four call sites.
+          // THE DEADLINE HAS TO BE CHECKED HERE TOO, OR THE CAP IS ADVISORY. Measured: ozzy@54 at
+          // `fast` ran 960s against the 600s default, because the archive, refinement and polish
+          // loops each check it and this stage did not -- decoding, refitting and screening up to
+          // 12 donors is not free at level 50+. A cap that names a number and then overruns it by
+          // 60% is worse than no cap, because the number is quoted to users as a bound.
+          //
+          // Donors already admitted are KEPT: they are ordinary finalists and Stage 3 still takes
+          // the maximum, so stopping early means fewer candidates, never a worse answer than not
+          // having run this stage at all.
+          if (ctx.pastDeadline()) { ctx.note('corpus: stopped admitting donors at the time cap'); break; }
           let decoded = null;
           try {
             decoded = global.parseBuildCode ? await global.parseBuildCode(d.code) : null;
@@ -2616,7 +2620,10 @@
         // them as finalists would multiply the most expensive stage. They are ranked at
         // SCREEN_ITERATIONS and only the best few are admitted -- and unlike donor screening, a
         // mis-rank here removes a SPECULATIVE extra candidate rather than a real donor.
-        if (admittedPairs.length > 1) {
+        // Recombination screens up to 132 combinations at SCREEN_ITERATIONS, which is the single
+        // largest uncapped block in this stage. It is a SPECULATIVE extra candidate, so it is the
+        // right thing to drop first when time has run out.
+        if (admittedPairs.length > 1 && !ctx.pastDeadline()) {
           const combos = []; const cmeta = [];
           for (const ti of admittedPairs) {
             for (const aj of admittedPairs) {

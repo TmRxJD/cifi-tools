@@ -335,11 +335,30 @@ function mapSaveToStore(save) {
     if (v !== undefined) globalUpgrades[`researches.${id}`] = realNum(v);
   }
 
-  // Diamond Ultima -> DiamondUltimaLevel. Exact name match to the "Diamond Ultima" upgrade
-  // page, same {Name}Level convention as every other confirmed field -- reads 0 on the account
-  // this was checked against (matches in-game state), so pattern-confirmed, not yet
-  // value-diff-confirmed against a nonzero real number.
-  if (save.DiamondUltimaLevel !== undefined) globalUpgrades['ultima.ulti'] = realNum(save.DiamondUltimaLevel);
+  // DIAMOND ULTIMA IS DELIBERATELY NOT IMPORTED, AND MAPPING IT WAS ACTIVELY DESTRUCTIVE.
+  //
+  // `upgrades.ultima.ulti` IS NOT A LEVEL. The stored value is the loot MULTIPLIER itself -- the
+  // original tool's Ultima page renders it `display-as-multiplier`, as a 1.0000-10.0000 value with
+  // step 0.0001 labelled "Current Multiplier x", and our own card at app.js says the same.
+  //
+  // This line wrote `DiamondUltimaLevel` into it. That field is a small integer (1 on the reference
+  // account), so every save import silently reset a user's real multiplier -- x1.1989 in game --
+  // back to 1.0000, i.e. no boost at all. It reads as "Diamond Ultima isn't being scanned", and it
+  // is worse than not importing: a level of 7 would have been fed to the evaluator as x7 loot.
+  // The name matched the {Name}Level convention, which is exactly why it looked confirmed.
+  //
+  // WHAT THE GAME ACTUALLY SAYS, so the next attempt starts further along. `DiamondShop` computes
+  // `DiamondUltimaBonus = Pow(UltimaMilestoneExponent, DiamondUltimaLevel)` with the authored
+  // `UltimaMilestoneExponent = 1.05` (`UltimaMilestoneExponent2 = 1.02`, `UltimaMilestoneGoal = 50`).
+  // But that is NOT the number on screen: a save pulled the same day the player reported x1.1989
+  // carries `DiamondUltimaLevel = 1` and `DiamondUltimaProgress = 19`, and no integer power of 1.05
+  // or 1.02 reaches 1.1989 (3.72 and 9.16 respectively). The hunter game contexts carry a separate
+  // `DiamondUltimaRewardsBonus` (BigDouble) beside `AllDiamondUltimas` (int), and neither the DU
+  // level family (sums to 165) nor anything else in the save produces 1.1989. So the derivation is
+  // UNRESOLVED, and the original tool does not derive it either -- its input is typed by the user.
+  //
+  // Leaving it to the user's own input is therefore the honest behaviour, not a gap. Do not restore
+  // a mapping here without a value-diff proof that the field reproduces the displayed multiplier.
 
   // Mats Exchange -> `TysconDrives`. Exact-name match on the same {Name} convention as the rest,
   // and the only Tyscon-shaped field that is a plain count: the save also carries

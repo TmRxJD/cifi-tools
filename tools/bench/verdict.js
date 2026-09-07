@@ -67,6 +67,22 @@ function categoryOf(res) {
 }
 
 /**
+ * THE NOISE FLOOR EVERY DELTA THIS MODULE PRINTS IS MEASURED AGAINST.
+ *
+ * `eval-precision-check.js` evaluates a FIXED allocation (the fixture's own import, so the search
+ * is not involved) from 1000 to 16000 iterations: mean absolute error 0.12%, worst 0.35%. A
+ * FINAL_ITERATIONS score is therefore precise to about a tenth of a percent, and a COMPARISON of
+ * two of them carries roughly 0.2% -- so a delta under ~1% is not a difference, it is sampling.
+ *
+ * Separately, the search varies about SEVEN POINTS across random seeds. It is deterministic --
+ * one seed, one answer -- but that is ONE SAMPLE, so any single-run A/B narrower than ~7 points is
+ * noise rather than a result. Several conclusions in this repo's history were drawn without that.
+ *
+ * A threshold set well above 1% is not tolerant, it is blind; one set below 0.2% fails on noise.
+ */
+const NOISE_PCT = { comparison: 0.2, meaningful: 1.0, seedVariance: 7.0 };
+
+/**
  * The SECONDARY metric, reported and never fatal. A boss or push build trading loot for its actual
  * goal is succeeding, not failing -- gating on both would fail a build for doing its job.
  */
@@ -78,4 +94,4 @@ function secondaryWarningOf(res) {
   return res.optimizedStage < res.importStage ? `stage ${res.stageDeltaPct.toFixed(2)}%` : null;
 }
 
-module.exports = { failureOf, categoryOf, secondaryWarningOf, parityIsFatal };
+module.exports = { failureOf, categoryOf, secondaryWarningOf, parityIsFatal, NOISE_PCT };

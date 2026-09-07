@@ -158,6 +158,41 @@ function saveStore() {
   updateNavGating();
 }
 
+// THE BACKUP FORMAT, IN ONE PLACE. These were inline in the Settings page's two click handlers
+// until cloud sync needed the same bytes. A second copy of a SERIALIZATION rule is the worst kind
+// of duplicate: the two can drift into producing codes that each accepts and the other rejects,
+// and the symptom is "my backup won't restore" long after the change that caused it.
+//
+// The encoding (`btoa(unescape(encodeURIComponent(...)))`) is the pre-existing one and is kept
+// byte-for-byte, so every backup code users already hold still restores.
+function createStoreBackup() {
+  return btoa(unescape(encodeURIComponent(JSON.stringify(store))));
+}
+
+/**
+ * Replace the entire store from a backup code, then persist and redraw.
+ *
+ * Mutates the existing `store` object rather than rebinding it, because modules captured a
+ * reference to it at load time -- reassigning would leave them pointed at the old object and
+ * silently editing data the user can no longer see.
+ *
+ * Throws on a malformed code; the caller reports it. It must NOT half-apply: parse first, and
+ * only clear the live store once the replacement is known to be valid JSON.
+ */
+function restoreStoreBackup(code) {
+  const restored = JSON.parse(decodeURIComponent(escape(atob(String(code).trim()))));
+  if (!restored || typeof restored !== 'object' || Array.isArray(restored)) {
+    throw new Error('backup did not decode to a store object');
+  }
+  Object.keys(store).forEach((k) => delete store[k]);
+  Object.assign(store, restored);
+  saveStore();
+  render();
+  return true;
+}
+window.createStoreBackup = createStoreBackup;
+window.restoreStoreBackup = restoreStoreBackup;
+
 /**
  * Reset every hunter, build, upgrade and setting back to a fresh profile.
  *
@@ -2208,6 +2243,233 @@ function renderUpgradesPage(root, catKey) {
 // HUNTER_DEFS is flagged advanced, since "The Legacy of Ultima" (confirmed real, level-70+
 // gated on the live site) hasn't been reverse-engineered into the talent list yet, so the
 // gate exists and is wired up but has nothing to hide yet.
+// ---- Cloud Save panel -------------------------------------------------------------------------
+//
+// Mirrors cifi-tools' own account panel: sign in, an explicit Save-to-cloud and Load-from-cloud,
+// the two timestamps, and a "New Backup Available" notice. Nothing syncs automatically -- see the
+// header of cloudSync.js for why a store cannot be safely merged field by field.
+function cloudTimeText(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+}
+
+// ---- Cloud save UI ----------------------------------------------------------------------------
+//
+// The markup here is COPIED FROM THE ORIGINAL TOOL, not designed: its `NeonAuthModal` for the
+// signed-out dialog and its header account dropdown for the signed-in state. Users move between
+// the two tools, so the surface they already know is the right one. Copying it also means the
+// layout questions were answered by someone who shipped it, rather than re-litigated here.
+//
+// Changed on purpose, both requested: the provider is DISCORD rather than Google, and an
+// email/password form sits under a divider for accounts not tied to Discord.
+let __cloudMenuOpen = false;
+
+function cloudTimeText(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+}
+
+const CLOUD_DISCORD_LOGO = '<svg class="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="#5865F2">'
+  + '<path d="M20.317 4.369a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.249a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.036A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.009c.12.099.246.198.373.292a.077.077 0 0 1-.006.127 12.3 12.3 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.056c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.331c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>';
+
+/** Header slot: a Sign In button when signed out, the account avatar + dropdown when signed in. */
+async function renderCloudAccountButton() {
+  const host = document.getElementById('cloudAccount');
+  if (!host) return;
+  const CS = window.CloudSync;
+  if (!CS) { host.innerHTML = ''; return; }
+  const s = await CS.init();
+  // The SDK is fetched from a CDN. If that was blocked, render nothing rather than a button that
+  // cannot work -- Backup & Restore in Settings still covers the same need offline.
+  if (!s.available) { host.innerHTML = ''; return; }
+
+  if (!s.isAuthenticated) {
+    host.innerHTML = '<button id="cloudAccountBtn" class="flex items-center space-x-1 px-3 py-1.5 '
+      + 'rounded-full bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900 '
+      + 'text-white font-semibold shadow-lg transition-colors duration-200 text-xs sm:text-sm">'
+      + '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">'
+      + '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" '
+      + 'd="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>'
+      + '<span class="hidden xs:inline">Sign In</span></button>';
+    document.getElementById('cloudAccountBtn').onclick = () => openCloudAuthModal();
+    return;
+  }
+
+  const initial = ((s.userDisplayName || 'U').trim()[0] || 'U').toUpperCase();
+  host.innerHTML = `
+    <button id="cloudAccountBtn" class="px-3 py-1.5 rounded-lg transition-colors duration-200 flex items-center hover:bg-gray-700 relative text-gray-300 hover:text-white">
+      <div class="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">${escapeHtml(initial)}</div>
+      <span class="ml-1.5 text-sm hidden sm:inline max-w-[8rem] truncate">${escapeHtml(s.userDisplayName || 'User')}</span>
+      ${s.hasNewerCloudBackup ? '<span class="absolute top-0 right-0 w-2 h-2 bg-yellow-400 rounded-full"></span>' : ''}
+    </button>
+    <div id="cloudMenu" class="${__cloudMenuOpen ? '' : 'hidden '}absolute top-full right-0 mt-2 bg-gray-800 rounded-xl shadow-xl z-50 border border-gray-700 w-64 overflow-hidden">
+      <div class="p-3 border-b border-gray-700">
+        <div class="flex items-center">
+          <div class="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold">${escapeHtml(initial)}</div>
+          <div class="ml-2 min-w-0">
+            <div class="text-sm font-medium text-white truncate">${escapeHtml(s.userDisplayName || 'User')}</div>
+            <div class="text-xs text-gray-400 truncate">${escapeHtml((s.user && s.user.email) || 'No email')}</div>
+          </div>
+        </div>
+      </div>
+      <div class="p-3 border-b border-gray-700">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs text-gray-400">Cloud Backup</span>
+          ${s.hasNewerCloudBackup && !s.isSyncing ? '<span class="text-xs text-yellow-400">New Backup Available</span>' : ''}
+          ${s.isSyncing || s.lastSyncError ? `<span class="flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full inline-block ${s.isSyncing ? 'bg-yellow-400 animate-pulse' : 'bg-red-500'}"></span>
+              <span class="text-xs ${s.lastSyncError ? 'text-red-400' : 'text-yellow-400'}">${s.isSyncing ? 'Syncing...' : 'Error'}</span>
+            </span>` : ''}
+        </div>
+        <div class="space-y-1">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-gray-500">Saved</span>
+            <span class="text-xs font-mono ${s.lastCloudSaveTime ? 'text-green-400' : 'text-gray-600'}">${cloudTimeText(s.lastCloudSaveTime)}</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-gray-500">Loaded</span>
+            <span class="text-xs font-mono ${s.lastDownloadTime ? 'text-blue-400' : 'text-gray-600'}">${cloudTimeText(s.lastDownloadTime)}</span>
+          </div>
+        </div>
+      </div>
+      <div class="p-1">
+        <button id="cloudSaveBtn" class="w-full text-left px-3 py-2 text-sm text-blue-300 hover:bg-blue-900/20 rounded">Save to Cloud</button>
+        <button id="cloudLoadBtn" class="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded">Load from Cloud</button>
+        <button id="cloudSignOutBtn" class="w-full text-left px-3 py-2 text-sm text-red-300 hover:bg-red-900/20 rounded">Sign Out</button>
+      </div>
+      <p id="cloudMsg" class="text-xs px-3 pb-2"></p>
+    </div>`;
+
+  const menuEl = document.getElementById('cloudMenu');
+  document.getElementById('cloudAccountBtn').onclick = (ev) => {
+    ev.stopPropagation();
+    __cloudMenuOpen = !__cloudMenuOpen;
+    menuEl.classList.toggle('hidden', !__cloudMenuOpen);
+  };
+  menuEl.onclick = (ev) => ev.stopPropagation();
+
+  const msg = (text, cls) => {
+    const el = document.getElementById('cloudMsg');
+    if (!el) return;
+    el.className = `text-xs px-3 pb-2 ${cls}`;
+    el.textContent = text;
+  };
+  document.getElementById('cloudSaveBtn').onclick = async () => {
+    msg('Saving...', 'text-gray-400');
+    try { await CS.syncToServer(); renderCloudAccountButton(); }
+    catch (e) { msg(e.message, 'text-red-400'); }
+  };
+  document.getElementById('cloudLoadBtn').onclick = async () => {
+    // The same confirmation the local restore uses. There is no undo and no merge, so the
+    // destructive direction is an explicit choice every time.
+    if (!confirm('This will replace all data on THIS device with your cloud backup. '
+      + 'This action cannot be undone. Continue?')) return;
+    msg('Loading...', 'text-gray-400');
+    try {
+      const r = await CS.syncFromServer();
+      if (!r.restored) { msg('No cloud backup found yet.', 'text-amber-400'); return; }
+      __cloudMenuOpen = false;
+      renderCloudAccountButton();
+      alert('Cloud backup restored.');
+    } catch (e) { msg(e.message, 'text-red-400'); }
+  };
+  document.getElementById('cloudSignOutBtn').onclick = async () => {
+    await CS.signOut(); __cloudMenuOpen = false; renderCloudAccountButton();
+  };
+}
+
+/**
+ * The sign-in dialog, matching the original's NeonAuthModal: same overlay, card, header, centred
+ * blurb, error box and provider-button classes. Discord replaces Google, and an email/password
+ * form is added below a divider.
+ */
+function openCloudAuthModal() {
+  const CS = window.CloudSync;
+  if (!CS) return;
+  const existing = document.getElementById('cloudAuthModal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'cloudAuthModal';
+  overlay.className = 'fixed inset-0 z-50 overflow-y-auto bg-gray-900/80 flex items-center justify-center p-4';
+  overlay.innerHTML = `
+    <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-sm overflow-hidden animate-fade-in border border-gray-700">
+      <div class="bg-gradient-to-r from-gray-700 to-gray-800 p-4 border-b border-gray-600 flex justify-between items-center">
+        <h2 class="text-xl font-bold text-white flex items-center">
+          <svg class="w-5 h-5 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+          Sign In
+        </h2>
+        <button data-close class="p-1.5 rounded-full hover:bg-gray-700 transition-colors text-gray-400 hover:text-white">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="p-5">
+        <p class="text-gray-400 text-sm mb-4 text-center">Sign in to sync your data across devices</p>
+        <div id="cloudAuthError" class="hidden mb-4 p-3 bg-red-900/30 border border-red-700 rounded-lg">
+          <p class="text-red-300 text-sm"></p>
+        </div>
+        <button id="cloudDiscordBtn" class="w-full flex items-center justify-center px-4 py-3 border border-gray-600 rounded-lg shadow-sm text-sm font-medium text-gray-200 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 transition-colors">
+          ${CLOUD_DISCORD_LOGO} Continue with Discord
+        </button>
+        <div class="flex items-center gap-3 my-4">
+          <div class="flex-1 h-px bg-gray-700"></div>
+          <span class="text-[11px] text-gray-500 uppercase tracking-wide">or</span>
+          <div class="flex-1 h-px bg-gray-700"></div>
+        </div>
+        <input id="cloudEmail" type="email" autocomplete="email" placeholder="Email"
+          class="w-full mb-2 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white" />
+        <input id="cloudPassword" type="password" autocomplete="current-password" placeholder="Password"
+          class="w-full mb-3 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white" />
+        <div class="flex gap-2">
+          <button id="cloudSignInBtn" class="flex-1 px-4 py-2 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 transition-colors">Sign In</button>
+          <button id="cloudSignUpBtn" class="flex-1 px-4 py-2 rounded-lg text-sm font-medium text-gray-200 bg-gray-700 hover:bg-gray-600 border border-gray-600 transition-colors">Create Account</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  overlay.querySelector('[data-close]').onclick = close;
+  overlay.onclick = (ev) => { if (ev.target === overlay) close(); };
+
+  const showError = (text) => {
+    const box = document.getElementById('cloudAuthError');
+    box.classList.remove('hidden');
+    box.querySelector('p').textContent = text;
+  };
+  const el = (id) => document.getElementById(id);
+  const creds = () => ({ email: el('cloudEmail').value.trim(), password: el('cloudPassword').value });
+
+  el('cloudDiscordBtn').onclick = () => {
+    // OAuth navigates the whole page out to Discord and back. Nothing to await: the session lands
+    // in the SDK's storage and the header re-reads it on the next boot.
+    try { CS.signInWithDiscord(); } catch (e) { showError(e.message); }
+  };
+  el('cloudSignInBtn').onclick = async () => {
+    const { email, password } = creds();
+    if (!email || !password) { showError('Enter an email and password.'); return; }
+    try { await CS.signIn(email, password); close(); renderCloudAccountButton(); }
+    catch (e) { showError(e.message); }
+  };
+  el('cloudSignUpBtn').onclick = async () => {
+    const { email, password } = creds();
+    if (!email || !password) { showError('Enter an email and password.'); return; }
+    try { await CS.signUp(email, password); close(); renderCloudAccountButton(); }
+    catch (e) { showError(e.message); }
+  };
+}
+
+// Close the account dropdown on an outside click. Registered once at module level, so repeated
+// renders cannot stack duplicate listeners.
+document.addEventListener('click', () => {
+  if (!__cloudMenuOpen) return;
+  __cloudMenuOpen = false;
+  const m = document.getElementById('cloudMenu');
+  if (m) m.classList.add('hidden');
+});
+
 function settingsSection(icon, iconColor, title, bodyHtml) {
   return `<div class="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden mb-5">
     <div class="bg-gray-700/40 px-4 py-3 border-b border-gray-700 flex items-center gap-2">
@@ -2276,7 +2538,7 @@ function renderSettingsPage(root) {
     </div>`;
 
   document.getElementById('generateBackupBtn').onclick = () => {
-    const code = btoa(unescape(encodeURIComponent(JSON.stringify(store))));
+    const code = createStoreBackup();
     const box = document.getElementById('backupCodeOut');
     box.classList.remove('hidden');
     box.querySelector('textarea').value = code;
@@ -2286,12 +2548,8 @@ function renderSettingsPage(root) {
     if (!raw) return;
     if (!confirm('This will replace all current data. This action cannot be undone. Continue?')) return;
     try {
-      const restored = JSON.parse(decodeURIComponent(escape(atob(raw))));
-      Object.keys(store).forEach((k) => delete store[k]);
-      Object.assign(store, restored);
-      saveStore();
+      restoreStoreBackup(raw);
       alert('Backup restored.');
-      render();
     } catch (e) { alert('Invalid backup code: ' + e.message); }
   };
   document.getElementById('uploadBackupBtn').onclick = () => document.getElementById('uploadBackupFile').click();
@@ -3676,3 +3934,7 @@ async function reloadIfShellIsStale() {
 
 render();
 reloadIfShellIsStale();
+// The header account button lives OUTSIDE the routed view, so it is drawn once at startup rather
+// than from render() -- a per-render call would rebuild it (and close its dropdown) on every
+// navigation. It re-renders itself after each sync action.
+renderCloudAccountButton();

@@ -74,6 +74,10 @@ parentPort.on('message', async (fixture) => {
   const base = {
     hunter: fixture.hunter, set: fixture.set, index: fixture.index, mode: fixture.mode,
     note: fixture.note, uid: fixture.uid, name: fixture.name, bossStage: fixture.bossStage,
+    // Recorded so a results file says which level produced it. Mixing a `fast` row with a
+    // `complete` one in one summary would compare two different configurations and call the
+    // difference a regression -- the exact mistake that once invalidated this whole suite.
+    effort: fixture.effort || null,
   };
   try {
     const build = await H.parseBuildCode(fixture.code);
@@ -118,7 +122,13 @@ parentPort.on('message', async (fixture) => {
       scoreCtx = { bossTarget: fixture.bossStage };
     }
     const scorer = await H.makeScorer(cfg, fixture.mode, scoreCtx);
-    const result = await H.Optimizer.optimize(cfg, { mode: fixture.mode, scorer });
+    // EFFORT IS SELECTABLE SO THE CHEAP LEVEL CAN BE GRADED AT ALL. Every quality gate ran at the
+    // default, so `fast` -- an option in the shipped dropdown -- had no quality coverage whatsoever:
+    // the only thing asserting anything about it checked that it RETURNS a legal build. That is the
+    // same blind spot that let `fast` ship a crash on ozzy@11, and the same shape as `boss` and
+    // `bossTimeless` having zero coverage while being offered in the same UI.
+    const effort = fixture.effort || undefined;
+    const result = await H.Optimizer.optimize(cfg, { mode: fixture.mode, scorer, ...(effort ? { effort } : {}) });
     const optimized = await H.evaluateAllocation(cfg, result.best.talentAlloc, result.best.attrAlloc);
 
     parentPort.postMessage({
