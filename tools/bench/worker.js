@@ -47,13 +47,17 @@ const H = require('./harness.js');
 // SCORE A RESULT UNDER A MODE'S OWN OBJECTIVE, using OptimizerObjective's table rather than a
 // second copy of the scoring rules. Two copies of an objective is exactly the drift this project
 // has watched break benches before (ship-test duplicating nodeWeight and staying on `max`).
-function objectiveOf(mode, r) {
+function objectiveOf(mode, r, scoreCtx) {
   const M = H.Objective && H.Objective.MODES && H.Objective.MODES[mode];
   if (!M || typeof M.score !== 'function') {
     throw new Error(`worker: no objective for mode "${mode}" -- a fixture declares a mode the `
       + 'optimizer does not implement, and grading it on loot would silently measure the wrong thing');
   }
-  return M.score(r);
+  // THE SAME CONTEXT THE SEARCH SCORED WITH. Without it a boss mode is graded at bossTarget=null,
+  // which skips the "can it even reach the target" tier entirely -- so the gate would rank builds
+  // by a different rule than the one the optimizer maximised. Two scoring rules for one mode is the
+  // drift this repo bans, and here it would silently reverse verdicts.
+  return M.score(r, scoreCtx);
 }
 
 // Monte Carlo tolerance for parity. The recorded scores are also rounded in the fixture files
@@ -63,7 +67,14 @@ const PARITY_TOLERANCE_PCT = 3;
 
 parentPort.on('message', async (fixture) => {
   const started = Date.now();
-  const base = { hunter: fixture.hunter, set: fixture.set, index: fixture.index, mode: fixture.mode, note: fixture.note };
+  // `uid` and `name` are carried through so a result can be joined back to its fixture. Without
+  // them a diagnostic has to reconstruct the identity from hunter+set+index, and `index` is NOT
+  // unique per hunter -- Borge's loot fixtures run 0-61 in one set and 0-10 again in another --
+  // which is exactly the ambiguity findFixture refuses to guess through.
+  const base = {
+    hunter: fixture.hunter, set: fixture.set, index: fixture.index, mode: fixture.mode,
+    note: fixture.note, uid: fixture.uid, name: fixture.name, bossStage: fixture.bossStage,
+  };
   try {
     const build = await H.parseBuildCode(fixture.code);
     if (!build) throw new Error('build code did not decode');
@@ -81,7 +92,32 @@ parentPort.on('message', async (fixture) => {
       : (parityDeltaPct > 0 ? 'overcount' : 'undercount');
 
     // ---- Quality at the import's own budget ----------------------------------------------
-    const scorer = await H.makeScorer(cfg, fixture.mode);
+    // A BOSS FIXTURE MUST NAME THE BOSS IT CONTESTS, OR THE OBJECTIVE AIMS AT THE WRONG ONE.
+    //
+    // `Objective.contextFor` derives the target from the account's highest stage -- correct in the
+    // app, where hunterStats carries it. A fixture decoded from a SHARE CODE has no stage at all,
+    // so the target fell back to bossTargetFor(0) = the stage-100 boss for every build.
+    //
+    // Measured on borge@72, whose note says "boss kill stage 300": with target 100 BOTH builds sit
+    // in the kill-achieved tier, where ranking is kill RATE -- so a build killing the easy 200 boss
+    // at 99.9% outscored the import killing the hard 300 boss at 15.8%, and the gate PASSED a build
+    // that had lost 90% of its loot and 44 stages. That is exactly the failure the boss target was
+    // introduced to prevent ("a build for a fight there is no reason to take").
+    //
+    // The fixtures state it in their own notes ("boss kill stage 300"), so it is now explicit data.
+    // A boss-mode fixture WITHOUT one is a defect, not a default: silently aiming at stage 100
+    // would resume grading every boss build against a boss it cleared long ago.
+    const bossModes = ['boss', 'bossTimeless'];
+    let scoreCtx;
+    if (bossModes.includes(fixture.mode)) {
+      if (!Number.isFinite(fixture.bossStage)) {
+        throw new Error(`fixture ${fixture.uid} is mode "${fixture.mode}" but declares no bossStage; `
+          + 'without it the objective aims at the stage-100 boss and grades the build against a '
+          + 'fight it already won');
+      }
+      scoreCtx = { bossTarget: fixture.bossStage };
+    }
+    const scorer = await H.makeScorer(cfg, fixture.mode, scoreCtx);
     const result = await H.Optimizer.optimize(cfg, { mode: fixture.mode, scorer });
     const optimized = await H.evaluateAllocation(cfg, result.best.talentAlloc, result.best.attrAlloc);
 
@@ -104,8 +140,8 @@ parentPort.on('message', async (fixture) => {
       // on one of them -- and the loot branch would FAIL a boss build for shedding loot, which is
       // exactly what it is built to do. Carrying the objective score makes each mode gradeable on
       // the question it was optimised for.
-      importObjective: objectiveOf(fixture.mode, imported),
-      optimizedObjective: objectiveOf(fixture.mode, optimized),
+      importObjective: objectiveOf(fixture.mode, imported, scoreCtx),
+      optimizedObjective: objectiveOf(fixture.mode, optimized, scoreCtx),
       importKillRate: imported.bossKillRate,
       optimizedKillRate: optimized.bossKillRate,
       lootDeltaPct: 100 * (optimized.loot - imported.loot) / imported.loot,

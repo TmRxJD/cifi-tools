@@ -556,6 +556,11 @@
     let tier = 0;                       // index into POLISH_TIERS: how wide the amounts go
     for (let round = 0; round < POLISH_MAX_ROUNDS; round++) {
       if (ctx.shouldCancel()) throw new Cancelled();
+      // The polish is a sequence of full-fidelity neighbourhood sweeps and is the second-largest
+      // consumer after the archive. Checking only before the cross-block pass left it unbounded:
+      // with the archive capped, borge@12 at exhaustive still ran 115s against a 20s cap. Each
+      // round starts from a complete legal build, so stopping between rounds is safe.
+      if (round > 0 && ctx.pastDeadline()) break;
       report(round / POLISH_MAX_ROUNDS);
       const maxAmount = POLISH_TIERS[tier];
       const amounts = Array.from({ length: maxAmount }, (_, i) => maxAmount - i);
@@ -1458,6 +1463,17 @@
     const until = Math.min(evalBudget, spent + perStream);
     while (spent < until) {
       if (ctx.shouldCancel()) throw new Cancelled();
+      // TIME CAP IN THE ARCHIVE STAGE TOO. The first version checked only the refinement loop and
+      // the polish, which left the ARCHIVE unbounded -- and the archive is exactly what the
+      // Exhaustive tier doubles (19200 evaluations). Measured: borge@12 at exhaustive ran 20,125
+      // evaluations under a 45s cap, because nothing in this loop looked at the clock. A cap that
+      // misses the most expensive stage of the most expensive tier is not a cap.
+      //
+      // Breaking here is safe: the archive already holds complete legal builds, and the stages
+      // after this one operate on whatever it contains.
+      // The outer `truncated` flag is set by the refinement/polish checks that follow, so
+      // breaking here needs no flag of its own -- one would be set and never read.
+      if (ctx.pastDeadline()) break;
       report(spent / evalBudget);
       const elites = [...archive.values()];
       if (!elites.length) break;

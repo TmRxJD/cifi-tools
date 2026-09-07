@@ -1,0 +1,180 @@
+[
+  {
+    "hunter": "ozzy",
+    "set": "KNOWN_OZZY_PUSH_BUILDS",
+    "index": 3,
+    "mode": "boss",
+    "note": "4.05k boss kill 100",
+    "uid": "ozzy:KNOWN_OZZY_PUSH_BUILDS#3",
+    "name": "ozzy@34b",
+    "bossStage": 100,
+    "ok": true,
+    "parity": "match",
+    "level": 34,
+    "fixtureLevel": 34,
+    "expectedLootScore": 4050,
+    "parityDeltaPct": 1.5583353090531338,
+    "talentBudget": 34,
+    "attributeBudget": 102,
+    "importLoot": 4113.112580016652,
+    "importStage": 100.2586,
+    "optimizedLoot": 4708.740941579909,
+    "optimizedStage": 100.313,
+    "importObjective": 1000022718.0713809,
+    "optimizedObjective": 1000027518.3649851,
+    "importKillRate": 22.7,
+    "optimizedKillRate": 27.500000000000004,
+    "lootDeltaPct": 14.481207357588202,
+    "stageDeltaPct": 0.0542596844559979,
+    "evals": 13785,
+    "cacheHits": 2831,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 289,
+          "realizable": 180
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 40,
+        "entries": 40,
+        "feasibleCells": 40,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 3.8265591315689456,
+        "killBands": 4,
+        "bestKillReached": 11,
+        "bestMaxStageReached": 101.3,
+        "bossBoundariesCrossed": 1,
+        "bestScoreAtScreenIterations": 1000011016.6029668,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 672,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 361,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 61337,
+          "rejected": 46895,
+          "accepted": 14442,
+          "strandedRepairs": 2110,
+          "nodesCleared": 4045,
+          "structuralResamples": 2730
+        }
+      },
+      "corpusRecombined": {
+        "offered": 86,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 10,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 52,
+        "killing": 10,
+        "bestKillRate": 22.7,
+        "refined": 8,
+        "refinedKillBands": 4
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 1000010116.470227,
+          "finalIterations": 1000,
+          "killRatePct": 10.100000000000001,
+          "maxStageReached": 101.5
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 1000017917.5648156,
+          "finalIterations": 1000,
+          "killRatePct": 17.9,
+          "maxStageReached": 102.3,
+          "gainOverPreviousStagePct": 0.0007801015669894587
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 1000027518.3649851,
+          "finalIterations": 1000,
+          "killRatePct": 27.500000000000004,
+          "maxStageReached": 101.9,
+          "gainOverPreviousStagePct": 0.0009600628149590784
+        }
+      ],
+      "ledgerText": "archive   1000010116 loot/min @1000 iters  kill 10.100000000000001%  maxStage 101.5\nrefined   1000017918 loot/min @1000 iters  kill 17.9%  maxStage 102.3  (+0.00% vs archive)\nreturned  1000027518 loot/min @1000 iters  kill 27.500000000000004%  maxStage 101.9  (+0.00% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 715
+    },
+    "seconds": 715.987,
+    "optimizedTalents": {
+      "revival": 2,
+      "boon": 1,
+      "ua": 0,
+      "needles": 10,
+      "omen": 10,
+      "ll": 0,
+      "crip": 10,
+      "echo": 1
+    },
+    "optimizedAttributes": {
+      "lotl": 5,
+      "exo": 47,
+      "scorp": 5,
+      "timeless": 0,
+      "ibu": 5,
+      "exterm": 5,
+      "snek": 5,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 0,
+      "dance": 0,
+      "sisters": 0,
+      "scarab": 0,
+      "cat": 0
+    },
+    "importTalents": {
+      "revival": 2,
+      "boon": 1,
+      "ua": 0,
+      "needles": 10,
+      "omen": 10,
+      "ll": 0,
+      "crip": 10,
+      "echo": 1,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "lotl": 1,
+      "exo": 51,
+      "scorp": 5,
+      "timeless": 0,
+      "ibu": 5,
+      "exterm": 5,
+      "snek": 5,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 0,
+      "dance": 0,
+      "sisters": 0,
+      "scarab": 0,
+      "cat": 0
+    }
+  }
+]

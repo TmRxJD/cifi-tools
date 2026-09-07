@@ -1,0 +1,7238 @@
+[
+  {
+    "hunter": "borge",
+    "set": "KNOWN_BORGE_BUILDS",
+    "index": 1,
+    "mode": "loot",
+    "ok": true,
+    "parity": "match",
+    "level": 13,
+    "fixtureLevel": 13,
+    "expectedLootScore": 119.91,
+    "parityDeltaPct": 0.04582747189158055,
+    "talentBudget": 13,
+    "attributeBudget": 39,
+    "importLoot": 119.96495172154519,
+    "importStage": 51.8914,
+    "optimizedLoot": 162.28300294601578,
+    "optimizedStage": 77.0482,
+    "importObjective": 119.96495172154519,
+    "optimizedObjective": 162.28300294601578,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 35.275345521495716,
+    "stageDeltaPct": 48.47970954724675,
+    "evals": 11933,
+    "cacheHits": 6749,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 335,
+          "realizable": 118
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 57,
+        "entries": 57,
+        "feasibleCells": 57,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9504,
+        "idleVariations": 96,
+        "bestViolation": 100,
+        "killBands": 1,
+        "bestKillReached": 0,
+        "bestMaxStageReached": 91.3,
+        "bossBoundariesCrossed": 0,
+        "bestScoreAtScreenIterations": 158.28904078193185,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": null,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 353,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 57210,
+          "rejected": 41936,
+          "accepted": 15274,
+          "strandedRepairs": 2341,
+          "nodesCleared": 2798,
+          "structuralResamples": 3328
+        }
+      },
+      "corpusRecombined": {
+        "offered": 128,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 69,
+        "killing": 0,
+        "bestKillRate": 0,
+        "refined": 8,
+        "refinedKillBands": 1
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 157.5028974639678,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 80.4
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 162.28300294601578,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 80.7,
+          "gainOverPreviousStagePct": 3.0349317752338743
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 162.28300294601578,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 80.7,
+          "gainOverPreviousStagePct": 0
+        }
+      ],
+      "ledgerText": "archive   158 loot/min @1000 iters  kill 0%  maxStage 80.4\nrefined   162 loot/min @1000 iters  kill 0%  maxStage 80.7  (+3.03% vs archive)\nreturned  162 loot/min @1000 iters  kill 0%  maxStage 80.7  (+0.00% vs refined)",
+      "truncated": false,
+      "elapsedSeconds": 285
+    },
+    "seconds": 285.395,
+    "optimizedTalents": {
+      "revival": 2,
+      "loth": 1,
+      "ua": 0,
+      "impeccable": 10,
+      "omen": 0,
+      "ll": 0,
+      "pog": 0,
+      "tfow": 0
+    },
+    "optimizedAttributes": {
+      "ares": 1,
+      "ylith": 1,
+      "spartan": 1,
+      "timeless": 5,
+      "baal": 0,
+      "sensors": 0,
+      "htb": 1,
+      "lfin": 9,
+      "exp": 0,
+      "atlas": 0,
+      "weak": 0,
+      "battle": 0,
+      "mino": 0,
+      "hermes": 0,
+      "athena": 0
+    },
+    "importTalents": {
+      "revival": 1,
+      "loth": 0,
+      "ua": 0,
+      "impeccable": 2,
+      "omen": 0,
+      "ll": 10,
+      "pog": 0,
+      "tfow": 0,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "ares": 1,
+      "ylith": 1,
+      "spartan": 1,
+      "timeless": 5,
+      "baal": 1,
+      "sensors": 6,
+      "htb": 1,
+      "lfin": 0,
+      "exp": 1,
+      "atlas": 0,
+      "weak": 0,
+      "battle": 0,
+      "athena": 0,
+      "mino": 0,
+      "hermes": 0
+    }
+  },
+  {
+    "hunter": "borge",
+    "set": "KNOWN_BORGE_BUILDS",
+    "index": 6,
+    "mode": "loot",
+    "note": "POG build, higher loot at this level",
+    "ok": true,
+    "parity": "match",
+    "level": 16,
+    "fixtureLevel": 16,
+    "expectedLootScore": 276.46,
+    "parityDeltaPct": -0.12857160972115436,
+    "talentBudget": 16,
+    "attributeBudget": 48,
+    "importLoot": 276.1045509277649,
+    "importStage": 81.7565,
+    "optimizedLoot": 276.20727890723833,
+    "optimizedStage": 81.6409,
+    "importObjective": 276.1045509277649,
+    "optimizedObjective": 276.20727890723833,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0.037206188426909606,
+    "stageDeltaPct": -0.1413954853742523,
+    "evals": 12210,
+    "cacheHits": 7485,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 361,
+          "realizable": 118
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 68,
+        "entries": 68,
+        "feasibleCells": 68,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 99.90965840210194,
+        "killBands": 1,
+        "bestKillReached": 0,
+        "bestMaxStageReached": 100,
+        "bossBoundariesCrossed": 1,
+        "bestScoreAtScreenIterations": 252.82497505316027,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": null,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 398,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 55552,
+          "rejected": 40237,
+          "accepted": 15315,
+          "strandedRepairs": 2085,
+          "nodesCleared": 2549,
+          "structuralResamples": 3298
+        }
+      },
+      "corpusRecombined": {
+        "offered": 128,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 75,
+        "killing": 0,
+        "bestKillRate": 0,
+        "refined": 8,
+        "refinedKillBands": 1
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 254.22292474295998,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 91
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 276.1045509277649,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 86.8,
+          "gainOverPreviousStagePct": 8.607259241836275
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 276.20727890723833,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 86.9,
+          "gainOverPreviousStagePct": 0.037206188426909606
+        }
+      ],
+      "ledgerText": "archive   254 loot/min @1000 iters  kill 0%  maxStage 91\nrefined   276 loot/min @1000 iters  kill 0%  maxStage 86.8  (+8.61% vs archive)\nreturned  276 loot/min @1000 iters  kill 0%  maxStage 86.9  (+0.04% vs refined)",
+      "truncated": false,
+      "elapsedSeconds": 289
+    },
+    "seconds": 289.642,
+    "optimizedTalents": {
+      "revival": 1,
+      "loth": 0,
+      "ua": 0,
+      "impeccable": 0,
+      "omen": 0,
+      "ll": 0,
+      "pog": 15,
+      "tfow": 0
+    },
+    "optimizedAttributes": {
+      "ares": 2,
+      "ylith": 1,
+      "spartan": 4,
+      "timeless": 5,
+      "baal": 0,
+      "sensors": 0,
+      "htb": 1,
+      "lfin": 10,
+      "exp": 0,
+      "atlas": 0,
+      "weak": 0,
+      "battle": 0,
+      "mino": 0,
+      "hermes": 0,
+      "athena": 0
+    },
+    "importTalents": {
+      "revival": 1,
+      "loth": 0,
+      "ua": 0,
+      "impeccable": 0,
+      "omen": 0,
+      "ll": 0,
+      "pog": 15,
+      "tfow": 0,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "ares": 1,
+      "ylith": 2,
+      "spartan": 4,
+      "timeless": 5,
+      "baal": 0,
+      "sensors": 0,
+      "htb": 1,
+      "lfin": 10,
+      "exp": 0,
+      "atlas": 0,
+      "weak": 0,
+      "battle": 0,
+      "athena": 0,
+      "mino": 0,
+      "hermes": 0
+    }
+  },
+  {
+    "hunter": "borge",
+    "set": "KNOWN_BORGE_BUILDS",
+    "index": 10,
+    "mode": "loot",
+    "ok": true,
+    "parity": "match",
+    "level": 20,
+    "fixtureLevel": 20,
+    "expectedLootScore": 691.41,
+    "parityDeltaPct": -0.11705165613139305,
+    "talentBudget": 20,
+    "attributeBudget": 60,
+    "importLoot": 690.6006931443419,
+    "importStage": 99.35119999999999,
+    "optimizedLoot": 690.7274168617514,
+    "optimizedStage": 99.1879,
+    "importObjective": 690.6006931443419,
+    "optimizedObjective": 690.7274168617514,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0.018349781381267447,
+    "stageDeltaPct": -0.1643664092632927,
+    "evals": 14394,
+    "cacheHits": 7788,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 361,
+          "realizable": 118
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 65,
+        "entries": 65,
+        "feasibleCells": 65,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9504,
+        "idleVariations": 96,
+        "bestViolation": 75.88967750188151,
+        "killBands": 1,
+        "bestKillReached": 0,
+        "bestMaxStageReached": 100,
+        "bossBoundariesCrossed": 1,
+        "bestScoreAtScreenIterations": 660.7922286812918,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": null,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 413,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 54572,
+          "rejected": 38975,
+          "accepted": 15597,
+          "strandedRepairs": 1929,
+          "nodesCleared": 2362,
+          "structuralResamples": 3428
+        }
+      },
+      "corpusRecombined": {
+        "offered": 106,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 11,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 77,
+        "killing": 0,
+        "bestKillRate": 0,
+        "refined": 8,
+        "refinedKillBands": 1
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 657.6658009857621,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 690.7274168617514,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100,
+          "gainOverPreviousStagePct": 5.027114961190613
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 690.7274168617514,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100,
+          "gainOverPreviousStagePct": 0
+        }
+      ],
+      "ledgerText": "archive   658 loot/min @1000 iters  kill 0%  maxStage 100\nrefined   691 loot/min @1000 iters  kill 0%  maxStage 100  (+5.03% vs archive)\nreturned  691 loot/min @1000 iters  kill 0%  maxStage 100  (+0.00% vs refined)",
+      "truncated": false,
+      "elapsedSeconds": 352
+    },
+    "seconds": 352.439,
+    "optimizedTalents": {
+      "revival": 1,
+      "loth": 0,
+      "ua": 0,
+      "impeccable": 0,
+      "omen": 0,
+      "ll": 4,
+      "pog": 15,
+      "tfow": 0
+    },
+    "optimizedAttributes": {
+      "ares": 1,
+      "ylith": 1,
+      "spartan": 6,
+      "timeless": 5,
+      "baal": 0,
+      "sensors": 0,
+      "htb": 4,
+      "lfin": 10,
+      "exp": 1,
+      "atlas": 0,
+      "weak": 0,
+      "battle": 0,
+      "mino": 0,
+      "hermes": 0,
+      "athena": 0
+    },
+    "importTalents": {
+      "revival": 1,
+      "loth": 0,
+      "ua": 0,
+      "impeccable": 0,
+      "omen": 0,
+      "ll": 4,
+      "pog": 15,
+      "tfow": 0,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "ares": 2,
+      "ylith": 1,
+      "spartan": 6,
+      "timeless": 5,
+      "baal": 0,
+      "sensors": 0,
+      "htb": 5,
+      "lfin": 10,
+      "exp": 0,
+      "atlas": 0,
+      "weak": 0,
+      "battle": 0,
+      "athena": 0,
+      "mino": 0,
+      "hermes": 0
+    }
+  },
+  {
+    "hunter": "borge",
+    "set": "KNOWN_BORGE_BUILDS",
+    "index": 13,
+    "mode": "loot",
+    "note": "1.03k",
+    "ok": true,
+    "parity": "match",
+    "level": 23,
+    "fixtureLevel": 23,
+    "expectedLootScore": 1030,
+    "parityDeltaPct": -0.09787443369691352,
+    "talentBudget": 23,
+    "attributeBudget": 69,
+    "importLoot": 1028.9918933329218,
+    "importStage": 98.3955,
+    "optimizedLoot": 1030.2791427072443,
+    "optimizedStage": 99.69109999999999,
+    "importObjective": 1028.9918933329218,
+    "optimizedObjective": 1030.2791427072443,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0.12509810647323039,
+    "stageDeltaPct": 1.3167268828350822,
+    "evals": 17482,
+    "cacheHits": 8212,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 361,
+          "realizable": 118
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 58,
+        "entries": 58,
+        "feasibleCells": 58,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 71.04053256118993,
+        "killBands": 1,
+        "bestKillReached": 0,
+        "bestMaxStageReached": 100,
+        "bossBoundariesCrossed": 1,
+        "bestScoreAtScreenIterations": 924.4652273584601,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": null,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 1453,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 54593,
+          "rejected": 39219,
+          "accepted": 15374,
+          "strandedRepairs": 2269,
+          "nodesCleared": 2875,
+          "structuralResamples": 3328
+        }
+      },
+      "corpusRecombined": {
+        "offered": 130,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 76,
+        "killing": 0,
+        "bestKillRate": 0,
+        "refined": 8,
+        "refinedKillBands": 1
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 916.6866900344687,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 1030.2791427072443,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100,
+          "gainOverPreviousStagePct": 12.391633249142558
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 1030.2791427072443,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100,
+          "gainOverPreviousStagePct": 0
+        }
+      ],
+      "ledgerText": "archive   917 loot/min @1000 iters  kill 0%  maxStage 100\nrefined   1030 loot/min @1000 iters  kill 0%  maxStage 100  (+12.39% vs archive)\nreturned  1030 loot/min @1000 iters  kill 0%  maxStage 100  (+0.00% vs refined)",
+      "truncated": false,
+      "elapsedSeconds": 324
+    },
+    "seconds": 324.027,
+    "optimizedTalents": {
+      "revival": 1,
+      "loth": 0,
+      "ua": 0,
+      "impeccable": 0,
+      "omen": 0,
+      "ll": 7,
+      "pog": 15,
+      "tfow": 0
+    },
+    "optimizedAttributes": {
+      "ares": 1,
+      "ylith": 2,
+      "spartan": 1,
+      "timeless": 5,
+      "baal": 1,
+      "sensors": 1,
+      "htb": 3,
+      "lfin": 10,
+      "exp": 6,
+      "atlas": 0,
+      "weak": 0,
+      "battle": 0,
+      "mino": 0,
+      "hermes": 0,
+      "athena": 0
+    },
+    "importTalents": {
+      "revival": 0,
+      "loth": 0,
+      "ua": 0,
+      "impeccable": 0,
+      "omen": 0,
+      "ll": 8,
+      "pog": 15,
+      "tfow": 0,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "ares": 2,
+      "ylith": 1,
+      "spartan": 1,
+      "timeless": 5,
+      "baal": 1,
+      "sensors": 3,
+      "htb": 1,
+      "lfin": 10,
+      "exp": 6,
+      "atlas": 0,
+      "weak": 0,
+      "battle": 0,
+      "athena": 0,
+      "mino": 0,
+      "hermes": 0
+    }
+  },
+  {
+    "hunter": "borge",
+    "set": "KNOWN_BORGE_BUILDS",
+    "index": 19,
+    "mode": "loot",
+    "note": "21.89k",
+    "ok": true,
+    "parity": "match",
+    "level": 33,
+    "fixtureLevel": 33,
+    "expectedLootScore": 21890,
+    "parityDeltaPct": 0.09153352059837042,
+    "talentBudget": 33,
+    "attributeBudget": 99,
+    "importLoot": 21910.036687658983,
+    "importStage": 102.23089999999999,
+    "optimizedLoot": 22015.744139075035,
+    "optimizedStage": 101.9624,
+    "importObjective": 21910.036687658983,
+    "optimizedObjective": 22015.744139075035,
+    "importKillRate": 99.7,
+    "optimizedKillRate": 99.3,
+    "lootDeltaPct": 0.48246131635002165,
+    "stageDeltaPct": -0.2626407475626145,
+    "evals": 22564,
+    "cacheHits": 15811,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 361,
+          "realizable": 281
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 266,
+        "entries": 266,
+        "feasibleCells": 266,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 56.741153266653185,
+        "killBands": 14,
+        "bestKillReached": 99,
+        "bestMaxStageReached": 134.1,
+        "bossBoundariesCrossed": 1,
+        "bestScoreAtScreenIterations": 21129.94536978062,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 0,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 285,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 42812,
+          "rejected": 26488,
+          "accepted": 16324,
+          "strandedRepairs": 2021,
+          "nodesCleared": 3627,
+          "structuralResamples": 3159
+        }
+      },
+      "corpusRecombined": {
+        "offered": 132,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 287,
+        "killing": 274,
+        "bestKillRate": 99.9,
+        "refined": 8,
+        "refinedKillBands": 8
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 20786.265832433037,
+          "finalIterations": 1000,
+          "killRatePct": 97.1,
+          "maxStageReached": 103.4
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 22003.586899717462,
+          "finalIterations": 1000,
+          "killRatePct": 98.8,
+          "maxStageReached": 103.7,
+          "gainOverPreviousStagePct": 5.856372073261114
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 22015.744139075035,
+          "finalIterations": 1000,
+          "killRatePct": 99.3,
+          "maxStageReached": 104,
+          "gainOverPreviousStagePct": 0.05525117069767167
+        }
+      ],
+      "ledgerText": "archive   20786 loot/min @1000 iters  kill 97.1%  maxStage 103.4\nrefined   22004 loot/min @1000 iters  kill 98.8%  maxStage 103.7  (+5.86% vs archive)\nreturned  22016 loot/min @1000 iters  kill 99.3%  maxStage 104  (+0.06% vs refined)",
+      "truncated": false,
+      "elapsedSeconds": 516
+    },
+    "seconds": 516.355,
+    "optimizedTalents": {
+      "revival": 2,
+      "loth": 1,
+      "ua": 0,
+      "impeccable": 10,
+      "omen": 5,
+      "ll": 0,
+      "pog": 15,
+      "tfow": 0
+    },
+    "optimizedAttributes": {
+      "ares": 12,
+      "ylith": 2,
+      "spartan": 1,
+      "timeless": 5,
+      "baal": 2,
+      "sensors": 1,
+      "htb": 10,
+      "lfin": 1,
+      "exp": 6,
+      "atlas": 6,
+      "weak": 1,
+      "battle": 0,
+      "mino": 0,
+      "hermes": 0,
+      "athena": 0
+    },
+    "importTalents": {
+      "revival": 1,
+      "loth": 2,
+      "ua": 0,
+      "impeccable": 10,
+      "omen": 5,
+      "ll": 0,
+      "pog": 15,
+      "tfow": 0,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "ares": 8,
+      "ylith": 2,
+      "spartan": 1,
+      "timeless": 5,
+      "baal": 4,
+      "sensors": 1,
+      "htb": 10,
+      "lfin": 0,
+      "exp": 6,
+      "atlas": 6,
+      "weak": 1,
+      "battle": 0,
+      "athena": 0,
+      "mino": 0,
+      "hermes": 0
+    }
+  },
+  {
+    "hunter": "borge",
+    "set": "KNOWN_BORGE_BUILDS",
+    "index": 27,
+    "mode": "loot",
+    "note": "163.40k R4-11",
+    "ok": true,
+    "parity": "match",
+    "level": 41,
+    "fixtureLevel": 41,
+    "expectedLootScore": 163400,
+    "parityDeltaPct": 0.2565693042460901,
+    "talentBudget": 41,
+    "attributeBudget": 123,
+    "importLoot": 163819.2342431381,
+    "importStage": 181.4488,
+    "optimizedLoot": 163819.2342431381,
+    "optimizedStage": 181.4488,
+    "importObjective": 163819.2342431381,
+    "optimizedObjective": 163819.2342431381,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0,
+    "stageDeltaPct": 0,
+    "evals": 18779,
+    "cacheHits": 4938,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 361,
+          "realizable": 308
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 748,
+        "entries": 748,
+        "feasibleCells": 748,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 7.946578662552109,
+        "killBands": 14,
+        "bestKillReached": 99,
+        "bestMaxStageReached": 180,
+        "bossBoundariesCrossed": 1,
+        "bestScoreAtScreenIterations": 108561.21302396333,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 0,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 316,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 46811,
+          "rejected": 30821,
+          "accepted": 15990,
+          "strandedRepairs": 1432,
+          "nodesCleared": 1951,
+          "structuralResamples": 3322
+        }
+      },
+      "corpusRecombined": {
+        "offered": 128,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 758,
+        "killing": 659,
+        "bestKillRate": 99.9,
+        "refined": 8,
+        "refinedKillBands": 8
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 108487.46274094911,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 176.8
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 162303.31965817368,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 185.5,
+          "gainOverPreviousStagePct": 49.6056000919925
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 163819.2342431381,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 188.7,
+          "gainOverPreviousStagePct": 0.9340009730898219
+        }
+      ],
+      "ledgerText": "archive   108487 loot/min @1000 iters  kill 0%  maxStage 176.8\nrefined   162303 loot/min @1000 iters  kill 0%  maxStage 185.5  (+49.61% vs archive)\nreturned  163819 loot/min @1000 iters  kill 0%  maxStage 188.7  (+0.93% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 950
+    },
+    "seconds": 950.523,
+    "optimizedTalents": {
+      "revival": 2,
+      "loth": 5,
+      "ua": 0,
+      "impeccable": 10,
+      "omen": 0,
+      "ll": 9,
+      "pog": 15,
+      "tfow": 0
+    },
+    "optimizedAttributes": {
+      "ares": 1,
+      "ylith": 1,
+      "spartan": 6,
+      "timeless": 5,
+      "baal": 6,
+      "sensors": 6,
+      "htb": 2,
+      "lfin": 10,
+      "exp": 6,
+      "atlas": 0,
+      "weak": 6,
+      "battle": 2,
+      "mino": 0,
+      "hermes": 0,
+      "athena": 0
+    },
+    "importTalents": {
+      "revival": 2,
+      "loth": 5,
+      "ua": 0,
+      "impeccable": 10,
+      "omen": 0,
+      "ll": 9,
+      "pog": 15,
+      "tfow": 0,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "ares": 1,
+      "ylith": 1,
+      "spartan": 6,
+      "timeless": 5,
+      "baal": 6,
+      "sensors": 6,
+      "htb": 2,
+      "lfin": 10,
+      "exp": 6,
+      "atlas": 0,
+      "weak": 6,
+      "battle": 2,
+      "athena": 0,
+      "mino": 0,
+      "hermes": 0
+    }
+  },
+  {
+    "hunter": "borge",
+    "set": "KNOWN_BORGE_BUILDS",
+    "index": 32,
+    "mode": "loot",
+    "note": "489.52k",
+    "ok": true,
+    "parity": "match",
+    "level": 45,
+    "fixtureLevel": 45,
+    "expectedLootScore": 489520,
+    "parityDeltaPct": 0.07858512834606615,
+    "talentBudget": 45,
+    "attributeBudget": 135,
+    "importLoot": 489904.68992027966,
+    "importStage": 199.3569,
+    "optimizedLoot": 490365.5188037051,
+    "optimizedStage": 199.67170000000002,
+    "importObjective": 489904.68992027966,
+    "optimizedObjective": 490365.5188037051,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0.09406500752226682,
+    "stageDeltaPct": 0.1579077523777805,
+    "evals": 17809,
+    "cacheHits": 3974,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 361,
+          "realizable": 308
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 246,
+        "entries": 246,
+        "feasibleCells": 246,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 71.12378106036488,
+        "killBands": 14,
+        "bestKillReached": 99,
+        "bestMaxStageReached": 200,
+        "bossBoundariesCrossed": 2,
+        "bestScoreAtScreenIterations": 446825.8155240152,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 144,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 362,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 50215,
+          "rejected": 34480,
+          "accepted": 15735,
+          "strandedRepairs": 1796,
+          "nodesCleared": 2417,
+          "structuralResamples": 3389
+        }
+      },
+      "corpusRecombined": {
+        "offered": 124,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 258,
+        "killing": 125,
+        "bestKillRate": 99.9,
+        "refined": 8,
+        "refinedKillBands": 8
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 446192.0408354737,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 200
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 486300.3290799588,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 200,
+          "gainOverPreviousStagePct": 8.989019205583364
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 490365.5188037051,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 200,
+          "gainOverPreviousStagePct": 0.8359422111511502
+        }
+      ],
+      "ledgerText": "archive   446192 loot/min @1000 iters  kill 0%  maxStage 200\nrefined   486300 loot/min @1000 iters  kill 0%  maxStage 200  (+8.99% vs archive)\nreturned  490366 loot/min @1000 iters  kill 0%  maxStage 200  (+0.84% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 791
+    },
+    "seconds": 792.379,
+    "optimizedTalents": {
+      "revival": 2,
+      "loth": 5,
+      "ua": 1,
+      "impeccable": 10,
+      "omen": 1,
+      "ll": 10,
+      "pog": 15,
+      "tfow": 1
+    },
+    "optimizedAttributes": {
+      "ares": 1,
+      "ylith": 1,
+      "spartan": 6,
+      "timeless": 5,
+      "baal": 3,
+      "sensors": 6,
+      "htb": 10,
+      "lfin": 10,
+      "exp": 6,
+      "atlas": 0,
+      "weak": 6,
+      "battle": 3,
+      "mino": 0,
+      "hermes": 0,
+      "athena": 0
+    },
+    "importTalents": {
+      "revival": 2,
+      "loth": 5,
+      "ua": 0,
+      "impeccable": 10,
+      "omen": 0,
+      "ll": 10,
+      "pog": 15,
+      "tfow": 3,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "ares": 1,
+      "ylith": 1,
+      "spartan": 6,
+      "timeless": 5,
+      "baal": 3,
+      "sensors": 6,
+      "htb": 10,
+      "lfin": 10,
+      "exp": 6,
+      "atlas": 0,
+      "weak": 6,
+      "battle": 3,
+      "athena": 0,
+      "mino": 0,
+      "hermes": 0
+    }
+  },
+  {
+    "hunter": "borge",
+    "set": "KNOWN_BORGE_BUILDS",
+    "index": 40,
+    "mode": "loot",
+    "note": "1.67m Wrench 60, R16-13, R4-17, I60-4 (pre boss/AttGN2)",
+    "ok": true,
+    "parity": "match",
+    "level": 49,
+    "fixtureLevel": 49,
+    "expectedLootScore": 1670000,
+    "parityDeltaPct": 0.39205504835096694,
+    "talentBudget": 49,
+    "attributeBudget": 147,
+    "importLoot": 1676547.3193074611,
+    "importStage": 199.9244,
+    "optimizedLoot": 1676547.3193074611,
+    "optimizedStage": 199.9244,
+    "importObjective": 1676547.3193074611,
+    "optimizedObjective": 1676547.3193074611,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0,
+    "stageDeltaPct": 0,
+    "evals": 23681,
+    "cacheHits": 12023,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 361,
+          "realizable": 308
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 92,
+        "entries": 92,
+        "feasibleCells": 92,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 61.00487921459895,
+        "killBands": 1,
+        "bestKillReached": 0,
+        "bestMaxStageReached": 200,
+        "bossBoundariesCrossed": 2,
+        "bestScoreAtScreenIterations": 1626360.398040366,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": null,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 1416,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 46758,
+          "rejected": 30623,
+          "accepted": 16135,
+          "strandedRepairs": 2129,
+          "nodesCleared": 3011,
+          "structuralResamples": 3390
+        }
+      },
+      "corpusRecombined": {
+        "offered": 120,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 108,
+        "killing": 0,
+        "bestKillRate": 0,
+        "refined": 8,
+        "refinedKillBands": 1
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 1630709.4822356524,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 200
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 1676547.3193074611,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 200,
+          "gainOverPreviousStagePct": 2.810913750802902
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 1676547.3193074611,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 200,
+          "gainOverPreviousStagePct": 0
+        }
+      ],
+      "ledgerText": "archive   1630709 loot/min @1000 iters  kill 0%  maxStage 200\nrefined   1676547 loot/min @1000 iters  kill 0%  maxStage 200  (+2.81% vs archive)\nreturned  1676547 loot/min @1000 iters  kill 0%  maxStage 200  (+0.00% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 714
+    },
+    "seconds": 714.187,
+    "optimizedTalents": {
+      "revival": 2,
+      "loth": 0,
+      "ua": 0,
+      "impeccable": 7,
+      "omen": 0,
+      "ll": 10,
+      "pog": 15,
+      "tfow": 15
+    },
+    "optimizedAttributes": {
+      "ares": 51,
+      "ylith": 1,
+      "spartan": 1,
+      "timeless": 5,
+      "baal": 1,
+      "sensors": 6,
+      "htb": 10,
+      "lfin": 5,
+      "exp": 6,
+      "atlas": 0,
+      "weak": 0,
+      "battle": 3,
+      "mino": 0,
+      "hermes": 0,
+      "athena": 0
+    },
+    "importTalents": {
+      "revival": 2,
+      "loth": 0,
+      "ua": 0,
+      "impeccable": 7,
+      "omen": 0,
+      "ll": 10,
+      "pog": 15,
+      "tfow": 15,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "ares": 51,
+      "ylith": 1,
+      "spartan": 1,
+      "timeless": 5,
+      "baal": 1,
+      "sensors": 6,
+      "htb": 10,
+      "lfin": 5,
+      "exp": 6,
+      "atlas": 0,
+      "weak": 0,
+      "battle": 3,
+      "athena": 0,
+      "mino": 0,
+      "hermes": 0
+    }
+  },
+  {
+    "hunter": "borge",
+    "set": "KNOWN_BORGE_BUILDS",
+    "index": 44,
+    "mode": "loot",
+    "note": "21.48m Wrench 70",
+    "ok": true,
+    "parity": "match",
+    "level": 54,
+    "fixtureLevel": 54,
+    "expectedLootScore": 21480000,
+    "parityDeltaPct": 0.13610408235793964,
+    "talentBudget": 54,
+    "attributeBudget": 162,
+    "importLoot": 21509235.156890485,
+    "importStage": 204.0722,
+    "optimizedLoot": 21626684.737388834,
+    "optimizedStage": 202.8878,
+    "importObjective": 21509235.156890485,
+    "optimizedObjective": 21626684.737388834,
+    "importKillRate": 0,
+    "optimizedKillRate": 99.2,
+    "lootDeltaPct": 0.5460425702804403,
+    "stageDeltaPct": -0.5803828252941904,
+    "evals": 18092,
+    "cacheHits": 18102,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 361,
+          "realizable": 410
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 168,
+        "entries": 168,
+        "feasibleCells": 168,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 58.691283872659724,
+        "killBands": 14,
+        "bestKillReached": 99,
+        "bestMaxStageReached": 216.4,
+        "bossBoundariesCrossed": 2,
+        "bestScoreAtScreenIterations": 21304937.180837203,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 1056,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 351,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 43917,
+          "rejected": 27986,
+          "accepted": 15931,
+          "strandedRepairs": 2249,
+          "nodesCleared": 4194,
+          "structuralResamples": 2943
+        }
+      },
+      "corpusRecombined": {
+        "offered": 88,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 10,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 185,
+        "killing": 123,
+        "bestKillRate": 99.8,
+        "refined": 8,
+        "refinedKillBands": 8
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 20991269.344098177,
+          "finalIterations": 1000,
+          "killRatePct": 98.3,
+          "maxStageReached": 207.2
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 21626684.737388834,
+          "finalIterations": 1000,
+          "killRatePct": 99.2,
+          "maxStageReached": 206.8,
+          "gainOverPreviousStagePct": 3.027046067937328
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 21626684.737388834,
+          "finalIterations": 1000,
+          "killRatePct": 99.2,
+          "maxStageReached": 206.8,
+          "gainOverPreviousStagePct": 0
+        }
+      ],
+      "ledgerText": "archive   20991269 loot/min @1000 iters  kill 98.3%  maxStage 207.2\nrefined   21626685 loot/min @1000 iters  kill 99.2%  maxStage 206.8  (+3.03% vs archive)\nreturned  21626685 loot/min @1000 iters  kill 99.2%  maxStage 206.8  (+0.00% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 608
+    },
+    "seconds": 608.279,
+    "optimizedTalents": {
+      "revival": 2,
+      "loth": 5,
+      "ua": 0,
+      "impeccable": 10,
+      "omen": 0,
+      "ll": 7,
+      "pog": 15,
+      "tfow": 15
+    },
+    "optimizedAttributes": {
+      "ares": 24,
+      "ylith": 2,
+      "spartan": 5,
+      "timeless": 5,
+      "baal": 2,
+      "sensors": 6,
+      "htb": 10,
+      "lfin": 0,
+      "exp": 6,
+      "atlas": 6,
+      "weak": 5,
+      "battle": 3,
+      "mino": 6,
+      "hermes": 0,
+      "athena": 0
+    },
+    "importTalents": {
+      "revival": 2,
+      "loth": 5,
+      "ua": 0,
+      "impeccable": 10,
+      "omen": 0,
+      "ll": 7,
+      "pog": 15,
+      "tfow": 15,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "ares": 14,
+      "ylith": 1,
+      "spartan": 5,
+      "timeless": 5,
+      "baal": 5,
+      "sensors": 6,
+      "htb": 10,
+      "lfin": 0,
+      "exp": 6,
+      "atlas": 6,
+      "weak": 6,
+      "battle": 3,
+      "athena": 0,
+      "mino": 5,
+      "hermes": 1
+    }
+  },
+  {
+    "hunter": "borge",
+    "set": "KNOWN_BORGE_BUILDS",
+    "index": 50,
+    "mode": "loot",
+    "note": "97.57m",
+    "ok": true,
+    "parity": "match",
+    "level": 59,
+    "fixtureLevel": 59,
+    "expectedLootScore": 97570000,
+    "parityDeltaPct": 0.2188117793719214,
+    "talentBudget": 59,
+    "attributeBudget": 177,
+    "importLoot": 97783494.65313318,
+    "importStage": 252.35129999999998,
+    "optimizedLoot": 97783494.65313318,
+    "optimizedStage": 252.35129999999998,
+    "importObjective": 97783494.65313318,
+    "optimizedObjective": 97783494.65313318,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0,
+    "stageDeltaPct": 0,
+    "evals": 16603,
+    "cacheHits": 3387,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 361,
+          "realizable": 410
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 589,
+        "entries": 589,
+        "feasibleCells": 589,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 43.56800016895003,
+        "killBands": 14,
+        "bestKillReached": 99,
+        "bestMaxStageReached": 256.4,
+        "bossBoundariesCrossed": 2,
+        "bestScoreAtScreenIterations": 78273159.83226512,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 0,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 942,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 40963,
+          "rejected": 24597,
+          "accepted": 16366,
+          "strandedRepairs": 2013,
+          "nodesCleared": 3829,
+          "structuralResamples": 2996
+        }
+      },
+      "corpusRecombined": {
+        "offered": 130,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 598,
+        "killing": 545,
+        "bestKillRate": 99.9,
+        "refined": 8,
+        "refinedKillBands": 8
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 77152915.91667524,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 257.8
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 97708746.32953541,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 260.6,
+          "gainOverPreviousStagePct": 26.642972813963844
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 97783494.65313318,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 260.7,
+          "gainOverPreviousStagePct": 0.07650115921626453
+        }
+      ],
+      "ledgerText": "archive   77152916 loot/min @1000 iters  kill 0%  maxStage 257.8\nrefined   97708746 loot/min @1000 iters  kill 0%  maxStage 260.6  (+26.64% vs archive)\nreturned  97783495 loot/min @1000 iters  kill 0%  maxStage 260.7  (+0.08% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 897
+    },
+    "seconds": 898.172,
+    "optimizedTalents": {
+      "revival": 2,
+      "loth": 5,
+      "ua": 0,
+      "impeccable": 10,
+      "omen": 0,
+      "ll": 12,
+      "pog": 15,
+      "tfow": 15
+    },
+    "optimizedAttributes": {
+      "ares": 23,
+      "ylith": 1,
+      "spartan": 6,
+      "timeless": 5,
+      "baal": 6,
+      "sensors": 6,
+      "htb": 1,
+      "lfin": 10,
+      "exp": 6,
+      "atlas": 1,
+      "weak": 6,
+      "battle": 3,
+      "mino": 13,
+      "hermes": 0,
+      "athena": 0
+    },
+    "importTalents": {
+      "revival": 2,
+      "loth": 5,
+      "ua": 0,
+      "impeccable": 10,
+      "omen": 0,
+      "ll": 12,
+      "pog": 15,
+      "tfow": 15,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "ares": 23,
+      "ylith": 1,
+      "spartan": 6,
+      "timeless": 5,
+      "baal": 6,
+      "sensors": 6,
+      "htb": 1,
+      "lfin": 10,
+      "exp": 6,
+      "atlas": 1,
+      "weak": 6,
+      "battle": 3,
+      "athena": 0,
+      "mino": 13,
+      "hermes": 0
+    }
+  },
+  {
+    "hunter": "borge",
+    "set": "KNOWN_BORGE_BUILDS",
+    "index": 56,
+    "mode": "loot",
+    "note": "1.26b",
+    "ok": true,
+    "parity": "match",
+    "level": 65,
+    "fixtureLevel": 65,
+    "expectedLootScore": 1260000000,
+    "parityDeltaPct": -0.2580361016063842,
+    "talentBudget": 65,
+    "attributeBudget": 195,
+    "importLoot": 1256748745.1197596,
+    "importStage": 299.744,
+    "optimizedLoot": 1256748745.1197596,
+    "optimizedStage": 299.744,
+    "importObjective": 1256748745.1197596,
+    "optimizedObjective": 1256748745.1197596,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0,
+    "stageDeltaPct": 0,
+    "evals": 15307,
+    "cacheHits": 1325,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 361,
+          "realizable": 587
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 740,
+        "entries": 740,
+        "feasibleCells": 740,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 19.807481187290495,
+        "killBands": 14,
+        "bestKillReached": 99,
+        "bestMaxStageReached": 300,
+        "bossBoundariesCrossed": 3,
+        "bestScoreAtScreenIterations": 753231832.2731302,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 0,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 417,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 43393,
+          "rejected": 27356,
+          "accepted": 16037,
+          "strandedRepairs": 1743,
+          "nodesCleared": 2587,
+          "structuralResamples": 3268
+        }
+      },
+      "corpusRecombined": {
+        "offered": 132,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 750,
+        "killing": 648,
+        "bestKillRate": 99.9,
+        "refined": 8,
+        "refinedKillBands": 8
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 751367801.9434272,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 300
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 869731125.7218436,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 300,
+          "gainOverPreviousStagePct": 15.753047105860457
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 1256748745.1197596,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 300,
+          "gainOverPreviousStagePct": 44.4985361512394
+        }
+      ],
+      "ledgerText": "archive   751367802 loot/min @1000 iters  kill 0%  maxStage 300\nrefined   869731126 loot/min @1000 iters  kill 0%  maxStage 300  (+15.75% vs archive)\nreturned  1256748745 loot/min @1000 iters  kill 0%  maxStage 300  (+44.50% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 945
+    },
+    "seconds": 946.381,
+    "optimizedTalents": {
+      "revival": 2,
+      "loth": 5,
+      "ua": 5,
+      "impeccable": 10,
+      "omen": 1,
+      "ll": 12,
+      "pog": 15,
+      "tfow": 15
+    },
+    "optimizedAttributes": {
+      "ares": 27,
+      "ylith": 1,
+      "spartan": 6,
+      "timeless": 5,
+      "baal": 6,
+      "sensors": 6,
+      "htb": 10,
+      "lfin": 0,
+      "exp": 6,
+      "atlas": 0,
+      "weak": 6,
+      "battle": 3,
+      "mino": 0,
+      "hermes": 15,
+      "athena": 1
+    },
+    "importTalents": {
+      "revival": 2,
+      "loth": 5,
+      "ua": 5,
+      "impeccable": 10,
+      "omen": 1,
+      "ll": 12,
+      "pog": 15,
+      "tfow": 15,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "ares": 27,
+      "ylith": 1,
+      "spartan": 6,
+      "timeless": 5,
+      "baal": 6,
+      "sensors": 6,
+      "htb": 10,
+      "lfin": 0,
+      "exp": 6,
+      "atlas": 0,
+      "weak": 6,
+      "battle": 3,
+      "athena": 1,
+      "mino": 0,
+      "hermes": 15
+    }
+  },
+  {
+    "hunter": "borge",
+    "set": "KNOWN_BORGE_BUILDS",
+    "index": 60,
+    "mode": "loot",
+    "note": "1.53b",
+    "ok": true,
+    "parity": "match",
+    "level": 69,
+    "fixtureLevel": 69,
+    "expectedLootScore": 1530000000,
+    "parityDeltaPct": 0.02062799486002891,
+    "talentBudget": 69,
+    "attributeBudget": 207,
+    "importLoot": 1530315608.3213584,
+    "importStage": 299.6187,
+    "optimizedLoot": 1531362931.0467253,
+    "optimizedStage": 299.8544,
+    "importObjective": 1530315608.3213584,
+    "optimizedObjective": 1531362931.0467253,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0.06843834825129082,
+    "stageDeltaPct": 0.07866665198133777,
+    "evals": 16382,
+    "cacheHits": 1380,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 361,
+          "realizable": 620
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 551,
+        "entries": 551,
+        "feasibleCells": 551,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 20.464179967949637,
+        "killBands": 14,
+        "bestKillReached": 99,
+        "bestMaxStageReached": 300,
+        "bossBoundariesCrossed": 3,
+        "bestScoreAtScreenIterations": 1434858219.5219197,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 0,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 518,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 45014,
+          "rejected": 28864,
+          "accepted": 16150,
+          "strandedRepairs": 1597,
+          "nodesCleared": 2325,
+          "structuralResamples": 3303
+        }
+      },
+      "corpusRecombined": {
+        "offered": 126,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 561,
+        "killing": 460,
+        "bestKillRate": 99.9,
+        "refined": 8,
+        "refinedKillBands": 8
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 1425994728.3263726,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 300
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 1513854790.7164254,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 300,
+          "gainOverPreviousStagePct": 6.161317475077225
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 1531362931.0467253,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 300,
+          "gainOverPreviousStagePct": 1.1565270617543313
+        }
+      ],
+      "ledgerText": "archive   1425994728 loot/min @1000 iters  kill 0%  maxStage 300\nrefined   1513854791 loot/min @1000 iters  kill 0%  maxStage 300  (+6.16% vs archive)\nreturned  1531362931 loot/min @1000 iters  kill 0%  maxStage 300  (+1.16% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 1004
+    },
+    "seconds": 1004.484,
+    "optimizedTalents": {
+      "revival": 2,
+      "loth": 5,
+      "ua": 5,
+      "impeccable": 10,
+      "omen": 5,
+      "ll": 12,
+      "pog": 15,
+      "tfow": 15
+    },
+    "optimizedAttributes": {
+      "ares": 45,
+      "ylith": 1,
+      "spartan": 2,
+      "timeless": 5,
+      "baal": 4,
+      "sensors": 6,
+      "htb": 10,
+      "lfin": 0,
+      "exp": 6,
+      "atlas": 0,
+      "weak": 5,
+      "battle": 3,
+      "mino": 0,
+      "hermes": 20,
+      "athena": 1
+    },
+    "importTalents": {
+      "revival": 2,
+      "loth": 5,
+      "ua": 5,
+      "impeccable": 10,
+      "omen": 5,
+      "ll": 12,
+      "pog": 15,
+      "tfow": 15,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "ares": 47,
+      "ylith": 1,
+      "spartan": 1,
+      "timeless": 5,
+      "baal": 4,
+      "sensors": 6,
+      "htb": 10,
+      "lfin": 0,
+      "exp": 6,
+      "atlas": 0,
+      "weak": 5,
+      "battle": 3,
+      "athena": 1,
+      "mino": 0,
+      "hermes": 20
+    }
+  },
+  {
+    "hunter": "borge",
+    "set": "KNOWN_BORGE_LATE_BUILDS",
+    "index": 3,
+    "mode": "loot",
+    "note": "2.82b pre-boss farm 129 Wrench",
+    "ok": true,
+    "parity": "match",
+    "level": 72,
+    "fixtureLevel": 72,
+    "expectedLootScore": 2820000000,
+    "parityDeltaPct": -0.0058593821330104314,
+    "talentBudget": 72,
+    "attributeBudget": 216,
+    "importLoot": 2819834765.423849,
+    "importStage": 299.807,
+    "optimizedLoot": 2819834765.423849,
+    "optimizedStage": 299.807,
+    "importObjective": 2819834765.423849,
+    "optimizedObjective": 2819834765.423849,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0,
+    "stageDeltaPct": 0,
+    "evals": 18403,
+    "cacheHits": 1114,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 361,
+          "realizable": 605
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 459,
+        "entries": 459,
+        "feasibleCells": 459,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 34.47769239898572,
+        "killBands": 14,
+        "bestKillReached": 99,
+        "bestMaxStageReached": 300,
+        "bossBoundariesCrossed": 3,
+        "bestScoreAtScreenIterations": 2351432707.3799295,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 0,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 341,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 46669,
+          "rejected": 30525,
+          "accepted": 16144,
+          "strandedRepairs": 1500,
+          "nodesCleared": 2183,
+          "structuralResamples": 3317
+        }
+      },
+      "corpusRecombined": {
+        "offered": 126,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 471,
+        "killing": 343,
+        "bestKillRate": 99.9,
+        "refined": 8,
+        "refinedKillBands": 8
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 2348070433.5820775,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 300
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 2774481759.57825,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 300,
+          "gainOverPreviousStagePct": 18.160073901431677
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 2819834765.423849,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 300,
+          "gainOverPreviousStagePct": 1.63464782887934
+        }
+      ],
+      "ledgerText": "archive   2348070434 loot/min @1000 iters  kill 0%  maxStage 300\nrefined   2774481760 loot/min @1000 iters  kill 0%  maxStage 300  (+18.16% vs archive)\nreturned  2819834765 loot/min @1000 iters  kill 0%  maxStage 300  (+1.63% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 888
+    },
+    "seconds": 888.169,
+    "optimizedTalents": {
+      "revival": 1,
+      "loth": 5,
+      "ua": 0,
+      "impeccable": 0,
+      "omen": 0,
+      "ll": 12,
+      "pog": 15,
+      "ultima": 24,
+      "tfow": 15
+    },
+    "optimizedAttributes": {
+      "ares": 52,
+      "ylith": 1,
+      "spartan": 1,
+      "timeless": 5,
+      "baal": 3,
+      "sensors": 6,
+      "htb": 10,
+      "lfin": 0,
+      "exp": 6,
+      "atlas": 1,
+      "weak": 2,
+      "battle": 3,
+      "mino": 5,
+      "hermes": 20,
+      "athena": 1
+    },
+    "importTalents": {
+      "revival": 1,
+      "loth": 5,
+      "ua": 0,
+      "impeccable": 0,
+      "omen": 0,
+      "ll": 12,
+      "pog": 15,
+      "tfow": 15,
+      "ultima": 24
+    },
+    "importAttributes": {
+      "ares": 52,
+      "ylith": 1,
+      "spartan": 1,
+      "timeless": 5,
+      "baal": 3,
+      "sensors": 6,
+      "htb": 10,
+      "lfin": 0,
+      "exp": 6,
+      "atlas": 1,
+      "weak": 2,
+      "battle": 3,
+      "athena": 1,
+      "mino": 5,
+      "hermes": 20
+    }
+  },
+  {
+    "hunter": "borge",
+    "set": "KNOWN_BORGE_LATE_BUILDS",
+    "index": 13,
+    "mode": "loot",
+    "note": "R16-44, Wrench 140",
+    "ok": true,
+    "parity": "match",
+    "level": 82,
+    "fixtureLevel": 82,
+    "expectedLootScore": 56700000000,
+    "parityDeltaPct": -0.12177515478317825,
+    "talentBudget": 82,
+    "attributeBudget": 246,
+    "importLoot": 56630953487.23794,
+    "importStage": 322.7608,
+    "optimizedLoot": 56815615661.48557,
+    "optimizedStage": 322.62710000000004,
+    "importObjective": 56630953487.23794,
+    "optimizedObjective": 56815615661.48557,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0.32607993133869695,
+    "stageDeltaPct": -0.04142386559953258,
+    "evals": 18530,
+    "cacheHits": 14299,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 361,
+          "realizable": 545
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 314,
+        "entries": 314,
+        "feasibleCells": 314,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 61.6745191367024,
+        "killBands": 14,
+        "bestKillReached": 99,
+        "bestMaxStageReached": 331.6,
+        "bossBoundariesCrossed": 3,
+        "bestScoreAtScreenIterations": 47304468020.96898,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 0,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 507,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 50903,
+          "rejected": 35681,
+          "accepted": 15222,
+          "strandedRepairs": 1741,
+          "nodesCleared": 3285,
+          "structuralResamples": 3428
+        }
+      },
+      "corpusRecombined": {
+        "offered": 132,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 330,
+        "killing": 203,
+        "bestKillRate": 99.9,
+        "refined": 8,
+        "refinedKillBands": 8
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 47621458164.67491,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 328.7
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 56456306429.1671,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 332.7,
+          "gainOverPreviousStagePct": 18.552242213880348
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 56815615661.48557,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 334.6,
+          "gainOverPreviousStagePct": 0.6364377251092066
+        }
+      ],
+      "ledgerText": "archive   47621458165 loot/min @1000 iters  kill 0%  maxStage 328.7\nrefined   56456306429 loot/min @1000 iters  kill 0%  maxStage 332.7  (+18.55% vs archive)\nreturned  56815615661 loot/min @1000 iters  kill 0%  maxStage 334.6  (+0.64% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 710
+    },
+    "seconds": 710.956,
+    "optimizedTalents": {
+      "revival": 2,
+      "loth": 5,
+      "ua": 0,
+      "impeccable": 10,
+      "omen": 0,
+      "ll": 12,
+      "pog": 15,
+      "ultima": 23,
+      "tfow": 15
+    },
+    "optimizedAttributes": {
+      "ares": 26,
+      "ylith": 1,
+      "spartan": 6,
+      "timeless": 5,
+      "baal": 6,
+      "sensors": 6,
+      "htb": 5,
+      "lfin": 0,
+      "exp": 6,
+      "atlas": 4,
+      "weak": 6,
+      "battle": 3,
+      "mino": 20,
+      "hermes": 20,
+      "athena": 1
+    },
+    "importTalents": {
+      "revival": 2,
+      "loth": 5,
+      "ua": 1,
+      "impeccable": 10,
+      "omen": 0,
+      "ll": 12,
+      "pog": 15,
+      "tfow": 15,
+      "ultima": 22
+    },
+    "importAttributes": {
+      "ares": 29,
+      "ylith": 1,
+      "spartan": 6,
+      "timeless": 5,
+      "baal": 6,
+      "sensors": 6,
+      "htb": 5,
+      "lfin": 0,
+      "exp": 6,
+      "atlas": 3,
+      "weak": 6,
+      "battle": 3,
+      "athena": 1,
+      "mino": 20,
+      "hermes": 20
+    }
+  },
+  {
+    "hunter": "knox",
+    "set": "KNOWN_KNOX_BUILDS",
+    "index": 0,
+    "mode": "loot",
+    "note": "swap out of glass cannon build",
+    "ok": true,
+    "parity": "match",
+    "level": 12,
+    "fixtureLevel": 12,
+    "expectedLootScore": 46,
+    "parityDeltaPct": 0.1713779557587003,
+    "talentBudget": 12,
+    "attributeBudget": 36,
+    "importLoot": 46.078833859649,
+    "importStage": 53.5903,
+    "optimizedLoot": 46.078833859649,
+    "optimizedStage": 53.5903,
+    "importObjective": 46.078833859649,
+    "optimizedObjective": 46.078833859649,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0,
+    "stageDeltaPct": 0,
+    "evals": 14472,
+    "cacheHits": 6305,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 145,
+          "realizable": 287
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 37,
+        "entries": 37,
+        "feasibleCells": 37,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9312,
+        "idleVariations": 288,
+        "bestViolation": 100,
+        "killBands": 1,
+        "bestKillReached": 0,
+        "bestMaxStageReached": 61.2,
+        "bossBoundariesCrossed": 0,
+        "bestScoreAtScreenIterations": 43.32949696259173,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": null,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 0,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 39945,
+          "rejected": 23370,
+          "accepted": 16575,
+          "strandedRepairs": 2719,
+          "nodesCleared": 3627,
+          "structuralResamples": 3382
+        }
+      },
+      "corpusRecombined": {
+        "offered": 126,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 50,
+        "killing": 0,
+        "bestKillRate": 0,
+        "refined": 8,
+        "refinedKillBands": 1
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 43.450701483817284,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 54
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 46.078833859649,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 55.7,
+          "gainOverPreviousStagePct": 6.048538426498215
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 46.078833859649,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 55.7,
+          "gainOverPreviousStagePct": 0
+        }
+      ],
+      "ledgerText": "archive   43 loot/min @1000 iters  kill 0%  maxStage 54\nrefined   46 loot/min @1000 iters  kill 0%  maxStage 55.7  (+6.05% vs archive)\nreturned  46 loot/min @1000 iters  kill 0%  maxStage 55.7  (+0.00% vs refined)",
+      "truncated": false,
+      "elapsedSeconds": 471
+    },
+    "seconds": 471.978,
+    "optimizedTalents": {
+      "revival": 0,
+      "calyp": 5,
+      "ua": 0,
+      "ghost": 0,
+      "omen": 0,
+      "ll": 0,
+      "pog": 7,
+      "finish": 0
+    },
+    "optimizedAttributes": {
+      "kraken": 1,
+      "soul": 1,
+      "dead": 4,
+      "spa": 1,
+      "pl": 1,
+      "time": 5,
+      "sear": 3,
+      "pct": 0,
+      "kot": 0,
+      "fe": 0,
+      "sop": 0
+    },
+    "importTalents": {
+      "revival": 0,
+      "calyp": 5,
+      "ua": 0,
+      "ghost": 0,
+      "omen": 0,
+      "ll": 0,
+      "pog": 7,
+      "finish": 0,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "kraken": 1,
+      "spa": 1,
+      "pl": 1,
+      "time": 5,
+      "soul": 1,
+      "dead": 4,
+      "fe": 0,
+      "sop": 0,
+      "sear": 3,
+      "pct": 0,
+      "kot": 0
+    }
+  },
+  {
+    "hunter": "knox",
+    "set": "KNOWN_KNOX_BUILDS",
+    "index": 4,
+    "mode": "loot",
+    "note": "respec with more investment",
+    "ok": true,
+    "parity": "match",
+    "level": 16,
+    "fixtureLevel": 16,
+    "expectedLootScore": 285.36,
+    "parityDeltaPct": -0.05471191687177361,
+    "talentBudget": 16,
+    "attributeBudget": 48,
+    "importLoot": 285.2038740740147,
+    "importStage": 81.683,
+    "optimizedLoot": 285.4958816589925,
+    "optimizedStage": 82.0694,
+    "importObjective": 285.2038740740147,
+    "optimizedObjective": 285.4958816589925,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0.10238556047875265,
+    "stageDeltaPct": 0.473048247493352,
+    "evals": 16007,
+    "cacheHits": 6184,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 145,
+          "realizable": 287
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 49,
+        "entries": 49,
+        "feasibleCells": 49,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 100,
+        "killBands": 1,
+        "bestKillReached": 0,
+        "bestMaxStageReached": 87.9,
+        "bossBoundariesCrossed": 0,
+        "bestScoreAtScreenIterations": 253.94826052611822,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": null,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 0,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 38761,
+          "rejected": 22074,
+          "accepted": 16687,
+          "strandedRepairs": 2290,
+          "nodesCleared": 2928,
+          "structuralResamples": 3298
+        }
+      },
+      "corpusRecombined": {
+        "offered": 126,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 60,
+        "killing": 0,
+        "bestKillRate": 0,
+        "refined": 8,
+        "refinedKillBands": 1
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 251.77807401579065,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 83.1
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 285.4958816589925,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 84.1,
+          "gainOverPreviousStagePct": 13.391876069830927
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 285.4958816589925,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 84.1,
+          "gainOverPreviousStagePct": 0
+        }
+      ],
+      "ledgerText": "archive   252 loot/min @1000 iters  kill 0%  maxStage 83.1\nrefined   285 loot/min @1000 iters  kill 0%  maxStage 84.1  (+13.39% vs archive)\nreturned  285 loot/min @1000 iters  kill 0%  maxStage 84.1  (+0.00% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 666
+    },
+    "seconds": 666.898,
+    "optimizedTalents": {
+      "revival": 1,
+      "calyp": 5,
+      "ua": 0,
+      "ghost": 0,
+      "omen": 0,
+      "ll": 0,
+      "pog": 10,
+      "finish": 0
+    },
+    "optimizedAttributes": {
+      "kraken": 3,
+      "soul": 1,
+      "dead": 10,
+      "spa": 1,
+      "pl": 1,
+      "time": 5,
+      "sear": 2,
+      "pct": 0,
+      "kot": 0,
+      "fe": 0,
+      "sop": 0
+    },
+    "importTalents": {
+      "revival": 1,
+      "calyp": 5,
+      "ua": 0,
+      "ghost": 0,
+      "omen": 0,
+      "ll": 0,
+      "pog": 10,
+      "finish": 0,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "kraken": 1,
+      "spa": 1,
+      "pl": 1,
+      "time": 5,
+      "soul": 1,
+      "dead": 10,
+      "fe": 0,
+      "sop": 0,
+      "sear": 3,
+      "pct": 0,
+      "kot": 0
+    }
+  },
+  {
+    "hunter": "knox",
+    "set": "KNOWN_KNOX_BUILDS",
+    "index": 5,
+    "mode": "loot",
+    "note": "before 90 regen",
+    "ok": true,
+    "parity": "match",
+    "level": 17,
+    "fixtureLevel": 17,
+    "expectedLootScore": 325.54,
+    "parityDeltaPct": 0.013772430964515709,
+    "talentBudget": 17,
+    "attributeBudget": 51,
+    "importLoot": 325.5848347717619,
+    "importStage": 84.03020000000001,
+    "optimizedLoot": 325.6349541664997,
+    "optimizedStage": 84.3933,
+    "importObjective": 325.5848347717619,
+    "optimizedObjective": 325.6349541664997,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0.015393651480401338,
+    "stageDeltaPct": 0.43210655216813554,
+    "evals": 14895,
+    "cacheHits": 8792,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 145,
+          "realizable": 287
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 53,
+        "entries": 53,
+        "feasibleCells": 53,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9504,
+        "idleVariations": 96,
+        "bestViolation": 100,
+        "killBands": 1,
+        "bestKillReached": 0,
+        "bestMaxStageReached": 90,
+        "bossBoundariesCrossed": 0,
+        "bestScoreAtScreenIterations": 319.0979406205203,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": null,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 0,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 36424,
+          "rejected": 20058,
+          "accepted": 16366,
+          "strandedRepairs": 2370,
+          "nodesCleared": 2989,
+          "structuralResamples": 3417
+        }
+      },
+      "corpusRecombined": {
+        "offered": 126,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 60,
+        "killing": 0,
+        "bestKillRate": 0,
+        "refined": 8,
+        "refinedKillBands": 1
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 320.8144286655782,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 85.5
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 325.6349541664997,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 85.6,
+          "gainOverPreviousStagePct": 1.5025899929041246
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 325.6349541664997,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 85.6,
+          "gainOverPreviousStagePct": 0
+        }
+      ],
+      "ledgerText": "archive   321 loot/min @1000 iters  kill 0%  maxStage 85.5\nrefined   326 loot/min @1000 iters  kill 0%  maxStage 85.6  (+1.50% vs archive)\nreturned  326 loot/min @1000 iters  kill 0%  maxStage 85.6  (+0.00% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 649
+    },
+    "seconds": 650.29,
+    "optimizedTalents": {
+      "revival": 2,
+      "calyp": 5,
+      "ua": 0,
+      "ghost": 0,
+      "omen": 0,
+      "ll": 0,
+      "pog": 10,
+      "finish": 0
+    },
+    "optimizedAttributes": {
+      "kraken": 6,
+      "soul": 1,
+      "dead": 10,
+      "spa": 1,
+      "pl": 1,
+      "time": 5,
+      "sear": 2,
+      "pct": 0,
+      "kot": 0,
+      "fe": 0,
+      "sop": 0
+    },
+    "importTalents": {
+      "revival": 2,
+      "calyp": 5,
+      "ua": 0,
+      "ghost": 0,
+      "omen": 0,
+      "ll": 0,
+      "pog": 10,
+      "finish": 0,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "kraken": 4,
+      "spa": 1,
+      "pl": 1,
+      "time": 5,
+      "soul": 1,
+      "dead": 10,
+      "fe": 0,
+      "sop": 0,
+      "sear": 3,
+      "pct": 0,
+      "kot": 0
+    }
+  },
+  {
+    "hunter": "knox",
+    "set": "KNOWN_KNOX_BUILDS",
+    "index": 7,
+    "mode": "loot",
+    "ok": true,
+    "parity": "match",
+    "level": 18,
+    "fixtureLevel": 18,
+    "expectedLootScore": 704.99,
+    "parityDeltaPct": -0.2817858579041072,
+    "talentBudget": 18,
+    "attributeBudget": 54,
+    "importLoot": 703.0034378803618,
+    "importStage": 98.10119999999999,
+    "optimizedLoot": 706.4903950633658,
+    "optimizedStage": 97.4333,
+    "importObjective": 703.0034378803618,
+    "optimizedObjective": 706.4903950633658,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0.4960085534599268,
+    "stageDeltaPct": -0.6808275535875085,
+    "evals": 14064,
+    "cacheHits": 2170,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 145,
+          "realizable": 287
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 55,
+        "entries": 55,
+        "feasibleCells": 55,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 98.42505098500932,
+        "killBands": 1,
+        "bestKillReached": 0,
+        "bestMaxStageReached": 100,
+        "bossBoundariesCrossed": 1,
+        "bestScoreAtScreenIterations": 673.7277244276346,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": null,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 0,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 36621,
+          "rejected": 20201,
+          "accepted": 16420,
+          "strandedRepairs": 2603,
+          "nodesCleared": 3284,
+          "structuralResamples": 3338
+        }
+      },
+      "corpusRecombined": {
+        "offered": 126,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 64,
+        "killing": 0,
+        "bestKillRate": 0,
+        "refined": 8,
+        "refinedKillBands": 1
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 670.3080550682877,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 703.0034378803618,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100,
+          "gainOverPreviousStagePct": 4.877665211518804
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 706.4903950633658,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100,
+          "gainOverPreviousStagePct": 0.4960085534599268
+        }
+      ],
+      "ledgerText": "archive   670 loot/min @1000 iters  kill 0%  maxStage 100\nrefined   703 loot/min @1000 iters  kill 0%  maxStage 100  (+4.88% vs archive)\nreturned  706 loot/min @1000 iters  kill 0%  maxStage 100  (+0.50% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 759
+    },
+    "seconds": 760.188,
+    "optimizedTalents": {
+      "revival": 2,
+      "calyp": 5,
+      "ua": 0,
+      "ghost": 0,
+      "omen": 0,
+      "ll": 1,
+      "pog": 10,
+      "finish": 0
+    },
+    "optimizedAttributes": {
+      "kraken": 1,
+      "soul": 1,
+      "dead": 10,
+      "spa": 1,
+      "pl": 1,
+      "time": 5,
+      "sear": 1,
+      "pct": 0,
+      "kot": 0,
+      "fe": 5,
+      "sop": 0
+    },
+    "importTalents": {
+      "revival": 2,
+      "calyp": 5,
+      "ua": 0,
+      "ghost": 0,
+      "omen": 0,
+      "ll": 1,
+      "pog": 10,
+      "finish": 0,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "kraken": 1,
+      "spa": 1,
+      "pl": 1,
+      "time": 5,
+      "soul": 1,
+      "dead": 10,
+      "fe": 6,
+      "sop": 0,
+      "sear": 0,
+      "pct": 0,
+      "kot": 0
+    }
+  },
+  {
+    "hunter": "knox",
+    "set": "KNOWN_KNOX_BUILDS",
+    "index": 10,
+    "mode": "loot",
+    "note": "1.58k Anchor 10",
+    "ok": true,
+    "parity": "match",
+    "level": 20,
+    "fixtureLevel": 20,
+    "expectedLootScore": 1580,
+    "parityDeltaPct": -0.08921748385416862,
+    "talentBudget": 20,
+    "attributeBudget": 60,
+    "importLoot": 1578.5903637551041,
+    "importStage": 99.6251,
+    "optimizedLoot": 1578.5903637551041,
+    "optimizedStage": 99.6251,
+    "importObjective": 1578.5903637551041,
+    "optimizedObjective": 1578.5903637551041,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0,
+    "stageDeltaPct": 0,
+    "evals": 14289,
+    "cacheHits": 10573,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 145,
+          "realizable": 287
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 41,
+        "entries": 41,
+        "feasibleCells": 41,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 98.94637999340974,
+        "killBands": 1,
+        "bestKillReached": 0,
+        "bestMaxStageReached": 100,
+        "bossBoundariesCrossed": 1,
+        "bestScoreAtScreenIterations": 1479.95765884785,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": null,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 0,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 36815,
+          "rejected": 20123,
+          "accepted": 16692,
+          "strandedRepairs": 2443,
+          "nodesCleared": 3024,
+          "structuralResamples": 3370
+        }
+      },
+      "corpusRecombined": {
+        "offered": 126,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 52,
+        "killing": 0,
+        "bestKillRate": 0,
+        "refined": 8,
+        "refinedKillBands": 1
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 1491.189348373071,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 1574.3456953987934,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100,
+          "gainOverPreviousStagePct": 5.576511602396323
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 1578.5903637551041,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100,
+          "gainOverPreviousStagePct": 0.2696147592435557
+        }
+      ],
+      "ledgerText": "archive   1491 loot/min @1000 iters  kill 0%  maxStage 100\nrefined   1574 loot/min @1000 iters  kill 0%  maxStage 100  (+5.58% vs archive)\nreturned  1579 loot/min @1000 iters  kill 0%  maxStage 100  (+0.27% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 703
+    },
+    "seconds": 704.255,
+    "optimizedTalents": {
+      "revival": 1,
+      "calyp": 2,
+      "ua": 0,
+      "ghost": 0,
+      "omen": 0,
+      "ll": 10,
+      "pog": 7,
+      "finish": 0
+    },
+    "optimizedAttributes": {
+      "kraken": 9,
+      "soul": 1,
+      "dead": 10,
+      "spa": 1,
+      "pl": 1,
+      "time": 5,
+      "sear": 5,
+      "pct": 0,
+      "kot": 0,
+      "fe": 0,
+      "sop": 0
+    },
+    "importTalents": {
+      "revival": 1,
+      "calyp": 2,
+      "ua": 0,
+      "ghost": 0,
+      "omen": 0,
+      "ll": 10,
+      "pog": 7,
+      "finish": 0,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "kraken": 9,
+      "spa": 1,
+      "pl": 1,
+      "time": 5,
+      "soul": 1,
+      "dead": 10,
+      "fe": 0,
+      "sop": 0,
+      "sear": 5,
+      "pct": 0,
+      "kot": 0
+    }
+  },
+  {
+    "hunter": "knox",
+    "set": "KNOWN_KNOX_BUILDS",
+    "index": 14,
+    "mode": "loot",
+    "note": "2.97k Anchor 20, regen 120",
+    "ok": true,
+    "parity": "match",
+    "level": 24,
+    "fixtureLevel": 24,
+    "expectedLootScore": 2970,
+    "parityDeltaPct": -0.19487749246439395,
+    "talentBudget": 24,
+    "attributeBudget": 72,
+    "importLoot": 2964.2121384738075,
+    "importStage": 99.9995,
+    "optimizedLoot": 2964.2121384738075,
+    "optimizedStage": 99.9995,
+    "importObjective": 2964.2121384738075,
+    "optimizedObjective": 2964.2121384738075,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0,
+    "stageDeltaPct": 0,
+    "evals": 16439,
+    "cacheHits": 4287,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 145,
+          "realizable": 287
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 17,
+        "entries": 17,
+        "feasibleCells": 17,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 8928,
+        "idleVariations": 672,
+        "bestViolation": 98.00828644538076,
+        "killBands": 1,
+        "bestKillReached": 0,
+        "bestMaxStageReached": 100,
+        "bossBoundariesCrossed": 1,
+        "bestScoreAtScreenIterations": 2818.7401861056205,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": null,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 0,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 36548,
+          "rejected": 19897,
+          "accepted": 16651,
+          "strandedRepairs": 2312,
+          "nodesCleared": 2878,
+          "structuralResamples": 3459
+        }
+      },
+      "corpusRecombined": {
+        "offered": 90,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 10,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 27,
+        "killing": 0,
+        "bestKillRate": 0,
+        "refined": 8,
+        "refinedKillBands": 1
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 2815.276134085481,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 2964.2121384738075,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100,
+          "gainOverPreviousStagePct": 5.29028050162146
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 2964.2121384738075,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100,
+          "gainOverPreviousStagePct": 0
+        }
+      ],
+      "ledgerText": "archive   2815 loot/min @1000 iters  kill 0%  maxStage 100\nrefined   2964 loot/min @1000 iters  kill 0%  maxStage 100  (+5.29% vs archive)\nreturned  2964 loot/min @1000 iters  kill 0%  maxStage 100  (+0.00% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 710
+    },
+    "seconds": 710.778,
+    "optimizedTalents": {
+      "revival": 0,
+      "calyp": 3,
+      "ua": 0,
+      "ghost": 4,
+      "omen": 0,
+      "ll": 10,
+      "pog": 0,
+      "finish": 7
+    },
+    "optimizedAttributes": {
+      "kraken": 1,
+      "soul": 1,
+      "dead": 10,
+      "spa": 1,
+      "pl": 1,
+      "time": 5,
+      "sear": 5,
+      "pct": 5,
+      "kot": 0,
+      "fe": 0,
+      "sop": 0
+    },
+    "importTalents": {
+      "revival": 0,
+      "calyp": 3,
+      "ua": 0,
+      "ghost": 4,
+      "omen": 0,
+      "ll": 10,
+      "pog": 0,
+      "finish": 7,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "kraken": 1,
+      "spa": 1,
+      "pl": 1,
+      "time": 5,
+      "soul": 1,
+      "dead": 10,
+      "fe": 0,
+      "sop": 0,
+      "sear": 5,
+      "pct": 5,
+      "kot": 0
+    }
+  },
+  {
+    "hunter": "knox",
+    "set": "KNOWN_KNOX_BUILDS",
+    "index": 16,
+    "mode": "loot",
+    "note": "4.03k Anchor 30",
+    "ok": true,
+    "parity": "match",
+    "level": 26,
+    "fixtureLevel": 26,
+    "expectedLootScore": 4030,
+    "parityDeltaPct": -0.10583285165764704,
+    "talentBudget": 26,
+    "attributeBudget": 78,
+    "importLoot": 4025.734936078197,
+    "importStage": 99.9988,
+    "optimizedLoot": 4025.734936078197,
+    "optimizedStage": 99.9988,
+    "importObjective": 4025.734936078197,
+    "optimizedObjective": 4025.734936078197,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0,
+    "stageDeltaPct": 0,
+    "evals": 19306,
+    "cacheHits": 5005,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 145,
+          "realizable": 287
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 16,
+        "entries": 16,
+        "feasibleCells": 16,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9504,
+        "idleVariations": 96,
+        "bestViolation": 96.86256170500425,
+        "killBands": 1,
+        "bestKillReached": 0,
+        "bestMaxStageReached": 100,
+        "bossBoundariesCrossed": 1,
+        "bestScoreAtScreenIterations": 3958.1955134628065,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": null,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 0,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 37115,
+          "rejected": 20564,
+          "accepted": 16551,
+          "strandedRepairs": 2360,
+          "nodesCleared": 2878,
+          "structuralResamples": 3350
+        }
+      },
+      "corpusRecombined": {
+        "offered": 108,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 11,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 29,
+        "killing": 0,
+        "bestKillRate": 0,
+        "refined": 8,
+        "refinedKillBands": 1
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 3953.0341419742495,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 4021.850665239612,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100,
+          "gainOverPreviousStagePct": 1.740853248259424
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 4025.734936078197,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100,
+          "gainOverPreviousStagePct": 0.096579191071312
+        }
+      ],
+      "ledgerText": "archive   3953 loot/min @1000 iters  kill 0%  maxStage 100\nrefined   4022 loot/min @1000 iters  kill 0%  maxStage 100  (+1.74% vs archive)\nreturned  4026 loot/min @1000 iters  kill 0%  maxStage 100  (+0.10% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 705
+    },
+    "seconds": 705.981,
+    "optimizedTalents": {
+      "revival": 0,
+      "calyp": 3,
+      "ua": 0,
+      "ghost": 6,
+      "omen": 0,
+      "ll": 10,
+      "pog": 0,
+      "finish": 7
+    },
+    "optimizedAttributes": {
+      "kraken": 1,
+      "soul": 1,
+      "dead": 10,
+      "spa": 2,
+      "pl": 1,
+      "time": 5,
+      "sear": 5,
+      "pct": 6,
+      "kot": 0,
+      "fe": 0,
+      "sop": 0
+    },
+    "importTalents": {
+      "revival": 0,
+      "calyp": 3,
+      "ua": 0,
+      "ghost": 6,
+      "omen": 0,
+      "ll": 10,
+      "pog": 0,
+      "finish": 7,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "kraken": 1,
+      "spa": 2,
+      "pl": 1,
+      "time": 5,
+      "soul": 1,
+      "dead": 10,
+      "fe": 0,
+      "sop": 0,
+      "sear": 5,
+      "pct": 6,
+      "kot": 0
+    }
+  },
+  {
+    "hunter": "knox",
+    "set": "KNOWN_KNOX_PUSH_BUILDS",
+    "index": 0,
+    "mode": "boss",
+    "note": "BOSS KILL stage 100, Anchor 40 required",
+    "ok": true,
+    "parity": "undercount",
+    "level": 28,
+    "fixtureLevel": 28,
+    "expectedLootScore": 5370,
+    "parityDeltaPct": -11.139566966649491,
+    "talentBudget": 28,
+    "attributeBudget": 84,
+    "importLoot": 4771.805253890922,
+    "importStage": 100.137,
+    "optimizedLoot": 5357.608276211853,
+    "optimizedStage": 100.173,
+    "importObjective": 1000009418.3938686,
+    "optimizedObjective": 1000011118.6452601,
+    "importKillRate": 9.4,
+    "optimizedKillRate": 11.1,
+    "lootDeltaPct": 12.27633969016795,
+    "stageDeltaPct": 0.0359507474759593,
+    "evals": 15667,
+    "cacheHits": 8111,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 145,
+          "realizable": 287
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 15,
+        "entries": 15,
+        "feasibleCells": 15,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9504,
+        "idleVariations": 96,
+        "bestViolation": 6.256779188879509,
+        "killBands": 4,
+        "bestKillReached": 12,
+        "bestMaxStageReached": 103,
+        "bossBoundariesCrossed": 1,
+        "bestScoreAtScreenIterations": 1000012018.7448896,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 432,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 0,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 37151,
+          "rejected": 20688,
+          "accepted": 16463,
+          "strandedRepairs": 1058,
+          "nodesCleared": 1183,
+          "structuralResamples": 3293
+        }
+      },
+      "corpusRecombined": {
+        "offered": 106,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 11,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 33,
+        "killing": 20,
+        "bestKillRate": 10.5,
+        "refined": 8,
+        "refinedKillBands": 4
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 1000006017.8208882,
+          "finalIterations": 1000,
+          "killRatePct": 6,
+          "maxStageReached": 102.9
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 1000009618.4188027,
+          "finalIterations": 1000,
+          "killRatePct": 9.6,
+          "maxStageReached": 102.5,
+          "gainOverPreviousStagePct": 0.0003600576246953582
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 1000011118.6452601,
+          "finalIterations": 1000,
+          "killRatePct": 11.1,
+          "maxStageReached": 103.1,
+          "gainOverPreviousStagePct": 0.00015002120276898316
+        }
+      ],
+      "ledgerText": "archive   1000006018 loot/min @1000 iters  kill 6%  maxStage 102.9\nrefined   1000009618 loot/min @1000 iters  kill 9.6%  maxStage 102.5  (+0.00% vs archive)\nreturned  1000011119 loot/min @1000 iters  kill 11.1%  maxStage 103.1  (+0.00% vs refined)",
+      "truncated": false,
+      "elapsedSeconds": 551
+    },
+    "seconds": 551.745,
+    "optimizedTalents": {
+      "revival": 2,
+      "calyp": 0,
+      "ua": 0,
+      "ghost": 4,
+      "omen": 0,
+      "ll": 0,
+      "pog": 10,
+      "finish": 12
+    },
+    "optimizedAttributes": {
+      "kraken": 40,
+      "soul": 14,
+      "dead": 10,
+      "spa": 0,
+      "pl": 0,
+      "time": 0,
+      "sear": 5,
+      "pct": 0,
+      "kot": 0,
+      "fe": 0,
+      "sop": 0
+    },
+    "importTalents": {
+      "revival": 2,
+      "calyp": 0,
+      "ua": 0,
+      "ghost": 3,
+      "omen": 0,
+      "ll": 0,
+      "pog": 10,
+      "finish": 13,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "kraken": 43,
+      "spa": 0,
+      "pl": 0,
+      "time": 0,
+      "soul": 11,
+      "dead": 10,
+      "fe": 0,
+      "sop": 0,
+      "sear": 5,
+      "pct": 0,
+      "kot": 0
+    }
+  },
+  {
+    "hunter": "knox",
+    "set": "KNOWN_KNOX_BUILDS",
+    "index": 20,
+    "mode": "loot",
+    "note": "56.47k",
+    "ok": true,
+    "parity": "match",
+    "level": 31,
+    "fixtureLevel": 31,
+    "expectedLootScore": 56470,
+    "parityDeltaPct": -0.06880271681430523,
+    "talentBudget": 31,
+    "attributeBudget": 93,
+    "importLoot": 56431.14710581496,
+    "importStage": 102.245,
+    "optimizedLoot": 57286.07069027237,
+    "optimizedStage": 102.2998,
+    "importObjective": 56431.14710581496,
+    "optimizedObjective": 57286.07069027237,
+    "importKillRate": 90.4,
+    "optimizedKillRate": 91.9,
+    "lootDeltaPct": 1.5149853020962443,
+    "stageDeltaPct": 0.053596752897452374,
+    "evals": 19426,
+    "cacheHits": 8841,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 145,
+          "realizable": 287
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 157,
+        "entries": 157,
+        "feasibleCells": 157,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 79.0867329682117,
+        "killBands": 14,
+        "bestKillReached": 99,
+        "bestMaxStageReached": 111.7,
+        "bossBoundariesCrossed": 1,
+        "bestScoreAtScreenIterations": 49734.05766135691,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 336,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 0,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 36576,
+          "rejected": 19900,
+          "accepted": 16676,
+          "strandedRepairs": 1415,
+          "nodesCleared": 1679,
+          "structuralResamples": 3321
+        }
+      },
+      "corpusRecombined": {
+        "offered": 124,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 176,
+        "killing": 160,
+        "bestKillRate": 99.9,
+        "refined": 8,
+        "refinedKillBands": 8
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 47866.97414592469,
+          "finalIterations": 1000,
+          "killRatePct": 83.3,
+          "maxStageReached": 104.8
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 54944.59856669366,
+          "finalIterations": 1000,
+          "killRatePct": 86.9,
+          "maxStageReached": 105.2,
+          "gainOverPreviousStagePct": 14.786028461277933
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 57286.07069027237,
+          "finalIterations": 1000,
+          "killRatePct": 91.9,
+          "maxStageReached": 105.2,
+          "gainOverPreviousStagePct": 4.261514661421263
+        }
+      ],
+      "ledgerText": "archive   47867 loot/min @1000 iters  kill 83.3%  maxStage 104.8\nrefined   54945 loot/min @1000 iters  kill 86.9%  maxStage 105.2  (+14.79% vs archive)\nreturned  57286 loot/min @1000 iters  kill 91.9%  maxStage 105.2  (+4.26% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 644
+    },
+    "seconds": 645.046,
+    "optimizedTalents": {
+      "revival": 2,
+      "calyp": 0,
+      "ua": 0,
+      "ghost": 6,
+      "omen": 0,
+      "ll": 0,
+      "pog": 10,
+      "finish": 13
+    },
+    "optimizedAttributes": {
+      "kraken": 34,
+      "soul": 12,
+      "dead": 10,
+      "spa": 1,
+      "pl": 1,
+      "time": 4,
+      "sear": 5,
+      "pct": 0,
+      "kot": 0,
+      "fe": 0,
+      "sop": 0
+    },
+    "importTalents": {
+      "revival": 2,
+      "calyp": 0,
+      "ua": 0,
+      "ghost": 6,
+      "omen": 0,
+      "ll": 0,
+      "pog": 10,
+      "finish": 13,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "kraken": 35,
+      "spa": 1,
+      "pl": 1,
+      "time": 4,
+      "soul": 11,
+      "dead": 10,
+      "fe": 0,
+      "sop": 0,
+      "sear": 5,
+      "pct": 0,
+      "kot": 0
+    }
+  },
+  {
+    "hunter": "knox",
+    "set": "KNOWN_KNOX_BUILDS",
+    "index": 23,
+    "mode": "loot",
+    "note": "94.36k Salvo 3, 180 atk",
+    "ok": true,
+    "parity": "match",
+    "level": 32,
+    "fixtureLevel": 32,
+    "expectedLootScore": 94360,
+    "parityDeltaPct": 0.09292976857513727,
+    "talentBudget": 32,
+    "attributeBudget": 96,
+    "importLoot": 94447.6885296275,
+    "importStage": 102.17179999999999,
+    "optimizedLoot": 94664.27937949094,
+    "optimizedStage": 102.11449999999999,
+    "importObjective": 94447.6885296275,
+    "optimizedObjective": 94664.27937949094,
+    "importKillRate": 99.2,
+    "optimizedKillRate": 99.3,
+    "lootDeltaPct": 0.22932361102251347,
+    "stageDeltaPct": -0.05608201088754227,
+    "evals": 22116,
+    "cacheHits": 10263,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 145,
+          "realizable": 287
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 203,
+        "entries": 203,
+        "feasibleCells": 203,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 80.53498600659891,
+        "killBands": 14,
+        "bestKillReached": 99,
+        "bestMaxStageReached": 117.5,
+        "bossBoundariesCrossed": 1,
+        "bestScoreAtScreenIterations": 88845.47498331999,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 0,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 0,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 35370,
+          "rejected": 18602,
+          "accepted": 16768,
+          "strandedRepairs": 1967,
+          "nodesCleared": 2503,
+          "structuralResamples": 3404
+        }
+      },
+      "corpusRecombined": {
+        "offered": 122,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 226,
+        "killing": 208,
+        "bestKillRate": 99.9,
+        "refined": 8,
+        "refinedKillBands": 8
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 89287.43863963964,
+          "finalIterations": 1000,
+          "killRatePct": 99.8,
+          "maxStageReached": 104.7
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 92583.34716975743,
+          "finalIterations": 1000,
+          "killRatePct": 95.5,
+          "maxStageReached": 103.3,
+          "gainOverPreviousStagePct": 3.6913462636328185
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 94664.27937949094,
+          "finalIterations": 1000,
+          "killRatePct": 99.3,
+          "maxStageReached": 103.5,
+          "gainOverPreviousStagePct": 2.2476312137624372
+        }
+      ],
+      "ledgerText": "archive   89287 loot/min @1000 iters  kill 99.8%  maxStage 104.7\nrefined   92583 loot/min @1000 iters  kill 95.5%  maxStage 103.3  (+3.69% vs archive)\nreturned  94664 loot/min @1000 iters  kill 99.3%  maxStage 103.5  (+2.25% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 646
+    },
+    "seconds": 646.315,
+    "optimizedTalents": {
+      "revival": 2,
+      "calyp": 2,
+      "ua": 0,
+      "ghost": 12,
+      "omen": 0,
+      "ll": 0,
+      "pog": 6,
+      "finish": 10
+    },
+    "optimizedAttributes": {
+      "kraken": 26,
+      "soul": 16,
+      "dead": 10,
+      "spa": 1,
+      "pl": 1,
+      "time": 5,
+      "sear": 5,
+      "pct": 1,
+      "kot": 0,
+      "fe": 0,
+      "sop": 0
+    },
+    "importTalents": {
+      "revival": 2,
+      "calyp": 2,
+      "ua": 0,
+      "ghost": 12,
+      "omen": 0,
+      "ll": 0,
+      "pog": 6,
+      "finish": 10,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "kraken": 30,
+      "spa": 1,
+      "pl": 1,
+      "time": 5,
+      "soul": 12,
+      "dead": 10,
+      "fe": 0,
+      "sop": 0,
+      "sear": 5,
+      "pct": 1,
+      "kot": 0
+    }
+  },
+  {
+    "hunter": "knox",
+    "set": "KNOWN_KNOX_BUILDS",
+    "index": 25,
+    "mode": "loot",
+    "note": "103.47k, 150 regen",
+    "ok": true,
+    "parity": "match",
+    "level": 33,
+    "fixtureLevel": 33,
+    "expectedLootScore": 103470,
+    "parityDeltaPct": -0.4889910638903862,
+    "talentBudget": 33,
+    "attributeBudget": 99,
+    "importLoot": 102964.04094619262,
+    "importStage": 102.4134,
+    "optimizedLoot": 103723.31291821951,
+    "optimizedStage": 102.3481,
+    "importObjective": 102964.04094619262,
+    "optimizedObjective": 103723.31291821951,
+    "importKillRate": 98.6,
+    "optimizedKillRate": 99.2,
+    "lootDeltaPct": 0.7374146984224111,
+    "stageDeltaPct": -0.06376118750084801,
+    "evals": 22620,
+    "cacheHits": 11503,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 145,
+          "realizable": 287
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 296,
+        "entries": 296,
+        "feasibleCells": 296,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 46.38283522461758,
+        "killBands": 14,
+        "bestKillReached": 99,
+        "bestMaxStageReached": 126,
+        "bossBoundariesCrossed": 1,
+        "bestScoreAtScreenIterations": 98999.82653915013,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 0,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 0,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 34754,
+          "rejected": 18092,
+          "accepted": 16662,
+          "strandedRepairs": 1814,
+          "nodesCleared": 2268,
+          "structuralResamples": 3362
+        }
+      },
+      "corpusRecombined": {
+        "offered": 122,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 317,
+        "killing": 292,
+        "bestKillRate": 99.9,
+        "refined": 8,
+        "refinedKillBands": 8
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 99197.02127973411,
+          "finalIterations": 1000,
+          "killRatePct": 99,
+          "maxStageReached": 104.3
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 102410.62717124708,
+          "finalIterations": 1000,
+          "killRatePct": 98,
+          "maxStageReached": 103.5,
+          "gainOverPreviousStagePct": 3.2396193454747477
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 103723.31291821951,
+          "finalIterations": 1000,
+          "killRatePct": 99.2,
+          "maxStageReached": 104,
+          "gainOverPreviousStagePct": 1.2817866497169403
+        }
+      ],
+      "ledgerText": "archive   99197 loot/min @1000 iters  kill 99%  maxStage 104.3\nrefined   102411 loot/min @1000 iters  kill 98%  maxStage 103.5  (+3.24% vs archive)\nreturned  103723 loot/min @1000 iters  kill 99.2%  maxStage 104  (+1.28% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 708
+    },
+    "seconds": 708.398,
+    "optimizedTalents": {
+      "revival": 2,
+      "calyp": 2,
+      "ua": 0,
+      "ghost": 15,
+      "omen": 0,
+      "ll": 0,
+      "pog": 0,
+      "finish": 14
+    },
+    "optimizedAttributes": {
+      "kraken": 17,
+      "soul": 16,
+      "dead": 10,
+      "spa": 1,
+      "pl": 1,
+      "time": 5,
+      "sear": 5,
+      "pct": 4,
+      "kot": 0,
+      "fe": 0,
+      "sop": 0
+    },
+    "importTalents": {
+      "revival": 2,
+      "calyp": 2,
+      "ua": 0,
+      "ghost": 15,
+      "omen": 0,
+      "ll": 0,
+      "pog": 0,
+      "finish": 14,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "kraken": 20,
+      "spa": 1,
+      "pl": 1,
+      "time": 5,
+      "soul": 13,
+      "dead": 10,
+      "fe": 0,
+      "sop": 0,
+      "sear": 5,
+      "pct": 4,
+      "kot": 0
+    }
+  },
+  {
+    "hunter": "knox",
+    "set": "KNOWN_KNOX_BUILDS",
+    "index": 28,
+    "mode": "loot",
+    "note": "132.54k",
+    "ok": true,
+    "parity": "match",
+    "level": 35,
+    "fixtureLevel": 35,
+    "expectedLootScore": 132540,
+    "parityDeltaPct": -0.017068661584392932,
+    "talentBudget": 35,
+    "attributeBudget": 105,
+    "importLoot": 132517.37719593605,
+    "importStage": 102.6244,
+    "optimizedLoot": 133693.22402956645,
+    "optimizedStage": 103.453,
+    "importObjective": 132517.37719593605,
+    "optimizedObjective": 133693.22402956645,
+    "importKillRate": 99.5,
+    "optimizedKillRate": 99.7,
+    "lootDeltaPct": 0.8873152023616016,
+    "stageDeltaPct": 0.80741032347084,
+    "evals": 23835,
+    "cacheHits": 9070,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 145,
+          "realizable": 287
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 263,
+        "entries": 263,
+        "feasibleCells": 263,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 100,
+        "killBands": 14,
+        "bestKillReached": 99,
+        "bestMaxStageReached": 125.4,
+        "bossBoundariesCrossed": 1,
+        "bestScoreAtScreenIterations": 124679.42419160271,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 0,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 0,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 34897,
+          "rejected": 18201,
+          "accepted": 16696,
+          "strandedRepairs": 1917,
+          "nodesCleared": 2408,
+          "structuralResamples": 3419
+        }
+      },
+      "corpusRecombined": {
+        "offered": 122,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 286,
+        "killing": 254,
+        "bestKillRate": 99.9,
+        "refined": 8,
+        "refinedKillBands": 8
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 124499.26977790457,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 105.9
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 131125.3709704846,
+          "finalIterations": 1000,
+          "killRatePct": 97.5,
+          "maxStageReached": 103.9,
+          "gainOverPreviousStagePct": 5.322200848567539
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 133693.22402956645,
+          "finalIterations": 1000,
+          "killRatePct": 99.7,
+          "maxStageReached": 105.4,
+          "gainOverPreviousStagePct": 1.958319004229823
+        }
+      ],
+      "ledgerText": "archive   124499 loot/min @1000 iters  kill 0%  maxStage 105.9\nrefined   131125 loot/min @1000 iters  kill 97.5%  maxStage 103.9  (+5.32% vs archive)\nreturned  133693 loot/min @1000 iters  kill 99.7%  maxStage 105.4  (+1.96% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 673
+    },
+    "seconds": 673.756,
+    "optimizedTalents": {
+      "revival": 2,
+      "calyp": 5,
+      "ua": 0,
+      "ghost": 15,
+      "omen": 0,
+      "ll": 0,
+      "pog": 3,
+      "finish": 10
+    },
+    "optimizedAttributes": {
+      "kraken": 1,
+      "soul": 1,
+      "dead": 10,
+      "spa": 1,
+      "pl": 1,
+      "time": 5,
+      "sear": 1,
+      "pct": 9,
+      "kot": 5,
+      "fe": 0,
+      "sop": 0
+    },
+    "importTalents": {
+      "revival": 1,
+      "calyp": 4,
+      "ua": 0,
+      "ghost": 15,
+      "omen": 0,
+      "ll": 0,
+      "pog": 0,
+      "finish": 15,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "kraken": 19,
+      "spa": 1,
+      "pl": 1,
+      "time": 5,
+      "soul": 12,
+      "dead": 10,
+      "fe": 0,
+      "sop": 0,
+      "sear": 5,
+      "pct": 6,
+      "kot": 0
+    }
+  },
+  {
+    "hunter": "knox",
+    "set": "KNOWN_KNOX_BUILDS",
+    "index": 30,
+    "mode": "loot",
+    "note": "146.92k",
+    "ok": true,
+    "parity": "match",
+    "level": 36,
+    "fixtureLevel": 36,
+    "expectedLootScore": 146920,
+    "parityDeltaPct": -0.36731184579500487,
+    "talentBudget": 36,
+    "attributeBudget": 108,
+    "importLoot": 146380.34543615798,
+    "importStage": 103.5058,
+    "optimizedLoot": 146594.67878181048,
+    "optimizedStage": 103.48299999999999,
+    "importObjective": 146380.34543615798,
+    "optimizedObjective": 146594.67878181048,
+    "importKillRate": 99.4,
+    "optimizedKillRate": 99.8,
+    "lootDeltaPct": 0.14642221605220804,
+    "stageDeltaPct": -0.0220277511018742,
+    "evals": 22773,
+    "cacheHits": 8440,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 145,
+          "realizable": 287
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 261,
+        "entries": 261,
+        "feasibleCells": 261,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 100,
+        "killBands": 14,
+        "bestKillReached": 99,
+        "bestMaxStageReached": 132.9,
+        "bossBoundariesCrossed": 1,
+        "bestScoreAtScreenIterations": 136413.5779378589,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 0,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 0,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 34095,
+          "rejected": 17503,
+          "accepted": 16592,
+          "strandedRepairs": 1948,
+          "nodesCleared": 2440,
+          "structuralResamples": 3355
+        }
+      },
+      "corpusRecombined": {
+        "offered": 124,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 282,
+        "killing": 236,
+        "bestKillRate": 99.9,
+        "refined": 8,
+        "refinedKillBands": 8
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 137131.4474274674,
+          "finalIterations": 1000,
+          "killRatePct": 99.4,
+          "maxStageReached": 104.2
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 146223.53418587588,
+          "finalIterations": 1000,
+          "killRatePct": 99.2,
+          "maxStageReached": 105.4,
+          "gainOverPreviousStagePct": 6.630198199590591
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 146594.67878181048,
+          "finalIterations": 1000,
+          "killRatePct": 99.8,
+          "maxStageReached": 105.4,
+          "gainOverPreviousStagePct": 0.25382001467890375
+        }
+      ],
+      "ledgerText": "archive   137131 loot/min @1000 iters  kill 99.4%  maxStage 104.2\nrefined   146224 loot/min @1000 iters  kill 99.2%  maxStage 105.4  (+6.63% vs archive)\nreturned  146595 loot/min @1000 iters  kill 99.8%  maxStage 105.4  (+0.25% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 642
+    },
+    "seconds": 642.676,
+    "optimizedTalents": {
+      "revival": 2,
+      "calyp": 5,
+      "ua": 0,
+      "ghost": 15,
+      "omen": 0,
+      "ll": 1,
+      "pog": 0,
+      "finish": 13
+    },
+    "optimizedAttributes": {
+      "kraken": 2,
+      "soul": 1,
+      "dead": 10,
+      "spa": 1,
+      "pl": 1,
+      "time": 5,
+      "sear": 2,
+      "pct": 9,
+      "kot": 5,
+      "fe": 0,
+      "sop": 0
+    },
+    "importTalents": {
+      "revival": 2,
+      "calyp": 5,
+      "ua": 0,
+      "ghost": 15,
+      "omen": 0,
+      "ll": 0,
+      "pog": 0,
+      "finish": 14,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "kraken": 2,
+      "spa": 1,
+      "pl": 1,
+      "time": 5,
+      "soul": 1,
+      "dead": 10,
+      "fe": 0,
+      "sop": 0,
+      "sear": 2,
+      "pct": 9,
+      "kot": 5
+    }
+  },
+  {
+    "hunter": "knox",
+    "set": "KNOWN_KNOX_BUILDS",
+    "index": 34,
+    "mode": "loot",
+    "note": "Anchor 70, Regen 180",
+    "ok": true,
+    "parity": "match",
+    "level": 39,
+    "fixtureLevel": 39,
+    "expectedLootScore": 296290,
+    "parityDeltaPct": 0.16584517377456026,
+    "talentBudget": 39,
+    "attributeBudget": 117,
+    "importLoot": 296781.38266537664,
+    "importStage": 137.472,
+    "optimizedLoot": 296781.38266537664,
+    "optimizedStage": 137.472,
+    "importObjective": 296781.38266537664,
+    "optimizedObjective": 296781.38266537664,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0,
+    "stageDeltaPct": 0,
+    "evals": 20262,
+    "cacheHits": 4608,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 145,
+          "realizable": 287
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 210,
+        "entries": 210,
+        "feasibleCells": 210,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 39.933689867678204,
+        "killBands": 14,
+        "bestKillReached": 99,
+        "bestMaxStageReached": 145.2,
+        "bossBoundariesCrossed": 1,
+        "bestScoreAtScreenIterations": 266069.75903340493,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 0,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 0,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 36936,
+          "rejected": 20791,
+          "accepted": 16145,
+          "strandedRepairs": 2002,
+          "nodesCleared": 2326,
+          "structuralResamples": 3401
+        }
+      },
+      "corpusRecombined": {
+        "offered": 124,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 225,
+        "killing": 154,
+        "bestKillRate": 99.9,
+        "refined": 8,
+        "refinedKillBands": 8
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 266056.6815564102,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 141.7
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 295535.62806932675,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 139.1,
+          "gainOverPreviousStagePct": 11.07994970863617
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 296781.38266537664,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 139.7,
+          "gainOverPreviousStagePct": 0.4215243367400929
+        }
+      ],
+      "ledgerText": "archive   266057 loot/min @1000 iters  kill 0%  maxStage 141.7\nrefined   295536 loot/min @1000 iters  kill 0%  maxStage 139.1  (+11.08% vs archive)\nreturned  296781 loot/min @1000 iters  kill 0%  maxStage 139.7  (+0.42% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 780
+    },
+    "seconds": 781.146,
+    "optimizedTalents": {
+      "revival": 2,
+      "calyp": 0,
+      "ua": 0,
+      "ghost": 7,
+      "omen": 0,
+      "ll": 10,
+      "pog": 10,
+      "finish": 10
+    },
+    "optimizedAttributes": {
+      "kraken": 48,
+      "soul": 19,
+      "dead": 10,
+      "spa": 1,
+      "pl": 1,
+      "time": 5,
+      "sear": 5,
+      "pct": 0,
+      "kot": 0,
+      "fe": 0,
+      "sop": 0
+    },
+    "importTalents": {
+      "revival": 2,
+      "calyp": 0,
+      "ua": 0,
+      "ghost": 7,
+      "omen": 0,
+      "ll": 10,
+      "pog": 10,
+      "finish": 10,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "kraken": 48,
+      "spa": 1,
+      "pl": 1,
+      "time": 5,
+      "soul": 19,
+      "dead": 10,
+      "fe": 0,
+      "sop": 0,
+      "sear": 5,
+      "pct": 0,
+      "kot": 0
+    }
+  },
+  {
+    "hunter": "ozzy",
+    "set": "KNOWN_OZZY_PUSH_BUILDS",
+    "index": 0,
+    "mode": "push",
+    "ok": true,
+    "parity": "match",
+    "level": 12,
+    "fixtureLevel": 12,
+    "expectedLootScore": 23.53,
+    "parityDeltaPct": -0.02992159499298152,
+    "talentBudget": 12,
+    "attributeBudget": 36,
+    "importLoot": 23.522959448698153,
+    "importStage": 19.368100000000002,
+    "optimizedLoot": 23.522959448698153,
+    "optimizedStage": 19.368100000000002,
+    "importObjective": 19.368100000000002,
+    "optimizedObjective": 19.368100000000002,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0,
+    "stageDeltaPct": 0,
+    "evals": 11073,
+    "cacheHits": 7747,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 245,
+          "realizable": 78
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 18,
+        "entries": 18,
+        "feasibleCells": 18,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9504,
+        "idleVariations": 96,
+        "bestViolation": 100,
+        "killBands": 1,
+        "bestKillReached": 0,
+        "bestMaxStageReached": 20.9,
+        "bossBoundariesCrossed": 0,
+        "bestScoreAtScreenIterations": 19.343,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": null,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 256,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 62963,
+          "rejected": 48514,
+          "accepted": 14449,
+          "strandedRepairs": 1309,
+          "nodesCleared": 2340,
+          "structuralResamples": 3364
+        }
+      },
+      "corpusRecombined": {
+        "offered": 20,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 5,
+        "admitted": 5,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 21,
+        "killing": 0,
+        "bestKillRate": 0,
+        "refined": 8,
+        "refinedKillBands": 1
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 19.2816,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 21.6
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 19.3066,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 21.2,
+          "gainOverPreviousStagePct": 0.12965728985145725
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 19.368100000000002,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 21.3,
+          "gainOverPreviousStagePct": 0.31854391762403705
+        }
+      ],
+      "ledgerText": "archive   19 loot/min @1000 iters  kill 0%  maxStage 21.6\nrefined   19 loot/min @1000 iters  kill 0%  maxStage 21.2  (+0.13% vs archive)\nreturned  19 loot/min @1000 iters  kill 0%  maxStage 21.3  (+0.32% vs refined)",
+      "truncated": false,
+      "elapsedSeconds": 44
+    },
+    "seconds": 44.052,
+    "optimizedTalents": {
+      "revival": 1,
+      "boon": 1,
+      "ua": 0,
+      "needles": 10,
+      "omen": 0,
+      "ll": 0,
+      "crip": 0,
+      "echo": 0
+    },
+    "optimizedAttributes": {
+      "lotl": 1,
+      "exo": 10,
+      "scorp": 5,
+      "timeless": 0,
+      "ibu": 5,
+      "exterm": 0,
+      "snek": 0,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 0,
+      "dance": 0,
+      "sisters": 0,
+      "scarab": 0,
+      "cat": 0
+    },
+    "importTalents": {
+      "revival": 1,
+      "boon": 1,
+      "ua": 0,
+      "needles": 10,
+      "omen": 0,
+      "ll": 0,
+      "crip": 0,
+      "echo": 0,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "lotl": 1,
+      "exo": 10,
+      "scorp": 5,
+      "timeless": 0,
+      "ibu": 5,
+      "exterm": 0,
+      "snek": 0,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 0,
+      "dance": 0,
+      "sisters": 0,
+      "scarab": 0,
+      "cat": 0
+    }
+  },
+  {
+    "hunter": "ozzy",
+    "set": "KNOWN_OZZY_BUILDS",
+    "index": 6,
+    "mode": "loot",
+    "note": "swap off GC",
+    "ok": true,
+    "parity": "match",
+    "level": 17,
+    "fixtureLevel": 17,
+    "expectedLootScore": 93.86,
+    "parityDeltaPct": 0.023137122646873353,
+    "talentBudget": 17,
+    "attributeBudget": 51,
+    "importLoot": 93.88171650331635,
+    "importStage": 46.374900000000004,
+    "optimizedLoot": 94.78608281965069,
+    "optimizedStage": 43.835300000000004,
+    "importObjective": 93.88171650331635,
+    "optimizedObjective": 94.78608281965069,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0.963303985076142,
+    "stageDeltaPct": -5.476238223694283,
+    "evals": 14708,
+    "cacheHits": 7047,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 289,
+          "realizable": 78
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 46,
+        "entries": 46,
+        "feasibleCells": 46,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 100,
+        "killBands": 1,
+        "bestKillReached": 0,
+        "bestMaxStageReached": 70.9,
+        "bossBoundariesCrossed": 0,
+        "bestScoreAtScreenIterations": 92.35721428474116,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": null,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 302,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 64123,
+          "rejected": 49538,
+          "accepted": 14585,
+          "strandedRepairs": 1457,
+          "nodesCleared": 2425,
+          "structuralResamples": 3316
+        }
+      },
+      "corpusRecombined": {
+        "offered": 90,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 10,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 59,
+        "killing": 0,
+        "bestKillRate": 0,
+        "refined": 8,
+        "refinedKillBands": 1
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 92.65501631622963,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 61.9
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 94.78608281965069,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 47.6,
+          "gainOverPreviousStagePct": 2.3000012175787306
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 94.78608281965069,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 47.6,
+          "gainOverPreviousStagePct": 0
+        }
+      ],
+      "ledgerText": "archive   93 loot/min @1000 iters  kill 0%  maxStage 61.9\nrefined   95 loot/min @1000 iters  kill 0%  maxStage 47.6  (+2.30% vs archive)\nreturned  95 loot/min @1000 iters  kill 0%  maxStage 47.6  (+0.00% vs refined)",
+      "truncated": false,
+      "elapsedSeconds": 538
+    },
+    "seconds": 538.352,
+    "optimizedTalents": {
+      "revival": 0,
+      "boon": 1,
+      "ua": 0,
+      "needles": 3,
+      "omen": 3,
+      "ll": 10,
+      "crip": 0,
+      "echo": 0
+    },
+    "optimizedAttributes": {
+      "lotl": 1,
+      "exo": 17,
+      "scorp": 2,
+      "timeless": 5,
+      "ibu": 1,
+      "exterm": 5,
+      "snek": 0,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 0,
+      "dance": 0,
+      "sisters": 0,
+      "scarab": 0,
+      "cat": 0
+    },
+    "importTalents": {
+      "revival": 1,
+      "boon": 1,
+      "ua": 0,
+      "needles": 3,
+      "omen": 2,
+      "ll": 10,
+      "crip": 0,
+      "echo": 0,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "lotl": 1,
+      "exo": 14,
+      "scorp": 3,
+      "timeless": 5,
+      "ibu": 1,
+      "exterm": 5,
+      "snek": 0,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 0,
+      "dance": 0,
+      "sisters": 0,
+      "scarab": 0,
+      "cat": 0
+    }
+  },
+  {
+    "hunter": "ozzy",
+    "set": "KNOWN_OZZY_BUILDS",
+    "index": 11,
+    "mode": "loot",
+    "ok": true,
+    "parity": "match",
+    "level": 22,
+    "fixtureLevel": 22,
+    "expectedLootScore": 305.3,
+    "parityDeltaPct": 0.43113291095926903,
+    "talentBudget": 22,
+    "attributeBudget": 66,
+    "importLoot": 306.61624877715866,
+    "importStage": 85.95,
+    "optimizedLoot": 306.61624877715866,
+    "optimizedStage": 85.95,
+    "importObjective": 306.61624877715866,
+    "optimizedObjective": 306.61624877715866,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0,
+    "stageDeltaPct": 0,
+    "evals": 13042,
+    "cacheHits": 10431,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 289,
+          "realizable": 78
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 63,
+        "entries": 63,
+        "feasibleCells": 63,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 99.54548112156625,
+        "killBands": 1,
+        "bestKillReached": 0,
+        "bestMaxStageReached": 100,
+        "bossBoundariesCrossed": 1,
+        "bestScoreAtScreenIterations": 297.8115375050785,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": null,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 335,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 62171,
+          "rejected": 47456,
+          "accepted": 14715,
+          "strandedRepairs": 1387,
+          "nodesCleared": 2289,
+          "structuralResamples": 3384
+        }
+      },
+      "corpusRecombined": {
+        "offered": 72,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 9,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 71,
+        "killing": 0,
+        "bestKillRate": 0,
+        "refined": 8,
+        "refinedKillBands": 1
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 298.85138038033466,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 91
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 305.1526112097482,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 90.8,
+          "gainOverPreviousStagePct": 2.1084830933001757
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 306.61624877715866,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 92.5,
+          "gainOverPreviousStagePct": 0.4796411741679003
+        }
+      ],
+      "ledgerText": "archive   299 loot/min @1000 iters  kill 0%  maxStage 91\nrefined   305 loot/min @1000 iters  kill 0%  maxStage 90.8  (+2.11% vs archive)\nreturned  307 loot/min @1000 iters  kill 0%  maxStage 92.5  (+0.48% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 699
+    },
+    "seconds": 700.844,
+    "optimizedTalents": {
+      "revival": 1,
+      "boon": 1,
+      "ua": 0,
+      "needles": 10,
+      "omen": 6,
+      "ll": 3,
+      "crip": 0,
+      "echo": 1
+    },
+    "optimizedAttributes": {
+      "lotl": 15,
+      "exo": 1,
+      "scorp": 5,
+      "timeless": 5,
+      "ibu": 5,
+      "exterm": 5,
+      "snek": 0,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 0,
+      "dance": 0,
+      "sisters": 0,
+      "scarab": 0,
+      "cat": 0
+    },
+    "importTalents": {
+      "revival": 1,
+      "boon": 1,
+      "ua": 0,
+      "needles": 10,
+      "omen": 6,
+      "ll": 3,
+      "crip": 0,
+      "echo": 1,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "lotl": 15,
+      "exo": 1,
+      "scorp": 5,
+      "timeless": 5,
+      "ibu": 5,
+      "exterm": 5,
+      "snek": 0,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 0,
+      "dance": 0,
+      "sisters": 0,
+      "scarab": 0,
+      "cat": 0
+    }
+  },
+  {
+    "hunter": "ozzy",
+    "set": "KNOWN_OZZY_BUILDS",
+    "index": 15,
+    "mode": "loot",
+    "note": "1.13k",
+    "ok": true,
+    "parity": "match",
+    "level": 27,
+    "fixtureLevel": 27,
+    "expectedLootScore": 1130,
+    "parityDeltaPct": -0.2510783060261703,
+    "talentBudget": 27,
+    "attributeBudget": 81,
+    "importLoot": 1127.1628151419043,
+    "importStage": 99.7894,
+    "optimizedLoot": 1128.855397339464,
+    "optimizedStage": 99.64779999999999,
+    "importObjective": 1127.1628151419043,
+    "optimizedObjective": 1128.855397339464,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0.15016306205475483,
+    "stageDeltaPct": -0.14189883895484998,
+    "evals": 13000,
+    "cacheHits": 6101,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 289,
+          "realizable": 78
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 60,
+        "entries": 60,
+        "feasibleCells": 60,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 92.20581264346136,
+        "killBands": 1,
+        "bestKillReached": 0,
+        "bestMaxStageReached": 100,
+        "bossBoundariesCrossed": 1,
+        "bestScoreAtScreenIterations": 1099.5234884390657,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": null,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 910,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 60279,
+          "rejected": 45341,
+          "accepted": 14938,
+          "strandedRepairs": 1476,
+          "nodesCleared": 2586,
+          "structuralResamples": 3418
+        }
+      },
+      "corpusRecombined": {
+        "offered": 110,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 11,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 65,
+        "killing": 0,
+        "bestKillRate": 0,
+        "refined": 8,
+        "refinedKillBands": 1
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 1095.2651553280552,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 1127.7517823398302,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100,
+          "gainOverPreviousStagePct": 2.9660970089059906
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 1128.855397339464,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100,
+          "gainOverPreviousStagePct": 0.09785974333323064
+        }
+      ],
+      "ledgerText": "archive   1095 loot/min @1000 iters  kill 0%  maxStage 100\nrefined   1128 loot/min @1000 iters  kill 0%  maxStage 100  (+2.97% vs archive)\nreturned  1129 loot/min @1000 iters  kill 0%  maxStage 100  (+0.10% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 718
+    },
+    "seconds": 719.251,
+    "optimizedTalents": {
+      "revival": 1,
+      "boon": 1,
+      "ua": 0,
+      "needles": 9,
+      "omen": 5,
+      "ll": 10,
+      "crip": 0,
+      "echo": 1
+    },
+    "optimizedAttributes": {
+      "lotl": 1,
+      "exo": 30,
+      "scorp": 5,
+      "timeless": 5,
+      "ibu": 5,
+      "exterm": 5,
+      "snek": 0,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 0,
+      "dance": 0,
+      "sisters": 0,
+      "scarab": 0,
+      "cat": 0
+    },
+    "importTalents": {
+      "revival": 1,
+      "boon": 1,
+      "ua": 0,
+      "needles": 10,
+      "omen": 4,
+      "ll": 10,
+      "crip": 0,
+      "echo": 1,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "lotl": 1,
+      "exo": 30,
+      "scorp": 5,
+      "timeless": 5,
+      "ibu": 5,
+      "exterm": 5,
+      "snek": 0,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 0,
+      "dance": 0,
+      "sisters": 0,
+      "scarab": 0,
+      "cat": 0
+    }
+  },
+  {
+    "hunter": "ozzy",
+    "set": "KNOWN_OZZY_BUILDS",
+    "index": 20,
+    "mode": "loot",
+    "note": "2.13k",
+    "ok": true,
+    "parity": "match",
+    "level": 33,
+    "fixtureLevel": 33,
+    "expectedLootScore": 2130,
+    "parityDeltaPct": -0.09149789138642654,
+    "talentBudget": 33,
+    "attributeBudget": 99,
+    "importLoot": 2128.051094913469,
+    "importStage": 99.8549,
+    "optimizedLoot": 2132.434508713216,
+    "optimizedStage": 99.84360000000001,
+    "importObjective": 2128.051094913469,
+    "optimizedObjective": 2132.434508713216,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0.20598254479059597,
+    "stageDeltaPct": -0.011316420125593665,
+    "evals": 15440,
+    "cacheHits": 3900,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 289,
+          "realizable": 160
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 53,
+        "entries": 53,
+        "feasibleCells": 53,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 68.7000355895745,
+        "killBands": 1,
+        "bestKillReached": 0,
+        "bestMaxStageReached": 100,
+        "bossBoundariesCrossed": 1,
+        "bestScoreAtScreenIterations": 2054.262705157931,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": null,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 187,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 54195,
+          "rejected": 38825,
+          "accepted": 15370,
+          "strandedRepairs": 1842,
+          "nodesCleared": 3675,
+          "structuralResamples": 2412
+        }
+      },
+      "corpusRecombined": {
+        "offered": 108,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 11,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 60,
+        "killing": 0,
+        "bestKillRate": 0,
+        "refined": 8,
+        "refinedKillBands": 1
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 2060.6944828971946,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 2125.940049594308,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100,
+          "gainOverPreviousStagePct": 3.1661931081303654
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 2132.434508713216,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 100,
+          "gainOverPreviousStagePct": 0.305486465629505
+        }
+      ],
+      "ledgerText": "archive   2061 loot/min @1000 iters  kill 0%  maxStage 100\nrefined   2126 loot/min @1000 iters  kill 0%  maxStage 100  (+3.17% vs archive)\nreturned  2132 loot/min @1000 iters  kill 0%  maxStage 100  (+0.31% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 682
+    },
+    "seconds": 683.175,
+    "optimizedTalents": {
+      "revival": 1,
+      "boon": 1,
+      "ua": 0,
+      "needles": 10,
+      "omen": 10,
+      "ll": 10,
+      "crip": 0,
+      "echo": 1
+    },
+    "optimizedAttributes": {
+      "lotl": 1,
+      "exo": 65,
+      "scorp": 2,
+      "timeless": 5,
+      "ibu": 1,
+      "exterm": 5,
+      "snek": 0,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 0,
+      "dance": 0,
+      "sisters": 0,
+      "scarab": 0,
+      "cat": 0
+    },
+    "importTalents": {
+      "revival": 0,
+      "boon": 1,
+      "ua": 0,
+      "needles": 10,
+      "omen": 10,
+      "ll": 10,
+      "crip": 1,
+      "echo": 1,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "lotl": 1,
+      "exo": 62,
+      "scorp": 3,
+      "timeless": 5,
+      "ibu": 1,
+      "exterm": 5,
+      "snek": 0,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 0,
+      "dance": 0,
+      "sisters": 0,
+      "scarab": 0,
+      "cat": 0
+    }
+  },
+  {
+    "hunter": "ozzy",
+    "set": "KNOWN_OZZY_PUSH_BUILDS",
+    "index": 3,
+    "mode": "boss",
+    "note": "4.05k boss kill 100",
+    "ok": true,
+    "parity": "match",
+    "level": 34,
+    "fixtureLevel": 34,
+    "expectedLootScore": 4050,
+    "parityDeltaPct": 1.5583353090531338,
+    "talentBudget": 34,
+    "attributeBudget": 102,
+    "importLoot": 4113.112580016652,
+    "importStage": 100.2586,
+    "optimizedLoot": 3541.71039392527,
+    "optimizedStage": 100.2201,
+    "importObjective": 1000022718.0713809,
+    "optimizedObjective": 1000019617.7466782,
+    "importKillRate": 22.7,
+    "optimizedKillRate": 19.6,
+    "lootDeltaPct": -13.89220875858128,
+    "stageDeltaPct": -0.03840069580065859,
+    "evals": 13680,
+    "cacheHits": 2982,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 289,
+          "realizable": 180
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 40,
+        "entries": 40,
+        "feasibleCells": 40,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 3.8265591315689456,
+        "killBands": 4,
+        "bestKillReached": 11,
+        "bestMaxStageReached": 101.3,
+        "bossBoundariesCrossed": 1,
+        "bestScoreAtScreenIterations": 1000011016.6029668,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 672,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 361,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 61337,
+          "rejected": 46895,
+          "accepted": 14442,
+          "strandedRepairs": 2110,
+          "nodesCleared": 4045,
+          "structuralResamples": 2730
+        }
+      },
+      "corpusRecombined": {
+        "offered": 88,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 10,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 52,
+        "killing": 7,
+        "bestKillRate": 18.5,
+        "refined": 8,
+        "refinedKillBands": 4
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 1000010116.470227,
+          "finalIterations": 1000,
+          "killRatePct": 10.100000000000001,
+          "maxStageReached": 101.5
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 1000017917.5648156,
+          "finalIterations": 1000,
+          "killRatePct": 17.9,
+          "maxStageReached": 102.3,
+          "gainOverPreviousStagePct": 0.0007801015669894587
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 1000019617.7466782,
+          "finalIterations": 1000,
+          "killRatePct": 19.6,
+          "maxStageReached": 101.8,
+          "gainOverPreviousStagePct": 0.0001700151400019791
+        }
+      ],
+      "ledgerText": "archive   1000010116 loot/min @1000 iters  kill 10.100000000000001%  maxStage 101.5\nrefined   1000017918 loot/min @1000 iters  kill 17.9%  maxStage 102.3  (+0.00% vs archive)\nreturned  1000019618 loot/min @1000 iters  kill 19.6%  maxStage 101.8  (+0.00% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 742
+    },
+    "seconds": 743.124,
+    "optimizedTalents": {
+      "revival": 2,
+      "boon": 1,
+      "ua": 0,
+      "needles": 10,
+      "omen": 10,
+      "ll": 0,
+      "crip": 9,
+      "echo": 2
+    },
+    "optimizedAttributes": {
+      "lotl": 3,
+      "exo": 46,
+      "scorp": 5,
+      "timeless": 0,
+      "ibu": 5,
+      "exterm": 5,
+      "snek": 5,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 0,
+      "dance": 1,
+      "sisters": 0,
+      "scarab": 0,
+      "cat": 0
+    },
+    "importTalents": {
+      "revival": 2,
+      "boon": 1,
+      "ua": 0,
+      "needles": 10,
+      "omen": 10,
+      "ll": 0,
+      "crip": 10,
+      "echo": 1,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "lotl": 1,
+      "exo": 51,
+      "scorp": 5,
+      "timeless": 0,
+      "ibu": 5,
+      "exterm": 5,
+      "snek": 5,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 0,
+      "dance": 0,
+      "sisters": 0,
+      "scarab": 0,
+      "cat": 0
+    }
+  },
+  {
+    "hunter": "ozzy",
+    "set": "KNOWN_OZZY_BUILDS",
+    "index": 27,
+    "mode": "loot",
+    "note": "47.99k push/loot start, R4-3",
+    "ok": true,
+    "parity": "match",
+    "level": 46,
+    "fixtureLevel": 46,
+    "expectedLootScore": 47990,
+    "parityDeltaPct": -0.03892770600251129,
+    "talentBudget": 46,
+    "attributeBudget": 138,
+    "importLoot": 47971.318593889395,
+    "importStage": 140.1636,
+    "optimizedLoot": 47992.16388966744,
+    "optimizedStage": 140.09390000000002,
+    "importObjective": 47971.318593889395,
+    "optimizedObjective": 47992.16388966744,
+    "importKillRate": 99.7,
+    "optimizedKillRate": 99.5,
+    "lootDeltaPct": 0.043453664374991145,
+    "stageDeltaPct": -0.04972760402842337,
+    "evals": 18292,
+    "cacheHits": 6421,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 289,
+          "realizable": 186
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 593,
+        "entries": 593,
+        "feasibleCells": 593,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 100,
+        "killBands": 14,
+        "bestKillReached": 99,
+        "bestMaxStageReached": 155.2,
+        "bossBoundariesCrossed": 1,
+        "bestScoreAtScreenIterations": 44546.68470053926,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 0,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 273,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 50327,
+          "rejected": 34264,
+          "accepted": 16063,
+          "strandedRepairs": 1491,
+          "nodesCleared": 3253,
+          "structuralResamples": 3342
+        }
+      },
+      "corpusRecombined": {
+        "offered": 130,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 609,
+        "killing": 556,
+        "bestKillRate": 99.9,
+        "refined": 8,
+        "refinedKillBands": 8
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 44554.340480297644,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 103.8
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 47881.74517588138,
+          "finalIterations": 1000,
+          "killRatePct": 98.5,
+          "maxStageReached": 103,
+          "gainOverPreviousStagePct": 7.468194253835142
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 47992.16388966744,
+          "finalIterations": 1000,
+          "killRatePct": 99.5,
+          "maxStageReached": 147.6,
+          "gainOverPreviousStagePct": 0.23060712048082102
+        }
+      ],
+      "ledgerText": "archive   44554 loot/min @1000 iters  kill 0%  maxStage 103.8\nrefined   47882 loot/min @1000 iters  kill 98.5%  maxStage 103  (+7.47% vs archive)\nreturned  47992 loot/min @1000 iters  kill 99.5%  maxStage 147.6  (+0.23% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 1118
+    },
+    "seconds": 1120.298,
+    "optimizedTalents": {
+      "revival": 2,
+      "boon": 1,
+      "ua": 2,
+      "needles": 10,
+      "omen": 10,
+      "ll": 10,
+      "crip": 10,
+      "echo": 1
+    },
+    "optimizedAttributes": {
+      "lotl": 63,
+      "exo": 1,
+      "scorp": 5,
+      "timeless": 5,
+      "ibu": 5,
+      "exterm": 5,
+      "snek": 5,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 0,
+      "dance": 3,
+      "sisters": 0,
+      "scarab": 0,
+      "cat": 0
+    },
+    "importTalents": {
+      "revival": 2,
+      "boon": 1,
+      "ua": 2,
+      "needles": 10,
+      "omen": 10,
+      "ll": 10,
+      "crip": 10,
+      "echo": 1,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "lotl": 60,
+      "exo": 1,
+      "scorp": 5,
+      "timeless": 5,
+      "ibu": 5,
+      "exterm": 5,
+      "snek": 5,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 0,
+      "dance": 4,
+      "sisters": 0,
+      "scarab": 0,
+      "cat": 0
+    }
+  },
+  {
+    "hunter": "ozzy",
+    "set": "KNOWN_OZZY_BUILDS",
+    "index": 34,
+    "mode": "loot",
+    "note": "690.33k",
+    "ok": true,
+    "parity": "match",
+    "level": 53,
+    "fixtureLevel": 53,
+    "expectedLootScore": 690330,
+    "parityDeltaPct": -0.37033099251599794,
+    "talentBudget": 53,
+    "attributeBudget": 159,
+    "importLoot": 687773.4940593643,
+    "importStage": 190.4809,
+    "optimizedLoot": 687936.351631323,
+    "optimizedStage": 190.29500000000002,
+    "importObjective": 687773.4940593643,
+    "optimizedObjective": 687936.351631323,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0.02367895438910645,
+    "stageDeltaPct": -0.09759508696146192,
+    "evals": 10365,
+    "cacheHits": 388,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 289,
+          "realizable": 292
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 577,
+        "entries": 577,
+        "feasibleCells": 577,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 7392,
+        "idleVariations": 48,
+        "bestViolation": 0.006851254535634144,
+        "killBands": 14,
+        "bestKillReached": 99,
+        "bestMaxStageReached": 200,
+        "bossBoundariesCrossed": 2,
+        "bestScoreAtScreenIterations": 493302.377408556,
+        "variations": 7440,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 0,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 360,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 38098,
+          "rejected": 25830,
+          "accepted": 12268,
+          "strandedRepairs": 1313,
+          "nodesCleared": 2542,
+          "structuralResamples": 2147
+        }
+      },
+      "corpusRecombined": {
+        "offered": 86,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 10,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 581,
+        "killing": 466,
+        "bestKillRate": 99.9,
+        "refined": 8,
+        "refinedKillBands": 8
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 491139.78291266283,
+          "finalIterations": 1000,
+          "killRatePct": 97.6,
+          "maxStageReached": 195.2
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 586748.6101486251,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 197.1,
+          "gainOverPreviousStagePct": 19.46672425291273
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 687936.351631323,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 198.9,
+          "gainOverPreviousStagePct": 17.245501690590583
+        }
+      ],
+      "ledgerText": "archive   491140 loot/min @1000 iters  kill 97.6%  maxStage 195.2\nrefined   586749 loot/min @1000 iters  kill 0%  maxStage 197.1  (+19.47% vs archive)\nreturned  687936 loot/min @1000 iters  kill 0%  maxStage 198.9  (+17.25% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 1561
+    },
+    "seconds": 1564.394,
+    "optimizedTalents": {
+      "revival": 2,
+      "boon": 1,
+      "ua": 5,
+      "needles": 10,
+      "omen": 10,
+      "ll": 10,
+      "crip": 14,
+      "echo": 1
+    },
+    "optimizedAttributes": {
+      "lotl": 63,
+      "exo": 2,
+      "scorp": 5,
+      "timeless": 5,
+      "ibu": 5,
+      "exterm": 5,
+      "snek": 1,
+      "vect": 0,
+      "cycle": 1,
+      "deal": 3,
+      "medusa": 1,
+      "dance": 4,
+      "sisters": 0,
+      "scarab": 4,
+      "cat": 0
+    },
+    "importTalents": {
+      "revival": 2,
+      "boon": 1,
+      "ua": 5,
+      "needles": 10,
+      "omen": 10,
+      "ll": 10,
+      "crip": 14,
+      "echo": 1,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "lotl": 64,
+      "exo": 1,
+      "scorp": 5,
+      "timeless": 5,
+      "ibu": 5,
+      "exterm": 5,
+      "snek": 1,
+      "vect": 0,
+      "cycle": 1,
+      "deal": 3,
+      "medusa": 1,
+      "dance": 4,
+      "sisters": 0,
+      "scarab": 4,
+      "cat": 0
+    }
+  },
+  {
+    "hunter": "ozzy",
+    "set": "KNOWN_OZZY_BUILDS",
+    "index": 39,
+    "mode": "loot",
+    "note": "3.13m Zap 50, assumes CreaGN3/AttGN3/InnoGN3 unlocked from now on",
+    "ok": true,
+    "parity": "match",
+    "level": 56,
+    "fixtureLevel": 56,
+    "expectedLootScore": 3130000,
+    "parityDeltaPct": 0.00009491895770314879,
+    "talentBudget": 56,
+    "attributeBudget": 168,
+    "importLoot": 3130002.970963376,
+    "importStage": 199.2942,
+    "optimizedLoot": 3134648.3824056564,
+    "optimizedStage": 199.51489999999998,
+    "importObjective": 3130002.970963376,
+    "optimizedObjective": 3134648.3824056564,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0.14841556015681612,
+    "stageDeltaPct": 0.11074080429836577,
+    "evals": 9619,
+    "cacheHits": 598,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 289,
+          "realizable": 292
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 319,
+        "entries": 319,
+        "feasibleCells": 319,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 6720,
+        "idleVariations": 48,
+        "bestViolation": 0.014687585349584862,
+        "killBands": 14,
+        "bestKillReached": 99,
+        "bestMaxStageReached": 200,
+        "bossBoundariesCrossed": 2,
+        "bestScoreAtScreenIterations": 2778194.9074508846,
+        "variations": 6768,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 48,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 223,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 37285,
+          "rejected": 26409,
+          "accepted": 10876,
+          "strandedRepairs": 1214,
+          "nodesCleared": 2312,
+          "structuralResamples": 1903
+        }
+      },
+      "corpusRecombined": {
+        "offered": 64,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 9,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 324,
+        "killing": 193,
+        "bestKillRate": 99.9,
+        "refined": 8,
+        "refinedKillBands": 8
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 2809595.4036497017,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 200
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 2809595.4036497017,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 200,
+          "gainOverPreviousStagePct": 0
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 3134648.3824056564,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 200,
+          "gainOverPreviousStagePct": 11.569387475994107
+        }
+      ],
+      "ledgerText": "archive   2809595 loot/min @1000 iters  kill 0%  maxStage 200\nrefined   2809595 loot/min @1000 iters  kill 0%  maxStage 200  (+0.00% vs archive)\nreturned  3134648 loot/min @1000 iters  kill 0%  maxStage 200  (+11.57% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 1199
+    },
+    "seconds": 1200.641,
+    "optimizedTalents": {
+      "revival": 2,
+      "boon": 1,
+      "ua": 4,
+      "needles": 10,
+      "omen": 10,
+      "ll": 10,
+      "crip": 15,
+      "echo": 4
+    },
+    "optimizedAttributes": {
+      "lotl": 36,
+      "exo": 49,
+      "scorp": 5,
+      "timeless": 5,
+      "ibu": 5,
+      "exterm": 5,
+      "snek": 0,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 1,
+      "dance": 4,
+      "sisters": 0,
+      "scarab": 9,
+      "cat": 0
+    },
+    "importTalents": {
+      "revival": 2,
+      "boon": 1,
+      "ua": 3,
+      "needles": 10,
+      "omen": 10,
+      "ll": 10,
+      "crip": 15,
+      "echo": 5,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "lotl": 36,
+      "exo": 49,
+      "scorp": 5,
+      "timeless": 5,
+      "ibu": 5,
+      "exterm": 5,
+      "snek": 0,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 1,
+      "dance": 4,
+      "sisters": 0,
+      "scarab": 9,
+      "cat": 0
+    }
+  },
+  {
+    "hunter": "ozzy",
+    "set": "KNOWN_OZZY_BUILDS",
+    "index": 43,
+    "mode": "loot",
+    "note": "5.29m Zap 60, R4-19",
+    "ok": true,
+    "parity": "match",
+    "level": 58,
+    "fixtureLevel": 58,
+    "expectedLootScore": 5290000,
+    "parityDeltaPct": -0.42255994166837324,
+    "talentBudget": 58,
+    "attributeBudget": 174,
+    "importLoot": 5267646.579085743,
+    "importStage": 199.1257,
+    "optimizedLoot": 5303082.2674261015,
+    "optimizedStage": 199.6404,
+    "importObjective": 5267646.579085743,
+    "optimizedObjective": 5303082.2674261015,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0.6727043625335374,
+    "stageDeltaPct": 0.2584799450799193,
+    "evals": 12379,
+    "cacheHits": 622,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 289,
+          "realizable": 292
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 126,
+        "entries": 126,
+        "feasibleCells": 126,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 36.461849839472,
+        "killBands": 4,
+        "bestKillReached": 99,
+        "bestMaxStageReached": 200,
+        "bossBoundariesCrossed": 2,
+        "bestScoreAtScreenIterations": 5011189.609822577,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 864,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 896,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 49991,
+          "rejected": 34537,
+          "accepted": 15454,
+          "strandedRepairs": 2204,
+          "nodesCleared": 4679,
+          "structuralResamples": 2749
+        }
+      },
+      "corpusRecombined": {
+        "offered": 82,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 10,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 134,
+        "killing": 4,
+        "bestKillRate": 99.9,
+        "refined": 8,
+        "refinedKillBands": 4
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 5014483.823689972,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 200
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 4162906.6405945546,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 200,
+          "gainOverPreviousStagePct": -16.98234978986877
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 5303082.2674261015,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 200,
+          "gainOverPreviousStagePct": 27.388930986660437
+        }
+      ],
+      "ledgerText": "archive   5014484 loot/min @1000 iters  kill 0%  maxStage 200\nrefined   4162907 loot/min @1000 iters  kill 0%  maxStage 200  (-16.98% vs archive)\nreturned  5303082 loot/min @1000 iters  kill 0%  maxStage 200  (+27.39% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 919
+    },
+    "seconds": 920.289,
+    "optimizedTalents": {
+      "revival": 2,
+      "boon": 1,
+      "ua": 1,
+      "needles": 10,
+      "omen": 10,
+      "ll": 10,
+      "crip": 15,
+      "echo": 9
+    },
+    "optimizedAttributes": {
+      "lotl": 17,
+      "exo": 80,
+      "scorp": 5,
+      "timeless": 5,
+      "ibu": 5,
+      "exterm": 5,
+      "snek": 0,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 1,
+      "dance": 0,
+      "sisters": 0,
+      "scarab": 12,
+      "cat": 0
+    },
+    "importTalents": {
+      "revival": 2,
+      "boon": 1,
+      "ua": 2,
+      "needles": 10,
+      "omen": 10,
+      "ll": 10,
+      "crip": 15,
+      "echo": 8,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "lotl": 13,
+      "exo": 84,
+      "scorp": 5,
+      "timeless": 5,
+      "ibu": 5,
+      "exterm": 5,
+      "snek": 0,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 1,
+      "dance": 0,
+      "sisters": 0,
+      "scarab": 12,
+      "cat": 0
+    }
+  },
+  {
+    "hunter": "ozzy",
+    "set": "KNOWN_OZZY_BUILDS",
+    "index": 46,
+    "mode": "loot",
+    "note": "8.77m prior to boss kill",
+    "ok": true,
+    "parity": "match",
+    "level": 60,
+    "fixtureLevel": 60,
+    "expectedLootScore": 8770000,
+    "parityDeltaPct": 0.10881722438538886,
+    "talentBudget": 60,
+    "attributeBudget": 180,
+    "importLoot": 8779543.270578599,
+    "importStage": 199.7388,
+    "optimizedLoot": 8779543.270578599,
+    "optimizedStage": 199.7388,
+    "importObjective": 8779543.270578599,
+    "optimizedObjective": 8779543.270578599,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 0,
+    "stageDeltaPct": 0,
+    "evals": 12248,
+    "cacheHits": 989,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 289,
+          "realizable": 292
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 107,
+        "entries": 107,
+        "feasibleCells": 107,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 23.925920902226725,
+        "killBands": 1,
+        "bestKillReached": 0,
+        "bestMaxStageReached": 200,
+        "bossBoundariesCrossed": 2,
+        "bestScoreAtScreenIterations": 8201320.565457882,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": null,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 345,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 50426,
+          "rejected": 34583,
+          "accepted": 15843,
+          "strandedRepairs": 2319,
+          "nodesCleared": 4860,
+          "structuralResamples": 2718
+        }
+      },
+      "corpusRecombined": {
+        "offered": 52,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 8,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 110,
+        "killing": 2,
+        "bestKillRate": 0.6,
+        "refined": 8,
+        "refinedKillBands": 1
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 8238832.285153867,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 200
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 8720342.845597645,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 200,
+          "gainOverPreviousStagePct": 5.844402990353941
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 8779543.270578599,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 200,
+          "gainOverPreviousStagePct": 0.6788772646804813
+        }
+      ],
+      "ledgerText": "archive   8238832 loot/min @1000 iters  kill 0%  maxStage 200\nrefined   8720343 loot/min @1000 iters  kill 0%  maxStage 200  (+5.84% vs archive)\nreturned  8779543 loot/min @1000 iters  kill 0%  maxStage 200  (+0.68% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 787
+    },
+    "seconds": 787.949,
+    "optimizedTalents": {
+      "revival": 2,
+      "boon": 1,
+      "ua": 0,
+      "needles": 10,
+      "omen": 10,
+      "ll": 10,
+      "crip": 15,
+      "echo": 12
+    },
+    "optimizedAttributes": {
+      "lotl": 1,
+      "exo": 102,
+      "scorp": 5,
+      "timeless": 5,
+      "ibu": 2,
+      "exterm": 5,
+      "snek": 0,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 1,
+      "dance": 0,
+      "sisters": 0,
+      "scarab": 15,
+      "cat": 0
+    },
+    "importTalents": {
+      "revival": 2,
+      "boon": 1,
+      "ua": 0,
+      "needles": 10,
+      "omen": 10,
+      "ll": 10,
+      "crip": 15,
+      "echo": 12,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "lotl": 1,
+      "exo": 102,
+      "scorp": 5,
+      "timeless": 5,
+      "ibu": 2,
+      "exterm": 5,
+      "snek": 0,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 1,
+      "dance": 0,
+      "sisters": 0,
+      "scarab": 15,
+      "cat": 0
+    }
+  },
+  {
+    "hunter": "ozzy",
+    "set": "KNOWN_OZZY_BUILDS",
+    "index": 50,
+    "mode": "loot",
+    "note": "77.53m",
+    "ok": true,
+    "parity": "match",
+    "level": 64,
+    "fixtureLevel": 64,
+    "expectedLootScore": 77530000,
+    "parityDeltaPct": 1.9635792716779847,
+    "talentBudget": 64,
+    "attributeBudget": 192,
+    "importLoot": 79052363.00933194,
+    "importStage": 201.11679999999998,
+    "optimizedLoot": 79129184.67647402,
+    "optimizedStage": 201.13479999999998,
+    "importObjective": 79052363.00933194,
+    "optimizedObjective": 79129184.67647402,
+    "importKillRate": 82.8,
+    "optimizedKillRate": 83.3,
+    "lootDeltaPct": 0.09717820469580354,
+    "stageDeltaPct": 0.008950023071170923,
+    "evals": 13205,
+    "cacheHits": 1087,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 289,
+          "realizable": 384
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 116,
+        "entries": 116,
+        "feasibleCells": 116,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 30.986818203551554,
+        "killBands": 12,
+        "bestKillReached": 93,
+        "bestMaxStageReached": 202.4,
+        "bossBoundariesCrossed": 2,
+        "bestScoreAtScreenIterations": 74064988.51727726,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 0,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 433,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 51041,
+          "rejected": 35784,
+          "accepted": 15257,
+          "strandedRepairs": 2038,
+          "nodesCleared": 4348,
+          "structuralResamples": 3301
+        }
+      },
+      "corpusRecombined": {
+        "offered": 80,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 10,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 124,
+        "killing": 37,
+        "bestKillRate": 92.7,
+        "refined": 8,
+        "refinedKillBands": 8
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 70114379.0823184,
+          "finalIterations": 1000,
+          "killRatePct": 72.39999999999999,
+          "maxStageReached": 203
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 72642454.20512266,
+          "finalIterations": 1000,
+          "killRatePct": 81.39999999999999,
+          "maxStageReached": 202.7,
+          "gainOverPreviousStagePct": 3.6056443141800636
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 79129184.67647402,
+          "finalIterations": 1000,
+          "killRatePct": 83.3,
+          "maxStageReached": 202.9,
+          "gainOverPreviousStagePct": 8.92966866597676
+        }
+      ],
+      "ledgerText": "archive   70114379 loot/min @1000 iters  kill 72.39999999999999%  maxStage 203\nrefined   72642454 loot/min @1000 iters  kill 81.39999999999999%  maxStage 202.7  (+3.61% vs archive)\nreturned  79129185 loot/min @1000 iters  kill 83.3%  maxStage 202.9  (+8.93% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 790
+    },
+    "seconds": 790.619,
+    "optimizedTalents": {
+      "revival": 2,
+      "boon": 1,
+      "ua": 0,
+      "needles": 10,
+      "omen": 10,
+      "ll": 6,
+      "crip": 15,
+      "echo": 20
+    },
+    "optimizedAttributes": {
+      "lotl": 17,
+      "exo": 67,
+      "scorp": 5,
+      "timeless": 5,
+      "ibu": 5,
+      "exterm": 5,
+      "snek": 5,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 0,
+      "dance": 1,
+      "sisters": 0,
+      "scarab": 0,
+      "cat": 20
+    },
+    "importTalents": {
+      "revival": 2,
+      "boon": 1,
+      "ua": 0,
+      "needles": 10,
+      "omen": 10,
+      "ll": 6,
+      "crip": 15,
+      "echo": 20,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "lotl": 16,
+      "exo": 68,
+      "scorp": 5,
+      "timeless": 5,
+      "ibu": 5,
+      "exterm": 5,
+      "snek": 5,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 0,
+      "dance": 1,
+      "sisters": 0,
+      "scarab": 0,
+      "cat": 20
+    }
+  },
+  {
+    "hunter": "ozzy",
+    "set": "KNOWN_OZZY_BUILDS",
+    "index": 57,
+    "mode": "loot",
+    "note": "266.54m Zap 120, R4-36",
+    "ok": true,
+    "parity": "match",
+    "level": 68,
+    "fixtureLevel": 68,
+    "expectedLootScore": 266540000,
+    "parityDeltaPct": -0.012362689328033102,
+    "talentBudget": 68,
+    "attributeBudget": 204,
+    "importLoot": 266507048.48786506,
+    "importStage": 201.9732,
+    "optimizedLoot": 267971437.32215697,
+    "optimizedStage": 201.8231,
+    "importObjective": 266507048.48786506,
+    "optimizedObjective": 267971437.32215697,
+    "importKillRate": 98.7,
+    "optimizedKillRate": 98.6,
+    "lootDeltaPct": 0.5494747109319262,
+    "stageDeltaPct": -0.07431679054447847,
+    "evals": 12240,
+    "cacheHits": 841,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 289,
+          "realizable": 444
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 422,
+        "entries": 422,
+        "feasibleCells": 422,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 9552,
+        "idleVariations": 48,
+        "bestViolation": 54.09707929101838,
+        "killBands": 14,
+        "bestKillReached": 99,
+        "bestMaxStageReached": 238.6,
+        "bossBoundariesCrossed": 2,
+        "bestScoreAtScreenIterations": 236840932.42213285,
+        "variations": 9600,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 0,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 663,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 45791,
+          "rejected": 29792,
+          "accepted": 15999,
+          "strandedRepairs": 1832,
+          "nodesCleared": 4552,
+          "structuralResamples": 3234
+        }
+      },
+      "corpusRecombined": {
+        "offered": 122,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 12,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 430,
+        "killing": 391,
+        "bestKillRate": 99.9,
+        "refined": 8,
+        "refinedKillBands": 8
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 231193305.73024392,
+          "finalIterations": 1000,
+          "killRatePct": 97.6,
+          "maxStageReached": 202.8
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 238719764.62381214,
+          "finalIterations": 1000,
+          "killRatePct": 95.7,
+          "maxStageReached": 203.5,
+          "gainOverPreviousStagePct": 3.2554830555301986
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 267971437.32215697,
+          "finalIterations": 1000,
+          "killRatePct": 98.6,
+          "maxStageReached": 203.9,
+          "gainOverPreviousStagePct": 12.253561302073683
+        }
+      ],
+      "ledgerText": "archive   231193306 loot/min @1000 iters  kill 97.6%  maxStage 202.8\nrefined   238719765 loot/min @1000 iters  kill 95.7%  maxStage 203.5  (+3.26% vs archive)\nreturned  267971437 loot/min @1000 iters  kill 98.6%  maxStage 203.9  (+12.25% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 976
+    },
+    "seconds": 977.13,
+    "optimizedTalents": {
+      "revival": 2,
+      "boon": 1,
+      "ua": 0,
+      "needles": 10,
+      "omen": 10,
+      "ll": 10,
+      "crip": 15,
+      "echo": 20
+    },
+    "optimizedAttributes": {
+      "lotl": 1,
+      "exo": 107,
+      "scorp": 3,
+      "timeless": 5,
+      "ibu": 1,
+      "exterm": 5,
+      "snek": 0,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 1,
+      "dance": 1,
+      "sisters": 0,
+      "scarab": 20,
+      "cat": 7
+    },
+    "importTalents": {
+      "revival": 2,
+      "boon": 1,
+      "ua": 0,
+      "needles": 10,
+      "omen": 10,
+      "ll": 10,
+      "crip": 15,
+      "echo": 20,
+      "ultima": 0
+    },
+    "importAttributes": {
+      "lotl": 1,
+      "exo": 105,
+      "scorp": 3,
+      "timeless": 5,
+      "ibu": 2,
+      "exterm": 5,
+      "snek": 0,
+      "vect": 0,
+      "cycle": 0,
+      "deal": 0,
+      "medusa": 1,
+      "dance": 1,
+      "sisters": 0,
+      "scarab": 20,
+      "cat": 7
+    }
+  },
+  {
+    "hunter": "ozzy",
+    "set": "KNOWN_OZZY_BUILDS",
+    "index": 65,
+    "mode": "loot",
+    "note": "R4-44",
+    "ok": true,
+    "parity": "overcount",
+    "level": 75,
+    "fixtureLevel": 75,
+    "expectedLootScore": 4390000000,
+    "parityDeltaPct": 4.124513567041992,
+    "talentBudget": 75,
+    "attributeBudget": 225,
+    "importLoot": 4571066145.593143,
+    "importStage": 287.5105,
+    "optimizedLoot": 4623887454.90163,
+    "optimizedStage": 287.0962,
+    "importObjective": 4571066145.593143,
+    "optimizedObjective": 4623887454.90163,
+    "importKillRate": 0,
+    "optimizedKillRate": 0,
+    "lootDeltaPct": 1.155557754494774,
+    "stageDeltaPct": -0.14409908507688202,
+    "evals": 12176,
+    "cacheHits": 1080,
+    "diag": {
+      "stages": {
+        "enumerate": {
+          "supports": 289,
+          "realizable": 458
+        }
+      },
+      "timings": {},
+      "archive": {
+        "cells": 712,
+        "entries": 712,
+        "feasibleCells": 712,
+        "infeasibleCells": 0,
+        "lastImprovementAt": 7632,
+        "idleVariations": 48,
+        "bestViolation": 21.741130801029087,
+        "killBands": 14,
+        "bestKillReached": 99,
+        "bestMaxStageReached": 285.8,
+        "bossBoundariesCrossed": 2,
+        "bestScoreAtScreenIterations": 1796752149.6792653,
+        "variations": 7680,
+        "streams": 1,
+        "structuralShare": 0.35,
+        "selection": "curiosity",
+        "breakpointSpending": true,
+        "feasibleInfeasible": false,
+        "screenIterations": 100,
+        "fiDecision": "not-requested",
+        "firstFeasibleAtVariation": 0,
+        "feasibleInfeasibleRequested": false,
+        "bossDamageBands": false,
+        "breakpointClamped": 332,
+        "breakpointBlocked": 0,
+        "moves": {
+          "attempted": 38846,
+          "rejected": 26211,
+          "accepted": 12635,
+          "strandedRepairs": 1348,
+          "nodesCleared": 3152,
+          "structuralResamples": 2611
+        }
+      },
+      "corpusRecombined": {
+        "offered": 102,
+        "admitted": 4
+      },
+      "corpus": {
+        "offered": 12,
+        "admitted": 11,
+        "nearestLevelDistance": 0
+      },
+      "finalists": {
+        "count": 720,
+        "killing": 612,
+        "bestKillRate": 99.9,
+        "refined": 8,
+        "refinedKillBands": 8
+      },
+      "polish": {
+        "ocbaConsidered": 0,
+        "ocbaVerified": 0
+      },
+      "ledger": [
+        {
+          "stage": "archive",
+          "scoreAtFinalIterations": 1785603924.6786115,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 283.2
+        },
+        {
+          "stage": "refined",
+          "scoreAtFinalIterations": 3007520371.6993365,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 284.2,
+          "gainOverPreviousStagePct": 68.43155025214543
+        },
+        {
+          "stage": "returned",
+          "scoreAtFinalIterations": 4623887454.90163,
+          "finalIterations": 1000,
+          "killRatePct": 0,
+          "maxStageReached": 297.2,
+          "gainOverPreviousStagePct": 53.74417737656086
+        }
+      ],
+      "ledgerText": "archive   1785603925 loot/min @1000 iters  kill 0%  maxStage 283.2\nrefined   3007520372 loot/min @1000 iters  kill 0%  maxStage 284.2  (+68.43% vs archive)\nreturned  4623887455 loot/min @1000 iters  kill 0%  maxStage 297.2  (+53.74% vs refined)",
+      "truncated": true,
+      "elapsedSeconds": 1782
+    },
+    "seconds": 1785.186,
+    "optimizedTalents": {
+      "revival": 2,
+      "boon": 1,
+      "ua": 3,
+      "needles": 10,
+      "omen": 10,
+      "ll": 10,
+      "crip": 0,
+      "ultima": 38,
+      "echo": 1
+    },
+    "optimizedAttributes": {
+      "lotl": 45,
+      "exo": 7,
+      "scorp": 5,
+      "timeless": 5,
+      "ibu": 5,
+      "exterm": 5,
+      "snek": 1,
+      "vect": 0,
+      "cycle": 5,
+      "deal": 3,
+      "medusa": 1,
+      "dance": 4,
+      "sisters": 1,
+      "scarab": 20,
+      "cat": 10
+    },
+    "importTalents": {
+      "revival": 2,
+      "boon": 1,
+      "ua": 3,
+      "needles": 10,
+      "omen": 10,
+      "ll": 10,
+      "crip": 0,
+      "echo": 1,
+      "ultima": 38
+    },
+    "importAttributes": {
+      "lotl": 49,
+      "exo": 3,
+      "scorp": 5,
+      "timeless": 5,
+      "ibu": 5,
+      "exterm": 5,
+      "snek": 1,
+      "vect": 0,
+      "cycle": 5,
+      "deal": 3,
+      "medusa": 1,
+      "dance": 4,
+      "sisters": 1,
+      "scarab": 20,
+      "cat": 10
+    }
+  }
+]

@@ -70,6 +70,11 @@ function parseArgs(argv) {
   const batchFlag = flags.find((f) => f.startsWith('--batch='));
   const outFlag = flags.find((f) => f.startsWith('--out='));
   const sampleFlag = flags.find((f) => f.startsWith('--sample='));
+  // SELECT BY NAME, e.g. --only=ozzy@34b,borge@72. The positional `from`/`to` are INDICES into the
+  // level-sorted list, and they READ like levels -- `run.js ozzy 34 35` selects neither level 34 nor
+  // ozzy@34b. That has produced a wrong-build run three times, so naming is now the supported path
+  // and the indices are kept only for slicing a large sweep.
+  const onlyFlag = flags.find((f) => f.startsWith('--only='));
   const maxLevelFlag = flags.find((f) => f.startsWith('--max-level='));
   const seedFlag = flags.find((f) => f.startsWith('--seed='));
   const sample = sampleFlag ? Number(sampleFlag.split('=')[1]) : 0;
@@ -77,6 +82,7 @@ function parseArgs(argv) {
     throw new Error(`--sample must be a positive integer, got "${sampleFlag.split('=')[1]}"`);
   }
   return {
+    only: onlyFlag ? onlyFlag.slice('--only='.length).split(',').map((x) => x.trim()).filter(Boolean) : null,
     sample,
     // Varies per run by default so repeated gates cover different builds over time; always
     // reported, so any failure can be replayed exactly with --seed=.
@@ -119,6 +125,12 @@ function selectFixtures(args) {
     const before = all.length;
     all = all.filter((f) => (f.level || 0) <= args.maxLevel);
     args.excludedByLevel = before - all.length;
+  }
+  // NAMES WIN OVER EVERYTHING. findFixture throws on an ambiguous name rather than guessing, which
+  // is the behaviour that makes this safe to prefer over indices.
+  if (args.only) {
+    const known2 = H.loadKnownBuilds();
+    return args.only.map((n) => H.findFixture(known2, n));
   }
   if (args.sample) return stratifiedSample(all, hunters, args.sample, args.seed);
   return all.slice(args.from, args.to === undefined ? all.length : args.to);
@@ -176,80 +188,21 @@ function stratifiedSample(all, hunters, count, seed) {
   return picked;
 }
 
-/**
- * Classify a completed case. Returns null when it passed.
- *
- * A build is gated on ITS OWN objective: loot builds on loot per minute, push builds on
- * average stage. Gating both metrics on every build sounds stricter but is simply wrong --
- * pushing deeper costs loot per minute, so a push build that correctly gains stage would be
- * failed for succeeding. Measured directly: the level-12 and level-13 Borge push fixtures gain
- * +2.8% stage while shedding ~6-9% loot, which is the trade a push build exists to make.
- *
- * The secondary metric is still measured and surfaced (see secondaryWarningOf) so a genuine
- * "gained loot by gutting progression" result can never hide -- it just doesn't fail the gate.
- */
-function failureOf(res) {
-  if (!res.ok) return `ERROR ${res.error.split('\n')[0]}`;
-  // PARITY IS A DIAGNOSTIC, NOT A GATE, IN EITHER DIRECTION.
-  //
-  // This used to fail any build whose computed score EXCEEDED the recorded one, justified by
-  // "nothing can make it land above one". That premise is false and the full 182-build sweep
-  // disproved it: three builds overcount (+4.7% to +7.2%) and three undercount (-5.4%), with the
-  // direction FLIPPING between adjacent levels (72/73/74). They cluster at the stage-300 boss-kill
-  // boundary, where the metric is threshold-sensitive -- a build that barely kills the boss swings
-  // hard either way. A recorded score and a code-only evaluation describe DIFFERENT ACCOUNT STATES
-  // (a share code carries only CODE_PARAMS), so their difference is not evidence about which side
-  // is wrong, and its SIGN carries no information at all.
-  //
-  // Keeping the rule cost real credibility: the last three "parity failures" in the sweep were all
-  // this rule misfiring on correct builds. And the purpose of this tool is to propose a sane
-  // structure, not to replicate cifi-tools -- a build scoring well is the goal, not a defect.
-  //
-  // What parity IS still good for is spotting NON-UNIFORM error: a constant bias cannot reorder
-  // candidates, but one that flips sign between neighbouring levels can, so the spread is reported
-  // in the summary and large deviations are surfaced per build. Reported, never fatal.
-  //
-  // JUDGE EVERY MODE ON ITS OWN OBJECTIVE.
-  //
-  // This used to be `if (push) {stage} else {loot}`, which silently graded `boss` and
-  // `bossTimeless` on LOOT -- failing a boss build for shedding loot, which is precisely what it
-  // is built to do. That is the same defect the push branch exists to prevent, one objective
-  // further along, and it only surfaced once six boss-kill fixtures were labelled correctly (their
-  // boss status had been sitting in free-text `note` while `mode` said push).
-  //
-  // `importObjective`/`optimizedObjective` come from OptimizerObjective's own MODES table, so the
-  // gate cannot drift from what the optimizer maximised.
-  if (Number.isFinite(res.importObjective) && Number.isFinite(res.optimizedObjective)) {
-    if (res.optimizedObjective < res.importObjective) {
-      const kills = Number.isFinite(res.importKillRate)
-        ? `  (kill ${res.importKillRate.toFixed(1)}% -> ${(res.optimizedKillRate || 0).toFixed(1)}%)` : '';
-      return `${res.mode.toUpperCase()} objective ${res.importObjective.toFixed(2)} -> `
-        + `${res.optimizedObjective.toFixed(2)}${kills}`;
-    }
-  } else if (res.mode === 'push') {
-    // Older result files predate the objective fields; fall back rather than crash on --resume.
-    if (res.optimizedStage < res.importStage) {
-      return `STAGE ${res.importStage.toFixed(2)} -> ${res.optimizedStage.toFixed(2)} (${res.stageDeltaPct.toFixed(2)}%)`;
-    }
-  } else if (res.optimizedLoot < res.importLoot) {
-    return `LOOT ${res.importLoot.toFixed(2)} -> ${res.optimizedLoot.toFixed(2)} (${res.lootDeltaPct.toFixed(2)}%)`;
-  }
-  return null;
-}
+// THE VERDICT RULE LIVES IN verdict.js, shared with summarize.js. It used to be defined here and
+// copied there, and the copies drifted: on one 42-build sweep this file reported 1 failure and the
+// summary reported 2, because the copy still treated parity-overcount as fatal and had no boss
+// case. A rule with two homes is a rule that will disagree with itself.
+const { failureOf, secondaryWarningOf } = require('./verdict.js');
 
-/** The non-objective metric moving backwards -- reported, never fatal. */
-function secondaryWarningOf(res) {
-  if (!res.ok) return null;
-  // For a boss mode the interesting SECONDARY metric is loot -- a boss build trading loot for a
-  // kill is expected and must stay a warning, never a failure.
-  if (res.mode === 'push' || res.mode === 'boss' || res.mode === 'bossTimeless') {
-    return res.optimizedLoot < res.importLoot ? `loot ${res.lootDeltaPct.toFixed(2)}%` : null;
-  }
-  return res.optimizedStage < res.importStage ? `stage ${res.stageDeltaPct.toFixed(2)}%` : null;
-}
+
 
 function describe(res) {
-  const label = `${res.hunter}/${res.set}#${res.index} lvl${res.level ?? '?'} ${res.mode}`;
+  // LABEL BY THE BUILD'S NAME, NOT set#index. `#3` reads as a level and is not one -- ozzy@34b is
+  // KNOWN_OZZY_PUSH_BUILDS#3 -- and this repo has already lost a debugging session to investigating
+  // a different build than the one a gate flagged. The uid is kept alongside so the exact fixture is
+  // still unambiguous.
+  const label = `${res.name || `${res.hunter}@?`} lvl${res.level ?? '?'} ${res.mode}`
+    + ` [${res.hunter}/${res.set}#${res.index}]`;
   const failure = failureOf(res);
   if (failure) return `FAIL ${label}  ${failure}`;
   const warn = secondaryWarningOf(res);
@@ -357,8 +310,12 @@ async function main() {
   }
 
   if (args.listOnly) {
-    console.log(`${fixtures.length} build(s)${args.sample ? `, seed ${args.seed}` : ''}:`);
-    for (const f of fixtures) console.log(`  ${f.hunter}/${f.set}#${f.index} level ${f.level} (${f.mode})`);
+    // Name-first, so a listing can be pasted straight back into --only=.
+  console.log(`${fixtures.length} build(s)${args.sample ? `, seed ${args.seed}` : ''}:`);
+    // NAME FIRST, so a listing can be pasted straight back into --only= without translation.
+    for (const f of fixtures) {
+      console.log(`  ${String(f.name || '?').padEnd(12)} level ${f.level} (${f.mode})   [${f.uid}]`);
+    }
     return;
   }
 
@@ -435,8 +392,8 @@ async function main() {
     console.log(`loot vs import  : worst ${lootDeltas[0].toFixed(2)}%  median ${median.toFixed(2)}%  best ${lootDeltas[lootDeltas.length - 1].toFixed(2)}%`);
   }
   console.log(`secondary down  : ${warnings.length} (not fatal -- the other metric traded off)`);
-  for (const { res, why } of failures) console.log(`  FAIL ${res.hunter}/${res.set}#${res.index} lvl${res.level ?? '?'}: ${why}`);
-  for (const { res, why } of warnings) console.log(`  warn ${res.hunter}/${res.set}#${res.index} lvl${res.level ?? '?'} ${res.mode}: ${why}`);
+  for (const { res, why } of failures) console.log(`  FAIL ${res.name || res.uid} lvl${res.level ?? '?'} ${res.mode}: ${why}`);
+  for (const { res, why } of warnings) console.log(`  warn ${res.name || res.uid} lvl${res.level ?? '?'} ${res.mode}: ${why}`);
   console.log(`\ndetail written to ${path.relative(process.cwd(), resultsFile)}`);
 
   process.exit(failures.length ? 1 : 0);

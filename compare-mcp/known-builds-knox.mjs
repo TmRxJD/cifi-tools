@@ -51,5 +51,5 @@ export const KNOWN_KNOX_BUILDS = [
 // what a kill PAYS rather than helping land it (measured: kill rate and remaining boss HP are
 // bit-identical at Timeless 0 and 5), so at the first boss the kill itself is the whole objective.
 export const KNOWN_KNOX_PUSH_BUILDS = [
-  { level: 28, expectedLootScore: 5370, code: 'mp7qUpmiHfj84GyyXor4ugL5k7FewzMycxo8yLD2BMRL4S8ET', mode: 'boss', note: 'BOSS KILL stage 100, Anchor 40 required' },
+  { level: 28, expectedLootScore: 5370, code: 'mp7qUpmiHfj84GyyXor4ugL5k7FewzMycxo8yLD2BMRL4S8ET', mode: 'boss', bossStage: 100, note: 'BOSS KILL stage 100, Anchor 40 required' },
 ];
