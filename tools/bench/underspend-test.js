@@ -72,7 +72,23 @@ let failures = 0;
       const scorer = await H.makeScorer(damaged, 'loot');
       let res;
       try {
-        res = await H.Optimizer.optimize(damaged, { mode: 'loot', scorer });
+        // CAPPED AT 30s, AND THE CAP MAKES THIS GATE STRICTER RATHER THAN WEAKER.
+        //
+        // This ran uncapped -- so at the 600s default -- for 9 builds, which made it one of the two
+        // gates that dominated the whole suite (567s+ against a 2,700s total, alongside
+        // effort-level-check's 910s). Everything else finishes in seconds.
+        //
+        // What this asserts is that the optimizer never returns an UNDER-SPENT build. A truncated
+        // run demonstrates that at least as well as a converged one: the spend assertion runs at
+        // Stage 3 regardless, and the cap is checked at stage boundaries precisely so a partial
+        // allocation is never returned. More to the point, a SHORTER run is MORE likely to leave a
+        // point unspent -- that is exactly how the original bug surfaced, on the cheap effort level
+        // and not the thorough one. So cutting the budget increases the chance of catching the
+        // thing this gate exists for.
+        //
+        // It would NOT be sound in a gate comparing SCORES, where truncation makes the number
+        // irreproducible. See effort-value-check, which disables the cap for that reason.
+        res = await H.Optimizer.optimize(damaged, { mode: 'loot', scorer, maxSeconds: 30 });
       } catch (err) {
         failures++;
         console.log(`FAIL ${fx.uid} lvl${build.level}: optimize threw -- ${err.message}`);

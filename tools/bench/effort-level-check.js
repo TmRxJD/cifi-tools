@@ -76,7 +76,13 @@ let checked = 0;
           // 900s budget. What matters here is that each level returns a legal fully-spent build,
           // and a truncated run demonstrates that as well as a converged one, so the cheaper cap
           // loses nothing this gate is actually asserting.
-          mode: fx.mode || 'loot', scorer, effort, maxSeconds: 45,
+          // 15s, DOWN FROM 45s. At 45 this was 910s solo and 1,407s when run alongside other
+          // gates -- 35% of a 2,700s suite, and the long pole that bounded every attempt to
+          // parallelise it. The same reasoning that justified 45 justifies 15, and more strongly:
+          // a SHORTER run is MORE likely to leave a point unspent, which is precisely the failure
+          // this gate exists for (`fast` threw on ozzy@11 for exactly that). Cheaper and stricter
+          // point the same way here, which is rare enough to be worth saying out loud.
+          mode: fx.mode || 'loot', scorer, effort, maxSeconds: 15,
         });
         if (!res.best) throw new Error('returned no build');
         const legal = H.Space.isLegal(cfg.ATTRIBUTES, cfg.ATTRIBUTE_DEPENDENCIES,

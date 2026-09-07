@@ -1,9 +1,18 @@
 'use strict';
 // Run every gate in one command, and make SKIPS as visible as failures.
 //
-//   node tools/bench/all.js                 # everything that needs no external input
+//   node tools/bench/all.js                 # THE PRE-PUSH CHECK: structural gates only, seconds
+//   node tools/bench/all.js --sims          # also the simulation gates (tens of minutes)
 //   node tools/bench/all.js --bundle=<path> # also the checks that compare against cifi-tools
 //   node tools/bench/all.js --strict        # a SKIP is a failure too
+//
+// WHAT IS AND IS NOT IN THE DEFAULT RUN, decided by measurement rather than taste. A full run was
+// 66 gates in 4,279s -- and NINE of them accounted for 4,212s of that, 98%. The other 57 gates
+// total SIXTY-SEVEN SECONDS. The expensive nine all re-run the optimizer over fixtures, which
+// answers "is the search still good", not "is this change safe to ship".
+//
+// Those are a manual, deliberate run -- the same category as the build sweep in run.js -- and they
+// are no longer paid for on every push. `--sims` includes them.
 //
 // WHY THIS EXISTS. Several checks in this suite depend on gitignored inputs -- a pulled save, an
 // extracted reference, the live bundle -- and each of them handled a missing input by printing
@@ -16,13 +25,22 @@
 // and `--strict` turns them into failures for a machine that should have every input present.
 // A bench that exits 0 while printing SKIP is reported as SKIP, not PASS.
 
-const { execFileSync } = require('child_process');
+const { execFile } = require('child_process');
+const os = require('node:os');
 const fs = require('fs');
 const path = require('path');
 
 const args = process.argv.slice(2);
 const strict = args.includes('--strict');
 const bundleArg = args.find((a) => a.startsWith('--bundle='));
+const jobsArg = args.find((a) => a.startsWith('--jobs='));
+// HOW MANY GATES AT ONCE. Several gates run the real optimizer, and each of those spawns its
+// own WASM worker pool -- so this is bounded well below the core count on purpose. Uncapped
+// parallelism here trades a suite that is slow for one that dies on
+// "Cannot allocate Wasm memory for new instance", which is the failure MAX_POOL_SIZE exists
+// to prevent inside a single process and which nothing prevents across several.
+const JOBS = jobsArg ? Math.max(1, Number(jobsArg.slice('--jobs='.length)))
+  : Math.max(1, Math.min(4, os.cpus().length - 1));
 const bundle = bundleArg ? bundleArg.slice('--bundle='.length) : null;
 
 // Gates that need nothing beyond the repo.
@@ -123,23 +141,70 @@ const NEEDS_BUNDLE = [
 // counted as gates.
 const REPORTS = ['sirred-ship-check', 'save-coverage', 'loopmod-test'];
 
+// SIMULATION GATES: they run the real optimizer or evaluator over fixtures, and each costs
+// minutes. Excluded from the default run and included by --sims. Seconds are from a measured full
+// run, so the cost of adding one here is visible rather than guessed.
+//
+// This is NOT "gates we trust less". They catch real defects -- effort-level-check exists because
+// `fast` threw on a shipped dropdown option, fallback-guarantee-check asserts the corpus safety
+// net. It is a statement about WHEN to pay for them: before a release or after touching the
+// search, not before every push of a UI or importer change.
+const SIMS = new Set([
+  'effort-level-check',        // 1407s
+  'underspend-repro',          //  938s
+  'underspend-test',           //  600s+
+  'fallback-guarantee-check',  //  712s
+  'mode-fidelity-matrix',      //  407s
+  'corpus-recombine-check',    //  277s
+  'cross-block-gate-check',    //  205s
+  'effort-option-check',       //  143s
+  'corpus-wiring-check',       //   99s
+  'boss-parity-check',
+  'search-quality-check',
+  // Wall-clock gates: expensive AND meaningless under load, so they are simulation-run only.
+  'time-cap-check',
+  'time-cap-binds-check',
+  'runtime-ceiling-check',
+  'effort-value-check',
+]);
+const withSims = args.includes('--sims');
+
 const startedAt = Date.now();
 const results = [];
+
+// GATES THAT MEASURE WALL CLOCK MUST RUN ALONE.
+//
+// These assert things like "the default effort finishes inside the stated ceiling" and "the time
+// cap actually bounds a run". Under load those numbers are inflated by contention and the gate
+// fails for a reason that has nothing to do with the code -- exactly the mistake made when a
+// per-build figure from a 7-way parallel sweep was read as a runtime violation. They run last,
+// one at a time, after the pool has drained.
+const TIMING_SENSITIVE = new Set([
+  'time-cap-check',
+  'time-cap-binds-check',
+  'runtime-ceiling-check',
+  'effort-value-check',
+]);
+
 function run(name, extra) {
   const file = path.join(__dirname, `${name}.js`);
   if (!fs.existsSync(file)) {
     results.push({ name, status: 'MISSING', line: 'no such bench' });
-    return;
+    return Promise.resolve();
   }
-  let out = '';
-  let code = 0;
   const gateStart = Date.now();
-  try {
-    out = execFileSync(process.execPath, [file, ...(extra || [])], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-  } catch (e) {
-    out = `${e.stdout || ''}${e.stderr || ''}`;
-    code = e.status === undefined ? 1 : e.status;
-  }
+  return new Promise((resolve) => {
+    execFile(process.execPath, [file, ...(extra || [])],
+      { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }, (err, stdout, stderr) => {
+        const out = `${stdout || ''}${stderr || ''}`;
+        const code = err ? (err.code === undefined ? 1 : err.code) : 0;
+        finish(name, out, code, gateStart);
+        resolve();
+      });
+  });
+}
+
+function finish(name, out, code, gateStart) {
   const lines = out.trimEnd().split('\n');
   const last = lines[lines.length - 1] || '';
   // A bench that printed SKIP verified less than it claims, even though it exited 0.
@@ -161,10 +226,59 @@ function run(name, extra) {
 `);
 }
 
-LOCAL.forEach((n) => run(n));
-if (bundle) NEEDS_BUNDLE.forEach((n) => run(n, [bundle]));
-REPORTS.forEach((n) => run(n));
+/** Run `tasks` with at most `limit` in flight. */
+async function pool(tasks, limit) {
+  let next = 0;
+  const lane = async () => {
+    for (;;) {
+      const i = next++;
+      if (i >= tasks.length) return;
+      await tasks[i]();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, lane));
+}
+
+async function main() {
+  const queued = [];
+  const serial = [];
+  let skippedSims = 0;
+  const add = (n, extra) => {
+    if (SIMS.has(n) && !withSims) { skippedSims++; return; }
+    (TIMING_SENSITIVE.has(n) ? serial : queued).push({ name: n, extra });
+  };
+  LOCAL.forEach((n) => add(n));
+  if (bundle) NEEDS_BUNDLE.forEach((n) => add(n, [bundle]));
+  REPORTS.forEach((n) => add(n));
+
+  // LONGEST FIRST. The suite finishes no sooner than its slowest gate, so starting the known
+  // heavyweights immediately is what keeps the tail short -- the same scheduling the build sweep
+  // uses. Anything not named here is assumed cheap and sorts after; being wrong about one only
+  // costs a little tail, while being wrong in the other direction leaves a 900s gate starting last.
+  const HEAVY = ['effort-level-check', 'underspend-repro', 'underspend-test',
+    'fallback-guarantee-check', 'mode-fidelity-matrix', 'corpus-recombine-check',
+    'cross-block-gate-check', 'search-quality-check', 'boss-parity-check'];
+  queued.sort((a, b) => {
+    const ai = HEAVY.indexOf(a.name); const bi = HEAVY.indexOf(b.name);
+    return (ai === -1 ? HEAVY.length : ai) - (bi === -1 ? HEAVY.length : bi);
+  });
+
+  console.log(`running ${queued.length} gate(s) ${JOBS} at a time`
+    + (serial.length ? `, then ${serial.length} timing-sensitive gate(s) alone` : ''));
+  if (skippedSims) {
+    // NAMED, NOT SILENT. A suite that quietly runs less than it used to is how a green board stops
+    // meaning anything -- the same reason SKIP is reported as loudly as FAIL here.
+    console.log(`  (${skippedSims} simulation gate(s) NOT run -- add --sims for those; `
+      + 'they are a manual run, not a pre-push check)');
+  }
+  await pool(queued.map((g) => () => run(g.name, g.extra)), JOBS);
+  for (const g of serial) await run(g.name, g.extra);
+  report();
+}
+
 const reportNames = new Set(REPORTS);
+
+function report() {
 
 const width = Math.max(...results.map((r) => r.name.length));
 for (const r of results) {
@@ -201,5 +315,11 @@ if (skipped.length) {
   });
 }
 
-const bad = failed.length + (strict ? skipped.length : 0);
-process.exit(bad ? 1 : 0);
+  const bad = failed.length + (strict ? skipped.length : 0);
+  process.exitCode = bad ? 1 : 0;
+}
+
+main().catch((e) => {
+  console.error('FAIL  the suite itself crashed: ' + ((e && e.stack) || e));
+  process.exit(1);
+});
