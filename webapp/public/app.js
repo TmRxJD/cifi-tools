@@ -3742,6 +3742,15 @@ function renderOptimizeEffort() {
     .join('');
   const stored = store.optimizeEffort;
   select.value = LEVELS[stored] ? stored : window.HunterOptimizer.DEFAULT_EFFORT;
+  // SELF-HEAL A LEVEL THAT NO LONGER EXISTS. `exhaustive` was a shipped option and is now removed,
+  // so a returning user's store still names it. The select already falls back, and the only
+  // consumer reads the select rather than the store -- verified -- so nothing throws. But leaving
+  // a dead value in the store means the next person to read it finds a level that is not in
+  // EFFORT_LEVELS and has to work out whether that is a bug. Write the resolved value back.
+  if (stored !== select.value) {
+    store.optimizeEffort = select.value;
+    saveStore();
+  }
   const showHelp = () => { help.textContent = LEVELS[select.value].help; };
   select.onchange = () => {
     showHelp();

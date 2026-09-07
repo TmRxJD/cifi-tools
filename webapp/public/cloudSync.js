@@ -235,6 +235,22 @@
       state.user = null;
       state.isAuthenticated = false;
       state.hasNewerCloudBackup = false;
+      // THE SYNC STAMPS DESCRIBE AN ACCOUNT, NOT A BROWSER, so they must not outlive the session.
+      //
+      // `hasNewerCloudBackup` is computed by comparing the cloud record's updatedAt against the
+      // last upload/download THIS browser did. Leaving one account's stamps in place means the
+      // next account is measured against a baseline that has nothing to do with it -- and the
+      // failure is silent and in the dangerous direction: a stamp NEWER than the new account's
+      // backup hides the "new backup available" notice, so the user never learns the cloud holds
+      // something they have not pulled. Clearing on sign-out costs a first-run notice and removes
+      // that whole class of wrong answer.
+      for (const key of Object.values(LS)) {
+        try { localStorage.removeItem(key); } catch { /* private mode: memory state is cleared below */ }
+      }
+      state.lastSyncTime = null;
+      state.lastUploadTime = null;
+      state.lastDownloadTime = null;
+      state.lastCloudSaveTime = null;
       emit();
       return snapshot();
     },
