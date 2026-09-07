@@ -101,7 +101,24 @@
         + `null/undefined for "no stage known"; got ${typeof highestStageReached}`);
     }
     const reached = Math.max(0, Math.floor(Number(highestStageReached) || 0));
-    return Math.floor(reached / 100) * 100 + 100;
+    // A BOSS AT X00 IS NOT BEATEN UNTIL X01, SO REACHING X00 MEANS YOU ARE STILL FIGHTING IT.
+    //
+    // The rule was floor(reached/100)*100 + 100 unconditionally, which reads "reached 100" as
+    // "cleared 100" and aims at 200 -- the boss AFTER the one still in front of you. On a real
+    // account sitting at stage 100 that is the whole point of the mode inverted: it optimises for
+    // a fight two hundred stages of progress away while the actual wall goes unaddressed.
+    //
+    //     reached  0   -> 100   nothing cleared, first boss
+    //     reached  99  -> 100   died short of it
+    //     reached 100  -> 100   AT the boss, not through it   <- was 200
+    //     reached 101  -> 200   cleared 100, next is 200
+    //     reached 200  -> 200   AT the 200 boss               <- was 300
+    //     reached 262  -> 300   cleared 200, next is 300
+    //
+    // Landing exactly ON a boundary is the same signal `bossViolationOf` and `describeRun` already
+    // use for "stalled at a wall": a run that ends on the boss stage died to that boss.
+    if (reached > 0 && reached % BOSS_INTERVAL === 0) return reached;
+    return Math.floor(reached / BOSS_INTERVAL) * BOSS_INTERVAL + BOSS_INTERVAL;
   }
 
   /**
