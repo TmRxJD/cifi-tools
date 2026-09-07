@@ -354,8 +354,27 @@
    */
   function validateAllocation(hunter, build, where, gems) {
     const problems = [];
+    // A VALIDATOR THAT CANNOT VALIDATE MUST SAY SO, NOT RETURN "no problems".
+    //
+    // This returned an EMPTY problem list for any unusable input -- no hunter defs, a missing
+    // talents or attributes map, a null build -- and an empty list is read everywhere as VALID.
+    // So the one function whose job is catching corrupt state blessed exactly the state it could
+    // not inspect. A malformed-input sweep found it answering all 19 garbage calls with `[]`.
+    // Reporting a problem (rather than throwing) keeps a half-written store loadable while making
+    // the gap visible, which is the behaviour the rest of this file already takes for corruption.
+    if (!build || typeof build !== 'object') {
+      problems.push(`${where} is not an object, so it cannot be validated`);
+      return problems;
+    }
     const rawDefs = global.HUNTER_DEFS[hunter];
-    if (!rawDefs || !isPlainObject(build.talents) || !isPlainObject(build.attributes)) return problems;
+    if (!rawDefs) {
+      problems.push(`${where} names hunter "${hunter}", which has no definitions -- cannot be validated`);
+      return problems;
+    }
+    if (!isPlainObject(build.talents) || !isPlainObject(build.attributes)) {
+      problems.push(`${where} is missing a talents or attributes map, so it cannot be validated`);
+      return problems;
+    }
 
     // Caps must be resolved for this build's context before checking them. Borge's Call Me
     // Lucky Loot caps at 12 rather than 10 once Attraction gem node 2 is active, so validating

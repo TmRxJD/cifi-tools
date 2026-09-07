@@ -56,7 +56,28 @@ let checked = 0;
     for (const effort of levels) {
       checked++;
       try {
-        const res = await H.Optimizer.optimize(cfg, { mode: fx.mode || 'loot', scorer, effort });
+        // TIME-CAPPED, BECAUSE THIS GATE'S COST GREW WITH A NEW EFFORT TIER AND IT LOOKED LIKE A
+        // HANG. Adding `exhaustive` (19200 archive evals, refine 16, cross-block forced) made this
+        // 3 hunters x 3 levels instead of x2, with the new level several times the cost of
+        // Complete: measured 21.7 CPU-MINUTES and still running, inside a suite that runs gates
+        // sequentially, so the whole suite stalled behind it.
+        //
+        // Capping is sound HERE specifically because of what this gate asserts: that every shipped
+        // effort level RETURNS A LEGAL, FULLY-SPENT BUILD. A truncated run still returns one -- the
+        // cap is checked at stage boundaries precisely so it cannot yield a partial allocation --
+        // so the property under test survives. It would NOT be sound in a gate comparing SCORES,
+        // where truncation makes the number irreproducible.
+        //
+        // Skipping the expensive tier instead would be worse: it is a dropdown option users can
+        // pick, and the whole reason this gate exists is that a shipped option threw.
+        const res = await H.Optimizer.optimize(cfg, {
+          // 45s, NOT 90s. The cap bounds each RUN; the gate runs 18 of them (6 builds x 3 levels),
+          // so 90s bounded a single optimize at 27 MINUTES for the suite -- it still overran a
+          // 900s budget. What matters here is that each level returns a legal fully-spent build,
+          // and a truncated run demonstrates that as well as a converged one, so the cheaper cap
+          // loses nothing this gate is actually asserting.
+          mode: fx.mode || 'loot', scorer, effort, maxSeconds: 45,
+        });
         if (!res.best) throw new Error('returned no build');
         const legal = H.Space.isLegal(cfg.ATTRIBUTES, cfg.ATTRIBUTE_DEPENDENCIES,
           cfg.ATTRIBUTE_MIN_VALUE, res.best.attrAlloc, cfg.ATTRIBUTE_BUDGET);

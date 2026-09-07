@@ -61,6 +61,18 @@
 
   // iV(key, level, hunter): cost of buying the single next level `level` of a base stat.
   function baseStatCostAtLevel(key, level, hunter) {
+    // A NON-NUMERIC LEVEL MUST THROW, NOT PRICE AT ZERO.
+    //
+    // `level <= 0` is true for null and for undefined (both coerce to 0), so a caller that failed
+    // to read a level got a cost of 0 -- and this shortcut sits BEFORE the unknown-id throw, so
+    // `relicCostAtLevel(null, null)` returned 0 and never reached it. That defeats the rule this
+    // file already enforces for ids: "An unknown relic id THROWS; it must never price at 0. A
+    // silent zero makes an unmodeled relic look free, so it wins every cost-ranked comparison it
+    // enters." A zero from a missing LEVEL is the same lie by a different route.
+    // Level 0 legitimately costs 0; a level that is not a number does not.
+    if (typeof level !== 'number' || !Number.isFinite(level)) {
+      throw new Error('CostFormulas.baseStatCostAtLevel: level must be a finite number, got ' + typeof level);
+    }
     if (level <= 0) return 0;
     const n = level - 1;
     switch (key) {
@@ -159,10 +171,31 @@
           return Math.ceil(s * l * u * c * d * 10);
         }
       default:
-        return 0;
+        // AN UNKNOWN STAT KEY MUST THROW, NOT PRICE AT ZERO.
+        //
+        // `default: return 0` made any unrecognised key -- a typo, a hunter alias this switch does
+        // not handle, a key read from a stale store -- cost NOTHING, so it would win every
+        // cost-ranked comparison it entered and the purchase path would recommend it first. That is
+        // exactly the failure this file already guards for relic ids ("An unknown relic id THROWS;
+        // it must never price at 0"), left open on the base-stat side.
+        //
+        // The aliases are real and must keep working: Knox stores block/charge/chargeGain/reload,
+        // and Ozzy's Multistrike Chance/Power live under the crit keys. They are handled by the
+        // cases above; anything else is a caller bug.
+        throw new Error('CostFormulas.baseStatCostAtLevel: no cost formula for base stat "'
+          + String(key) + '" (hunter "' + String(hunter) + '")');
     }
   }
   function baseStatCostRange(key, fromLevel, toLevel, hunter) {
+    // A NON-NUMERIC RANGE MUST THROW, NOT SUM TO ZERO. `toLevel <= fromLevel` is FALSE when either
+    // is undefined (NaN comparisons are always false), so control fell through to a loop whose
+    // condition was also false, and the function returned 0 -- i.e. FREE. Same silent-zero lie as a
+    // missing level, reached by a different route. An empty range (to <= from) legitimately costs 0.
+    if (typeof fromLevel !== 'number' || !Number.isFinite(fromLevel)
+      || typeof toLevel !== 'number' || !Number.isFinite(toLevel)) {
+      throw new Error('CostFormulas.baseStatCostRange: fromLevel and toLevel must be finite numbers, got '
+        + typeof fromLevel + ' and ' + typeof toLevel);
+    }
     if (toLevel <= fromLevel) return 0;
     let sum = 0;
     for (let lvl = fromLevel + 1; lvl <= toLevel; lvl++) {
@@ -318,6 +351,18 @@
    * comparison it enters. Fail loudly -- a missing relic is a data gap to fix, not a zero.
    */
   function relicCostAtLevel(relicId, level) {
+    // A NON-NUMERIC LEVEL MUST THROW, NOT PRICE AT ZERO.
+    //
+    // `level <= 0` is true for null and for undefined (both coerce to 0), so a caller that failed
+    // to read a level got a cost of 0 -- and this shortcut sits BEFORE the unknown-id throw, so
+    // `relicCostAtLevel(null, null)` returned 0 and never reached it. That defeats the rule this
+    // file already enforces for ids: "An unknown relic id THROWS; it must never price at 0. A
+    // silent zero makes an unmodeled relic look free, so it wins every cost-ranked comparison it
+    // enters." A zero from a missing LEVEL is the same lie by a different route.
+    // Level 0 legitimately costs 0; a level that is not a number does not.
+    if (typeof level !== 'number' || !Number.isFinite(level)) {
+      throw new Error('CostFormulas.relicCostAtLevel: level must be a finite number, got ' + typeof level);
+    }
     if (level <= 0) return 0;
     const id = canonicalRelicId(relicId);
     if (TIER2_SPECS[id]) return tier2CostAtLevel(TIER2_SPECS[id], level);
@@ -403,6 +448,15 @@
   }
 
   function relicCostRange(relicId, fromLevel, toLevel) {
+    // A NON-NUMERIC RANGE MUST THROW, NOT SUM TO ZERO. `toLevel <= fromLevel` is FALSE when either
+    // is undefined (NaN comparisons are always false), so control fell through to a loop whose
+    // condition was also false, and the function returned 0 -- i.e. FREE. Same silent-zero lie as a
+    // missing level, reached by a different route. An empty range (to <= from) legitimately costs 0.
+    if (typeof fromLevel !== 'number' || !Number.isFinite(fromLevel)
+      || typeof toLevel !== 'number' || !Number.isFinite(toLevel)) {
+      throw new Error('CostFormulas.relicCostRange: fromLevel and toLevel must be finite numbers, got '
+        + typeof fromLevel + ' and ' + typeof toLevel);
+    }
     if (toLevel <= fromLevel) return 0;
     let sum = 0;
     for (let lvl = fromLevel + 1; lvl <= toLevel; lvl++) sum += relicCostAtLevel(relicId, lvl);
@@ -443,12 +497,33 @@
     i114: { startValue: 2.5000000000000002e+28, multiplier: 10 }, i115: { startValue: 1e+29, multiplier: 5 },
   };
   function inscryptionCostAtLevel(id, level) {
+    // A NON-NUMERIC LEVEL MUST THROW, NOT PRICE AT ZERO.
+    //
+    // `level <= 0` is true for null and for undefined (both coerce to 0), so a caller that failed
+    // to read a level got a cost of 0 -- and this shortcut sits BEFORE the unknown-id throw, so
+    // `relicCostAtLevel(null, null)` returned 0 and never reached it. That defeats the rule this
+    // file already enforces for ids: "An unknown relic id THROWS; it must never price at 0. A
+    // silent zero makes an unmodeled relic look free, so it wins every cost-ranked comparison it
+    // enters." A zero from a missing LEVEL is the same lie by a different route.
+    // Level 0 legitimately costs 0; a level that is not a number does not.
+    if (typeof level !== 'number' || !Number.isFinite(level)) {
+      throw new Error('CostFormulas.inscryptionCostAtLevel: level must be a finite number, got ' + typeof level);
+    }
     if (level <= 0) return 0;
     const cfg = INSCRYPTION_TABLE[id];
     if (!cfg) return undefined;
     return level <= 1 ? cfg.startValue : cfg.startValue * Math.pow(cfg.multiplier, level - 1);
   }
   function inscryptionCostRange(id, fromLevel, toLevel) {
+    // A NON-NUMERIC RANGE MUST THROW, NOT SUM TO ZERO. `toLevel <= fromLevel` is FALSE when either
+    // is undefined (NaN comparisons are always false), so control fell through to a loop whose
+    // condition was also false, and the function returned 0 -- i.e. FREE. Same silent-zero lie as a
+    // missing level, reached by a different route. An empty range (to <= from) legitimately costs 0.
+    if (typeof fromLevel !== 'number' || !Number.isFinite(fromLevel)
+      || typeof toLevel !== 'number' || !Number.isFinite(toLevel)) {
+      throw new Error('CostFormulas.inscryptionCostRange: fromLevel and toLevel must be finite numbers, got '
+        + typeof fromLevel + ' and ' + typeof toLevel);
+    }
     if (toLevel <= fromLevel) return 0;
     let sum = 0;
     for (let lvl = fromLevel + 1; lvl <= toLevel; lvl++) {
@@ -464,6 +539,18 @@
   // as-is (g1-g14/oogadget/campfragdet included) rather than trimmed to "what we use" --
   // this is a direct copy, not a reimplementation.
   function gadgetCostAtLevel(id, level) {
+    // A NON-NUMERIC LEVEL MUST THROW, NOT PRICE AT ZERO.
+    //
+    // `level <= 0` is true for null and for undefined (both coerce to 0), so a caller that failed
+    // to read a level got a cost of 0 -- and this shortcut sits BEFORE the unknown-id throw, so
+    // `relicCostAtLevel(null, null)` returned 0 and never reached it. That defeats the rule this
+    // file already enforces for ids: "An unknown relic id THROWS; it must never price at 0. A
+    // silent zero makes an unmodeled relic look free, so it wins every cost-ranked comparison it
+    // enters." A zero from a missing LEVEL is the same lie by a different route.
+    // Level 0 legitimately costs 0; a level that is not a number does not.
+    if (typeof level !== 'number' || !Number.isFinite(level)) {
+      throw new Error('CostFormulas.gadgetCostAtLevel: level must be a finite number, got ' + typeof level);
+    }
     if (level <= 0) return 0;
     const t = Math.floor((level - 1) / 10);
     const e = level - 1;
@@ -485,6 +572,15 @@
     }
   }
   function gadgetCostRange(id, fromLevel, toLevel) {
+    // A NON-NUMERIC RANGE MUST THROW, NOT SUM TO ZERO. `toLevel <= fromLevel` is FALSE when either
+    // is undefined (NaN comparisons are always false), so control fell through to a loop whose
+    // condition was also false, and the function returned 0 -- i.e. FREE. Same silent-zero lie as a
+    // missing level, reached by a different route. An empty range (to <= from) legitimately costs 0.
+    if (typeof fromLevel !== 'number' || !Number.isFinite(fromLevel)
+      || typeof toLevel !== 'number' || !Number.isFinite(toLevel)) {
+      throw new Error('CostFormulas.gadgetCostRange: fromLevel and toLevel must be finite numbers, got '
+        + typeof fromLevel + ' and ' + typeof toLevel);
+    }
     if (toLevel <= fromLevel) return 0;
     let sum = 0;
     for (let lvl = fromLevel + 1; lvl <= toLevel; lvl++) sum += gadgetCostAtLevel(id, lvl);
@@ -494,6 +590,18 @@
   // Verbatim port of the live bundle's `_V` (gem-tree named-upgrade per-level cost: the
   // per-hunter loot-bonus and stat-bonus nodes, plus Attraction's catch-up-power nodes).
   function gemAliasCostAtLevel(alias, level) {
+    // A NON-NUMERIC LEVEL MUST THROW, NOT PRICE AT ZERO.
+    //
+    // `level <= 0` is true for null and for undefined (both coerce to 0), so a caller that failed
+    // to read a level got a cost of 0 -- and this shortcut sits BEFORE the unknown-id throw, so
+    // `relicCostAtLevel(null, null)` returned 0 and never reached it. That defeats the rule this
+    // file already enforces for ids: "An unknown relic id THROWS; it must never price at 0. A
+    // silent zero makes an unmodeled relic look free, so it wins every cost-ranked comparison it
+    // enters." A zero from a missing LEVEL is the same lie by a different route.
+    // Level 0 legitimately costs 0; a level that is not a number does not.
+    if (typeof level !== 'number' || !Number.isFinite(level)) {
+      throw new Error('CostFormulas.gemAliasCostAtLevel: level must be a finite number, got ' + typeof level);
+    }
     if (level <= 0) return 0;
     const e = level - 1;
     switch (alias) {
@@ -509,6 +617,15 @@
     }
   }
   function gemAliasCostRange(alias, fromLevel, toLevel) {
+    // A NON-NUMERIC RANGE MUST THROW, NOT SUM TO ZERO. `toLevel <= fromLevel` is FALSE when either
+    // is undefined (NaN comparisons are always false), so control fell through to a loop whose
+    // condition was also false, and the function returned 0 -- i.e. FREE. Same silent-zero lie as a
+    // missing level, reached by a different route. An empty range (to <= from) legitimately costs 0.
+    if (typeof fromLevel !== 'number' || !Number.isFinite(fromLevel)
+      || typeof toLevel !== 'number' || !Number.isFinite(toLevel)) {
+      throw new Error('CostFormulas.gemAliasCostRange: fromLevel and toLevel must be finite numbers, got '
+        + typeof fromLevel + ' and ' + typeof toLevel);
+    }
     if (toLevel <= fromLevel) return 0;
     let sum = 0;
     for (let lvl = fromLevel + 1; lvl <= toLevel; lvl++) sum += gemAliasCostAtLevel(alias, lvl);
@@ -538,6 +655,15 @@
     return out;
   }
   function projCostRange(fromLevel, toLevel) {
+    // A NON-NUMERIC RANGE MUST THROW, NOT SUM TO ZERO. `toLevel <= fromLevel` is FALSE when either
+    // is undefined (NaN comparisons are always false), so control fell through to a loop whose
+    // condition was also false, and the function returned 0 -- i.e. FREE. Same silent-zero lie as a
+    // missing level, reached by a different route. An empty range (to <= from) legitimately costs 0.
+    if (typeof fromLevel !== 'number' || !Number.isFinite(fromLevel)
+      || typeof toLevel !== 'number' || !Number.isFinite(toLevel)) {
+      throw new Error('CostFormulas.projCostRange: fromLevel and toLevel must be finite numbers, got '
+        + typeof fromLevel + ' and ' + typeof toLevel);
+    }
     const total = { mat1: 0, mat2: 0, mat3: 0 };
     if (toLevel <= fromLevel) return total;
     for (let lvl = fromLevel + 1; lvl <= toLevel; lvl++) {
@@ -552,6 +678,19 @@
   // the same per-resource "per day" rate our build cards already compute from
   // HunterSim.evaluate's r.mat1/r.mat2/r.mat3 (per-run) * runsPerDay. minutesPerDay=1440.
   function collectionTimeMinutes(cost, perDayRate) {
+    // `!cost` catches 0, null and undefined but NOT a string or an object, so garbage divided by
+    // garbage returned NaN -- and NaN is the worst possible answer here: it compares false against
+    // every bound, formats as "NaN" only if something happens to render it, and otherwise flows
+    // silently into a displayed collection time. `null` already means "unknown" everywhere this is
+    // consumed (an unset fragment rate must render as unknown, never as zero or instant), so a
+    // non-numeric input is a caller bug and is refused rather than converted into a fake duration.
+    if (cost !== null && cost !== undefined && (typeof cost !== 'number' || !Number.isFinite(cost))) {
+      throw new Error('CostFormulas.collectionTimeMinutes: cost must be a finite number or null, got ' + typeof cost);
+    }
+    if (perDayRate !== null && perDayRate !== undefined
+      && (typeof perDayRate !== 'number' || !Number.isFinite(perDayRate))) {
+      throw new Error('CostFormulas.collectionTimeMinutes: perDayRate must be a finite number or null, got ' + typeof perDayRate);
+    }
     if (!cost || !perDayRate) return null;
     return (cost / perDayRate) * 1440;
   }
@@ -571,6 +710,14 @@
   /** Fragments on hand now, accruing perDay since the balance was last stamped. */
   function fragmentsOnHand(fragState, nowMs) {
     if (!fragState) throw new Error('fragmentsOnHand: no fragment state supplied');
+    // A TRUTHY NON-FRAGMENT-STATE IS NOT A FRAGMENT STATE. The `!fragState` guard passes anything
+    // truthy -- an array, a def list, a build -- and then `Number(undefined) || 0` reports a
+    // balance of ZERO fragments. Zero is a real, plausible answer ("you have none"), so a caller
+    // that passed the wrong object would be told it is broke rather than that it asked wrongly.
+    if (typeof fragState !== 'object' || Array.isArray(fragState)) {
+      throw new Error('fragmentsOnHand: fragState must be a plain object, got '
+        + (Array.isArray(fragState) ? 'an array' : typeof fragState));
+    }
     const base = Math.max(0, Number(fragState.current) || 0);
     if (!fragState.autoAccrue || !fragState.currentAt || !fragState.perDay) return base;
     const elapsedDays = Math.max(0, (nowMs - fragState.currentAt) / 86400000);
@@ -583,6 +730,14 @@
    * "unknown", and callers must render it as unknown rather than as zero or as instant.
    */
   function fragmentDaysUntilAffordable(cost, fragState, nowMs) {
+    // A MISSING COST MUST NOT READ AS "ALREADY AFFORDABLE". `cost <= have` is true for null and
+    // undefined (both coerce to 0), so a caller that failed to price something was told it needs
+    // ZERO DAYS -- i.e. buy it now. That is the same shape as the rule this file already follows
+    // for an unset rate: "An unset rate must render as unknown, never as zero or instant."
+    if (typeof cost !== 'number' || !Number.isFinite(cost)) {
+      throw new Error('CostFormulas.fragmentDaysUntilAffordable: cost must be a finite number, got '
+        + typeof cost);
+    }
     const perDay = Number(fragState && fragState.perDay) || 0;
     const have = fragmentsOnHand(fragState, nowMs);
     if (cost <= have) return 0;

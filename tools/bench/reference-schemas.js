@@ -531,6 +531,55 @@ const schemas = {
     }).strict(),
   ),
 
+  // ARCHIVE SEED STRUCTURES. Both files share a shape: an envelope plus a `seeds` array of build
+  // STRUCTURES (supports and allocations), deliberately WITHOUT scores -- their own note says
+  // "STRUCTURES ONLY. Scores depend on account sim params and must never be shipped here", which
+  // is the same reasoning that makes a fixture unscoreable under another account's state.
+  //
+  // `.seed-smoke.json` is the 5-build smoke version of `archive-seeds.json`; identical shape, so
+  // one schema is reused rather than copied.
+  'archive-seeds.json': archiveSeedFile(),
+  '.seed-smoke.json': archiveSeedFile(),
 };
+
+function archiveSeedFile() {
+  const alloc = nonEmptyRecord(z.string(), z.number().int().nonnegative());
+  return z.object({
+    generatedAt: z.string(),
+    note: z.string(),
+    effort: z.string(),
+    // TWO RECORD SHAPES, AND THE FILE IS RIGHT TO HOLD BOTH. A build whose optimize() THREW is
+    // recorded as {uid, name, hunter, error} rather than omitted -- 2 of 93 on the current file,
+    // both the "left 1 talent point unspent" invariant firing. Keeping the failure in the file is
+    // the honest choice (a silently shorter seed list would hide it), so the schema expresses the
+    // union instead of rejecting it. Loosening the SUCCESS shape to make these validate would have
+    // been the wrong fix: it would stop the schema catching a genuinely truncated record.
+    seeds: z.array(z.union([z.object({
+      uid: z.string(),
+      name: z.string(),
+      hunter: z.enum(['borge', 'ozzy', 'knox']),
+      error: z.string().min(1),
+    }).strict(), z.object({
+      uid: z.string(),
+      name: z.string(),
+      hunter: z.enum(['borge', 'ozzy', 'knox']),
+      level: z.number().int().positive(),
+      mode: z.string(),
+      talentBudget: z.number().int().nonnegative(),
+      attributeBudget: z.number().int().nonnegative(),
+      talentSupport: z.array(z.string()),
+      attrSupport: z.array(z.string()),
+      talentAlloc: alloc,
+      attrAlloc: alloc,
+      // Proportions are the allocation normalised, so they are fractions rather than counts.
+      talentProportions: nonEmptyRecord(z.string(), z.number()),
+      attrProportions: nonEmptyRecord(z.string(), z.number()),
+      regime: z.string(),
+      killsBoss: z.boolean(),
+      reachesBoss: z.boolean(),
+      secs: z.number().nonnegative(),
+    }).strict()])).min(1),
+  }).strict();
+}
 
 module.exports = { schemas, meta, numericKey };

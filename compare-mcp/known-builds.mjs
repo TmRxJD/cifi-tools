@@ -77,10 +77,10 @@ export const KNOWN_BORGE_PUSH_BUILDS = [
   { level: 14, expectedLootScore: 143.21, code: 'Zt4Q3t8RCXSzYhc4ozecU7RLs8dbEJDPTmWAaXwiSphLDNh9YrSiqBtB4Vom', note: 'stats inaccurate until ~lvl16' },
   { level: 15, expectedLootScore: 160.24, code: 'Zt4Q3t8RrPV6rz8hHqykV91Z9f7WCvDczDZ3P5KjTpF217AG1KqgTtMnSgVu', note: 'stats inaccurate until ~lvl16' },
   { level: 16, expectedLootScore: 180.00, code: '3W8MzjifqaBERtNEhDgifEXBMZuu9j96WcDgUtwEcmxZe5veYZt7ejvHrcaiyM', note: 'first stage-100 clear' },
-  { level: 27, expectedLootScore: 2400, code: '4iA7uKgDdydiQrkcc2MgysbdgxhYsgwujMUXHqVyZYrEUYUMVYXgTUjA4xGvxYU4nT', note: '2.40k boss kill stage 100, requires Gaiden Card' },
+  { level: 27, expectedLootScore: 2400, code: '4iA7uKgDdydiQrkcc2MgysbdgxhYsgwujMUXHqVyZYrEUYUMVYXgTUjA4xGvxYU4nT', bossStage: 100, mode: 'boss', note: '2.40k boss kill stage 100, requires Gaiden Card' },
   { level: 33, expectedLootScore: 10160, code: '6Vyt1J8c1MEgPXd5Bsp28TyJAk7xAGoh1tREDP2GDS5UiQUoGJh3uDTi4xfVhz5Jtk8d9y', note: '10.16k' },
-  { level: 50, expectedLootScore: 3460000, code: '54VXA6YDWDdnP13yWtoDFztc3CwSsgLpYe4Up3qFCvApSU8fXZVes2EpC6eDowD7NorLLMCeoqZwhGQF1', note: '3.46m boss kill stage 200' },
-  { level: 72, expectedLootScore: 2620000000, code: 'TZyYHEkPkCmvo9wv7aBPFHtPHHF9EH66xvr4ESGYGKj3kcPMniut6cTsnVpN3LH6cjhjTpYwh7BFPi5Xvw95vo', note: '2.62b boss kill stage 300, R16-36, R4-36, Wrench 130' },
+  { level: 50, expectedLootScore: 3460000, code: '54VXA6YDWDdnP13yWtoDFztc3CwSsgLpYe4Up3qFCvApSU8fXZVes2EpC6eDowD7NorLLMCeoqZwhGQF1', bossStage: 200, mode: 'boss', note: '3.46m boss kill stage 200' },
+  { level: 72, expectedLootScore: 2620000000, code: 'TZyYHEkPkCmvo9wv7aBPFHtPHHF9EH66xvr4ESGYGKj3kcPMniut6cTsnVpN3LH6cjhjTpYwh7BFPi5Xvw95vo', bossStage: 300, mode: 'boss', note: '2.62b boss kill stage 300, R16-36, R4-36, Wrench 130' },
 ];
 
 // "Post Stage 200" section 5 continuation (71+).

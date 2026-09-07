@@ -75,6 +75,6 @@ export const KNOWN_OZZY_PUSH_BUILDS = [
   { level: 12, expectedLootScore: 23.53, code: '5bvjMexb9VCMs69wTTFtdLrWwsz2MEpFByRe64x7' },
   { level: 17, expectedLootScore: 60.46, code: '4Q4iaVMh5NPhA4j6tdkQQUmDRo4jbvbidDLZMwCC7Bb9YAd7GiB', note: 'swap off GC' },
   { level: 21, expectedLootScore: 185.89, code: '4Q4iaVMh9KTEcWgqsVu9boTWjtP9joRrgmQpGWv5kVA1cJjt3HZ', note: 'stage 100' },
-  { level: 34, expectedLootScore: 4050, code: 'PEX3BXuR6zCDHnTsbv3A4yYjrK3fPuPc8NhxEASUUGqxhmZsq8Sq3BDq', note: '4.05k boss kill 100' },
-  { level: 60, expectedLootScore: 10160000, code: '9B56YozKGB6VK6RfrJy89tYzDFjw6eZMKFwiUMvmcKxU2YN84ouxo8VWQdg3ATcxj1Z1zdtsmh', note: '10.16m boss kill 200, InnoGN3, ZAP 80, R4-22, R17-12, 5 timeless' },
+  { level: 34, expectedLootScore: 4050, code: 'PEX3BXuR6zCDHnTsbv3A4yYjrK3fPuPc8NhxEASUUGqxhmZsq8Sq3BDq', bossStage: 100, mode: 'boss', note: '4.05k boss kill 100' },
+  { level: 60, expectedLootScore: 10160000, code: '9B56YozKGB6VK6RfrJy89tYzDFjw6eZMKFwiUMvmcKxU2YN84ouxo8VWQdg3ATcxj1Z1zdtsmh', bossStage: 200, mode: 'bossTimeless', note: '10.16m boss kill 200, InnoGN3, ZAP 80, R4-22, R17-12, 5 timeless' },
 ];

@@ -32,11 +32,23 @@ const check = (label, actual, expected) => {
 // --- the target itself -----------------------------------------------------------------------
 check('never beaten a boss (stage 0)   -> target 100', O.bossTargetFor(0), 100);
 check('stage 99, still short of the first -> target 100', O.bossTargetFor(99), 100);
-check('stage 100 exactly, boss beaten  -> target 200', O.bossTargetFor(100), 200);
-check('stage 101 -> target 200', O.bossTargetFor(101), 200);
+// A BOSS AT X00 IS NOT BEATEN UNTIL X01. This gate previously asserted
+//     bossTargetFor(100) === 200   labelled "stage 100 exactly, boss beaten"
+// which encoded the opposite and made the gate defend the bug: reaching the boss stage was read as
+// clearing it, so an account standing AT a wall was optimised for the boss two hundred stages
+// beyond it. Confirmed by the project owner from the game side -- a max stage of 100 means the
+// stage-100 boss is still in front of you.
+check('stage 100 exactly, AT the boss   -> target 100', O.bossTargetFor(100), 100);
+check('stage 101, boss cleared          -> target 200', O.bossTargetFor(101), 200);
+check('stage 200 exactly, AT the boss   -> target 200', O.bossTargetFor(200), 200);
+check('stage 201, boss cleared          -> target 300', O.bossTargetFor(201), 300);
+check('stage 262, mid-stretch           -> target 300', O.bossTargetFor(262), 300);
+check('stage 299, short of the wall     -> target 300', O.bossTargetFor(299), 300);
+check('stage 300 exactly, AT the boss   -> target 300', O.bossTargetFor(300), 300);
 check('stage 104 -> target 200', O.bossTargetFor(104), 200);
 check('stage 199 -> target 200', O.bossTargetFor(199), 200);
-check('stage 200 -> target 300', O.bossTargetFor(200), 300);
+// Same correction as above: standing ON the 200 boss means it is still ahead of you, not behind.
+check('stage 200 exactly, AT the boss  -> target 200', O.bossTargetFor(200), 200);
 check('garbage input floors to the first boss', O.bossTargetFor(undefined), 100);
 
 // --- the ordering ----------------------------------------------------------------------------

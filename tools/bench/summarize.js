@@ -11,12 +11,13 @@ const path = require('path');
 const files = process.argv.slice(2);
 if (!files.length) files.push(path.join(__dirname, 'results.json'));
 
-const isFailure = (r) => {
-  if (!r.ok) return 'error';
-  if (r.parity === 'overcount') return 'parity-overcount';
-  if (r.mode === 'push') return r.optimizedStage < r.importStage ? 'stage-regression' : null;
-  return r.optimizedLoot < r.importLoot ? 'loot-regression' : null;
-};
+// ONE definition of "failed", shared with run.js. This file used to carry its own copy and they
+// drifted: on the same 42-build sweep run.js reported 1 failure and this reported 2 -- it still
+// counted parity-overcount as fatal, and had no boss case, so it flagged a boss build for shedding
+// loot. See verdict.js for why parity is a diagnostic and why each mode is judged on its own
+// objective.
+const { categoryOf } = require('./verdict.js');
+const isFailure = categoryOf;
 
 let all = [];
 for (const f of files) {

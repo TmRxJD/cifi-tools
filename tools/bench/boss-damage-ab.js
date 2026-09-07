@@ -53,7 +53,14 @@ const FI = opt('fi', null) !== null;
 const BOTH = args.includes('--both');
 
 // The shipped archive seed, so arm-to-arm differences are the FLAG and not the stream.
-const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
+//
+// `--seedlist=0xc0ffee,0xbadf00d` overrides these. It exists so a threshold read FROM these three
+// seeds can be validated on seeds it was not fitted to -- the FI warmup fraction was derived from
+// a single seed once, and the value that looked right there cost 18% on another.
+const SEEDLIST = opt('seedlist', null);
+const BASE_SEEDS = SEEDLIST
+  ? SEEDLIST.split(',').map((t) => { const n = Number(t.trim()); if (!Number.isFinite(n)) throw new Error(`bad seed ${t}`); return n; })
+  : [0x9e3779b9, 0x1234, 0xa5a5a5a5];
 
 (async () => {
   const known = H.loadKnownBuilds();
@@ -110,7 +117,13 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
         // THE FLAG MUST BE CONFIRMED LIVE FROM THE RESULT, not from the argument we passed.
         // bossDamageBands reached three of four sites once already and was never actually applied.
         const recorded = res.diag && res.diag.archive && res.diag.archive.bossDamageBands;
-        const recordedFi = res.diag && res.diag.archive && res.diag.archive.feasibleInfeasible;
+        // ASSERT WIRING AGAINST THE REQUEST, REPORT ENGAGEMENT SEPARATELY. FI now engages only where
+        // its premise holds (no seed build kills anything), so `feasibleInfeasible` in diag is what
+        // ACTUALLY happened while `feasibleInfeasibleRequested` is what was asked for. Checking the
+        // former would make a correct no-engagement look like an unwired flag -- the guard must
+        // still catch a flag that never arrived, without flagging one that arrived and declined.
+        const recordedFi = res.diag && res.diag.archive && res.diag.archive.feasibleInfeasibleRequested;
+        const engagedFi = res.diag && res.diag.archive && res.diag.archive.feasibleInfeasible;
         if (recorded !== on || recordedFi !== fi) {
           throw new Error(`boss-damage-ab: asked for bossDamageBands=${on}/FI=${fi} but the run `
             + `recorded ${recorded}/${recordedFi}; a flag is not reaching the archive and the A/B `
@@ -131,7 +144,7 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
         }
         const d = H.Objective.describeRun(got);
         rows.push({
-          name, seed, on, fi, loot: got.loot,
+          name, seed, on, fi, engagedFi, loot: got.loot,
           feasibleCells: res.diag.archive.feasibleCells,
           infeasibleCells: res.diag.archive.infeasibleCells,
           bestViolation: res.diag.archive.bestViolation,
@@ -152,6 +165,7 @@ const BASE_SEEDS = [0x9e3779b9, 0x1234, 0xa5a5a5a5];
           + `${(r.pct >= 0 ? '+' : '') + r.pct.toFixed(2)}%  `
           + `cells ${String(r.cells).padStart(4)} F/I ${String(r.feasibleCells).padStart(3)}/${String(r.infeasibleCells).padStart(3)}  `
           + `bestViolation ${String(Math.round(r.bestViolation)).padStart(3)}  `
+          + (r.fi && !r.engagedFi ? 'FI-DECLINED(premise absent)  ' : '')
           + `furthest ${r.furthest.toFixed(1).padStart(6)}  ${r.regime}  ${r.secs}s`);
       }
     }

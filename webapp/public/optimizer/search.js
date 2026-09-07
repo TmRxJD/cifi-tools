@@ -99,7 +99,36 @@
   // Stage 3 therefore re-scores at FINAL_ITERATIONS, which is also exactly what the build card
   // displays. Optimizing one number and reporting another is what produced the old "the search
   // said it was better but nothing changed" dialog.
-  const SCREEN_ITERATIONS = 100;
+  //
+  // EVERY ARCHIVE DECISION IS MADE AT THIS FIDELITY, AND IT IS A SAMPLE, NOT A VALUE.
+  //
+  // Measured here: a 100-iteration score carries ~0.9% mean deviation from a 1000-iteration score
+  // and ~1.2% pairwise rank inversions, and a 0.32% ridge has been measured ordering BACKWARDS by
+  // 1.7% at this fidelity. MAP-Elites replaces a cell's occupant only with a HIGHER-SCORING one, so
+  // under noise a cell accumulates whichever build got a LUCKY estimate rather than the best build
+  // -- the winner's curse. The QD literature names this failure directly: "lucky solutions might be
+  // kept in place of truly good-performing ones" (Uncertain Quality-Diversity, arXiv 2302.00463).
+  //
+  // Overridable per run ONLY so that hypothesis can be tested end to end -- if outcomes are driven
+  // by lucky estimates, raising this must change them. Shipped value unchanged.
+  const DEFAULT_SCREEN_ITERATIONS = 100;
+  let SCREEN_ITERATIONS = DEFAULT_SCREEN_ITERATIONS;
+  // Same concurrency guard as FINAL_ITERATIONS, for the same reason: two runs in one process
+  // disagreeing about screening fidelity would silently corrupt each other's archives.
+  let screenIterationsOwner = 0;
+  function setScreenIterations(n) {
+    if (!Number.isFinite(n) || n <= 0) throw new Error(`screenIterations must be a positive number, got ${n}`);
+    if (screenIterationsOwner > 0 && n !== SCREEN_ITERATIONS) {
+      throw new Error(`optimize(): another run in this process is using screenIterations `
+        + `${SCREEN_ITERATIONS}; two concurrent runs cannot disagree about screening fidelity`);
+    }
+    SCREEN_ITERATIONS = n;
+    screenIterationsOwner++;
+  }
+  function releaseScreenIterations() {
+    screenIterationsOwner = Math.max(0, screenIterationsOwner - 1);
+    if (screenIterationsOwner === 0) SCREEN_ITERATIONS = DEFAULT_SCREEN_ITERATIONS;
+  }
   //
   // THE FIDELITY EVERY DECISION IS MADE AT, AND THE SINGLE LARGEST COST IN A RUN.
   //
@@ -185,6 +214,29 @@
       help: 'A full archive pass, then refines the 8 strongest elites. Finds builds Fast '
         + 'misses, at several times the cost.',
     },
+    exhaustive: {
+      // FOR SOMEONE WILLING TO WAIT. Every number here is the next measured step, not a round
+      // multiple of Complete.
+      //
+      // archiveEvals 19200 is the rung already measured above Complete on the ozzy@62 seed:
+      //     9600  -> 103 cells, 3 kill bands, best kill  5,  89s
+      //    19200  -> 107 cells, 4 kill bands, best kill 10, 170s
+      // Cells barely move, so this buys DEPTH per lineage rather than coverage -- and depth is what
+      // produces a boss foothold, which is the difference between -66% and a working build there.
+      //
+      // crossBlock is FORCED ON rather than left to the donor-distance gate. At Complete the pass is
+      // skipped when a donor sits within 2 levels, because it was measured finding nothing there for
+      // +31% runtime. Someone who has chosen to wait is buying exactly that kind of low-probability
+      // check, so the cost/benefit inverts.
+      //
+      // HONEST COST: expect several times Complete. borge@73 runs ~226s at Complete, and this
+      // roughly doubles the archive, doubles refinement and adds the cross-block pass on top --
+      // comfortably past the 5-minute mark on high-level builds. That is the deal being offered,
+      // not a regression.
+      label: 'Exhaustive', archiveEvals: 19200, refineSupports: 16, crossBlock: true,
+      help: 'Doubles the archive and refinement over Complete and forces the cross-block pass. '
+        + 'Several times slower; use it when you would rather wait than wonder.',
+    },
   };
   //
   // THE SHIPPED DEFAULT, DECLARED EXACTLY ONCE -- and it used to be declared twice, with two
@@ -214,14 +266,25 @@
     'structuralShare',                                 // variation mix
     'selection', 'seeds', 'seed',                      // parent choice + determinism
     'breakpointSpending',                              // move flags
+    // The cross-block pass in polishWinner. Declared so its COST can be A/B'd and so it can be
+    // switched off if it ever breaches a runtime ceiling -- narrowing CROSS_BLOCK_WIDTH instead
+    // would silently stop it working (the halves it pairs are individually downhill, so a narrow
+    // slice excludes exactly what it looks for).
+    'crossBlock',
     'feasibleInfeasible',                              // FI-MAP-Elites: two archives
     'archiveOnly',                                     // ablation: stop after illumination
     'finalIterations',                                 // decision fidelity; A/B only
+    'screenIterations',                                // ARCHIVE fidelity; A/B only
     'ocbaPolish',                                      // OCBA allocation in the final polish
     'betAndRun',                                       // k independent archives, refine the best
     'bossDamageBands',                                 // split kill-0 cells by boss damage
     'skipPolish',                                      // ablation
   ]);
+
+  // How many community builds are re-fitted in as extra finalists. Nearest levels first, since
+  // the method interpolates: a donor 40 levels away carries a shape for a different budget.
+  // Each costs ONE full-fidelity evaluation at Stage 3, so this is cheap next to the archive.
+  const CORPUS_DONORS = 12;
 
   const DEFAULT_ARCHIVE_EVALS = EFFORT_LEVELS.fast.archiveEvals;
 
@@ -247,6 +310,20 @@
   // the widest amount currently on offer -- evidence that something wider might pay. A build that
   // never wants a big transfer never scans for one.
   const POLISH_TIERS = [4, 8, 16];
+  // How many halves from EACH block the cross-block pass pairs. 32 was the smallest width that
+  // found the ozzy@11 coupling under a STRATIFIED slice; top-K needed 100+ and a narrow top-K never
+  // found it at all, because the halves involved are individually downhill. Cost is O(width^2)
+  // full-fidelity evaluations, paid only where the block-wise polish has already converged.
+  const CROSS_BLOCK_WIDTH = 32;
+  // How far the nearest usable corpus donor may be before the cross-block pass is worth its cost.
+  // 2 because refit demonstrably bridges one or two levels on its own -- generating a seed one level
+  // up scored +0.00% over simply refitting the level below -- while five levels away collapses
+  // (band=5 measured -41% on borge@73, -84% on knox@30).
+  const CROSS_BLOCK_DONOR_DISTANCE = 2;
+  // How many recombined donor pairs are admitted as finalists. 4 because the gain comes from the
+  // BEST pairing, not from volume -- ozzy@70's winner was a single pair worth +42 points -- while
+  // every admitted finalist costs a full-fidelity evaluation at Stage 3.
+  const CORPUS_RECOMBINE = 4;
 
 
 
@@ -468,7 +545,7 @@
   // Floor on how many get verified, so a degenerate neighbourhood cannot collapse the decision.
   const OCBA_MIN_VERIFY = 8;
 
-  async function polishWinner(ctx, cfg, talentAlloc, attrAlloc, startScore, pinnedAttrs, report, ocba, stats) {
+  async function polishWinner(ctx, cfg, talentAlloc, attrAlloc, startScore, pinnedAttrs, report, ocba, stats, crossBlock) {
     const { TALENTS, ATTRIBUTES, TALENT_BUDGET, ATTRIBUTE_BUDGET } = cfg;
     const deps = cfg.ATTRIBUTE_DEPENDENCIES;
     const minVal = cfg.ATTRIBUTE_MIN_VALUE;
@@ -479,6 +556,11 @@
     let tier = 0;                       // index into POLISH_TIERS: how wide the amounts go
     for (let round = 0; round < POLISH_MAX_ROUNDS; round++) {
       if (ctx.shouldCancel()) throw new Cancelled();
+      // The polish is a sequence of full-fidelity neighbourhood sweeps and is the second-largest
+      // consumer after the archive. Checking only before the cross-block pass left it unbounded:
+      // with the archive capped, borge@12 at exhaustive still ran 115s against a 20s cap. Each
+      // round starts from a complete legal build, so stopping between rounds is safe.
+      if (round > 0 && ctx.pastDeadline()) break;
       report(round / POLISH_MAX_ROUNDS);
       const maxAmount = POLISH_TIERS[tier];
       const amounts = Array.from({ length: maxAmount }, (_, i) => maxAmount - i);
@@ -560,13 +642,129 @@
         // Nothing improved at this width. Widen once and try again; if the widest tier is already
         // in play, the polish is genuinely converged.
         if (tier < POLISH_TIERS.length - 1) { tier += 1; continue; }
-        break;
+        // ---- CROSS-BLOCK PASS: change TALENTS AND ATTRIBUTES SIMULTANEOUSLY -------------------
+        //
+        // EVERY move above changes ONE block. The talent sweep holds attributes fixed and the
+        // attribute sweep holds talents fixed, so a transition needing BOTH is unreachable by
+        // construction -- at any width, from any start, with any budget.
+        //
+        // That is not theoretical. Measured on ozzy@11 with fixed allocations and no search
+        // involved: the import's attributes score -7.77% against our talents, its talents -0.92%
+        // against our attributes, and the two TOGETHER +2.07%. Both halves downhill, the pair
+        // uphill. A block-wise climber cannot cross that, which is why the build sat at -2.02%
+        // fully spent, legal and converged, only 8 point-differences from a better build.
+        //
+        // WIDENING WITHIN A BLOCK DOES NOT FIX IT -- measured, do not retry. Allowing K sources and
+        // M-level raises returned a BYTE-IDENTICAL build on borge@42, knox@38 and ozzy@11 at 4.6x
+        // to 9.7x the evaluations. The missing degree of freedom is ACROSS blocks, not within one.
+        //
+        // RANKING THE HALVES BY THEIR OWN SCORE IS ANTI-CORRELATED WITH FINDING THE PAIR. The
+        // halves needed here are individually downhill, so a top-K slice excludes precisely what
+        // this pass exists to find: top-K at K=8/16/32 returned +0.02% while a wide STRATIFIED
+        // slice returned +2.18 points. Half the slice is the best moves, half is spread across the
+        // whole distribution so the downhill tail is represented. Do not "optimise" this by
+        // narrowing K.
+        if (crossBlock === false) break;   // explicitly disabled for a cost A/B
+        if (stats) stats.crossBlockRan = true;
+        const jointMoves = await crossBlockMoves(ctx, cfg, curT, curA, curScore);
+        if (!jointMoves.length) break;
+        const jointExact = await ctx.score(jointMoves, FINAL_ITERATIONS);
+        let jb = -1;
+        for (let i = 0; i < jointExact.length; i++) {
+          if (jointExact[i] > curScore && (jb === -1 || jointExact[i] > jointExact[jb])) jb = i;
+        }
+        if (jb === -1) break;               // converged jointly too
+        curT = jointMoves[jb].talentAlloc;
+        curA = jointMoves[jb].attrAlloc;
+        curScore = jointExact[jb];
+        if (stats) stats.crossBlockGains = (stats.crossBlockGains || 0) + 1;
+        tier = 0;                           // structure changed: re-sweep from the narrowest width
+        continue;
       }
       curT = toVerify[bestIdx].m.talentAlloc;
       curA = toVerify[bestIdx].m.attrAlloc;
       curScore = exact[bestIdx];
     }
     return { talentAlloc: curT, attrAlloc: curA, score: curScore };
+  }
+
+  /**
+   * Candidate moves that change BOTH blocks at once, for the coupling the block-wise polish cannot
+   * cross. Returns allocations; the caller decides, so this can never accept a regression.
+   *
+   * Cost is bounded by CROSS_BLOCK_WIDTH^2 and it runs ONLY where the polish has converged, so a
+   * build that is not stuck pays nothing for it.
+   */
+  async function crossBlockMoves(ctx, cfg, curT, curA, curScore) {
+    const { TALENTS, ATTRIBUTES, TALENT_BUDGET, ATTRIBUTE_BUDGET } = cfg;
+    const deps = cfg.ATTRIBUTE_DEPENDENCIES;
+    const minVal = cfg.ATTRIBUTE_MIN_VALUE;
+    const capOf = (d) => (d.maxLevel === null || d.maxLevel === undefined ? Infinity : d.maxLevel);
+
+    // One block's worth of single-source moves, including ONE SOURCE -> TWO DESTINATIONS. The split
+    // form matters: ozzy@11's attribute half is `exo -3` spread across `lotl +1` and `exterm +1`,
+    // and every other move in this file sends freed points to a single destination, so without it
+    // the pair has nothing to pair WITH.
+    const halfMoves = (defs, alloc, budget, isAttr) => {
+      const out = [];
+      for (const from of defs) {
+        for (const chunk of [1, 2]) {
+          if ((alloc[from.id] || 0) < chunk) continue;
+          for (const to of defs) {
+            if (to.id === from.id) continue;
+            const next = { ...alloc };
+            next[from.id] -= chunk;
+            const room = Math.floor((budget - Space.costOf(defs, next)) / (to.cost || 1));
+            const add = Math.min(room, capOf(to) - (next[to.id] || 0));
+            if (add < 1) continue;
+            next[to.id] = (next[to.id] || 0) + add;
+            if (Space.costOf(defs, next) > budget) continue;
+            if (!isAttr || Space.isLegal(defs, deps, minVal, next, budget)) out.push(next);
+            if (add >= 2) {
+              for (const to2 of defs) {
+                if (to2.id === to.id || to2.id === from.id) continue;
+                const split = { ...next };
+                split[to.id] -= 1;
+                const room2 = Math.floor((budget - Space.costOf(defs, split)) / (to2.cost || 1));
+                const add2 = Math.min(room2, capOf(to2) - (split[to2.id] || 0));
+                if (add2 < 1) continue;
+                split[to2.id] = (split[to2.id] || 0) + add2;
+                if (Space.costOf(defs, split) > budget) continue;
+                if (!isAttr || Space.isLegal(defs, deps, minVal, split, budget)) out.push(split);
+              }
+            }
+          }
+        }
+      }
+      return out;
+    };
+
+    const aMoves = halfMoves(ATTRIBUTES, curA, ATTRIBUTE_BUDGET, true);
+    const tMoves = halfMoves(TALENTS, curT, TALENT_BUDGET, false);
+    if (!aMoves.length || !tMoves.length) return [];
+
+    // Rank each block's halves at SCREEN fidelity -- this is ranking only, and every surviving PAIR
+    // is re-scored at FINAL_ITERATIONS by the caller. That is the opposite of donor screening,
+    // where a cheap mis-rank permanently removed a candidate.
+    const aScores = await ctx.score(aMoves.map((a) => ({ talentAlloc: curT, attrAlloc: a })), SCREEN_ITERATIONS);
+    const tScores = await ctx.score(tMoves.map((t) => ({ talentAlloc: t, attrAlloc: curA })), SCREEN_ITERATIONS);
+    const stratify = (ranked, k) => {
+      if (ranked.length <= k) return ranked;
+      const head = ranked.slice(0, Math.ceil(k / 2));
+      const rest = ranked.slice(head.length);
+      const want = k - head.length;
+      const step = rest.length / want;
+      for (let i = 0; i < want; i++) head.push(rest[Math.floor(i * step)]);
+      return head;
+    };
+    const topA = stratify(aMoves.map((a, i) => ({ v: a, s: aScores[i] })).sort((x, y) => y.s - x.s), CROSS_BLOCK_WIDTH);
+    const topT = stratify(tMoves.map((t, i) => ({ v: t, s: tScores[i] })).sort((x, y) => y.s - x.s), CROSS_BLOCK_WIDTH);
+
+    const out = [];
+    for (const A of topA) {
+      for (const T of topT) out.push({ talentAlloc: T.v, attrAlloc: A.v });
+    }
+    return out;
   }
 
   // ============================ THE ARCHIVE (quality-diversity) ============================
@@ -701,6 +899,21 @@
   // reached one and for one already past it (objective.js records the measurement), so a build
   // that died between bosses is credited NO progress rather than perfect progress. Getting this
   // wrong once already made an unreachable regime score feasible.
+  // Fraction of the variation budget spent UNSPLIT before deciding whether to engage FI.
+  //
+  // MEASURED across THREE seeds, FI off, 9600 variations -- first variation at which anything kills:
+  //     knox@31   336 (3.5%)   1392 (14.5%)   528 (5.5%)   -- ALWAYS arrives
+  //     knox@30   NEVER        NEVER          NEVER        -- never arrives, on any seed
+  // So the separation is not a knife edge: 14.5% against "not within the whole budget".
+  //
+  // 0.30 is ~2x the worst observed arrival, with ~7x headroom on the other side. It is a chosen
+  // constant and it is chosen from a measured DISTRIBUTION, which is the part that matters.
+  //
+  // AN EARLIER VALUE OF 0.10 WAS DERIVED FROM A SINGLE SEED (336) AND COST 18%. On seed 1234
+  // knox@31 arrives at 14.5%, so the warmup ended first, FI engaged on a build that did not need
+  // it, and the result was -18.22% -- WORSE than the -2.84% the gate existed to remove. One seed is
+  // one sample applies to the measurement a threshold is read from, not only to the A/B arms.
+  const FI_WARMUP_FRACTION = 0.30;
   const FEASIBLE_KILL_RATE = 0;
   function isFeasibleBuild(meta) {
     return (meta.kill || 0) > FEASIBLE_KILL_RATE;
@@ -1103,20 +1316,118 @@
     // a total order and the archive cannot depend on evaluation order.
     const betterViolation = (a, b) => (a.violation !== b.violation ? a.violation < b.violation : a.score > b.score);
 
+    //
+    // FI ENGAGES ONLY WHERE ITS PREMISE HOLDS: A HARD-TO-REACH FEASIBLE REGION.
+    //
+    // FI-2Pop exists for problems where feasible solutions are RARE, and its whole value is walking
+    // the infeasible population to the constraint boundary. Where feasible solutions are already
+    // abundant there is no boundary to find, and the mechanism can only perturb a search that was
+    // already succeeding.
+    //
+    // MEASURED, and three separate rule variants failed to remove it -- fixed 50/50 alternation,
+    // pfeas-weighted selection, and dual retention:
+    //     knox@31  baseline +1.51% / +1.17% / +1.51%   (stable: 0.34 points across seeds)
+    //     knox@31  FI on    -2.84% / +1.17% / +1.51%   (one seed -4.29%, two exactly neutral)
+    // The regression is not the ~7-point variance measured on the bimodal ozzy build; knox@31's own
+    // baseline barely moves. FI was adding trajectory variance to a build that had none.
+    //
+    // The discriminator is in the archive itself, not in the hunter or the level:
+    //     knox@30  nothing kills   6 cells, reaches-cannot-kill  -> FI creates the killers, +82 pts
+    //     knox@31  killers already dominate  143 of 156 cells    -> FI can only perturb
+    // So the split is enabled only while NO seed build kills anything. Once the search can already
+    // reach the feasible region on its own, the premise is gone and so is the split.
+    // THE PREMISE IS TESTED AT RUNTIME, NOT AGAINST THE SEEDS. `seedHasKiller` alone could never
+    // fire on knox@31 -- its flat canonical fills do not kill, while its ILLUMINATED population
+    // kills abundantly -- so the build the gate was written for was the one build it never saw.
+    //
+    // MEASURED, `firstFeasibleAtVariation` with the split OFF, 9600 variations, seed 9e3779b9:
+    //     knox@30    NEVER   (and three independent full runs agree: no killer, ever)
+    //     knox@31      336   3.5% of budget
+    //     borge@42      48   0.5%
+    //     borge@32       0   already in the seeds
+    //     knox@35b       0   already in the seeds
+    // knox@30 is the ONLY build that cannot reach the feasible region on its own, which is exactly
+    // the condition FI-2Pop exists for. So: illuminate UNSPLIT for a warmup slice, and engage the
+    // split only if nothing has killed anything by then.
+    //
+    // WHY NOT THE CONSTANT-FREE RULE ("stop splitting once any killer appears"). With the split ON,
+    // knox@30's first killer arrives at variation 96 -- the split MANUFACTURED it. That rule would
+    // disengage immediately and throw away the win it exists to protect. The decision has to be made
+    // from UNSPLIT evidence, which is what costs one checkpoint constant.
+    //
+    // THIS IS A TRADE, NOT A FREE WIN, and pretending otherwise would be the kind of tidy story this
+    // file keeps having to correct. borge@42 reaches feasibility at 48 and would therefore decline
+    // the split -- yet FI HELPED it (-1.08% -> -0.68% on 2 of 3 seeds, violation 28-31 -> 9-10). We
+    // give up that +0.41% to avoid knox@31's -4.29%. Net positive, deliberately chosen.
+    // Read from the module constant, NOT from effortSpec -- illuminate takes positional parameters
+    // and has no effortSpec in scope, so referencing one here throws at runtime.
+    const warmupEvals = Math.max(1, Math.round(evalBudget * FI_WARMUP_FRACTION));
+    const seedHasKiller = seeds.some((sd) => sd.boss && isFeasibleBuild(sd.boss));
+    // `let`, because the warmup checkpoint may turn it on part way through.
+    let splitArchives = false;
+    let fiDecision = feasibleInfeasible ? 'pending-warmup' : 'not-requested';
+    if (feasibleInfeasible && seedHasKiller) {
+      fiDecision = 'declined-seed-killer';
+      ctx.note('FI requested but NOT engaged: a seed build already kills a boss, so the feasible '
+        + 'region is not hard to reach and the split would only perturb the search');
+    }
+
+    // WHEN does the population first reach the feasible region? MEASUREMENT ONLY.
+    //
+    // The FI premise is "killers are hard to find". `seedHasKiller` tests that against screened
+    // seeds, which are FLAT canonical fills -- so it never fires on knox@31, whose flat fills do
+    // not kill but whose illuminated population kills abundantly. Recording the variation index of
+    // the first feasible build is what makes the premise testable at a runtime checkpoint instead.
+    //
+    // Pure counter write, taking NO rng draw. A draw taken for a check that could never pass once
+    // shifted the whole stream and moved a result 7 points, which was written down as a real effect.
+    // Declared HERE, above `consider`, not beside the illumination loop: seeding calls
+    // `consider` before the loop runs, and reading a let in its temporal dead zone THROWS.
+    let spent = 0;
+    let firstFeasibleAtVariation = null;
+
     const consider = (pair, score, meta) => {
       if (!Number.isFinite(score)) return;
+      if (firstFeasibleAtVariation === null && isFeasibleBuild(meta)) firstFeasibleAtVariation = spent;
       const cell = cellOf(meta, ATTRIBUTES, pair.attrAlloc, bossDamageBands);
       // The '|F'/'|I' or '|loot' suffix is a constant on every key, so it does not change the
       // relative order under the key tie-break that parent selection uses.
-      if (feasibleInfeasible) {
+      if (splitArchives) {
         // Two archives, same cells. The suffix keeps them in one Map so every downstream reader
         // (curiosity, diag, the elite list) works unchanged; `feasible` is what selection splits on.
         const feasible = isFeasibleBuild(meta);
-        const key = cell + (feasible ? '|F' : '|I');
-        // Survival differs by archive, and that is the whole mechanism: the infeasible one is
-        // never judged on the objective, so it is free to walk to the constraint boundary.
-        const better = feasible ? betterLoot : betterViolation;
-        return put(key, pair, score, meta, better, feasible);
+        if (feasible) return put(cell + '|F', pair, score, meta, betterLoot, true);
+
+        //
+        // DUAL RETENTION IN INFEASIBLE CELLS -- MEASURED, BECAUSE REPLACING COST A BUILD THAT WAS
+        // WINNING.
+        //
+        // FI-2Pop keeps its infeasible population on constraint violation ALONE, and in its setting
+        // that is free: an infeasible solution violates a hard constraint and is unusable, so
+        // discarding its objective quality discards nothing.
+        //
+        // THAT ASSUMPTION DOES NOT HOLD HERE. "Infeasible" means "does not kill the boss it
+        // reaches", and 8 of 10 sampled imports do not kill theirs -- a non-killing build is
+        // frequently the RIGHT ANSWER. An infeasible cell that kept only its lowest-violation
+        // member was therefore throwing away a perfectly good farming build.
+        //
+        // Measured on knox@31, three seeds, violation-only retention:
+        //     9e3779b9  +1.51% -> -2.72%      1234  +1.17% -> +1.51%      a5a5a5a5  +1.51% -> +1.51%
+        // Its baseline varies only 0.34 points across seeds, so the -4.17% is a REAL regression and
+        // not the ~7-point variance measured on the bimodal ozzy build. FI was adding variance to a
+        // build that had none.
+        //
+        // WEIGHTING SELECTION COULD NOT HAVE FIXED IT, which is why pfeas did not: the loss happens
+        // in RETENTION. By the time killers appear and the infeasible share collapses, the
+        // loot-best builds in those cells are already gone.
+        //
+        // So an infeasible cell keeps BOTH extremes -- the build closest to killing, which is what
+        // walks the boundary, and the highest-scoring one, which is what a non-killing build is
+        // actually for. Both remain available as parents, and nothing that was retained before is
+        // lost.
+        const improvedViolation = put(cell + '|I', pair, score, meta, betterViolation, false);
+        const improvedLoot = put(cell + '|IL', pair, score, meta, betterLoot, false);
+        return improvedViolation || improvedLoot;
       }
       return put(cell + '|loot', pair, score, meta, betterLoot, true);
     };
@@ -1131,7 +1442,6 @@
       consider(s, s.score, s.boss);
     }
 
-    let spent = 0;
     // WHEN DID THE ARCHIVE LAST LEARN ANYTHING?
     //
     // Instrumentation before optimisation, deliberately. The archive is visibly over-provisioned on
@@ -1153,6 +1463,17 @@
     const until = Math.min(evalBudget, spent + perStream);
     while (spent < until) {
       if (ctx.shouldCancel()) throw new Cancelled();
+      // TIME CAP IN THE ARCHIVE STAGE TOO. The first version checked only the refinement loop and
+      // the polish, which left the ARCHIVE unbounded -- and the archive is exactly what the
+      // Exhaustive tier doubles (19200 evaluations). Measured: borge@12 at exhaustive ran 20,125
+      // evaluations under a 45s cap, because nothing in this loop looked at the clock. A cap that
+      // misses the most expensive stage of the most expensive tier is not a cap.
+      //
+      // Breaking here is safe: the archive already holds complete legal builds, and the stages
+      // after this one operate on whatever it contains.
+      // The outer `truncated` flag is set by the refinement/polish checks that follow, so
+      // breaking here needs no flag of its own -- one would be set and never read.
+      if (ctx.pastDeadline()) break;
       report(spent / evalBudget);
       const elites = [...archive.values()];
       if (!elites.length) break;
@@ -1211,8 +1532,8 @@
           .sort((x, y) => ((y[1].curiosity || 0) - (x[1].curiosity || 0))
             || (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0))
           .map(([, e]) => e);
-      const feasibleOrdered = feasibleInfeasible ? ordered.filter((e) => e.feasible !== false) : ordered;
-      const infeasibleOrdered = feasibleInfeasible ? ordered.filter((e) => e.feasible === false) : [];
+      const feasibleOrdered = splitArchives ? ordered.filter((e) => e.feasible !== false) : ordered;
+      const infeasibleOrdered = splitArchives ? ordered.filter((e) => e.feasible === false) : [];
 
       // Distance to the NEXT boss, from the stage descriptor alone. An elite that already kills is
       // not on the frontier -- its cell is occupied and curiosity will develop it on merit.
@@ -1240,7 +1561,7 @@
         // boss-progressing builds are simply a minority inside one curiosity-ordered list and get
         // a sliver of the effort -- which is exactly what MOME did here, and it returned a
         // bit-identical build. Retaining a stepping stone is worthless if nothing develops it.
-        if (feasibleInfeasible && infeasibleOrdered.length && feasibleOrdered.length) {
+        if (splitArchives && infeasibleOrdered.length && feasibleOrdered.length) {
           //
           // SHARE BY FEASIBILITY RATE, NOT A FIXED 50/50 -- MEASURED, BECAUSE FIXED ALTERNATION
           // REGRESSED A BUILD THAT WAS ALREADY WINNING.
@@ -1335,6 +1656,31 @@
         }
       }
       spent += batch.length;
+
+      // THE WARMUP CHECKPOINT. Decided once, from unsplit evidence, and never revisited.
+      if (fiDecision === 'pending-warmup' && spent >= warmupEvals) {
+        if (firstFeasibleAtVariation === null) {
+          // Nothing has killed anything unaided, so the feasible region really is hard to reach.
+          // Every entry in the archive is therefore INFEASIBLE by construction -- that is exactly
+          // the condition being tested -- so re-keying '|loot' to '|I' is exact, not approximate,
+          // and no entry is lost or misfiled.
+          const migrated = [...archive.entries()];
+          archive.clear();
+          for (const [key, entry] of migrated) {
+            const bare = key.endsWith('|loot') ? key.slice(0, -5) : key;
+            entry.feasible = false;
+            archive.set(bare + '|I', entry);
+          }
+          splitArchives = true;
+          fiDecision = 'engaged-warmup-empty';
+          ctx.note(`FI ENGAGED after ${spent} unsplit variations: nothing reached the feasible `
+            + `region, so the split is what has to find it (${migrated.length} entries re-keyed)`);
+        } else {
+          fiDecision = 'declined-warmup-found-killer';
+          ctx.note(`FI requested but NOT engaged: the population reached the feasible region on its `
+            + `own at variation ${firstFeasibleAtVariation}, so the split would only perturb it`);
+        }
+      }
     }
     }
 
@@ -1402,7 +1748,11 @@
       structuralShare,
       selection,
       breakpointSpending,
-      feasibleInfeasible,
+      feasibleInfeasible: splitArchives,
+      screenIterations: SCREEN_ITERATIONS,
+      fiDecision,
+      firstFeasibleAtVariation,
+      feasibleInfeasibleRequested: feasibleInfeasible,
       bossDamageBands,
       breakpointClamped: stats.breakpointClamped,
       breakpointBlocked: stats.breakpointBlocked,
@@ -1607,10 +1957,34 @@
   /** @param {OptimizerConfig} cfg @param {OptimizeOptions} [options] */
   // Every option this function accepts. An option NOT on this list is rejected rather than ignored
   // -- see the check below for why that matters.
-  const OPTIMIZE_OPTIONS = ['mode', 'effort', 'scorer', 'onProgress', 'shouldCancel'];
+  const OPTIMIZE_OPTIONS = ['mode', 'effort', 'scorer', 'onProgress', 'shouldCancel', 'maxSeconds'];
+
+  // A WALL-CLOCK CAP, NOT A WALL-CLOCK BUDGET, AND THE DIFFERENCE IS THE WHOLE DESIGN.
+  //
+  // A budget DECIDES how much searching happens, so it always binds, the amount of work varies with
+  // machine load, and identical inputs stop giving identical answers. This project measured exactly
+  // that: borge@42 returned +78.80% and then +62.72% at an IDENTICAL configuration, because a
+  // deadline is not deterministic even when the algorithm is. That is why every budget in this file
+  // is an evaluation count.
+  //
+  // A CAP is a safety valve. Sized generously it never fires, the search converges normally and
+  // determinism is untouched; it engages only in the pathological case where the alternative is a
+  // user waiting indefinitely. When it DOES fire the run is no longer reproducible, so it must say
+  // so -- `diag.truncated` and a note -- or a truncated answer is indistinguishable from a converged
+  // one, which is how the original wall-clock bug hid.
+  //
+  // Checked at STAGE BOUNDARIES only. Aborting mid-stage could return a partial allocation; skipping
+  // a whole stage cannot, because every stage's input is already a legal fully-spent build. And the
+  // floor is the corpus fallback: the finalist pool already holds the refit community builds, so a
+  // truncated run costs the search's improvements, never correctness.
+  //
+  // NEVER LOWER THIS TO MAKE SOMETHING FASTER. The moment it binds routinely it is a budget again
+  // and every A/B measured under it is noise.
+  const DEFAULT_MAX_SECONDS = 600;
 
   async function optimize(cfg, opts = /** @type {any} */ ({})) {
     let fidelityClaimed = false;
+    let screenClaimed = false;
     // AN IGNORED OPTION IS INDISTINGUISHABLE FROM A WORKING ONE, AND THAT IS HOW DEAD PARAMETERS
     // SURVIVE FOR MONTHS.
     //
@@ -1679,8 +2053,14 @@
     // this removes a large fraction of the real work rather than a rounding error.
     const cache = new Map();
     const diag = { stages: {}, timings: {} };
+    const startedAt = Date.now();
+    const maxSeconds = Number.isFinite(opts.maxSeconds) ? opts.maxSeconds : DEFAULT_MAX_SECONDS;
+    // maxSeconds <= 0 disables the cap entirely, for benches that must never be truncated.
+    const deadlineAt = maxSeconds > 0 ? startedAt + maxSeconds * 1000 : Infinity;
+    let truncated = false;
     const ctx = {
       shouldCancel,
+      pastDeadline: () => Date.now() > deadlineAt,
       diag,
       note: (m) => notes.push(m),
       // BOSS METADATA RIDES ON THE RESULT ARRAY, AND THE MEMO MUST CARRY IT TOO.
@@ -1901,6 +2281,10 @@
         setFinalIterations(effortSpec.finalIterations);
         fidelityClaimed = true;
       }
+      if (Number.isFinite(effortSpec.screenIterations)) {
+        setScreenIterations(effortSpec.screenIterations);
+        screenClaimed = true;
+      }
       if (effort && typeof effort === 'object') {
         const unknown = Object.keys(effortSpec).filter((k) => !EFFORT_SPEC_KEYS.has(k));
         if (unknown.length) {
@@ -2082,6 +2466,13 @@
 
       for (let i = 0; i < toRefine.length; i++) {
         if (shouldCancel()) throw new Cancelled();
+        // STAGE BOUNDARY. Every finalist already refined is a complete, legal, fully-spent build,
+        // so stopping BETWEEN elites is safe in a way stopping inside one would not be.
+        if (i > 0 && ctx.pastDeadline()) {
+          truncated = true;
+          ctx.note(`time cap reached: refined ${i} of ${toRefine.length} elites`);
+          break;
+        }
         report('refine', i, toRefine.length + 1);
         const c = toRefine[i];
         finalists.push(await optimizeJointly(ctx, budgets, c.talentAlloc, c.attrAlloc, c.score, STEP_SIZES, 6,
@@ -2139,6 +2530,126 @@
       // Survey results that did not make the refinement cut still compete: they are complete,
       // legal allocations, just less thoroughly tuned, and keeping them costs nothing at Stage 3.
       finalists.push(...surveyed.filter((e) => toRefine.indexOf(e) === -1));
+
+      // --- Stage 2c: REAL COMMUNITY BUILDS, re-fitted to this budget, as extra finalists. -----
+      //
+      // WHY THIS IS HERE, and why it is not a shortcut. Four rule-based constructions were measured
+      // against borge@73 and knox@30, all legal and correctly gated, and every one returned a build
+      // that KILLS NOTHING:
+      //     gate-paying fill      -46.32% / -84.47%      enumeration of all 360 supports  -45.20% / -84.17%
+      //     enumeration + depth   -46.36% / -88.17%      median of the whole corpus       -44.21% / -84.23%
+      // Re-fitting an ACTUAL community build to the same budget reaches +2.37% and +1.33%, killing
+      // the boss. Even the corpus MEDIAN fails, so the knowledge is build-specific: it is not a
+      // rule, not a per-node prior, and not recoverable from cost/cap/threshold metadata. Real
+      // builds encode which nodes are worth capping (knox winners hold `dead` at 10 and `sear` at
+      // 5) and nothing in the game's own data says so.
+      //
+      // STRICTLY ADDITIVE. Donors are appended as ordinary finalists and Stage 3 takes the maximum,
+      // so a donor that does not beat the search simply loses. This can raise the answer and cannot
+      // lower it -- which is the only reason it is safe to ship a heuristic this blunt.
+      //
+      // IT INTERPOLATES, IT DOES NOT OPTIMISE. Excluding donors within 5 levels collapses borge@73
+      // to -41.09% and knox@30 to -84.13%, i.e. back to the search's own answer. So this helps
+      // where the corpus has coverage (borge 12-84, ozzy 11-75, knox 12-40) and is inert outside
+      // it. That is a real limitation, not a rough edge to be smoothed over later.
+      // ADAPTIVE COST: SPEND WHERE THE BUILD ACTUALLY NEEDS IT.
+      //
+      // Starts at Infinity so a build with NO corpus (module missing, or a hunter/mode with no
+      // rows) is treated as uncovered -- the expensive path -- rather than silently cheap. An
+      // optimistic default here would withhold the one mechanism that helps exactly the builds
+      // that have nothing to fall back on.
+      let corpusNearest = Infinity;
+      const admittedPairs = [];   // donors that refit legally, for recombination below
+      const corpus = (typeof global !== 'undefined' && global.OptimizerCorpus)
+        || (typeof globalThis !== 'undefined' && globalThis.OptimizerCorpus);
+      const refit = (typeof global !== 'undefined' && global.OptimizerRefit)
+        || (typeof globalThis !== 'undefined' && globalThis.OptimizerRefit);
+      if (corpus && refit) {
+        const donors = corpus.donorsFor(cfg.hunter, mode, cfg.level || 0).slice(0, CORPUS_DONORS);
+        let admitted = 0;
+        for (const d of donors) {
+          // `parseBuildCode` is ASYNC and takes ONLY the code -- it reads the hunter out of the
+          // code's own header byte. Calling it synchronously (or passing a hunter) yields a Promise
+          // whose `.attributes` is undefined, every donor is skipped, and the whole feature does
+          // nothing while looking perfectly wired. That is the exact failure mode this file records
+          // for `optimizeByRegime` and for a flag that reached three of four call sites.
+          let decoded = null;
+          try {
+            decoded = global.parseBuildCode ? await global.parseBuildCode(d.code) : null;
+          } catch (e) { decoded = null; }
+          if (!decoded || !decoded.attributes || !decoded.talents) continue;
+          // The code carries its own hunter; a corpus row for the wrong one would refit into a
+          // node set it shares no ids with.
+          if (decoded.hunter && decoded.hunter !== cfg.hunter) continue;
+          const a = refit.refitTiered(ATTRIBUTES, minVal, attrBudget, decoded.attributes);
+          const t = refit.refitTalents(TALENTS, talentBudget, decoded.talents);
+          if (!a || !t) continue;
+          // Legality is not assumed. The naive refit used to produce ILLEGAL builds by stripping
+          // the sub-threshold points paying a gated build's unlock gates; the tiered form fixes
+          // that, and this asserts it rather than trusting it.
+          if (!Space.isLegal(ATTRIBUTES, deps, minVal, a, attrBudget)) continue;
+          if (Space.costOf(TALENTS, t) > talentBudget) continue;
+          finalists.push({ talentAlloc: t, attrAlloc: a, score: -Infinity, fromCorpus: d.level });
+          admittedPairs.push({ t, a, level: d.level });
+          admitted++;
+        }
+        if (admitted) ctx.note(`corpus: ${admitted} community build(s) re-fitted to this budget as extra finalists`);
+        // ---- DONOR RECOMBINATION: talents from one donor, attributes from another --------------
+        //
+        // A cross-block move for free. The measured barrier on the converged shortfalls is a
+        // talent/attribute COUPLING that no single-block move can cross; recombination simply
+        // STARTS from a build whose two blocks came from different donors, instead of searching for
+        // a way across.
+        //
+        // MEASURED, and this is the largest single gain of the whole effort: ozzy@70 went from
+        // -44.02% to -1.98%. That build has 59 donors below it and only 5 above, and its own climb
+        // gained just 1.78 points -- its bottleneck is the DONOR STAGE, which is exactly what this
+        // addresses. On builds whose donor is already good it does nothing, and it was never
+        // measured making anything worse.
+        //
+        // On both builds where the winning pair mixed level directions it took TALENTS FROM BELOW
+        // and ATTRIBUTES FROM ABOVE. Plausible mechanism: talent budget is ~level and saturates its
+        // caps early, while attributes are ~3x level and keep growing, so a lower donor's talents
+        // fit a smaller budget cleanly while a higher donor's attributes carry depth structure.
+        //
+        // SCREENED, NOT ADMITTED WHOLESALE. 12 donors cross into 132 combinations; entering all of
+        // them as finalists would multiply the most expensive stage. They are ranked at
+        // SCREEN_ITERATIONS and only the best few are admitted -- and unlike donor screening, a
+        // mis-rank here removes a SPECULATIVE extra candidate rather than a real donor.
+        if (admittedPairs.length > 1) {
+          const combos = []; const cmeta = [];
+          for (const ti of admittedPairs) {
+            for (const aj of admittedPairs) {
+              if (ti.level === aj.level) continue;
+              if (!Space.isLegal(ATTRIBUTES, deps, minVal, aj.a, attrBudget)) continue;
+              combos.push({ talentAlloc: ti.t, attrAlloc: aj.a });
+              cmeta.push(`${ti.level}t+${aj.level}a`);
+            }
+          }
+          if (combos.length) {
+            const cs = await ctx.score(combos, SCREEN_ITERATIONS);
+            const order = combos.map((_, i) => i).sort((x, y) => cs[y] - cs[x]).slice(0, CORPUS_RECOMBINE);
+            for (const i of order) {
+              finalists.push({
+                talentAlloc: combos[i].talentAlloc, attrAlloc: combos[i].attrAlloc,
+                score: -Infinity, fromCorpus: cmeta[i],
+              });
+            }
+            diag.corpusRecombined = { offered: combos.length, admitted: order.length };
+            ctx.note(`corpus: ${order.length} recombined donor pair(s) admitted (talents and `
+              + 'attributes from different builds)');
+          }
+        }
+
+        // HOW FAR AWAY IS THE NEAREST USABLE DONOR? This is what decides whether the expensive
+        // cross-block pass is worth running, so it is recorded rather than recomputed later.
+        for (const d of donors) {
+          const dist = Math.abs((d.level || 0) - (cfg.level || 0));
+          if (dist < corpusNearest) corpusNearest = dist;
+        }
+        if (!admitted) corpusNearest = Infinity;   // offered but none legal is the same as none
+        diag.corpus = { offered: donors.length, admitted, nearestLevelDistance: corpusNearest };
+      }
 
       // --- Stage 3: full-fidelity decision. -----------------------------------------------
       report('final', 0, 1);
@@ -2204,7 +2715,32 @@
           ctx, budgets, champion.talentAlloc, champion.attrAlloc, champion.score, pinnedAttrs,
           (f) => report('final', f, 1),
           effortSpec.ocbaPolish === true, polishStats,
+          // ADAPTIVE: the cross-block pass runs only where the corpus CANNOT cover this build.
+          //
+          // Measured on borge@73: +70s (+31%, 226s -> 296s against a 300s ceiling) for ZERO gain,
+          // and `crossBlockGains` confirmed it fired and found nothing. That is not a defect in the
+          // pass -- inside corpus coverage the donor pool already contains a build at this level, so
+          // the polish STARTS past the coupling barrier the pass exists to cross. On ozzy@11 the
+          // research bench measured +2.18 points from it, but only under leave-one-out, which the
+          // shipped path never does.
+          //
+          // So the benefit lives exactly where the corpus does not reach: knox above 40, ozzy above
+          // 75 or inside the 34-42 gap, borge above 84. Gate on the MEASURED distance to the nearest
+          // usable donor rather than on hunter or level, and easy builds stop paying for a mechanism
+          // that provably does nothing for them.
+          // Past the time cap the cross-block pass is skipped even when it would otherwise run:
+          // it is the most expensive optional work in the polish, and the champion handed to
+          // polishWinner is already a complete legal build.
+          !ctx.pastDeadline()
+            && (effortSpec.crossBlock === true
+              || (effortSpec.crossBlock !== false && corpusNearest > CROSS_BLOCK_DONOR_DISTANCE)),
         );
+        if (ctx.pastDeadline()) truncated = true;
+        // ALWAYS surface the polish stats. They used to be attached ONLY when ocbaPolish was on,
+        // so `crossBlockGains` -- the one fact that says whether the cross-block pass fired -- was
+        // unreadable in every default run. A counter that cannot be read is not a counter, and this
+        // project's recurring failure is exactly the feature that looks wired and is inert.
+        diag.polish = polishStats;
         if (effortSpec.ocbaPolish === true) {
           diag.ocbaPolish = polishStats;
           const saved = polishStats.ocbaConsidered
@@ -2344,6 +2880,18 @@
       }).join('\n');
       ctx.note(`value ledger (all at ${FINAL_ITERATIONS} iterations):\n${diag.ledgerText}`);
 
+      // A TRUNCATED RUN IS NOT REPRODUCIBLE AND MUST SAY SO. Where the cap fired depends on machine
+      // speed and load, so two runs of identical input can differ -- the one property this file
+      // otherwise guarantees. Reporting it is what keeps a truncated answer distinguishable from a
+      // converged one; the original wall-clock bug hid precisely because it was silent.
+      diag.truncated = truncated;
+      diag.elapsedSeconds = Math.round((Date.now() - startedAt) / 1000);
+      if (truncated) {
+        ctx.note(`STOPPED AT THE ${maxSeconds}s TIME CAP -- returning the best build found, which is `
+          + 'not necessarily the best this search would have found. This run is NOT reproducible; '
+          + 'raise the cap for a deterministic answer.');
+      }
+
       return {
         best: ranked[0],
         ranked,
@@ -2351,6 +2899,7 @@
         cacheHits,
         notes,
         cancelled: false,
+        truncated,
         // ONE diagnostic channel, not two. `supportsEnumerated`/`supportsRealizable` used to sit
         // here as well as in the diag record -- the same numbers reported twice, which is how the
         // two copies get to disagree.
@@ -2364,118 +2913,12 @@
       // reduced fidelity would silently degrade every LATER run in the same process, which is the
       // hardest kind of contamination to trace back.
       if (fidelityClaimed) releaseFinalIterations();
+      if (screenClaimed) releaseScreenIterations();
     }
-  }
-
-  //
-  // DISJUNCTIVE REGIME DECOMPOSITION -- solve one subproblem per regime, take the best on the TRUE
-  // objective.
-  //
-  // The loot objective is piecewise in how many bosses a run clears, and we KNOW where the pieces
-  // meet: bosses stand every BOSS_INTERVAL stages. Asking one stochastic search to discover a
-  // threshold whose location is already known is wasted effort, and on borge@73 it fails outright
-  // -- three separate hypotheses about why were each falsified by measurement, and nine methods on
-  // an earlier Knox build all returned the same wrong answer.
-  //
-  // Standard practice for a piecewise problem is decomposition rather than a better hill climber:
-  // express it as a set of subproblems and take the best solution across them (disjunctive
-  // programming / MINLP). Each subproblem here is "maximise the caller's objective subject to
-  // clearing k bosses", with the constraint handled by Deb's parameter-free feasibility rules.
-  //
-  // WHY THIS IS NOT THE CROSS-SEED PASS THAT WAS DELETED. That ran a search under a DIFFERENT
-  // objective and used its answer as a seed, so a proxy chose the candidate. Here every subproblem
-  // maximises the REAL objective and the regime enters only as a constraint on the feasible set;
-  // the winner is chosen across subproblems on the real objective too. Nothing is scored on boss
-  // progress at any point.
-  //
-  // COST. It is more than one search, and calling it a speed win would be a claim this has not
-  // earned. What it buys is that the expensive archive no longer has to STUMBLE onto a cliff, so
-  // each subproblem should need far less of one -- `effortPerRegime` is the dial for testing that,
-  // and until it is measured the honest description is a reliability change.
-  async function optimizeByRegime(cfg, opts = /** @type {any} */ ({})) {
-    const { mode = 'loot', scorer, regimes, effortPerRegime, onProgress, shouldCancel } = opts;
-    if (typeof scorer !== 'function') throw new Error('optimizeByRegime(): requires a scorer function');
-    const effort = effortPerRegime || opts.effort || DEFAULT_EFFORT;
-
-    // A subproblem's scorer. The base scorer's own `.boss` metadata carries everything the
-    // constraint needs, so no extra evaluation is paid for feasibility.
-    const constrained = (target) => async (pairs, iterations) => {
-      const base = await scorer(pairs, iterations);
-      if (!base.boss) {
-        throw new Error('optimizeByRegime: the scorer returned no .boss metadata, so feasibility '
-          + 'cannot be determined. A scorer that drops it silently turns every build feasible.');
-      }
-      const out = base.map((v, i) => Objective.constrainScore(v, base.boss[i], target));
-      out.boss = base.boss;
-      return out;
-    };
-
-    const runs = [];
-    // Subproblem 0 is the UNCONSTRAINED problem, which is the current search exactly. Whatever the
-    // regimes above it turn up, the answer can never be worse than solving the problem as before.
-    const t0 = Date.now();
-    const free = await optimize(cfg, { mode, scorer, effort, onProgress, shouldCancel });
-    if (free.cancelled) return free;
-    runs.push({ regime: null, label: 'unconstrained', res: free, secs: Math.round((Date.now() - t0) / 1000) });
-
-    // Which regimes to aim at. By default: the next cliff above whatever the free search reached.
-    // Aiming BELOW it is pointless -- the free search already had that feasible set available and
-    // was not restricted from it.
-    let targets = regimes;
-    if (!targets) {
-      const m = (await scorer([free.best], FINAL_ITERATIONS)).boss[0];
-      const reached = Objective.regimeOf({ maxStage: m.maxStage });
-      targets = [reached + 1];
-    }
-
-    for (const target of targets) {
-      if (shouldCancel && shouldCancel()) break;
-      const t = Date.now();
-      const res = await optimize(cfg, {
-        mode, scorer: constrained(target), effort, onProgress, shouldCancel,
-      });
-      if (res.cancelled) break;
-      runs.push({ regime: target, label: `clears ${target}`, res, secs: Math.round((Date.now() - t) / 1000) });
-    }
-
-    // THE DECISION IS ON THE TRUE OBJECTIVE, ACROSS ALL SUBPROBLEMS. A constrained run's own score
-    // is not comparable to another's -- they rank different feasible sets -- so every candidate is
-    // re-scored with the caller's own scorer before anything is chosen. This is the step that makes
-    // the decomposition sound rather than a heuristic.
-    const finalists = runs.filter((r) => r.res && r.res.best).map((r) => r.res.best);
-    if (!finalists.length) throw new Error('optimizeByRegime: no subproblem returned a build');
-    const scores = await scorer(finalists, FINAL_ITERATIONS);
-    let bestIdx = 0;
-    for (let i = 1; i < scores.length; i++) if (scores[i] > scores[bestIdx]) bestIdx = i;
-
-    const byRegime = runs.map((r, i) => ({
-      regime: r.regime,
-      label: r.label,
-      trueScore: scores[i],
-      // Did the subproblem actually satisfy its own constraint? A constrained run that returns an
-      // infeasible build has not proved the regime impossible, but it has not entered it either,
-      // and reporting that is the difference between "no such build exists" and "we did not find
-      // one" -- a distinction this project has been burned by repeatedly.
-      satisfied: r.regime === null ? null
-        : Objective.regimeOf({ maxStage: scores.boss[i].maxStage }) >= r.regime,
-      maxStage: scores.boss[i].maxStage,
-      killRate: scores.boss[i].kill,
-      secs: r.secs,
-      evals: r.res.evals,
-    }));
-
-    const winner = runs[bestIdx];
-    return {
-      ...winner.res,
-      best: finalists[bestIdx],
-      byRegime,
-      chosenRegime: winner.regime,
-      evals: runs.reduce((n, r) => n + (r.res.evals || 0), 0),
-    };
   }
 
   const Optimizer = {
-    optimize, optimizeByRegime, SCREEN_ITERATIONS, FINAL_ITERATIONS,
+    optimize, SCREEN_ITERATIONS, FINAL_ITERATIONS,
     STEP_SIZES,
     EFFORT_LEVELS, DEFAULT_EFFORT,
     // Exposed so a bench can measure ONE support's tuning in isolation. The search's own stages

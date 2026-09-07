@@ -70,6 +70,11 @@ function parseArgs(argv) {
   const batchFlag = flags.find((f) => f.startsWith('--batch='));
   const outFlag = flags.find((f) => f.startsWith('--out='));
   const sampleFlag = flags.find((f) => f.startsWith('--sample='));
+  // SELECT BY NAME, e.g. --only=ozzy@34b,borge@72. The positional `from`/`to` are INDICES into the
+  // level-sorted list, and they READ like levels -- `run.js ozzy 34 35` selects neither level 34 nor
+  // ozzy@34b. That has produced a wrong-build run three times, so naming is now the supported path
+  // and the indices are kept only for slicing a large sweep.
+  const onlyFlag = flags.find((f) => f.startsWith('--only='));
   const maxLevelFlag = flags.find((f) => f.startsWith('--max-level='));
   const seedFlag = flags.find((f) => f.startsWith('--seed='));
   const sample = sampleFlag ? Number(sampleFlag.split('=')[1]) : 0;
@@ -77,6 +82,7 @@ function parseArgs(argv) {
     throw new Error(`--sample must be a positive integer, got "${sampleFlag.split('=')[1]}"`);
   }
   return {
+    only: onlyFlag ? onlyFlag.slice('--only='.length).split(',').map((x) => x.trim()).filter(Boolean) : null,
     sample,
     // Varies per run by default so repeated gates cover different builds over time; always
     // reported, so any failure can be replayed exactly with --seed=.
@@ -119,6 +125,12 @@ function selectFixtures(args) {
     const before = all.length;
     all = all.filter((f) => (f.level || 0) <= args.maxLevel);
     args.excludedByLevel = before - all.length;
+  }
+  // NAMES WIN OVER EVERYTHING. findFixture throws on an ambiguous name rather than guessing, which
+  // is the behaviour that makes this safe to prefer over indices.
+  if (args.only) {
+    const known2 = H.loadKnownBuilds();
+    return args.only.map((n) => H.findFixture(known2, n));
   }
   if (args.sample) return stratifiedSample(all, hunters, args.sample, args.seed);
   return all.slice(args.from, args.to === undefined ? all.length : args.to);
@@ -176,48 +188,21 @@ function stratifiedSample(all, hunters, count, seed) {
   return picked;
 }
 
-/**
- * Classify a completed case. Returns null when it passed.
- *
- * A build is gated on ITS OWN objective: loot builds on loot per minute, push builds on
- * average stage. Gating both metrics on every build sounds stricter but is simply wrong --
- * pushing deeper costs loot per minute, so a push build that correctly gains stage would be
- * failed for succeeding. Measured directly: the level-12 and level-13 Borge push fixtures gain
- * +2.8% stage while shedding ~6-9% loot, which is the trade a push build exists to make.
- *
- * The secondary metric is still measured and surfaced (see secondaryWarningOf) so a genuine
- * "gained loot by gutting progression" result can never hide -- it just doesn't fail the gate.
- */
-function failureOf(res) {
-  if (!res.ok) return `ERROR ${res.error.split('\n')[0]}`;
-  // Only an OVERCOUNT is a parity failure. A share code cannot carry ~7 ambient account-wide
-  // gem params, so a code-only evaluation can legitimately land below a score recorded on a
-  // fully-invested account -- confirmed against the live site for knox #19. Nothing, however,
-  // can make it land above one, so an overcount is a genuine clone-side math error.
-  if (res.parity === 'overcount') {
-    return `PARITY clone ${res.importLoot.toFixed(2)} EXCEEDS recorded ${res.expectedLootScore} (+${res.parityDeltaPct.toFixed(2)}%)`;
-  }
-  if (res.mode === 'push') {
-    if (res.optimizedStage < res.importStage) {
-      return `STAGE ${res.importStage.toFixed(2)} -> ${res.optimizedStage.toFixed(2)} (${res.stageDeltaPct.toFixed(2)}%)`;
-    }
-  } else if (res.optimizedLoot < res.importLoot) {
-    return `LOOT ${res.importLoot.toFixed(2)} -> ${res.optimizedLoot.toFixed(2)} (${res.lootDeltaPct.toFixed(2)}%)`;
-  }
-  return null;
-}
+// THE VERDICT RULE LIVES IN verdict.js, shared with summarize.js. It used to be defined here and
+// copied there, and the copies drifted: on one 42-build sweep this file reported 1 failure and the
+// summary reported 2, because the copy still treated parity-overcount as fatal and had no boss
+// case. A rule with two homes is a rule that will disagree with itself.
+const { failureOf, secondaryWarningOf } = require('./verdict.js');
 
-/** The non-objective metric moving backwards -- reported, never fatal. */
-function secondaryWarningOf(res) {
-  if (!res.ok) return null;
-  if (res.mode === 'push') {
-    return res.optimizedLoot < res.importLoot ? `loot ${res.lootDeltaPct.toFixed(2)}%` : null;
-  }
-  return res.optimizedStage < res.importStage ? `stage ${res.stageDeltaPct.toFixed(2)}%` : null;
-}
+
 
 function describe(res) {
-  const label = `${res.hunter}/${res.set}#${res.index} lvl${res.level ?? '?'} ${res.mode}`;
+  // LABEL BY THE BUILD'S NAME, NOT set#index. `#3` reads as a level and is not one -- ozzy@34b is
+  // KNOWN_OZZY_PUSH_BUILDS#3 -- and this repo has already lost a debugging session to investigating
+  // a different build than the one a gate flagged. The uid is kept alongside so the exact fixture is
+  // still unambiguous.
+  const label = `${res.name || `${res.hunter}@?`} lvl${res.level ?? '?'} ${res.mode}`
+    + ` [${res.hunter}/${res.set}#${res.index}]`;
   const failure = failureOf(res);
   if (failure) return `FAIL ${label}  ${failure}`;
   const warn = secondaryWarningOf(res);
@@ -325,8 +310,12 @@ async function main() {
   }
 
   if (args.listOnly) {
-    console.log(`${fixtures.length} build(s)${args.sample ? `, seed ${args.seed}` : ''}:`);
-    for (const f of fixtures) console.log(`  ${f.hunter}/${f.set}#${f.index} level ${f.level} (${f.mode})`);
+    // Name-first, so a listing can be pasted straight back into --only=.
+  console.log(`${fixtures.length} build(s)${args.sample ? `, seed ${args.seed}` : ''}:`);
+    // NAME FIRST, so a listing can be pasted straight back into --only= without translation.
+    for (const f of fixtures) {
+      console.log(`  ${String(f.name || '?').padEnd(12)} level ${f.level} (${f.mode})   [${f.uid}]`);
+    }
     return;
   }
 
@@ -383,18 +372,28 @@ async function main() {
   console.log('\n' + '='.repeat(74));
   console.log(`have ${results.length}/${totalTarget} build(s); this run took ${((Date.now() - startedAt) / 1000 / 60).toFixed(1)} min`);
   const undercounts = results.filter((r) => r.ok && r.parity === 'undercount');
+  const overcounts = results.filter((r) => r.ok && r.parity === 'overcount');
   console.log(`parity match    : ${results.filter((r) => r.ok && r.parity === 'match').length}`);
-  console.log(`parity overcount: ${results.filter((r) => r.ok && r.parity === 'overcount').length}  (fatal -- clone math wrong)`);
-  console.log(`parity under    : ${undercounts.length}  (expected where the recorded score came from account state a share code can't carry)`);
-  console.log(`quality failures: ${results.filter((r) => r.ok && failureOf(r) && r.parity !== 'overcount').length}`);
+  console.log(`parity over     : ${overcounts.length}  (diagnostic -- a code and a recorded score describe different account states)`);
+  console.log(`parity under    : ${undercounts.length}  (diagnostic -- same reason, opposite sign)`);
+  // NON-UNIFORMITY is the part that can actually reorder candidates. A constant bias cannot; a
+  // bias that flips sign between neighbouring levels can, so print the SPREAD rather than a count.
+  const pd = results.filter((r) => r.ok && Number.isFinite(r.parityDeltaPct)).map((r) => r.parityDeltaPct);
+  if (pd.length) {
+    const sorted = pd.slice().sort((a, b) => a - b);
+    const mean = pd.reduce((s, x) => s + x, 0) / pd.length;
+    console.log(`parity spread   : ${sorted[0].toFixed(2)}% .. +${sorted[sorted.length - 1].toFixed(2)}%  mean ${mean.toFixed(2)}%`
+      + '  (wide + sign-flipping between adjacent levels = a ranking hazard)');
+  }
+  console.log(`quality failures: ${results.filter((r) => r.ok && failureOf(r)).length}`);
   console.log(`errors          : ${results.filter((r) => !r.ok).length}`);
   if (lootDeltas.length) {
     const median = lootDeltas[Math.floor(lootDeltas.length / 2)];
     console.log(`loot vs import  : worst ${lootDeltas[0].toFixed(2)}%  median ${median.toFixed(2)}%  best ${lootDeltas[lootDeltas.length - 1].toFixed(2)}%`);
   }
   console.log(`secondary down  : ${warnings.length} (not fatal -- the other metric traded off)`);
-  for (const { res, why } of failures) console.log(`  FAIL ${res.hunter}/${res.set}#${res.index} lvl${res.level ?? '?'}: ${why}`);
-  for (const { res, why } of warnings) console.log(`  warn ${res.hunter}/${res.set}#${res.index} lvl${res.level ?? '?'} ${res.mode}: ${why}`);
+  for (const { res, why } of failures) console.log(`  FAIL ${res.name || res.uid} lvl${res.level ?? '?'} ${res.mode}: ${why}`);
+  for (const { res, why } of warnings) console.log(`  warn ${res.name || res.uid} lvl${res.level ?? '?'} ${res.mode}: ${why}`);
   console.log(`\ndetail written to ${path.relative(process.cwd(), resultsFile)}`);
 
   process.exit(failures.length ? 1 : 0);

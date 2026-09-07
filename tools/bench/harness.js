@@ -90,7 +90,7 @@ function browserSandbox() {
   sb.self = sb;
   sb.globalThis = sb;
   vm.createContext(sb);
-  for (const f of ['hunterDefs.js', 'shipSchema.js', 'shipsPage.js', 'buildCode.js', 'costFormulas.js', 'hunterSimBrowser.js', 'accountState.js', 'optimizer/space.js', 'optimizer/objective.js', 'optimizer/search.js', 'storeSchema.js', 'saveImport.js']) {
+  for (const f of ['hunterDefs.js', 'shipSchema.js', 'shipsPage.js', 'buildCode.js', 'costFormulas.js', 'hunterSimBrowser.js', 'accountState.js', 'optimizer/space.js', 'optimizer/objective.js', 'optimizer/refit.js', 'optimizer/corpus.js', 'optimizer/search.js', 'storeSchema.js', 'saveImport.js']) {
     vm.runInContext(fs.readFileSync(path.join(PUBLIC, f), 'utf8'), sb, { filename: f });
   }
   sandbox = sb;
@@ -99,6 +99,21 @@ function browserSandbox() {
 
 // The optimizer modules are plain CommonJS-compatible, so Node requires them directly -- the
 // same files the browser loads via <script>.
+// TWO GLOBALS, AND THE OPTIMIZER LIVES IN THE NODE ONE. `browserSandbox()` runs the shipped files
+// in a vm context; these `require` calls load the SAME FILES into Node's own globalThis instead.
+// Anything `search.js` reaches for at runtime must therefore be required HERE too -- registering it
+// only in the sandbox leaves it invisible to `Optimizer.optimize()`.
+//
+// That is not hypothetical: the corpus seeding block looked perfectly wired, read
+// `global.OptimizerCorpus`, found nothing, and silently admitted zero donors. `corpus-wiring-check`
+// caught it by asserting from the run's own diag that donors were ADMITTED, not merely offered.
+// refit.js and corpus.js use the `(function (global) {...}(window ?? globalThis))` pattern, so they
+// register cleanly on Node's global. hunterDefs.js and buildCode.js do NOT -- they assign to a bare
+// `window`, so requiring them throws. The corpus block needs a DECODER at runtime, so the harness
+// bridges the sandbox's `parseBuildCode` onto Node's global below, after the sandbox exists.
+// In the browser this is a non-issue: buildCode.js loads before search.js and sets window.parseBuildCode.
+require('../../webapp/public/optimizer/refit.js');
+require('../../webapp/public/optimizer/corpus.js');
 const Space = require('../../webapp/public/optimizer/space.js');
 const Optimizer = require('../../webapp/public/optimizer/search.js');
 const Objective = require('../../webapp/public/optimizer/objective.js');
@@ -106,7 +121,28 @@ const Objective = require('../../webapp/public/optimizer/objective.js');
 /** Decode a real cifi-tools.com share code into a build. */
 async function parseBuildCode(code) {
   const sb = browserSandbox();
+  // BRIDGE THE DECODER ONTO NODE'S GLOBAL. search.js runs as a Node module here, so its `global` is
+  // globalThis -- while buildCode.js only ever registers inside the vm sandbox. Without this the
+  // corpus seeding block finds no decoder, skips every donor, and is inert while looking wired.
+  if (!globalThis.parseBuildCode) globalThis.parseBuildCode = (c) => sb.parseBuildCode(c);
   return sb.parseBuildCode(code);
+}
+
+/**
+ * Encode a build back to a share code. Same sandbox-bridging problem as parseBuildCode above:
+ * buildCode.js assigns to the bare global inside the vm, so it is invisible to Node without this.
+ * Needed by corpus-extend.js, which generates seed builds for levels the corpus does not cover and
+ * has to emit them in the one format the corpus stores.
+ */
+async function generateBuildCode(hunter, buildData, hunterStats = {}, globalUpgrades = {}, gems = {}) {
+  const sb = browserSandbox();
+  if (!sb.generateBuildCode) throw new Error('buildCode.js did not register generateBuildCode in the sandbox');
+  // ASYNC, and the signature is (hunter, buildData, hunterStats, globalUpgrades, gems) -- not a
+  // single build object. Calling it with one argument makes `hunter` an object, and because the
+  // function is async the resulting throw becomes a REJECTED PROMISE that a synchronous try/catch
+  // around the call site cannot see. That is how it took down a generation run that had already
+  // produced an accepted build.
+  return sb.generateBuildCode(hunter, buildData, hunterStats, globalUpgrades, gems);
 }
 
 function hunterDefs() {
@@ -378,8 +414,17 @@ function loadKnownBuilds() {
       // different builds, and any `find(f => f.index === n)` silently takes whichever was loaded
       // first -- so a gate could flag one build and the diagnostic could investigate another.
       // `uid` is the unique name; use it for reporting and selection.
+      // A PER-BUILD `mode:` OVERRIDES THE ARRAY-DERIVED ONE, and without this it was silently
+      // ignored -- `...b` spreads the build's own fields first and the derived `mode` overwrote
+      // them, so a fixture could declare a mode and be graded in a different one.
+      //
+      // That matters because the array name only distinguishes push from loot, while six BOSS-KILL
+      // builds live in the *_PUSH_ arrays: their boss status was recorded in free-text `note`
+      // ("boss kill stage 200") and they were therefore graded on average stage rather than on
+      // killing the boss they were built for. That is the same defect the push/loot split exists to
+      // prevent, one objective further along.
       arr.forEach((b, i) => entries.push({
-        ...b, hunter, mode, set: m[1], index: i, uid: `${hunter}:${m[1]}#${i}`,
+        ...b, hunter, mode: b.mode || mode, set: m[1], index: i, uid: `${hunter}:${m[1]}#${i}`,
       }));
     }
     // NAME FIXTURES BY LEVEL, NOT BY ARRAY POSITION.
@@ -405,7 +450,7 @@ function loadKnownBuilds() {
 }
 
 module.exports = {
-  browserSandbox, parseBuildCode, hunterDefs, cfgForImport, makeScorer, makePooledScorer, makeMultiModeScorer,
+  browserSandbox, parseBuildCode, generateBuildCode, hunterDefs, cfgForImport, makeScorer, makePooledScorer, makeMultiModeScorer,
   scoreAllocation,
   latestDecodedSave,
   findFixture,
