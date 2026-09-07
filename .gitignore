@@ -55,3 +55,7 @@ extended-*.json
 ultimaparity.txt
 *.json.lock
 results-archive/
+overnight-*.json
+ozzyverify*.json
+bossverify*.json
+verdicttest*.json
