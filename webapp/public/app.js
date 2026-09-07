@@ -3760,6 +3760,20 @@ function renderOptimizeEffort() {
     saveStore();
   };
   showHelp();
+
+  // THE RUN TIME LIMIT. It existed inside optimize() as a 600s default and was rendered nowhere
+  // and set by nobody, so it was invisible and untestable from the app -- the same shape as the
+  // three "honest reporting" functions that were written, exported and never called.
+  const mins = document.getElementById('optimizeMaxMinutes');
+  if (mins) {
+    mins.value = String(StoreSchema.clampOptimizeMinutes(store.optimizeMaxMinutes));
+    mins.onchange = () => {
+      const v = StoreSchema.clampOptimizeMinutes(mins.value);
+      mins.value = String(v);
+      store.optimizeMaxMinutes = v;
+      saveStore();
+    };
+  }
 }
 renderOptimizeEffort();
 
@@ -3830,6 +3844,9 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
     const result = await runOptimizer(cfg, {
       mode,
       effort,
+      // The user's stated ceiling, in seconds. Read from the store rather than the DOM so a run
+      // started from anywhere honours it.
+      maxSeconds: StoreSchema.clampOptimizeMinutes(store.optimizeMaxMinutes) * 60,
       shouldCancel: () => cancelRequested,
       onProgress: ({ phase, done, total }) => {
         const entry = OPTIMIZE_PHASES[phase];

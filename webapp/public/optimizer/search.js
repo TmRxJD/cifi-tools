@@ -1975,6 +1975,11 @@
   // NEVER LOWER THIS TO MAKE SOMETHING FASTER. The moment it binds routinely it is a budget again
   // and every A/B measured under it is noise.
   const DEFAULT_MAX_SECONDS = 600;
+  // How many finalists still get a full-fidelity score once the deadline has passed. Enough that
+  // the champion is chosen by measurement rather than by screening order -- screening is measured
+  // inverting a 0.32% ridge by 1.7%, so picking the winner on a screen score is how the search
+  // lands on a build that is genuinely worse. Corpus donors are kept on top of this count.
+  const FINALISTS_WHEN_LATE = 8;
 
   async function optimize(cfg, opts = /** @type {any} */ ({})) {
     let fidelityClaimed = false;
@@ -2668,7 +2673,28 @@
         seen.add(sig);
         unique.push(f);
       }
-      const finalScores = await ctx.score(unique.map((f) => ({ talentAlloc: f.talentAlloc, attrAlloc: f.attrAlloc })), FINAL_ITERATIONS);
+      // OUT OF TIME: SCORE FEWER FINALISTS, NEVER ZERO.
+      //
+      // Stage 3 evaluates every finalist at FINAL_ITERATIONS -- ten times a screening evaluation
+      // each -- and it ran uncapped, which is the second half of why a 5s cap produced a 64s run
+      // (skipping polish took that to 28s; this is the rest). It cannot be skipped: scoring the
+      // finalists is HOW the champion is chosen, and a cap that skipped it would return an unranked
+      // guess rather than a slightly less refined build.
+      //
+      // So it is trimmed instead, and the ones kept are chosen by the screening score already paid
+      // for -- plus every corpus donor unconditionally, because donors are the safety net that
+      // guarantees the answer is never worse than a known good build, and dropping them to save
+      // time would trade the one property a rushed run most needs to keep.
+      let toScore = unique;
+      if (ctx.pastDeadline() && unique.length > FINALISTS_WHEN_LATE) {
+        const donors = unique.filter((f) => f.fromCorpus !== undefined);
+        const rest = unique.filter((f) => f.fromCorpus === undefined)
+          .sort((a, b) => (b.score || -Infinity) - (a.score || -Infinity));
+        toScore = donors.concat(rest).slice(0, Math.max(FINALISTS_WHEN_LATE, donors.length));
+        ctx.note(`time cap: scoring ${toScore.length} of ${unique.length} finalists at full `
+          + `fidelity (every corpus donor kept)`);
+      }
+      const finalScores = await ctx.score(toScore.map((f) => ({ talentAlloc: f.talentAlloc, attrAlloc: f.attrAlloc })), FINAL_ITERATIONS);
       // Did refinement CREATE boss capability from the archive's foothold, or fail to? The archive
       // reaching kill 1 vs kill 7 decides the whole run, so the question is whether a weak foothold
       // refines up or dies. Reported, not acted on.
@@ -2688,7 +2714,13 @@
           stage: 'refined', talentAlloc: bestRefined.talentAlloc, attrAlloc: bestRefined.attrAlloc,
         });
       }
-      const ranked = unique
+      // `toScore`, NOT `unique`. finalScores is parallel to what was actually SCORED, and when the
+      // time cap trims the finalist list those two stop being the same array -- mapping over
+      // `unique` here would pair each build with another build's score, silently crowning the
+      // wrong champion (and handing `undefined` to the sort for the trimmed tail). Exactly the
+      // index-misalignment this project has been bitten by before, in new code, an hour after
+      // writing the trim.
+      const ranked = toScore
         .map((f, i) => ({ talentAlloc: f.talentAlloc, attrAlloc: f.attrAlloc, score: finalScores[i] }))
         .sort((a, b) => b.score - a.score);
 
@@ -2715,7 +2747,26 @@
       // Only the WINNER is polished, and only with small steps: this corrects the last few points,
       // it does not redo the descent. It is additive -- the polished build is compared against the
       // champion on the same FINAL_ITERATIONS measurement and only replaces it if it truly wins.
-      if (ranked.length && !effortSpec.skipPolish) {
+      // POLISH IS SKIPPED WHOLESALE ONCE THE DEADLINE HAS PASSED, and this is what makes the cap
+      // mean anything at all.
+      //
+      // MEASURED: `maxSeconds: 5` produced a 64-SECOND run. The archive honoured the cap (240 of
+      // 1200 variations) and stopped; everything after it ran to completion regardless, and this
+      // repo's own ablation puts ~87% of wall clock in full-fidelity refinement and polish. So the
+      // cap was bounding the cheap tenth and letting the expensive nine tenths run -- which is why
+      // it read as a no-op, and why raising or lowering the number changed nothing.
+      //
+      // Polish is the right thing to drop: it is explicitly ADDITIVE (it corrects the last few
+      // points on an already-chosen champion and only replaces it if it truly wins), so skipping it
+      // returns the same champion slightly less refined, never an invalid or worse build. Stage 3
+      // still runs, because scoring the finalists is how the champion is chosen at all -- a cap
+      // that skipped THAT would return an unranked guess.
+      const outOfTime = ctx.pastDeadline();
+      if (outOfTime) {
+        ctx.note(`stopped at the ${maxSeconds}s time cap before polish -- returning the best build `
+          + 'found, which is chosen at full fidelity but not finally polished');
+      }
+      if (ranked.length && !effortSpec.skipPolish && !outOfTime) {
         const champion = ranked[0];
         const polishStats = { ocbaConsidered: 0, ocbaVerified: 0 };
         const polished = await polishWinner(

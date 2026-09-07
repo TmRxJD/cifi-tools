@@ -111,6 +111,12 @@
     // DEFAULT_EFFORT said 'fast'; benches inherit the optimizer's value, so the two disagreeing
     // meant every bench measured a configuration the app never uses. Read it from the one place
     // that declares it, and fail loudly if that place is missing rather than inventing a fallback.
+    // HOW LONG A RUN MAY TAKE, in minutes. Ten by default, which is the ceiling the project
+    // owner asked for. It bounds the OPTIONAL work -- the final polish and the wider full-fidelity
+    // finalist comparison -- so a capped run returns a build chosen at full fidelity but less
+    // refined, never a partial or illegal one. There is a floor it cannot go below: enumeration,
+    // screening and the final ranking have to happen for the answer to be ranked at all.
+    optimizeMaxMinutes: { make: () => 10 },
     optimizeEffort: {
       make: () => {
         const opt = global.HunterOptimizer;
@@ -176,6 +182,25 @@
    * or previously-saved value outside the step grid is still a valid number of iterations, and
    * silently changing it would be a surprise.
    */
+  /**
+   * Minutes a run may take: 1..120, defaulting to 10 for anything unparseable.
+   *
+   * Clamped rather than trusted because it is a free-text number input: a blank, a negative or a
+   * pasted "600" would otherwise reach optimize() as a cap that either fires instantly or never.
+   * Zero is NOT special-cased to mean "no limit" -- optimize() already reads <= 0 that way, and a
+   * spinner that silently disables the limit at its own minimum is a trap.
+   */
+  function clampOptimizeMinutes(value) {
+    // EMPTY IS NOT ZERO. `Number('')` is 0, which is finite, so a blank input fell through the
+    // NaN guard and clamped to the MINIMUM (1 minute) instead of the default (10) -- the comment
+    // above said "unparseable defaults to 10" while the code did something else. A user who
+    // cleared the box to retype would have silently armed a 1-minute cap.
+    if (value === '' || value === null || value === undefined) return 10;
+    const n = Math.round(Number(value));
+    if (!Number.isFinite(n)) return 10;
+    return Math.max(1, Math.min(120, n));
+  }
+
   function clampIterations(value, store) {
     const n = Math.round(Number(value));
     if (!Number.isFinite(n)) return ITERATIONS.default;
@@ -424,6 +449,7 @@
     ITERATIONS,
     iterationCeiling,
     clampIterations,
+    clampOptimizeMinutes,
     LOOT_KEYS,
     defaultLootFilter,
   };

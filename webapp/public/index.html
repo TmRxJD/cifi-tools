@@ -538,6 +538,17 @@
       <select id="optimizeEffort" class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white"></select>
       <p id="optimizeEffortHelp" class="text-xs text-gray-400 mt-1"></p>
     </div>
+    <div class="mb-3">
+      <label class="block text-sm text-gray-300 mb-1" for="optimizeMaxMinutes">Stop after</label>
+      <div class="flex items-center gap-2">
+        <input id="optimizeMaxMinutes" type="number" min="1" max="120" step="1"
+               class="w-24 bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white" />
+        <span class="text-sm text-gray-400">minutes</span>
+      </div>
+      <p class="text-xs text-gray-400 mt-1">Returns the best build found so far rather than running
+        to completion. It bounds the optional work -- the final polish and the wider full-fidelity
+        comparison -- so a capped run gives up refinement, never correctness.</p>
+    </div>
     <p class="mb-3 text-xs text-gray-400">
       Every legal combination of attributes is enumerated; search effort decides how many are
       tuned before the best are refined. The same build and effort always produce the same
@@ -585,15 +596,15 @@
 <script src="optimizer/space.js?v=20260907q-guards"></script>
 <script src="optimizer/objective.js?v=20260907t-bosstarget"></script>
 <!-- storeSchema depends on HUNTER_DEFS (hunterDefs.js) and AllocSpace (optimizer/space.js). -->
-<script src="storeSchema.js?v=20260907q"></script>
+<script src="storeSchema.js?v=20260907s-timelimit"></script>
 <!-- Real community build codes used as optimizer seeds, and the gate-aware refit that
      scales one to a different budget. Both must load BEFORE search.js, which consumes them.
      Measured: rule-based construction lands at kill 0.0 and -45% to -88% on the hard builds;
      re-fitting a real build reaches +2.37% / +1.33% WITH the boss kill. -->
 <script src="optimizer/refit.js?v=20260907a-corpus"></script>
 <script src="optimizer/corpus.js?v=20260907s-modes"></script>
-<script src="optimizer/search.js?v=20260907v-timecap2"></script>
-<script src="optimizer/runner.js?v=20260907a"></script>
+<script src="optimizer/search.js?v=20260907w-capbinds"></script>
+<script src="optimizer/runner.js?v=20260907b-maxsec"></script>
 <script src="saveImport.js?v=20260907a-ultima"></script>
 <script src="buildCode.js?v=20260810p"></script>
 <script src="costFormulas.js?v=20260907q-guards"></script>
@@ -607,7 +618,7 @@
      CDN-blocked user still gets the whole tool minus cloud saves. -->
 <script src="https://cdn.jsdelivr.net/npm/appwrite@27.0.0/dist/iife/sdk.js"></script>
 <script src="cloudSync.js?v=20260907c-stamps"></script>
-<script src="app.js?v=20260907e-efforheal"></script>
+<script src="app.js?v=20260907f-timelimit"></script>
 <script>
   // Custom (non-Tabler) sidebar icons: real game-asset SVG paths copied verbatim from the
   // live site's rendered DOM (Relics/Loop Mods/Milestones use bespoke icons, not Tabler's).

@@ -129,7 +129,7 @@
    * @param {object} options  { mode, onProgress, shouldCancel, poolSize }
    * @returns the search result: { best, ranked, evals, cacheHits, notes, cancelled }
    */
-  async function runOptimizer(cfg, { mode = 'loot', effort, onProgress = () => {}, shouldCancel = () => false, poolSize } = {}) {
+  async function runOptimizer(cfg, { mode = 'loot', effort, maxSeconds, onProgress = () => {}, shouldCancel = () => false, poolSize } = {}) {
     const size = poolSize || Math.max(2, Math.min(MAX_POOL_SIZE, (navigator.hardwareConcurrency || 4) - 1));
     // POOLS ARE REUSED ACROSS RUNS, not built and thrown away each time.
     //
@@ -166,6 +166,9 @@
         // Omitted rather than defaulted here: optimize() owns DEFAULT_EFFORT, so there is one
         // place that decides what an unspecified effort means.
         ...(effort ? { effort } : {}),
+        // Forwarded only when the caller set it, for the same reason as `effort`: optimize() owns
+        // the default, so there is one place that decides what "unspecified" means.
+        ...(Number.isFinite(maxSeconds) ? { maxSeconds } : {}),
         scorer: (pairs, iterations) => pool.score(pairs, iterations),
         // Tracked so `finally` terminates it even when the search throws or is cancelled: leaking
         // a pool leaks a WASM module per worker, which is what MAX_POOL_SIZE exists to prevent.
