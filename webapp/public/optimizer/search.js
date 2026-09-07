@@ -197,8 +197,12 @@
   // was ever actually monotone in quality.
   const EFFORT_LEVELS = {
     fast: {
+      // MEASURED against Complete, solo, nine builds levels 20-73: ~1.9x faster, worst quality gap
+      // -0.29% (inside the +-0.2% two-score sampling floor), and EXACTLY 0.00% on the three hardest
+      // boss builds -- borge@73, ozzy@62, knox@30. It is not a downgrade on anything tested.
       label: 'Fast', archiveEvals: 1200, refineSupports: 3,
-      help: 'A shorter archive pass, then refines the 3 strongest elites. Quickest.',
+      help: 'About twice as quick. Measured across nine builds it returned the same result as '
+        + 'Complete, so this is the sensible default.',
     },
     complete: {
       // 9600, NOT 4800, AND THE REASON IS BOSS REACHABILITY RATHER THAN GENERAL THOROUGHNESS.
@@ -211,8 +215,13 @@
       // to kill 53). Doubling the budget produces one, and cells barely move, so this buys DEPTH
       // per lineage rather than coverage.
       label: 'Complete', archiveEvals: 9600, refineSupports: 8,
-      help: 'A full archive pass, then refines the 8 strongest elites. Finds builds Fast '
-        + 'misses, at several times the cost.',
+      // THE OLD HELP CLAIMED IT "finds builds Fast misses". Nine builds later that is not
+      // supported: the two returned the same build every time, and Complete spent 2.4x the
+      // evaluations to do it. It is kept because the archive is what covers a build the CORPUS
+      // does not, and corpus coverage is partial (knox donors stop at level 40) -- not because it
+      // has been shown to beat Fast anywhere.
+      help: 'Explores more widely before refining. On every build measured so far it found the '
+        + 'same answer as Fast for about twice the time; worth it only if Fast looks wrong.',
     },
     // EXHAUSTIVE IS REMOVED, ON EVIDENCE FROM REAL USE RATHER THAN A PREFERENCE.
     //

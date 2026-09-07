@@ -116,6 +116,10 @@ const storeSchema = z.object({
   // that relationship; duplicating it here would be a second source for one fact.
   lastHunter: z.enum(['borge', 'ozzy', 'knox']),
   optimizeEffort: z.string().min(1),
+  // The run time limit in MINUTES, clamped 1..120 by StoreSchema.clampOptimizeMinutes. Bounded
+  // here as well as there because a value outside that range reaches optimize() as a cap that
+  // either fires instantly or never -- and a 1-minute cap looks identical to a slow machine.
+  optimizeMaxMinutes: z.number().int().min(1).max(120),
 
   // Fragments are ACCOUNT-WIDE, which is why they sit at the top level rather than under a hunter.
   // `perDay` is a user input the sim cannot infer; `current` comes from the save and `currentAt`

@@ -2384,11 +2384,34 @@ fixed traversal order give identical output for identical input.
   "lack of directed search can cause slow convergence even in low-dimensional search spaces", and
   its overhead "may not always justify the computational cost, particularly in scenarios with
   limited diversity requirements" -- which is precisely what a six-cell archive is.
-  **THE COUNTER-EXAMPLE THAT MUST NOT BE FORGOTTEN**: archiveEvals 4800 -> 9600 was REQUIRED for
-  Ozzy boss reachability (-66.27% at 4800). So the archive is load-bearing for at least one build,
-  and any simplification has to be tested against boss-critical builds, not just farm builds. A
-  cheap-archive arm that looks clean on farm builds and quietly breaks boss builds is the specific
-  failure to watch for.
+  **THE COUNTER-EXAMPLE THAT USED TO BE HERE NO LONGER HOLDS, AND THE REASON IS THE CORPUS.** This
+  entry read: "archiveEvals 4800 -> 9600 was REQUIRED for Ozzy boss reachability (-66.27% at
+  4800), so the archive is load-bearing for at least one build." That measurement was real and it
+  is now STALE -- it predates corpus donors, which start the climb from a build that already pays
+  the tier gates and already kills a boss, so the archive no longer has to discover that foothold.
+  Measured after the corpus landed, `fast` (archiveEvals **1200**, an eighth of the budget the old
+  note called insufficient) against `complete` (9600), solo, same build, both arms:
+
+      borge@73  172s/13,983ev  vs  358s/37,228ev   2.08x faster   quality +0.00%
+      ozzy@62   168s/ 9,542ev  vs  290s/21,728ev   1.73x faster   quality +0.00%
+      knox@30    64s/ 7,970ev  vs  123s/20,027ev   1.92x faster   quality +0.00%
+
+  ozzy@62 is the very build the old note was about, and at 1200 it now returns the SAME build as at
+  9600. Across nine builds (levels 20-73) the median speedup is ~1.9x and the worst quality gap is
+  -0.29%, inside the +-0.2% two-score sampling floor.
+
+  **So `complete` currently buys 2.4x the evaluations and no measured quality**, on every build
+  tested including the three hardest. That is a claim about the ARCHIVE, not about the search: the
+  corpus donor and the VND climb decide these answers. Do not read it as licence to delete the
+  archive -- it is what handles a build the corpus does not cover, and corpus coverage is known to
+  be partial (borge 12-84, ozzy 11-75, knox only 12-40). Read it as: the archive budget stopped
+  being the thing that decides boss reachability the moment donors did.
+
+  The general lesson is the one this file keeps paying for: **a measurement is true of the system
+  that produced it.** This one survived as a "must not be forgotten" counter-example through the
+  change that invalidated it, and was still being cited to justify a budget nothing needed.
+  `effort-value-check.js` is the standing measurement, so the next person re-runs it rather than
+  quoting this paragraph.
   `effort-sufficiency-check.js` now carries `noarchive` (archiveEvals 400) and `shifted` (400 evals,
   refinement doubled) arms to answer it against the GATE'S VERDICT rather than against a score.
 
