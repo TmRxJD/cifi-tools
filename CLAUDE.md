@@ -182,8 +182,6 @@ There is exactly one place for each of these. **Do not add a second.**
 | Full evaluation fidelity | `HunterOptimizer.FINAL_ITERATIONS` |
 | Build share-code encode/decode | `webapp/public/buildCode.js` |
 | What each optimize mode maximizes | `webapp/public/optimizer/objective.js` (`OptimizerObjective.MODES`) |
-| Which mode cross-seeds a candidate into which | `objective.js` (`crossSeedFrom` / `crossSeedFor`) |
-| A scorer bound to another objective | `optimize()`'s `scorerFor` — `runner.js` (worker pool) / `harness.js` (`scorerFactory`) |
 | Optimizer acceptance gate | `tools/bench/run.js` |
 | Store schema tests | `tools/bench/schema-test.js` |
 | Clone-vs-live comparison | `compare-mcp/batch-test.mjs` |
@@ -193,8 +191,13 @@ There is exactly one place for each of these. **Do not add a second.**
 `evalStateFor` → `HunterSim.evaluate` (`overrides`/`upgrades`); `cfgFor` →
 `HunterSim.compileEvaluator` (`baseOverrides`/`globalUpgrades` + node tables + budgets);
 `statPathCfgFor` → `greedyPurchasePath` (talents/attributes pinned instead of varied). They must
-describe the same account state. **If you add an account-state field to one, add it to all
-three in the same change.**
+describe the same account state.
+
+**They no longer need to be edited together, and this entry used to say they did.** All three are
+now thin projections of `accountStateFor()` → `window.AccountState`, so an account-state field is
+**one line in `accountState.js`** that every consumer sees at once. The old rule ("add it to all
+three in the same change") outlived the drift hazard it protected against, and a stale warning is
+its own defect: it sends the next person editing three call sites that do not need editing.
 
 ---
 
@@ -1157,7 +1160,9 @@ think one is wrong, disprove it with a test.
   `MAX_IDLE_POINTS` idle -- and it prints both allocations rather than asserting a cause.
 - **`underspend-test.js` is the gate that covers this, and NOTHING WAS RUNNING IT.** It was failing
   on 6 known builds, identically on clean HEAD, and appeared in no hand-picked bench list -- which
-  is why `tools/bench/all.js` now exists and runs everything. Its failure message also says which
+  is why `tools/bench/all.js` now exists. **It does NOT run everything, and believing it does is
+  the same trap one level up** -- 63 of 137 bench files are named in it, and ~12 real gates are
+  outside it (see the audit command in the Validation section). Its failure message says which
   KIND of failure it is: whether the import is even REACHABLE inside the level-derived budget. A
   share code does not encode level (it is inferred from spend), so an import can legitimately spend
   more than the optimizer is allowed to, and "beat the import" would then be asking it to beat an
@@ -1858,6 +1863,282 @@ fixed traversal order give identical output for identical input.
   confirms all 281 sim parameters land in their own slot; `wasm-arity-check.js` confirms 101/89/91
   arguments are all named. The DAG the move algebra reasons about is the game's own.
 
+- **THE BOSS CLIFF ON borge@73 WAS A RESCALING BUG, NOT A SEARCH PROBLEM, AND SIX MECHANISMS WERE
+  BUILT TO CROSS A BARRIER THAT ONLY EXISTED BECAUSE THE GOOD STARTING POINT HAD BEEN DISCARDED.**
+  borge@73 sat at **-39.44%** through FI-MAP-Elites, bet-and-run, OCBA, a boss-damage descriptor
+  axis, cross-seeding and corpus donors. It now returns **+2.37%**, killing the stage-300 boss more
+  often than the reference build (32.4 against 31.7), deterministically, in 110 seconds.
+  **The mechanic, as the project owner described it and as the game implements it:** nodes are
+  filled to reach the UNLOCK THRESHOLD of a better node, and the allocation has to be reassessed at
+  each of those stages. Borge's `atlas`/`weak`/`battle` need 75 COST-WEIGHTED points in
+  strictly-lower-threshold nodes; `mino`/`hermes` 150; `athena` 180. Ozzy has 90/150/180. Knox has
+  none -- which is the control: the fix leaves every Knox number untouched, as it must.
+  **What was wrong.** Re-fitting a donor build to a different budget absorbed the whole difference
+  into the donor's SINGLE LARGEST node. For a gated build that strips the sub-threshold points
+  paying its gates, so `borge@74` -- the one donor at the right level with the right structure --
+  came out ILLEGAL and was dropped. The pool then topped out at -39.27% with NOTHING killing a boss,
+  and every search started outside the `kills-boss` regime.
+  **Three of my own errors compounded to hide it**, and each is worth knowing separately:
+  - `Space.isLegal` was called with `alloc`/`budget` SWAPPED, so it returned `true` for every input
+    and the illegality was invisible. It now throws on a malformed call (`guard-liveness-check`).
+  - A 250-iteration donor screen DISCARDED borge@74 even when legal. A cheap ruler that discards is
+    deciding, and screening ~80 donors costs ~80 evaluations against ~1500 for the climb -- the SAIL
+    lesson (do not optimise the cheap stage) repeated four hours after reading it.
+  - `refitTiered`'s first version PROPORTIONALLY REBUILT the donor and lost `athena`: cost 15, donor
+    value 1, so it sat at the back of a greedy refill queue and the budget ran out before reaching
+    it. athena at 1 is worth kill 7.4 / 2.96B against kill 0.0 / 0.99B. **Preserve the donor's
+    structure and TRIM to fit; never rebuild it** -- expensive low-count nodes are where the gates
+    and the kills live.
+  **THE BARRIER PROBE MEASURED FROM THE WRONG STARTING POINT AND I ACTED ON IT.** From the best
+  NON-killing refit, reaching the import needs 82 coordinated moves through a valley 67% deep, and
+  I concluded no local search could ever cross it. From a KILLING start the same climb closes
+  -19.69% -> +2.37% in 1,554 evaluations. **A barrier is a property of the PAIR of endpoints, not of
+  the build.** Local search was never the problem.
+  `refit.js` owns both strategies so they can be compared rather than swapped on faith;
+  `refit-check.js` gates the tiered one on legality, best score, and NOT LOSING FULLY-SPENT
+  BOSS-KILLERS -- a criterion added after the first version passed on legality and loot while
+  quietly destroying every killer.
+
+- **ABLATED: WHAT ACTUALLY EARNS ITS KEEP.** `ablation-check.js`, each component removed in turn,
+  judged at 1000 iterations against the community build, on the two hardest fixtures:
+
+  | arm | borge@73 | knox@30 | verdict |
+  |---|---|---|---|
+  | full (donors + tiered refit + chunked VND, top3) | +2.37% / 2254 evals | +1.33% / 1879 | baseline |
+  | **top1** | **+2.37% / 780 evals** | **+1.33% / 751** | **identical answer, 1/3 the cost -- top3 is WASTE** |
+  | naive refit | +1.60% / 3009 | +1.33% | tiered is worth +0.77% AND 25% fewer evals on a gated hunter |
+  | single-point moves only | -14.11% | +1.33% | chunked moves worth 16.5 points on Borge, nothing on Knox |
+  | no climb (donors only) | -19.69% | -64.28% | the climb is essential |
+  | flat start (no corpus) | -42.90%, kill 0.0 | -84.13%, kill 0.0 | **the corpus is essential** |
+
+  The `flat start` arm is essentially what the shipped archive does, and it fails both builds
+  without ever reaching a boss kill. Everything else in `search.js` -- the MAP-Elites archive,
+  behaviour descriptors, curiosity selection, structural resampling, FI, bet-and-run, OCBA, damage
+  bands, seed lists -- is measured UNNECESSARY on these builds.
+  **The whole method is four steps**: best corpus donor -> gate-paying refit -> chunked ordered VND
+  -> stop. 780 evals / 59s on the hardest Borge, 751 / 33s on Knox.
+- **AND IT DOES NOT GENERALISE BEYOND A NEAR NEIGHBOUR -- MEASURED, and this is the binding
+  limitation.** Excluding donors within 5 levels (`--band=5`):
+
+  | build | band=0 | band=5 |
+  |---|---|---|
+  | borge@73 | +2.37% (kills boss) | **-41.09%** (kill 0.0) |
+  | knox@30 | +1.33% (kills boss) | **-84.13%** (kill 0.0, exactly the shipped optimizer's number) |
+
+  So this INTERPOLATES between adjacent community builds; it does not optimise. It has nothing to
+  offer any level the corpus does not cover with a close neighbour -- every Knox above 40, the
+  eight-level Ozzy gap at 34-42, and any account past the corpus ceiling.
+  The mechanism is the same one measured everywhere else: at band=0 the climb STARTS from a
+  boss-killing donor and finishes the job; at band=5 it starts outside the kills-boss regime and
+  cannot cross. **The corpus is not magic -- it is a source of starting points that already pay the
+  tier gates.** The open problem is therefore CONSTRUCTING a gate-paying killing structure rather
+  than copying one, which is a far better-posed question than "which metaheuristic next".
+  **CAVEAT ADDED 2026-09-06: THE band=5 NUMBER IS PARTLY A BUDGET ARTIFACT, NOT PURELY A
+  CAPABILITY LIMIT.** Re-measured on borge@73 with the diagnostics printing: `-45.10%, 2176 evals,
+  TRUNCATED at 2000, NOT converged`, with all 7 gains in N1, `lastImprove@2175` and a ONE-EVALUATION
+  tail. The climb was still improving when the cap cut it off and never reached N2 or N8 at all --
+  so "cannot cross" is not established by this run; "ran out of budget mid-ascent" fits it equally
+  well. `maxevals` was sized (2000) from band=0 runs that converge in 381-781, and a far donor is a
+  much longer climb. Re-run band=5 with a large cap before concluding anything about capability.
+
+- **`maxevals: 2000` WAS OVERFIT TO FIVE BUILDS AND BINDS ON REAL ONES. The TRUNCATED flag tells
+  you which shortfalls are budget and which are real -- use it before diagnosing anything.**
+  The trim from 12000 was justified by five builds converging in 381-781 evaluations, recorded as
+  "~2.5x the worst observed". Across all 195 fixtures the cap fires on 7 Borge builds, and
+  re-running the shortfalls with it effectively removed splits them cleanly:
+
+  | build | capped | uncapped | evals needed | verdict |
+  |---|---|---|---|---|
+  | borge@31 | -12.61% | **-0.33%** | 2880 | BUDGET |
+  | ozzy@42 | -1.68% | **0.00%** | 3155 | BUDGET |
+  | borge@35 | -2.89% | -2.89% | 750 | genuine (converged) |
+  | borge@44 | -2.31% | -2.31% | 715 | genuine |
+  | ozzy@11 | -2.02% | -2.02% | 281 | genuine |
+  | ozzy@55 | -2.00% | -2.00% | 951 | genuine |
+  | ozzy@46 | -1.44% | -1.44% | 1210 | genuine |
+  | ozzy@51 | -1.37% | -1.37% | 1313 | genuine |
+  | borge@45b | -1.22% | -1.22% | 948 | genuine |
+
+  **Among the SHORTFALLS, exactly the TRUNCATED ones were budget; every converged one was unchanged
+  to the decimal.** So for a build that came up short, the flag says which pile it is in without a
+  re-run. The worst build in the whole sweep (-12.61%) was a cap, not a defect.
+  **BUT THE FLAG IS NECESSARY, NOT SUFFICIENT, AND AN EARLIER VERSION OF THIS ENTRY OVERCLAIMED IT.**
+  7 Borge builds truncated and only 2 of them came up short -- the other 5 hit the cap and still met
+  or beat their reference. Truncation therefore does NOT predict a shortfall; it only classifies one
+  that has already happened. Raising the cap is still right (it costs up to 12.3 points when it does
+  bite), but do not read the truncation count as a count of damaged builds.
+  **The general lesson, which this file has now recorded three times about three different dials:
+  a budget sized from a five-build sample is a sample statistic, not a bound.** The same five builds
+  also justified the neighborhood trim, which is therefore owed the same scepticism.
+
+- **EVERY ELITE-SET METHOD IS INERT AFTER THE CLIMB CONVERGES, FOR ONE REASON: BY THEN OUR BUILD IS
+  BETTER THAN EVERY DONOR. Do not try another one without first checking that precondition.**
+  Three were implemented and measured on `ozzy@11` (the coupling reproducer), all in the
+  post-convergence slot, all against a control of -2.02%:
+
+  | method | what it does | result | cost |
+  |---|---|---|---|
+  | GOMEA Gene-pool Optimal Mixing (learned linkage) | copies a linkage SUBSET from a donor | **-2.02%** (inert) | 7x |
+  | GOM standalone from best donor, no VND | mixing only | **-8.83%** | 3690 evals |
+  | Path relinking toward top donors | walks TOWARD a guiding donor | **-2.02%** (inert) | 4x |
+  | the hand-rolled cross-block joint pass | GENERATES candidates by search | **+0.16%** (+2.18 pts) | 2.8x |
+
+  Post-climb our build is -2.02% and the best donor is **-9.92%**. GOM copies from donors,
+  recombination crosses donors, relinking walks toward a donor -- all three borrow material from a
+  set that is strictly worse than where the search already stands. Only the joint pass, which
+  generates new candidates rather than borrowing them, can improve anything there.
+  **This is also why recombination helps only at the DONOR STAGE**, where donors genuinely are better
+  than the starting point, and does nothing afterwards.
+  **THE LITERATURE IS SOUND; WE DO NOT MEET ITS PRECONDITION.** GOMEA's operator really is what the
+  hand-rolled passes were converging on, and learned linkage really does beat predetermined models
+  (Bosman & Thierens, GECCO 2012) -- our learned FOS found 44 sets, 13 crossing the talent/attribute
+  boundary, confirming the assumed boundary is not where the interactions are. But GOMEA assumes an
+  EVOLVING gene pool and ours is 65 fixed community builds. Path relinking assumes a guiding solution
+  worth walking toward. Neither holds post-convergence.
+  **NO EXACT METHOD APPLIES EITHER.** Dynamic programming for resource allocation requires a
+  SEPARABLE objective; this project already measured ours as non-separable and non-concave (greedy
+  build-up reached -90.4% on talents, -96.5% on attributes). Heuristics are necessary, not lazy.
+  `--gom` and `--relink` ship OFF, kept so the measurement is not repeated.
+
+- **DONOR RECOMBINATION -- TALENTS FROM ONE DONOR, ATTRIBUTES FROM ANOTHER -- HELPS ON SOME BUILDS,
+  NEVER HURTS, AND ITS COST IS NOT FREE. It gets a cross-block move without searching for one.**
+  Final-answer A/B, everything else held identical:
+
+  | build | recombine=0 | recombine=12 | final | evals |
+  |---|---|---|---|---|
+  | ozzy@46 | -1.44% (1210) | **+0.41%** (1111) | **+1.85 pts** | fewer |
+  | borge@44 | -2.31% (715) | **-1.81%** (1133) | **+0.50 pts** | **+58%** |
+  | borge@35 | -2.89% (750) | -2.89% (745) | unchanged | same |
+  | ozzy@11 | -2.02% (281) | -2.02% (413) | unchanged | +47% |
+
+  **AN EARLIER VERSION OF THIS ENTRY CLAIMED IT IMPROVES QUALITY AND COST AT THE SAME TIME. That was
+  written from the ozzy@46 row alone and is WRONG** -- borge@44 gained half a point for 58% more
+  evaluations, and two builds gained nothing. The cheap-and-better case is the exception.
+  **borge@35 IS THE ONE TO REMEMBER: its DONOR improved 1.18 points and its FINAL answer did not
+  move at all.** Donor quality does not predict final quality here -- the same result this project
+  already had from top-3 vs top-1 donors returning byte-identical builds. Never judge a donor-stage
+  change by donor-stage numbers; the climb absorbs most of it.
+  Compare the joint cross-block pass, which crosses the same coupling barrier by SEARCHING for the
+  pair at 2.8x cost -- recombination simply starts on the far side of it when a good crossing
+  happens to exist among the donors, and does nothing when it does not.
+  Donor-quality gains over the best pure donor, before any climbing:
+
+  | build | best pure donor | best recombined | gain | mixes level direction? |
+  |---|---|---|---|---|
+  | borge@44 | -5.20% | -4.79% | +0.43% | no |
+  | borge@35 | -6.90% | -5.72% | +1.27% | **yes** |
+  | ozzy@46 | -5.84% | **-2.12%** | **+3.95%** | **yes** |
+  | knox@35b | -2.32% | -0.75% | +1.60% | no |
+
+  **ON BOTH BUILDS WHERE THE WINNER MIXED DIRECTIONS IT TOOK TALENTS FROM BELOW AND ATTRIBUTES FROM
+  ABOVE.** Plausible mechanism, not yet proven: talent budget is ~level while attributes are ~3x
+  level, so talents saturate their caps early and a lower donor's talent shape fits a smaller budget
+  cleanly, while a higher donor's attributes carry depth structure a lower donor has not grown into.
+  Recombined candidates record `dir: 'mixed'`, so every future run reports how often this happens
+  without needing a special test.
+  **TOP-K, NEVER ALL PAIRS -- and this one nearly went unmeasured.** The first probe crossed all 86
+  donors with each other: 7,482 full-fidelity evaluations on ONE build, none memoizable (every
+  recombination is a distinct allocation), which is ~10x the work of the entire optimization run it
+  exists to inform. It burned 46 CPU-minutes before being killed. Top-12 gives 132 combinations,
+  tests the same hypothesis, and runs in about a minute.
+  **Ranking by score is the RIGHT filter here and the WRONG one for the joint move pass** -- opposite
+  rules, same file, so do not "unify" them. Recombination wants a strong pairing, so strong donors
+  are what to cross. The joint pass wants two INDIVIDUALLY BAD halves that combine well, so ranking
+  excludes exactly what it needs.
+
+- **THE REMAINING SHORTFALLS ARE A TALENT/ATTRIBUTE COUPLING, PROVEN BY DIRECT MEASUREMENT, AND
+  EVERY MOVE IN THE SET CHANGES ONE BLOCK ONLY.** This is the mechanism behind the converged
+  (non-truncated) shortfalls, and it is measured on FIXED allocations with no search involved, so
+  nothing about the search can confound it. On `ozzy@11` -- converged, fully spent, legal, 2.02%
+  below its community build and only 8 point-differences from it:
+
+  | allocation | loot | vs ours |
+  |---|---|---|
+  | ours | 67.52 | +0.00% |
+  | import ATTRS + our talents | 62.28 | **-7.77%** |
+  | our attrs + import TALENTS | 66.90 | **-0.92%** |
+  | import (BOTH together) | 68.92 | **+2.07%** |
+
+  **Both halves are downhill alone; the pair is uphill.** The attribute sweep holds talents fixed
+  and the talent sweep holds attributes fixed, so no sequence of single-block moves crosses this --
+  by construction, at any budget, from any donor. That is why every mechanism ever tried on this
+  class returned a byte-identical build: they all searched a space in which the required move does
+  not exist. It is the same one-way coupling recorded elsewhere in this file ("talents are NOT
+  learnable from a flat attribute fill"), seen from the other side.
+  **THE FIX NEEDS THREE PIECES AND ANY TWO OF THEM DO NOTHING** -- each was measured alone first:
+  - *cross-block pairing* (`--joint=K`): +0.02%. It could not generate the attribute half it needed.
+  - *plus one source -> TWO destinations*: still +0.02%. `exo -3` split across `lotl +1`/`exterm +1`
+    is the attribute half, and every other move sends freed points to a SINGLE destination.
+  - *plus a WIDE pairing*: **-2.02% -> +0.16%**, now beating the import. `joint=100` and `joint=400`
+    return the same build, so 100 suffices.
+  **RANKING THE CANDIDATE HALVES BY THEIR OWN SCORE IS ANTI-CORRELATED WITH FINDING THE PAIR, and
+  that is why the first two attempts failed.** Top-K by individual score puts the needed halves at
+  the BOTTOM -- the attribute half measures -7.77% -- so a narrow, "efficient" pairing excludes
+  precisely the moves it exists to find. Do not re-optimise this by tightening K.
+  **COST: 281 -> 2396 evals (8.5x), 22s at level 11.** The pass runs only AFTER the ordinary VND
+  converges, so unstuck builds pay nothing -- but stuck builds skew expensive, and this is NOT yet
+  measured on a high-level Borge where evaluation is ~60ms and the pairing space is larger.
+
+- **MULTI-NODE MOVES *WITHIN* A BLOCK (K SOURCES, M-LEVEL RAISES) ARE IMPLEMENTED AND MEASURED NOT
+  TO PAY -- THE COUPLING ABOVE IS THE AXIS THAT MATTERS. Do not re-derive this.** `corpus-donor-refine.js` takes `--sources` (how many nodes may fund one raise),
+  `--raise` (levels the destination may gain), `--takecap` and `--movecap`. Defaults K=2/M=1
+  reproduce the pair-only move set BYTE-IDENTICALLY (verified: borge@42 +0.07%, 436 evals, same
+  allocation), so the generalisation is inert when off.
+
+  | build | arm | result | evals | time | converged |
+  |---|---|---|---|---|---|
+  | borge@42 | K=2 M=1 | +0.07% | 436 | 57s | yes |
+  | borge@42 | K=3 M=3 | **+0.07%** (identical alloc) | 2010 | 194s | **NO -- truncated** |
+  | knox@38 | K=2 M=1 | +0.10% | 592 | 42s | yes |
+  | knox@38 | K=2 M=4 | **+0.10%** (identical alloc) | 5734 | 379s | yes |
+
+  The knox@38 arm is the real refutation: it CONVERGED, sweeping N1/N2/N8 with the enlarged move set
+  and spending 2849 evaluations after its last gain proving nothing more existed, at **9.7x** cost.
+  **The mechanism of the waste is worth knowing: the enlarged neighborhood STARVES the neighborhood
+  escalation.** borge@42's rich arm reads `N1:2gain/1929ev` -- N1 ate the entire budget and N2/N8
+  never ran. So a richer move set does not merely cost more, it deletes the ordered escalation that
+  was separately measured doing the work.
+  **SCOPE, STATED HONESTLY: both builds were ALREADY at or above parity (+0.07%, +0.10%), so neither
+  could ever have shown a benefit.** These are cost measurements, not proof the idea is worthless.
+  The untested case is a build with a REAL shortfall under the corpus method -- and note that
+  knox@38 was chosen precisely because this file listed it at **-3.96%**, a PRE-CORPUS number that
+  is stale. A stale figure in this file caused the wrong fixture to be picked; when the fresh sweep
+  lands, correct the failing-build table rather than leaving numbers that describe a retired search.
+
+- **EVERY BUDGET IN THE CORPUS METHOD IS NOW SIZED FROM MEASUREMENT, AND THE TUNING WAS WORTH 3.8x.**
+  Each dial was instrumented before being changed -- evaluations spent per stage, the evaluation at
+  which the answer LAST changed, and gains per neighborhood -- because a budget nobody has measured
+  can only ever be raised.
+
+  | change | evidence |
+  |---|---|
+  | `top` 3 -> 1 | ablation: IDENTICAL build on borge@73 (+2.37%) and knox@30 (+1.33%) at 1/3 the cost |
+  | `maxevals` 12000 -> 2000 | **WRONG, AND MEASURED WRONG -- see below.** Actual usage on the five sampled builds was 381-781 evals, so the cap looked like 2.5x headroom. Across all 195 fixtures it BINDS, and costs up to 12.3 points. |
+  | neighborhoods 10 -> `[1,2,8]` | N1/N2/N8 produced ALL 16 gains across 5 builds; N3/N4/N6/N12/N16/N24/N32 produced ZERO while costing 25-50% of every run |
+
+  Result, verified byte-identical on all five builds (same scores, same improvement counts):
+      borge@73  2254 evals/156s -> 586/48s      knox@30  1879/80s -> 488/23s
+      knox@37   463/34s -> 314/24s   borge@32  489/20s -> 366/16s   borge@42  381/51s -> 252/30s
+
+  **THE REMAINING TAIL IS NOT WASTE.** 110-171 evals (23-50%) are spent after the last improvement,
+  and that is VND proving convergence: it must sweep the kept neighborhoods and find nothing before
+  it may stop. Removing it removes the guarantee that the search stopped for a reason rather than
+  because a counter ran out.
+
+  **DO NOT MAKE THE BUDGET LEVEL-BASED.** Evaluation count is driven by the SEARCH SPACE (one VND
+  sweep is O(n^2) in nodes -- Borge 15 attrs + 9 talents against Knox's 11 + 8), not by level.
+  Level multiplies the COST PER evaluation (~11ms at level 12, ~60ms at 79) and therefore wall
+  clock, but not how many evaluations convergence needs: **borge@73 and knox@30 converge within 30
+  evaluations of each other across a 43-level gap.** A per-level table would fit the wrong variable.
+
+  **THE DONOR SCREEN IS 5-20% AND IS DELIBERATELY LEFT ALONE** (35-77 evals against a 175-509 climb).
+  It was once "optimised" to 250 iterations, which discarded borge@74 -- the only donor reaching the
+  boss regime -- and reported the build at -38.26% when its own donor pool held a -19.69% killer.
+  That is the SAIL finding from this file applied to the cheap stage, twice.
+
+  **LIMIT: five builds is the evidence for the neighborhood trim.** A sixth build could need N4.
+  `--neighborhoods=` overrides so the trim can be re-measured rather than argued about.
+
 ### Known open defects
 
 - **THE BOSS-DAMAGE DESCRIPTOR AXIS IS REDUNDANT *GIVEN FI*, AND THE ORIGINAL DELETION WAS RIGHT FOR
@@ -2453,7 +2734,15 @@ node tools/bench/ship-node-gate-check.js # install prereqs + base caps vs the GA
 node tools/bench/node-counter-check.js  # each node's 'per X' counter vs the GAME (77 nodes)
 node tools/bench/node-name-check.js     # node names vs the game's fleet tooltips (77 nodes)
 node tools/bench/node-effect-probe.js  # every install node actually moves the output
-node tools/bench/all.js                # EVERY gate in one run; SKIP is reported, not hidden
+node tools/bench/all.js                # the WIRED gates in one run; SKIP is reported, not hidden
+# NOT every gate. Measured 2026-09-06: 137 bench files, 63 named in all.js. Most of the remainder
+# are libraries, extractors, reporters or manual A/Bs -- but ~12 are real gates that nothing runs,
+# `search-quality-check` among them (the one that asks whether the search can FIND a build rather
+# than merely keep the incumbent it was handed). Audit with:
+#   comm -23 <(ls tools/bench/*.js | xargs -n1 basename | sed 's/.js$//' | sort) \
+#            <(grep -oE "'[a-z0-9][a-z0-9-]+'" tools/bench/all.js | tr -d "'" | sort -u)
+# This is the exact shape of the underspend-test incident below: a gate outside every list fails
+# invisibly. Claiming "EVERY gate" while a dozen sit unwired is worse than claiming nothing.
 node tools/bench/all.js --bundle=<live-bundle.js> --strict
 node tools/bench/node-resource-check.js # which RESOURCES each node boosts, vs the GAME
 node tools/bench/fleet-formula-check.js # the per-node bonus COMPOSES as the game does
@@ -2525,13 +2814,21 @@ node tools/bench/show.js               # pretty-print the last results.json
 The optimizer gate replays every real build code in `compare-mcp/known-builds*.mjs` (182 of
 them) through two checks:
 
-- **Parity** — clone's loot score vs the score recorded for that code. Currently asymmetric
-  (below = expected, above = hard failure). **This rule is known to be wrong and needs
-  replacing** — see the parity invariant above; the sign assumption it rests on does not hold at
-  high level. The 3 remaining gate failures are all this rule misfiring, not optimizer defects.
-  The fix is to judge parity against what the ORIGINAL TOOL reports for the same code
-  (`compare-mcp/batch-test.mjs` already drives the live site) rather than against a recorded
-  number that may describe different account state.
+- **Parity** — clone's loot score vs the score recorded for that code. **FIXED 2026-09-06: parity
+  is now a two-sided DIAGNOSTIC and fails nothing.** It used to fail any build scoring ABOVE its
+  recorded number, on the premise that "nothing can make it land above one" — which the full
+  182-build sweep disproved (three overcount +4.7% to +7.2%, three undercount −5.4%, the direction
+  FLIPPING between adjacent levels 72/73/74, clustered at the stage-300 boss boundary where the
+  metric is threshold-sensitive). A recorded score and a code-only evaluation describe DIFFERENT
+  ACCOUNT STATES, so the sign of their difference carries no information, and all 3 remaining "gate
+  failures" were this rule misfiring on correct builds.
+  **The tool's purpose is to propose a sane structure, not to replicate cifi-tools, so a build
+  scoring well is the goal rather than a defect.** What parity is still good for is NON-UNIFORM
+  error: a constant bias cannot reorder candidates, but one that flips sign between neighbouring
+  levels can — so the summary now prints the parity SPREAD (min..max, mean) instead of an overcount
+  count. Judging against what the ORIGINAL TOOL reports for the same code
+  (`compare-mcp/batch-test.mjs` drives the live site) remains the stronger check and is still not
+  wired in.
 - **Quality** — given exactly the budget the import spent, the optimizer matches or beats it on
   *that build's own objective* (loot builds on loot/min, push builds on average stage). The other
   metric is reported as a warning, never fatal — pushing deeper genuinely costs loot/min, and
@@ -2658,3 +2955,29 @@ fields unguarded.
 58% of the code, carry 364 untyped element lookups and 86 `innerHTML` templates, and converting
 them forces a build step this project deliberately does not have. The payoff-to-risk ratio is
 far worse than steps 2 and 3.
+# Pending CLAUDE.md entries (2026-09-07)
+
+- **THE R-SPLINE GRADIENT STEP IS UNTESTED, NOT REFUTED, AND FOUR IMPLEMENTATIONS OF IT FAILED.**
+  The framing is sound and worth keeping: this problem is integer-ordered Discrete Optimization via
+  Simulation (noisy simulation objective, integer variables, local convergence), and R-SPLINE
+  alternates NEIGHBORHOOD ENUMERATION -- our VND -- with a gradient step from piecewise-linear
+  interpolation, which we have never had. A gradient direction moves EVERY variable at once without
+  needing a linkage model, a donor or subset enumeration, which is structurally the move our set
+  cannot express. The finite differences are also nearly free: a VND sweep already evaluates every
+  single-variable move and discards all but the argmax, and the evaluator is deterministic so those
+  differences are EXACT rather than noisy.
+  Four attempts, all inert, each with a different cause:
+    1. `slope > 0` filter -- empty BY DEFINITION at a local optimum, which is the only place the
+       pass runs. Direction must come from RANKING (slope vs mean), not sign.
+    2. Per-block direction -- rebuilt the exact cross-block limitation it existed to remove.
+    3. A stray brace from a bad patch.
+    4. Joint direction, still ~9-12 extra evaluations: the probe frees a point from the cheapest
+       non-zero node, which on a threshold-constrained Borge breaks a tier gate, so most probes fail
+       legality and are skipped.
+  Measured: ozzy@11 -2.02% -> -2.02% (293 evals vs 281), borge@73 +2.37% -> +2.37% (1124 vs 1115).
+  **borge@73 is also a poor test bed and ozzy@11 is worse**: a gradient needs resolution, and
+  ozzy@11 funds 5 of 15 attributes. If retried, fix the probe to respect tier thresholds first.
+
+- **GOM AND PATH RELINKING SHIP DELETED, NOT DISABLED.** Both measured inert post-convergence
+  (see the elite-set entry): every donor-based method is bounded by a corpus that, after the climb,
+  is worse than the build in hand. Their measurements are recorded; the code is gone.

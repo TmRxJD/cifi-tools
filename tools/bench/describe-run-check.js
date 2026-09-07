@@ -123,17 +123,11 @@ console.log('-- constraint violation (regime decomposition)');
         + `violation ${gotViolation.toFixed(4)} (want ${wantViolation})`);
     }
   }
-  // Every infeasible score must sit strictly below every feasible one, or the separator is broken
-  // and Deb's rule 2 silently stops holding.
-  checked++;
-  const feasible = H.Objective.constrainScore(1e9, R(303.8, 3.43), 3);
-  const infeasible = H.Objective.constrainScore(1e9, R(300.0, 3.43), 3);
-  if (infeasible < 0 && feasible >= 0 && infeasible < feasible) {
-    console.log(`ok    infeasible (${infeasible.toFixed(4)}) ranks below feasible (${feasible})`);
-  } else {
-    failures++;
-    console.log(`FAIL  separator broken: infeasible ${infeasible} vs feasible ${feasible}`);
-  }
+  // The feasibility SEPARATOR assertion lived here and tested `Objective.constrainScore`, which
+  // has been deleted: it was dead in the shipped app AND a second expression of feasibility that
+  // the FI machinery never used -- search.js computes its own violation via `bossViolationOf`.
+  // Two definitions of one rule is the drift hazard this project's canonical-method inventory
+  // exists to prevent, so the duplicate went rather than being kept alive by its test.
 }
 
 console.log('');

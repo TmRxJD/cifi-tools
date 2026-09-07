@@ -109,6 +109,18 @@ async function guard(name, where, trigger) {
     H.Space.enumerateSupports(cfg.ATTRIBUTES, deps, cfg.ATTRIBUTE_BUDGET);
   });
 
+  // 10b. Space.isLegal refuses a MIS-ORDERED call instead of answering it.
+  //
+  // The order is (defs, deps, minVal, alloc, budget). Swapping the last two used to return `true`
+  // for every input -- costOf() summed over a number and isHeld() read a number as the allocation.
+  // Two benches called it that way for a session, so dependency legality was never checked and an
+  // impossible Knox build (`time 2` under `pl 0`) scored as a +7.50% win. Caps, budget, an
+  // independent re-measurement and a determinism test all passed it; none of them looks at edges.
+  await guard('isLegal called with alloc/budget swapped', 'Space.isLegal', () => {
+    H.Space.isLegal(cfg.ATTRIBUTES, cfg.ATTRIBUTE_DEPENDENCIES, cfg.ATTRIBUTE_MIN_VALUE,
+      cfg.ATTRIBUTE_BUDGET, {});
+  });
+
   // 11. The relic cost table refuses an unknown relic rather than pricing it at zero.
   await guard('unknown relic id', 'CostFormulas.relicCostAtLevel', () => {
     const CF = sb.CostFormulas;

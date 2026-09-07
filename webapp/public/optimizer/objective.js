@@ -89,6 +89,17 @@
   }
 
   function bossTargetFor(highestStageReached) {
+    // `Number(x) || 0` swallows EVERYTHING -- a string, an object, NaN -- and returns target 100,
+    // which is a real, plausible answer (the first boss). A caller passing a stage it failed to
+    // read would get "aim at boss 100" and never learn it asked wrongly.
+    //
+    // null/undefined ARE legitimate: they mean "no stage known", and the objective's documented
+    // target-agnostic mode relies on that. Anything else is a caller bug.
+    if (highestStageReached !== null && highestStageReached !== undefined
+      && (typeof highestStageReached !== 'number' || !Number.isFinite(highestStageReached))) {
+      throw new Error('Objective.bossTargetFor: highestStageReached must be a finite number, or '
+        + `null/undefined for "no stage known"; got ${typeof highestStageReached}`);
+    }
     const reached = Math.max(0, Math.floor(Number(highestStageReached) || 0));
     return Math.floor(reached / 100) * 100 + 100;
   }
@@ -398,6 +409,19 @@
    * the case here -- violation is only ever computed for a build short of the target, and such a
    * build ends at the wall it failed to pass.
    */
+  // DEAD IN THE SHIPPED APP, DELIBERATELY KEPT, AND THE REASON IS NOT SENTIMENT.
+  //
+  // Its three companions in this subsystem -- constrainedScoreFor, constrainScore and their
+  // scoring path -- were deleted as dead. This one is kept because it is the ONLY tested statement
+  // of a rule that has produced four separate wrong conclusions in this project: `bossHpPercent`
+  // reads 0 BOTH for a run that never reached a wall AND for one already past it. Crediting the
+  // second as progress made an unreachable regime score FEASIBLE. `describe-run-check` pins that
+  // with five cases, one of them named "past a wall, died in the open".
+  //
+  // KNOWN DUPLICATION, recorded rather than hidden: `search.js` computes the same quantity inline
+  // as `bossViolationOf`, which is why this is unreferenced. If FI is ever revived, the correct
+  // move is to delete THAT copy and call this one -- the tested definition should be the canonical
+  // one, not the untested inline duplicate.
   function constraintViolation(result, targetBosses) {
     const cleared = regimeOf(result);
     const short = targetBosses - cleared;
@@ -423,42 +447,9 @@
     return short - progress;
   }
 
-  /**
-   * The objective for ONE subproblem: maximise `mode` subject to clearing `targetBosses` bosses.
-   *
-   * Feasible builds are ranked by the caller's real objective and nothing else, so within the
-   * feasible set this subproblem is exactly the search that already exists.
-   */
-  function constrainedScoreFor(mode, result, ctx, targetBosses) {
-    return constrainScore(scoreFor(mode, result, ctx), result, targetBosses);
-  }
 
-  /**
-   * THE ONE PLACE THE FEASIBILITY RULE LIVES.
-   *
-   * Takes an already-computed objective value plus whatever carries maxStage/bossHpPercent -- the
-   * full evaluator result, or the {kill, hp, maxStage} metadata a scorer rides alongside its
-   * scores. Both callers go through here so the rule cannot be implemented twice and drift, which
-   * is this codebase's most-repeated failure.
-   */
-  function constrainScore(baseScore, meta, targetBosses) {
-    if (!Number.isFinite(targetBosses)) {
-      throw new Error('constrainScore: targetBosses must be a number');
-    }
-    const shaped = { maxStage: meta.maxStage, bossHpPercent: Number.isFinite(meta.bossHpPercent) ? meta.bossHpPercent : meta.hp };
-    const violation = constraintViolation(shaped, targetBosses);
-    if (violation <= 0) {
-      if (!(baseScore >= 0)) {
-        throw new Error(`constrainScore: objective produced a negative or non-finite score `
-          + `(${baseScore}); the feasible/infeasible separator assumes a non-negative objective`);
-      }
-      return baseScore;
-    }
-    return INFEASIBLE_BASE - violation;
-  }
 
-  const Objective = { MODES, modesForAttributes, scoreFor, regimeOf, constraintViolation, constrainedScoreFor,
-    constrainScore,
+  const Objective = { MODES, modesForAttributes, scoreFor, regimeOf, constraintViolation,
     INFEASIBLE_BASE, pinnedAttrsFor, pathModes, modeOrThrow, bossTargetFor, contextFor, describeRun, BOSS_INTERVAL, KILL_ACHIEVED_BASE };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Objective;

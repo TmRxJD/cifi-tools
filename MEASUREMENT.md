@@ -153,6 +153,39 @@ not slow.
 **Rule:** long jobs report on start, not only on completion. Confirm work is happening by measuring
 CPU, not by the absence of an error.
 
+## 15. A predicate that answers a MALFORMED call is worse than one that throws
+
+`Space.isLegal(defs, deps, minVal, alloc, budget)` was called with the last two swapped. `costOf()`
+summed over a number and returned 0; `isHeld()` read a number as the allocation and found every node
+trivially held. **It returned `true` for every input**, so dependency legality went unchecked for a
+whole session — and a Knox build with `time 2` under `pl 0`, impossible in the game, was scored and
+reported as a **+7.50%** win. The real figure once edges were enforced was **+1.33%**.
+
+**Four other checks passed that build**: caps, budget, an independent re-measurement at full
+fidelity, and a two-run determinism test. None of them looks at dependency edges. Passing many
+checks is not the same as passing the *relevant* one.
+
+This was the third argument-order mistake in one session (`enumerateSupports(defs, deps, budget)`
+called with `minVal`; `diag.feasibleInfeasible` read one level too shallow).
+
+**Rule:** a predicate validates the SHAPE of its arguments and throws on a malformed call, so the
+caller cannot confuse "legal" with "not asked properly". `Space.isLegal` now throws; a
+`guard-liveness-check` case proves the rejection still fires. And when a bench depends on a
+predicate, it re-checks the property directly — `corpus-donor-refine` walks the dependency edges
+itself rather than trusting one call.
+
+## 16. A TIME-based stopping rule makes a deterministic method non-deterministic
+
+The corpus/VND search contains no PRNG: same input, same answer — that was its main advantage over
+the archive's ~7-point seed variance. Then a wall-clock budget was added to bound runtime, and
+borge@42 returned **+78.80%** and **+62.72%** from *identical* settings, because how much gets done
+in 300 seconds depends on what else the machine is doing. The algorithm stayed deterministic; the
+stopping rule was not, and it bit hardest exactly where results were largest and least verified.
+
+**Rule:** bound work by a COUNT (evaluations), never by seconds. Evaluation is ~87% of wall clock,
+so an evaluation cap bounds runtime anyway, and it stops at the same place every run. Print the
+seconds so a cost regression stays visible — but never let the clock decide the answer.
+
 ---
 
 ## The meta-rule

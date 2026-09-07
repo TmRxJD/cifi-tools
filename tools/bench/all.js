@@ -32,6 +32,14 @@ const LOCAL = [
   'bench-integrity-check',
   // Every shipped effort level must return a build. `fast` used to THROW on ozzy@11.
   'effort-level-check',
+  'asset-version-check',
+  'time-cap-check',
+  'cross-block-gate-check',
+  'corpus-recombine-check',
+  'fallback-guarantee-check',
+  'mode-fidelity-matrix',
+  'underspend-repro',
+  'refit-contract-check',
   'schema-test', 'app-schema-test', 'reference-schema-test',
   'relic-cost-test', 'relic-cap-check', 'relic-tier2-check',
   'node-coefficient-check', 'node-counter-check', 'node-name-check', 'node-effect-probe',
@@ -56,6 +64,48 @@ const LOCAL = [
   'describe-run-check', 'effort-option-check', 'boss-parity-check',
   // Structural/self-audit gates that existed but were in no list, so nothing ran them.
   'config-sanity-check', 'guard-liveness-check', 'dead-symbol-audit',
+  // THE MEASUREMENT MODULE'S OWN NEGATIVE CONTROLS. Every case is a real failure replayed: an
+  // illegal build that scored +7.50%, a wall-clock stopping rule that made a PRNG-free method
+  // return +78.80% then +62.72%, two arms judged at different fidelities, a sub-noise delta
+  // reported as a win. If this stops refusing them, every number the suite prints is suspect.
+  'measurement-check',
+  // UNDER-SPEND AND ILLEGALITY IN THE ALLOCATION BUILDERS. This class has bitten twice: a fill loop
+  // that `break`s at one node's cap left 55 of 73 talent points unspent on a far-away donor, and a
+  // gate-paying fill that handled tier thresholds but forgot dependency EDGES produced illegal
+  // builds on 24 of 24 fixtures. Both passed the caps check and the budget check, because
+  // under-spend is <= budget and a missing parent is not a cap violation.
+  'refit-spend-audit',
+  // THE CLASS ITSELF: a helper that answers a MALFORMED call instead of failing. Wraps definition
+  // objects in a Proxy that throws on any read of a field they do not have (catching `d.max` where
+  // the field is `maxLevel`), and calls every exported predicate with swapped/wrong-typed arguments
+  // demanding a throw. Every bug in this class today was invisible because the wrong answer looked
+  // like a right one: isLegal returned `true` for everything, enumerateSupports returned [].
+  'contract-audit',
+  // CORRUPTION-OVER-TIME classes the malformed-input sweep cannot see: a builder that MUTATES the
+  // caller's data (a donor edited on first use makes every later result depend on iteration order),
+  // non-determinism, boundary collapse at zero/one-node budgets, NaN contamination (NaN compares
+  // false against every bound, so it silently loses comparisons and passes budget checks), plus
+  // idempotence and aliasing. Verified to FAIL on injected mutation and injected non-idempotence.
+  'fumigation-sweep',
+  // Every exported optimizer function called with wrong-typed and swapped arguments; a function
+  // that ANSWERS garbage is the finding. Caught isEligible/isHeld returning `true` for strings,
+  // costOf returning 0 (the banned silent-zero shape), and signature() colliding with a real
+  // all-zeros allocation -- a poisoned memo key, where 54% of evaluation requests are memo hits.
+  'malformed-input-sweep',
+  // REACHABILITY, not reference counting. dead-symbol-audit and noop-audit both MISSED
+  // `optimizeByRegime`: ~90 lines, exported, never called by the app or by optimize(), kept looking
+  // alive by five in-file references and one bench. A bench is not production use. Its own selftest
+  // runs every time and fails the gate if the tool stops being able to see that.
+  // CORPUS SEEDING: is it actually wired, and is it strictly additive? A feature that looks wired
+  // and does nothing is this project's signature failure -- optimizeByRegime was 90 exported lines
+  // nobody called, and bossDamageBands reached three of four sites and silently no-oped. This
+  // asserts from the run's own diag that donors were ADMITTED, not merely offered. It has already
+  // caught the block being inert twice: once because refit/corpus registered only in the vm sandbox
+  // and not on Node's global, once because the async parseBuildCode was called synchronously.
+  'corpus-wiring-check',
+  // The bench refit and the SHIPPED refit are two copies of one rule. Compares 864 allocations.
+  'refit-parity-check',
+  'reachability-audit',
 ];
 
 // Gates that compare against the live cifi-tools bundle; they need --bundle=.
@@ -80,6 +130,7 @@ function run(name, extra) {
   }
   let out = '';
   let code = 0;
+  const gateStart = Date.now();
   try {
     out = execFileSync(process.execPath, [file, ...(extra || [])], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   } catch (e) {
@@ -91,15 +142,19 @@ function run(name, extra) {
   // A bench that printed SKIP verified less than it claims, even though it exited 0.
   const skipped = /^\s*(SKIP|skip)\b/m.test(out);
   const status = code !== 0 ? 'FAIL' : (skipped ? 'SKIP' : 'PASS');
-  results.push({ name, status, line: last.trim(), out });
+  const gateSecs = Math.round((Date.now() - gateStart) / 1000);
+  results.push({ name, status, line: last.trim(), out, secs: gateSecs });
   // PRINT AS IT GOES, not only in the summary at the end.
   //
   // This suite runs ~45 gates sequentially and several of them run the optimizer, so a full pass
   // takes tens of minutes. Buffering everything to the end means it is silent for that whole time
   // and indistinguishable from a hang -- the same defect the sweep had, where the silence got
   // reported as a malfunction. The summary table below still prints; this is in addition.
+  // PER-GATE seconds as well as elapsed. Total runtime alone cannot answer "which gate should be
+  // in a --quick subset"; only the per-gate cost can, and picking that subset by guesswork is how
+  // a suite ends up dropping the gates that actually catch things.
   const t = Math.round((Date.now() - startedAt) / 1000);
-  process.stdout.write(`  ${String(t).padStart(4)}s  ${status.padEnd(4)}  ${name}
+  process.stdout.write(`  ${String(t).padStart(4)}s  ${status.padEnd(4)}  ${String(gateSecs).padStart(4)}s  ${name}
 `);
 }
 

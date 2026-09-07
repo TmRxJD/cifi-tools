@@ -44,6 +44,18 @@
 const { parentPort } = require('node:worker_threads');
 const H = require('./harness.js');
 
+// SCORE A RESULT UNDER A MODE'S OWN OBJECTIVE, using OptimizerObjective's table rather than a
+// second copy of the scoring rules. Two copies of an objective is exactly the drift this project
+// has watched break benches before (ship-test duplicating nodeWeight and staying on `max`).
+function objectiveOf(mode, r) {
+  const M = H.Objective && H.Objective.MODES && H.Objective.MODES[mode];
+  if (!M || typeof M.score !== 'function') {
+    throw new Error(`worker: no objective for mode "${mode}" -- a fixture declares a mode the `
+      + 'optimizer does not implement, and grading it on loot would silently measure the wrong thing');
+  }
+  return M.score(r);
+}
+
 // Monte Carlo tolerance for parity. The recorded scores are also rounded in the fixture files
 // (several to 3 significant figures, e.g. "1.58k" as 1580), so this covers recording precision
 // as well as simulation variance.
@@ -87,6 +99,15 @@ parentPort.on('message', async (fixture) => {
       importStage: imported.stage,
       optimizedLoot: optimized.loot,
       optimizedStage: optimized.stage,
+      // THE MODE'S OWN OBJECTIVE, from OptimizerObjective rather than a second copy of the rule.
+      // Without this the gate can only compare loot and stage, so a `boss` build has to be judged
+      // on one of them -- and the loot branch would FAIL a boss build for shedding loot, which is
+      // exactly what it is built to do. Carrying the objective score makes each mode gradeable on
+      // the question it was optimised for.
+      importObjective: objectiveOf(fixture.mode, imported),
+      optimizedObjective: objectiveOf(fixture.mode, optimized),
+      importKillRate: imported.bossKillRate,
+      optimizedKillRate: optimized.bossKillRate,
       lootDeltaPct: 100 * (optimized.loot - imported.loot) / imported.loot,
       stageDeltaPct: imported.stage ? 100 * (optimized.stage - imported.stage) / imported.stage : 0,
       evals: result.evals,

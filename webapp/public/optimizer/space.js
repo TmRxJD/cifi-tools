@@ -41,6 +41,68 @@
   // restriction applies there -- while construction inside a support keeps this slack.
   const MAX_IDLE_POINTS = 1;
 
+  //
+  // ARGUMENT VALIDATION AT THE PUBLIC BOUNDARY, AND DELIBERATELY NOT INSIDE THE HOT LOOPS.
+  //
+  // A malformed-input sweep over every export found this module answering garbage rather than
+  // refusing it, in the three most dangerous shapes there are:
+  //   PREDICATES RETURNING TRUE -- isEligible/isHeld/isLegal returned `true` for string and number
+  //     arguments. `isLegal(defs, defs, defs, defs, 42)` was `true`, because an ARRAY satisfies
+  //     `typeof alloc === 'object'`.
+  //   SILENT ZEROS -- costOf('garbage') returned 0, which makes every candidate look affordable.
+  //     This project already banned exactly that shape for relic costs, where a zero made an
+  //     unmodelled relic win every cost-ranked comparison it entered.
+  //   MEMO-KEY COLLISIONS -- signature(defs, 'garbage') returned "0,0,0,..." which COLLIDES with a
+  //     real all-zeros allocation, and sameAlloc(x, 'garbage') returned true. Both feed dedup and
+  //     memoization, so a collision silently returns another build's cached score.
+  //
+  // `costOf` and `isHeld` run once per node inside every fill, trim and legality sweep, so they are
+  // left unguarded on purpose -- validating there would tax the hottest path in the optimizer.
+  // Instead the ENTRY POINTS validate, so garbage cannot reach them from outside this module.
+  function assertDefs(defs, where) {
+    if (!Array.isArray(defs) || !defs.length || typeof defs[0] !== 'object' || defs[0] === null
+      || typeof defs[0].id !== 'string') {
+      throw new Error(`${where}: defs must be a non-empty array of node definitions with string ids`);
+    }
+  }
+  function assertAlloc(alloc, where, defs) {
+    if (!alloc || typeof alloc !== 'object' || Array.isArray(alloc)) {
+      throw new Error(`${where}: alloc must be a plain object of node id -> level, got `
+        + `${Array.isArray(alloc) ? 'an array' : typeof alloc}`);
+    }
+    // An allocation sharing no ids with the node list is not an allocation for this space. Without
+    // this, every level reads as 0 and the result looks like a legal empty build.
+    if (defs && Array.isArray(defs)) {
+      let shared = 0;
+      for (const d of defs) if (Object.prototype.hasOwnProperty.call(alloc, d.id)) shared++;
+      if (shared === 0 && Object.keys(alloc).length > 0) {
+        throw new Error(`${where}: alloc shares no node ids with defs -- it belongs to a different space`);
+      }
+    }
+  }
+  function assertBudget(budget, where) {
+    if (!Number.isFinite(budget)) throw new Error(`${where}: budget must be a finite number, got ${typeof budget}`);
+  }
+  // A dependency map keyed by anything but node ids silently means "NO DEPENDENCIES", because every
+  // lookup misses. `enumerateSupports(defs, defs, 42)` returned 2048 supports for Knox -- 2^11, the
+  // unconstrained count -- which looks exactly like a real enumeration. An empty map is legitimate
+  // (Knox genuinely has no thresholds and shallow deps); a NON-empty map whose keys are all unknown
+  // is a caller passing the wrong object.
+  function assertDeps(deps, where, defs) {
+    if (deps === null || deps === undefined) return;
+    if (typeof deps !== 'object' || Array.isArray(deps)) {
+      throw new Error(`${where}: deps must be a plain object of childId -> [parentId], got `
+        + `${Array.isArray(deps) ? 'an array' : typeof deps}`);
+    }
+    const keys = Object.keys(deps);
+    if (!keys.length) return;
+    const ids = new Set(defs.map((d) => d.id));
+    if (!keys.some((k) => ids.has(k))) {
+      throw new Error(`${where}: deps has ${keys.length} key(s) and none is a node id -- every lookup `
+        + 'would miss and the space would read as dependency-free');
+    }
+  }
+
   function costOf(defs, alloc) {
     let sum = 0;
     for (const d of defs) sum += (alloc[d.id] || 0) * (d.cost || 1);
@@ -81,6 +143,25 @@
   }
 
   function isLegal(defs, deps, minVal, alloc, budget) {
+    // REJECT A MIS-ORDERED CALL INSTEAD OF ANSWERING IT. The argument order is
+    // (defs, deps, minVal, ALLOC, BUDGET), and swapping the last two used to return `true` for
+    // EVERYTHING: costOf() summed over a number and produced 0, and isHeld() read a number as the
+    // allocation so every node came back trivially held. Two benches called it that way for a whole
+    // session, so dependency legality went unchecked and a Knox build with `time 2` under `pl 0` --
+    // impossible in the game -- was scored, reported as a +7.50% win, and survived a caps check, a
+    // budget check, an independent re-measurement AND a determinism test, because none of those
+    // look at edges.
+    //
+    // A predicate that returns `true` for a malformed call is worse than one that throws: the
+    // caller cannot tell "legal" from "not asked properly".
+    if (!alloc || typeof alloc !== 'object' || Array.isArray(alloc)) {
+      throw new Error('Space.isLegal: alloc must be a plain object of node id -> level; got '
+        + `${typeof alloc}. Argument order is (defs, deps, minVal, alloc, budget).`);
+    }
+    if (!Number.isFinite(budget)) {
+      throw new Error('Space.isLegal: budget must be a finite number; got '
+        + `${typeof budget}. Argument order is (defs, deps, minVal, alloc, budget).`);
+    }
     if (costOf(defs, alloc) > budget) return false;
     return defs.every((d) => isHeld(d, defs, deps, minVal, alloc));
   }
@@ -115,6 +196,17 @@
   // Tractable by direct measurement: Borge 361, Ozzy 289, Knox 145 dependency-closed subsets.
   // Exhaustive means exhaustive.
   function enumerateSupports(defs, deps, budget) {
+    // AN EMPTY ENUMERATION IS INDISTINGUISHABLE FROM "NOTHING IS LEGAL", so a malformed call must
+    // throw rather than return []. Called as (defs, deps, MINVAL) -- passing the threshold map
+    // where the budget belongs -- this silently returned ZERO supports, and the caller read that
+    // as "this build has no legal structures" and reported a confident wrong conclusion.
+    // The same shape as isLegal answering a swapped call with `true`.
+    if (!Number.isFinite(budget)) {
+      throw new Error(`Space.enumerateSupports: budget must be a finite number, got ${typeof budget}. `
+        + 'Argument order is (defs, deps, budget).');
+    }
+    assertDefs(defs, 'Space.enumerateSupports');
+    assertDeps(deps, 'Space.enumerateSupports', defs);
     const n = defs.length;
     if (n > 30) throw new Error(`enumerateSupports: ${n} nodes exceeds the exhaustive bitmask limit`);
     const indexOf = new Map(defs.map((d, i) => [d.id, i]));
@@ -159,6 +251,9 @@
   // the screen should reflect what a support set can do when actually used, not a degenerate
   // corner of it. Fully deterministic: no randomness, ties broken by declaration order.
   function canonicalFill(defs, deps, minVal, budget, supportIds, openOnly = false) {
+    assertDefs(defs, 'Space.canonicalFill');
+    assertDeps(deps, 'Space.canonicalFill', defs);
+    assertBudget(budget, 'Space.canonicalFill');
     const inSupport = new Set(supportIds);
     const members = defs.filter((d) => inSupport.has(d.id));
     const alloc = {};
@@ -285,6 +380,10 @@
   // Spend any budget that is sitting idle, deterministically, without changing the support
   // set. Used after a transfer frees an odd amount that the donor's cost can't absorb.
   function fillLeftover(defs, deps, minVal, budget, alloc) {
+    assertDefs(defs, 'Space.fillLeftover');
+    assertDeps(deps, 'Space.fillLeftover', defs);
+    assertBudget(budget, 'Space.fillLeftover');
+    assertAlloc(alloc, 'Space.fillLeftover', defs);
     let spent = costOf(defs, alloc);
     let progressed = true;
     while (progressed && spent < budget) {
@@ -324,6 +423,10 @@
   // function survives as the unscored primitive the benches compare against; the scored one is
   // the one the search uses.
   function spendRemaining(defs, deps, minVal, budget, alloc) {
+    assertDefs(defs, 'Space.spendRemaining');
+    assertDeps(deps, 'Space.spendRemaining', defs);
+    assertBudget(budget, 'Space.spendRemaining');
+    assertAlloc(alloc, 'Space.spendRemaining', defs);
     let spent = costOf(defs, alloc);
     let progressed = true;
     while (progressed && budget - spent > MAX_IDLE_POINTS) {
@@ -350,6 +453,10 @@
   //
   // Mutates `alloc` in place, matching how the editor holds a live allocation object.
   function trimToBudget(defs, deps, minVal, budget, alloc) {
+    assertDefs(defs, 'Space.trimToBudget');
+    assertDeps(deps, 'Space.trimToBudget', defs);
+    assertBudget(budget, 'Space.trimToBudget');
+    assertAlloc(alloc, 'Space.trimToBudget', defs);
     let guard = 0;
     while (costOf(defs, alloc) > budget && guard++ < 10000) {
       let topId = null;
@@ -369,6 +476,10 @@
   // transfer can never produce a stranded dependent -- the failure mode that forced the old
   // code to carry a separate repairLegality pass.
   function transfer(defs, deps, minVal, budget, alloc, fromId, toId, amount) {
+    assertDefs(defs, 'Space.transfer');
+    assertDeps(deps, 'Space.transfer', defs);
+    assertBudget(budget, 'Space.transfer');
+    assertAlloc(alloc, 'Space.transfer', defs);
     if (fromId === toId) return null;
     const from = defs.find((d) => d.id === fromId);
     const to = defs.find((d) => d.id === toId);
@@ -419,17 +530,58 @@
     return next;
   }
 
+  // THESE TWO FEED DEDUPLICATION AND MEMOIZATION, so a false match is not a wrong answer -- it is
+  // ANOTHER BUILD'S CACHED SCORE. Measured before the guards: `sameAlloc(defs, alloc, 'garbage')`
+  // returned true, and `signature(defs, 'garbage')` returned "0,0,0,..." which COLLIDES with a real
+  // all-zeros allocation. Memoization is exact and the optimizer leans on it heavily (54% of
+  // evaluation requests are served from the memo), so a collision is invisible and permanent.
   function sameAlloc(defs, a, b) {
+    assertDefs(defs, 'Space.sameAlloc');
+    assertAlloc(a, 'Space.sameAlloc(a)', defs);
+    assertAlloc(b, 'Space.sameAlloc(b)', defs);
     return defs.every((d) => (a[d.id] || 0) === (b[d.id] || 0));
   }
 
   function signature(defs, alloc) {
+    assertDefs(defs, 'Space.signature');
+    assertAlloc(alloc, 'Space.signature', defs);
     return defs.map((d) => alloc[d.id] || 0).join(',');
   }
 
   const Space = {
     MAX_IDLE_POINTS,
-    costOf, pointsBelowThreshold, isEligible, isHeld, isLegal, clearInvalidDescendants,
+    // costOf / pointsBelowThreshold / isEligible / isHeld are exported BELOW as validating
+    // wrappers. They were listed here as bare shorthands too; object-literal semantics meant the
+    // later guarded definitions won, so it worked -- by a rule nobody should have to know. Two keys
+    // for one name, where which one wins is implicit, is precisely the kind of thing that hides a
+    // defect for a session.
+    isLegal, clearInvalidDescendants,
+    // GUARDED EXPORTS OVER FAST INTERNALS.
+    //
+    // costOf/pointsBelowThreshold/isEligible/isHeld run once per node inside every fill, trim and
+    // legality sweep, so they must stay unvalidated INTERNALLY -- guarding them would tax the
+    // hottest path in the optimizer. But they are also exported, and unguarded they answered
+    // garbage in the two worst ways: `costOf('garbage')` returned 0 (a zero cost makes every
+    // candidate look affordable -- the exact shape this project already banned for relic costs),
+    // and `isEligible`/`isHeld` returned TRUE for string and number arguments.
+    // So the export is a validating wrapper and the internal call sites keep the fast path.
+    costOf: (defs, alloc) => { assertDefs(defs, 'Space.costOf'); assertAlloc(alloc, 'Space.costOf', defs); return costOf(defs, alloc); },
+    pointsBelowThreshold: (defs, minVal, alloc, threshold) => {
+      assertDefs(defs, 'Space.pointsBelowThreshold');
+      assertAlloc(alloc, 'Space.pointsBelowThreshold', defs);
+      if (!Number.isFinite(threshold)) throw new Error('Space.pointsBelowThreshold: threshold must be a finite number');
+      return pointsBelowThreshold(defs, minVal, alloc, threshold);
+    },
+    isEligible: (def, defs, deps, minVal, alloc) => {
+      if (!def || typeof def !== 'object' || typeof def.id !== 'string') throw new Error('Space.isEligible: def must be a node definition');
+      assertDefs(defs, 'Space.isEligible'); assertAlloc(alloc, 'Space.isEligible', defs);
+      return isEligible(def, defs, deps, minVal, alloc);
+    },
+    isHeld: (def, defs, deps, minVal, alloc) => {
+      if (!def || typeof def !== 'object' || typeof def.id !== 'string') throw new Error('Space.isHeld: def must be a node definition');
+      assertDefs(defs, 'Space.isHeld'); assertAlloc(alloc, 'Space.isHeld', defs);
+      return isHeld(def, defs, deps, minVal, alloc);
+    },
     enumerateSupports, canonicalFill, fillLeftover, spendRemaining, trimToBudget, transfer, sameAlloc, signature,
   };
 
