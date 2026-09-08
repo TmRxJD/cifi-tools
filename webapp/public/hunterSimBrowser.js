@@ -57,6 +57,23 @@
   // what the hosted site currently uses; removing it is a separate decision recorded in
   // THIRD-PARTY.md, and this loader is the one place that has to change when it is made.
   const BRIDGE_TIMEOUT_MS = 15000;
+  // WHICH SOURCE ACTUALLY SERVED THE ENGINE, recorded and announced.
+  //
+  // Until now a working bridge and a missing one looked IDENTICAL from the outside: the bridge
+  // logs nothing on success, so "no console output" meant either "it worked" or "the content
+  // script never ran". That is unfalsifiable from the user's side, and it is the exact question
+  // anyone installing the extension needs answered.
+  //
+  // `HunterSim.engineSource()` is the machine-readable form; the console line is for a human who
+  // just installed the extension and wants to know whether it took.
+  let engineSource = 'not loaded yet';
+  function setEngineSource(src, detail) {
+    engineSource = src;
+    const msg = src === 'extension'
+      ? `[cifi] engine loaded via the COMPANION EXTENSION from cifi-tools.com (${detail}) -- nothing is served from this site`
+      : `[cifi] engine loaded from THIS SITE's own copy (${detail}). The companion extension is not active; see extension/README.md`;
+    try { console.info(msg); } catch { /* console may be unavailable in a worker */ }
+  }
   // Where cifi-tools serves its evaluator today. Changing this needs only a deploy of this file;
   // the extension validates the origin, not the exact path, precisely so that stays true.
   const ENGINE_PATH = '/wasm/release.wasm';
@@ -91,6 +108,7 @@
         const bin = atob(d.base64);
         const bytes = new Uint8Array(bin.length);
         for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        setEngineSource('extension', `${bytes.length} bytes`);
         finish(bytes.buffer);
       };
       window.addEventListener('message', onMessage);
@@ -111,7 +129,7 @@
               + 'Companion Bridge extension (see extension/README.md), which loads it from '
               + 'cifi-tools.com in your own browser.');
           }
-          return r.arrayBuffer();
+          return r.arrayBuffer().then((b) => { setEngineSource('local', `${b.byteLength} bytes`); return b; });
         }))
         .then((buf) => WebAssembly.compile(buf));
     }
@@ -526,7 +544,24 @@
   }
   function isAbort(err) { return !!err && err.name === ABORTED; }
 
-  global.HunterSim = { expectInjectedWasm, setWasmModule, failWasmModule, loadWasmModule,
+    // A user-facing diagnostic, because "did the extension take?" is otherwise unanswerable without
+  // reading the network panel. Reports what the page can see BEFORE any engine load, so it
+  // distinguishes "content script never ran" from "bridge ran and failed".
+  function bridgeStatus() {
+    const marked = typeof document !== 'undefined'
+      && document.documentElement?.dataset?.cifiCompanionBridge === '1';
+    return {
+      contentScriptDetected: marked,
+      engineSource,
+      verdict: marked
+        ? (engineSource === 'extension' ? 'OK -- engine came from the extension'
+          : engineSource === 'local' ? 'extension present but the engine came from THIS SITE (bridge failed -- check the console for the reason)'
+            : 'extension present, engine not loaded yet')
+        : 'extension NOT detected on this page -- check the URL matches the manifest, and reload the page AFTER loading the extension',
+    };
+  }
+
+global.HunterSim = { engineSource: () => engineSource, bridgeStatus, expectInjectedWasm, setWasmModule, failWasmModule, loadWasmModule,
     evaluate, evaluateDetailed, buildArgs, resolveParam, compileEvaluator, loadParams, loadWasm,
     clearCache, throwIfAborted, isAbort, ABORTED,
     // Exposed so a liveness check can tell "changes no wasm argument" apart from "does nothing":
