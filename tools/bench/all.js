@@ -292,9 +292,16 @@ const skipped = gates.filter((r) => r.status === 'SKIP');
 
 console.log('');
 if (!bundle) {
-  console.log(`note  ${NEEDS_BUNDLE.length} bundle-comparison gate(s) not run -- pass `
-    + '--bundle=<live-bundle.js> to include them (fetch the main bundle AND every chunk it '
-    + 'references; comparing against index-*.js alone reports false gaps)');
+  // ACTIONABLE, NOT JUST TRUE. This note used to say "pass --bundle=<live-bundle.js>" and stop
+  // there -- a file nobody had, that had to be assembled by hand from a code-split site. So the
+  // note printed on every run and everyone read past it, and the eight checks against the ORIGINAL
+  // tool -- the strongest correctness evidence in this repo -- had never run in a suite pass.
+  // fetch-bundle.js now assembles it in one command, so the instruction is two lines someone will
+  // actually follow.
+  console.log(`note  ${NEEDS_BUNDLE.length} bundle-comparison gate(s) not run. These check this `
+    + 'tool against the ORIGINAL, which is the strongest correctness evidence available here.');
+  console.log('      node tools/bench/fetch-bundle.js');
+  console.log('      node tools/bench/all.js --bundle=tools/bench/live-bundle.js');
 }
 console.log(`${gates.length - failed.length - skipped.length} passed, ${failed.length} failed, `
   + `${skipped.length} skipped, ${REPORTS.length} report(s)`);

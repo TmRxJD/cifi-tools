@@ -59,3 +59,8 @@ overnight-*.json
 ozzyverify*.json
 bossverify*.json
 verdicttest*.json
+
+# The fetched cifi-tools bundle (tools/bench/fetch-bundle.js). 4.6MB of somebody else's minified
+# code, re-downloadable in one command, and stale the moment they deploy -- committing it would
+# mean parity gates silently comparing against whatever was vendored months ago.
+tools/bench/live-bundle.js
