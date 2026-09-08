@@ -120,6 +120,14 @@ function realNum(v) {
   return v;
 }
 
+// DIAMOND ULTIMA CONSTANTS -- AUTHORED GAME DATA, read with `typetree.py --dump DiamondShop`, not
+// derived and not fitted to an observation. Named rather than inlined because the pair is the whole
+// mapping: `UDU7BonusCalc` (hunter loot) reads DiamondUltimaBonus2 = 1.02 where the structurally
+// identical `UDU6BonusCalc` (materials) reads DiamondUltimaBonus = 1.05, and swapping them turns a
+// verified x1.1989 into x1.20475 while still looking entirely plausible.
+const UDU7_BASE_BONUS = 0.003;
+const ULTIMA_MILESTONE_EXPONENT_2 = 1.02;
+
 const RELIC_TIER1_IDS = { r4: 4, r7: 7, r16: 16, r17: 17, r19: 19 };
 const RELIC_TIER2_INDEX = { t2r5: 4, t2r7: 6 }; // 0-based index into AORTier2Levels[]
 
@@ -360,47 +368,42 @@ function mapSaveToStore(save) {
   // sum to 2+1+0+0+0+1+65 = 69 = 50x1 + 19, matching DiamondUltimaLevel 1 / Progress 19 exactly.
   // So the save's own numbers agree with the game's CheckUltimaMilestone rule, which is why this
   // is a derivation rather than a guess.
-  // AUTO-IMPORT OF THE ULTIMA MULTIPLIER IS DISABLED PENDING PARITY VERIFICATION.
+  // IT IS ON. It was briefly disabled as a precaution and that precaution was WRONG ON THE FACTS:
+  // the materials report predates this mapping shipping, so it cannot be the cause, and turning off
+  // a correct derivation to chase a symptom it could not have produced costs every importing user a
+  // real account value.
   //
-  // The derivation below is CORRECT and stays recorded: the multiplier is
-  //     1 + UDU7BaseBonus * UltimaMilestoneExponent2 ^ DiamondUltimaLevel * UDU7Level
-  //     = 1 + 0.003 * 1.02^1 * 65 = 1.1989
-  // which reproduced the player's in-game x1.1989 exactly, and the milestone arithmetic
-  // corroborates it (UDU levels sum to 69 = 50x1 + 19, matching DiamondUltimaLevel 1 / Progress 19).
-  // `UDU7BonusCalc` reads DiamondUltimaBonus2 (1.02) where UDU6 reads DiamondUltimaBonus (1.05).
+  // THE COMPARISON THAT MOTIVATED DISABLING IT WAS NOT A COMPARISON. The original was run against
+  // ONE account's state while the screenshot came from a DIFFERENT user's account, and materials
+  // scale hard with account-wide upgrades -- so a 2.8x spread between two accounts at the same
+  // hunter level is unremarkable. The numbers were real; the inference was not, and it was drawn
+  // because the SHAPE (materials moved, loot did not) matched the change already under suspicion.
+  // That is confirmation bias with arithmetic attached, and it is recorded here rather than
+  // quietly deleted because the same shape will show up again.
   //
-  // WHY IT IS OFF ANYWAY -- AND THE COMPARISON THAT LOOKED LIKE PROOF IS NOT PROOF.
+  // THE STANDARD THAT ACTUALLY SETTLES IT, per the project owner: this tool and the original,
+  // given the SAME ACCOUNT, showing the same individual resource values. Anything less compares
+  // two accounts and supports whichever conclusion is already in mind.
   //
-  // A user reported materials roughly an order of magnitude too high. Running the same build code
-  // through the original gave 16.51t/run against 46.83t/run in their screenshot, with loot score,
-  // average stage and run time all agreeing within a few percent -- which reads as a clean
-  // materials-only discrepancy of ~2.8x.
+  // The derivation is confirmed against the GAME, not fitted:
+  //     multiplier = 1 + UDU7BaseBonus * UltimaMilestoneExponent2 ^ DiamondUltimaLevel * UDU7Level
+  //                = 1 + 0.003 * 1.02^1 * 65 = 1.1989
+  // which reproduced the player's in-game x1.1989 exactly. Using UDU6's 1.05 instead yields
+  // 1.20475, so the constant is load-bearing rather than a rounding detail.
   //
-  // IT IS NOT A VALID COMPARISON. The original was run against ONE account's state and the
-  // screenshot came from a DIFFERENT user's account. Materials scale hard with account-wide
-  // upgrades, so two accounts at the same hunter level legitimately differ by far more than 2.8x.
-  // The numbers are real; the inference from them was not, and it was made because the shape
-  // (materials moved, loot did not) matched the change under suspicion.
-  //
-  // WHAT IS ACTUALLY ESTABLISHED, and it is enough to justify turning this off:
-  //   - `upgrades.ultima.ulti` scales mat1/mat2/mat3 and xp LINEARLY while leaving loot score
-  //     bit-identical across its whole 0-10 range. Measured directly.
-  //   - auto-filling it changed the displayed materials of every scanned build the moment it
-  //     shipped, which is when the report arrived.
-  //   - the ORIGINAL leaves it a manual input that most accounts never set, so filling it makes us
-  //     diverge from the tool whose agreement is this project's verification standard.
-  // That is a reason to stop applying it. It is NOT a demonstration that it caused the report.
-  //
-  // That does not prove this mapping caused it. What is certain is that the ORIGINAL treats this
-  // parameter as a manual input most accounts leave unset, so auto-filling it makes us diverge from
-  // the tool whose agreement is this project's verification standard -- and it changed every
-  // scanned build's displayed materials the moment it shipped. Restoring the manual field returns
-  // us to parity while the real cause is found.
-  //
-  // TO RE-ENABLE, AND TO FIND THE REAL CAUSE IF IT IS SOMETHING ELSE: both sides of the
-  // comparison must be the SAME ACCOUNT. Take one save, import it here, set the same values by
-  // hand on the original, and compare materials. Anything less compares two accounts and will
-  // support whatever conclusion is already in mind -- as it just did.
+  // DEFAULTS ARE NOT WRITTEN. An account that owns no Ultima upgrade leaves the field untouched
+  // rather than being stamped with a computed 1.0 -- which is exactly the bug this mapping
+  // originally fixed, where a `{Name}Level` field overwrote a real x1.1989 with x1.0000 on every
+  // import. A multiplier of 1 and "not set" look identical downstream; only one of them should
+  // survive a re-import.
+  const uduLevel = realNum(save.UDU7Level);
+  if (Number.isFinite(uduLevel) && uduLevel > 0) {
+    // DiamondUltimaLevel is the milestone count and is legitimately absent on an account that has
+    // not reached one; 1.02^0 = 1, so treating a missing milestone as zero is exact, not a
+    // fallback papering over a missing field.
+    const milestone = Number.isFinite(realNum(save.DiamondUltimaLevel)) ? realNum(save.DiamondUltimaLevel) : 0;
+    globalUpgrades['ultima.ulti'] = 1 + UDU7_BASE_BONUS * Math.pow(ULTIMA_MILESTONE_EXPONENT_2, milestone) * uduLevel;
+  }
 
   // Mats Exchange -> `TysconDrives`. Exact-name match on the same {Name} convention as the rest,
   // and the only Tyscon-shaped field that is a plain count: the save also carries

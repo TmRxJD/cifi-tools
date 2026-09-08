@@ -56,14 +56,42 @@ const check = (label, ok, detail) => {
     const store = sb.mapSaveToStore(save);
     const got = store && store.globalUpgrades ? store.globalUpgrades['ultima.ulti'] : undefined;
 
-    // THE AUTO-IMPORT IS CURRENTLY OFF, so the gate asserts the ORIGINAL property again: nothing
-    // may write into ultima.ulti. The derivation is verified and recorded in saveImport.js, but a
-    // user-reported materials discrepancy (16.51t/run on the original vs 46.83t/run here, for the
-    // same code, with loot and stage agreeing) means we are not applying it until parity is
-    // re-established. This gate follows the shipped behaviour rather than the intended one --
-    // asserting a derivation the importer deliberately does not perform would fail on purpose.
-    check(`importer does not write ultima.ulti (${decoded})`, got === undefined,
-      got === undefined ? '' : `imported ${got}`);
+    // THE AUTO-IMPORT IS ON, so the gate checks the VALUE, not merely that something was written.
+    // Recomputing the expected multiplier here from the save's own fields would test the importer
+    // against a copy of itself -- the parallel-implementation trap this project bans -- so the
+    // constants are asserted independently against the AUTHORED game data instead, and the result
+    // is bounded by what the control offers.
+    const uduLevel = Number(save.UDU7Level || 0);
+    if (uduLevel > 0) {
+      const milestone = Number(save.DiamondUltimaLevel || 0);
+      const expected = 1 + 0.003 * Math.pow(1.02, milestone) * uduLevel;
+      check(`importer derives ultima.ulti (${decoded})`, Number.isFinite(got),
+        Number.isFinite(got) ? '' : 'nothing written -- the auto-import is off or threw');
+      check(`ultima.ulti matches the authored derivation (x${expected.toFixed(4)})`,
+        Number.isFinite(got) && Math.abs(got - expected) < 1e-9,
+        Number.isFinite(got) ? `got x${got.toFixed(4)}` : 'not written');
+
+      // THE WRONG CONSTANT IS THE FAILURE MODE THIS EXISTS FOR. UDU6 (materials) uses 1.05 where
+      // UDU7 (hunter loot) uses 1.02; both produce a plausible multiplier, so only an explicit
+      // check separates them. On the reference save that is x1.1989 against x1.20475.
+      const wrong = 1 + 0.003 * Math.pow(1.05, milestone) * uduLevel;
+      if (Math.abs(wrong - expected) > 1e-9) {
+        check('ultima.ulti did NOT use UDU6\'s 1.05 exponent',
+          !(Number.isFinite(got) && Math.abs(got - wrong) < 1e-9),
+          `got x${Number(got).toFixed(5)}, which is the MATERIALS constant`);
+      }
+
+      // The control card is a multiplier in 1.0000-10.0000, so a derivation landing outside that
+      // is a modelling error rather than a big number -- and would be silently clamped by the UI.
+      check('ultima.ulti is inside the control\'s range',
+        Number.isFinite(got) && got >= 1 && got <= 10, `got ${got}`);
+    } else {
+      // NO DEFAULT MAY BE STAMPED. An unowned upgrade must leave the field untouched: a computed
+      // 1.0 and "not set" are indistinguishable downstream, and writing one is exactly the bug
+      // that overwrote a real x1.1989 with x1.0000 on every re-import.
+      check(`importer writes nothing when UDU7 is unowned (${decoded})`, got === undefined,
+        got === undefined ? '' : `stamped ${got}`);
+    }
 
     // MILESTONE ARITHMETIC, checked because it is what makes the derivation trustworthy rather
     // than fitted: the game advances DiamondUltimaLevel once per UltimaMilestoneGoal (50) Ultima
