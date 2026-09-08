@@ -569,5 +569,51 @@ h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -.
 .modern-card .card-content .label { margin-top: 0.5rem; font-weight: 500; font-size: 0.9rem; color: #e2e8f0; }
 .modern-card .card-content svg { color: #a5b4fc; }
 
-/* The bar overlays the page, so the last of the content needs room to clear it. */
-@media (max-width: 767px) { body { padding-bottom: calc(var(--mobile-navbar-height) + env(safe-area-inset-bottom)); } }
+/* ---- WHEN THE BOTTOM BAR APPLIES -------------------------------------------------
+   WIDTH ALONE IS THE WRONG TEST, and the original gets this wrong too -- it uses a
+   bare `md:hidden`, so its bar appears strictly below 768px. That leaves two real
+   devices on the desktop layout that cannot use it:
+
+     - a TABLET IN PORTRAIT (768x1024, 810x1080, 1024x1366) is >= 768px wide, so it
+       gets the 208px sidebar on a screen whose whole point is that it is narrow and
+       tall;
+     - a PHONE IN LANDSCAPE (844x390, 932x430) is also >= 768px wide, so it gets the
+       sidebar on a viewport 390px TALL.
+
+   So the condition is orientation-aware: portrait up to 1024px logical width covers
+   every tablet held upright, and a short viewport covers a phone turned sideways. A
+   genuinely large portrait display (a 1440x2560 monitor) is excluded deliberately --
+   it has room for the sidebar, and that is what the width ceiling is for.
+
+   Expressed once, as a custom media query repeated in each block, because CSS has no
+   way to name one. Keep the three conditions IDENTICAL across the blocks below: they
+   are one rule, and a mismatch shows the bar with the sidebar still present. */
+@media (max-width: 767px),
+       (orientation: portrait) and (max-width: 1024px),
+       (orientation: landscape) and (max-height: 540px) {
+  /* Beats Tailwind's `hidden md:flex` / `md:hidden`, which are width-only and would
+     otherwise re-show the sidebar and hide the bar on a portrait tablet. */
+  aside { display: none !important; }
+  #mobileNav { display: block !important; }
+  /* The header's pill nav is Tailwind `hidden md:flex`, so on a portrait TABLET it reappears
+     while the bottom bar is also showing -- two navigations for the same destinations, one of
+     them duplicating what the bar already does. Only one may be visible at a time. */
+  #headerNav { display: none !important; }
+  body { padding-bottom: calc(var(--mobile-navbar-height) + env(safe-area-inset-bottom)); }
+}
+
+/* A portrait tablet is wide enough for three cards, and the sheet should not stretch
+   the full width of a 1024px screen -- at that size the original's two-column grid
+   reads as a row of very wide buttons rather than a menu. */
+@media (min-width: 640px) {
+  .submenu { left: 50%; right: auto; transform: translate(-50%, 20px); width: min(560px, calc(100% - 1.5rem)); }
+  .submenu.visible { transform: translate(-50%, 0); }
+  .submenu .tab-content .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* A phone in landscape has very little height, so the sheet must not eat all of it. */
+@media (orientation: landscape) and (max-height: 540px) {
+  .submenu.visible { max-height: calc(100vh - var(--mobile-navbar-height) - 0.75rem); }
+  .modern-card .card-content { padding: 0.6rem; }
+  .modern-card .card-content .label { margin-top: 0.25rem; font-size: 0.8rem; }
+}

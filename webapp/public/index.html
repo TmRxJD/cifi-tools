@@ -100,7 +100,7 @@ tailwind.config = {
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" />
-<link rel="stylesheet" href="tokens.css?v=20260907m-bottomnav" />
+<link rel="stylesheet" href="tokens.css?v=20260907p-portrait" />
 <style>
   body { background: var(--surface-900); color: var(--surface-200); }
   .stepper-btn { @apply w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed text-white; }
@@ -133,7 +133,7 @@ tailwind.config = {
     <!-- Desktop nav: unchanged, just gated to md+ now that mobile gets its own menu below
          (a 7-item inline pill bar has no room on a phone-width viewport -- it was overflowing
          off the right edge of the screen entirely with no way to reach Upgrades/Settings). -->
-    <nav class="hidden md:flex items-center gap-1">
+    <nav id="headerNav" class="hidden md:flex items-center gap-1">
       <a href="#/sim" class="nav-pill" data-nav="sim">Hunters</a>
       <a href="#/fleet" class="nav-pill" data-nav="fleet">Fleet</a>
       <a href="#/upgrades/relics" class="nav-pill" data-nav="upgrades">Upgrades</a>
