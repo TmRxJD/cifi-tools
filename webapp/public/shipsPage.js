@@ -1047,7 +1047,13 @@ function defaultShipGear() {
     manualMK2Gens: 0, manualMK3Gens: 0, totalManualGens: 0, techUpgrades: 0, hardwareUpgrades: 0, softwareUpgrades: 0,
     loopModsOwned: 0, loopFillsThisRun: 0, loopResetsDone: 0, automationsUnlocked: 0, ticksThisLoop: 0,
     operationsCompleted: 0, studiesThisLR: 0, researchLevels: 0, totalCompletedResearch: 0, missionsCompleted: 0,
-    meltdown: 0, focusWeights: { cells: 5, shards: 5, researchPoints: 5, modPoints: 5, missionMaterials: 5, academyPoints: 5 },
+    // MELTDOWN DEFAULTS TO 1, NOT 0, because 1 is the neutral value rather than a placeholder.
+    // It is an EXPONENT -- the game applies Pow(MK1Production, m) -- and before the first
+    // Ouroboros reset the binary takes the un-melted branch entirely, which is arithmetically
+    // identical to m = 1. A default of 0 displayed a number that means "output^0 = 1 for
+    // everything", i.e. a state the game never has, and left the reader to guess whether it meant
+    // "none yet" or "worth nothing".
+    meltdown: 1, focusWeights: { cells: 5, shards: 5, researchPoints: 5, modPoints: 5, missionMaterials: 5, academyPoints: 5 },
   };
 }
 function getShipGear() {
@@ -1057,6 +1063,11 @@ function getShipGear() {
   // drop the stale keys, backfill any new ones this account hasn't seen yet.
   const defaults = defaultShipGear();
   Object.keys(defaults).forEach((k) => { if (!(k in window.store.shipGear)) window.store.shipGear[k] = defaults[k]; });
+  // A stored 0 predates the default above and meant "no Ouroboros reset yet", which IS exponent 1.
+  // Migrated on read rather than in a one-shot so a restored backup or a synced store is covered
+  // too. Values BELOW 1 are left alone -- 0.461 is a real reading from a real account, and only
+  // exactly 0 was ever the placeholder.
+  if (!(window.store.shipGear.meltdown > 0)) window.store.shipGear.meltdown = 1;
   Object.keys(window.store.shipGear).forEach((k) => { if (!(k in defaults)) delete window.store.shipGear[k]; });
   Object.keys(defaults.focusWeights).forEach((k) => { if (!(k in window.store.shipGear.focusWeights)) window.store.shipGear.focusWeights[k] = defaults.focusWeights[k]; });
   Object.keys(window.store.shipGear.focusWeights).forEach((k) => { if (!(k in defaults.focusWeights)) delete window.store.shipGear.focusWeights[k]; });
@@ -1965,7 +1976,14 @@ function renderFleetPage(root) {
   const gearForMeltdown = getShipGear();
   const meltdownInput = document.getElementById('fleetMeltdownInput');
   meltdownInput.value = gearForMeltdown.meltdown;
-  meltdownInput.onchange = (e) => { gearForMeltdown.meltdown = Number(e.target.value) || 0; window.saveStore(); };
+  // `|| 1`, not `|| 0`: clearing the field means "no meltdown", and no meltdown is exponent 1.
+  // Coercing to 0 would store an exponent that flattens every node's contribution to 1.
+  meltdownInput.onchange = (e) => {
+    const v = Number(e.target.value);
+    gearForMeltdown.meltdown = Number.isFinite(v) && v > 0 ? v : 1;
+    e.target.value = gearForMeltdown.meltdown;
+    window.saveStore();
+  };
 
   const canvas = document.getElementById('fleetCanvas');
   for (let n = 1; n <= 7; n++) {

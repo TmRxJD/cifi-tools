@@ -92,10 +92,19 @@ const storeSchema = z.object({
   // Mostly plain counters, plus `focusWeights`, which is a nested per-resource weighting map.
   // The union says so rather than a blanket z.unknown(): a counter arriving as a string is the
   // failure worth catching, and it is what a bad import produces.
+  // Progression counters plus `meltdown` and the nested `focusWeights` map. Open on keys because
+  // the counter set is per-ship and lives in shipsPage.js.
+  //
+  // `meltdown` is pinned POSITIVE and checked separately, because it is an EXPONENT
+  // (Pow(MK1Production, m)) and 0 is not a state the game has: before the first Ouroboros reset
+  // the un-melted branch runs, which is m = 1. A stored 0 would flatten every node's contribution
+  // to 1 while looking like an ordinary empty field.
   shipGear: nonEmptyRecord(
     z.string().min(1),
     z.union([z.number(), z.record(z.string().min(1), z.number())]),
-  ),
+  ).refine((g) => g.meltdown === undefined || (typeof g.meltdown === 'number' && g.meltdown > 0), {
+    message: 'shipGear.meltdown must be > 0 -- it is an exponent, and "no meltdown" is 1, not 0',
+  }),
   gearSets: z.object({
     // Every piece's game-sourced fields are owned by REAL_GEAR_PIECES; the store owns only
     // level/owned. Both are checked because a piece persisted without a name cannot be reconciled

@@ -365,7 +365,15 @@ function mapSaveToShipGear(save) {
   if (save.ResearchLevelsThisConstruction !== undefined) gear.researchLevels = realNum(save.ResearchLevelsThisConstruction);
   if (save.FullyCompletedResearches !== undefined) gear.totalCompletedResearch = realNum(save.FullyCompletedResearches);
   if (save.MissionsCompletedAllTime !== undefined) gear.missionsCompleted = realNum(save.MissionsCompletedAllTime);
-  if (save.HighestMeltdown !== undefined) gear.meltdown = realNum(save.HighestMeltdown);
+  if (save.HighestMeltdown !== undefined) {
+    // AN ACCOUNT WITHOUT AN OUROBOROS RESET READS 0 HERE, AND 0 IS NOT THE EXPONENT.
+    // Meltdown is applied as Pow(MK1Production, m), and before the first reset the game takes the
+    // un-melted branch -- arithmetically identical to m = 1. Importing the raw 0 would store an
+    // exponent that flattens every node's contribution, so it is normalised at the source rather
+    // than left for a consumer to remember.
+    const m = realNum(save.HighestMeltdown);
+    gear.meltdown = Number.isFinite(m) && m > 0 ? m : 1;
+  }
   return gear;
 }
 window.mapCifiSaveToShipGear = mapSaveToShipGear;
