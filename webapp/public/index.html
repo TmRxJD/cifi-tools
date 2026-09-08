@@ -160,8 +160,13 @@ tailwind.config = {
   <nav id="mobileNavMenu" class="hidden md:hidden flex-col gap-1 px-4 pb-3 border-t border-gray-700 pt-3">
     <a href="#/sim" class="nav-pill-mobile" data-nav="sim">Hunters</a>
     <a href="#/fleet" class="nav-pill-mobile" data-nav="fleet">Fleet</a>
-    <a href="#/upgrades/relics" class="nav-pill-mobile" data-nav="upgrades">Upgrades</a>
     <a href="#/settings" class="nav-pill-mobile" data-nav="settings">Settings</a>
+    <!-- Every upgrade category, CLONED FROM THE SIDEBAR at init by app.js (see the mobile drawer
+         block). Deliberately empty here: the sidebar is `hidden md:flex` and so does not exist on a
+         phone, and a second hand-written copy of the list would drift the moment a category is
+         added. The old single "Upgrades" link pointed at #/upgrades/relics and left every other
+         category unreachable on mobile. -->
+    <div id="mobileNavCategories" class="mt-2 pt-2 border-t border-gray-700/60"></div>
   </nav>
 </header>
 
@@ -703,7 +708,7 @@ tailwind.config = {
 <script src="hunterDefs.js?v=20260903a"></script>
 <script src="shipSchema.js?v=20260810p"></script>
 <script src="accountState.js?v=20260907a"></script>
-<script src="shipsPage.js?v=20260907b-nodeweight"></script>
+<script src="shipsPage.js?v=20260907f-fa1bool"></script>
 <script src="upgradeEffects.js?v=20260810p"></script>
 <script src="hunterSimBrowser.js?v=20260903l"></script>
 <script src="optimizer/space.js?v=20260907q-guards"></script>
@@ -731,7 +736,7 @@ tailwind.config = {
      CDN-blocked user still gets the whole tool minus cloud saves. -->
 <script src="https://cdn.jsdelivr.net/npm/appwrite@27.0.0/dist/iife/sdk.js"></script>
 <script src="cloudSync.js?v=20260907c-stamps"></script>
-<script src="app.js?v=20260907k-midnight"></script>
+<script src="app.js?v=20260907l-mobilenav"></script>
 <script>
   // Custom (non-Tabler) sidebar icons: real game-asset SVG paths copied verbatim from the
   // live site's rendered DOM (Relics/Loop Mods/Milestones use bespoke icons, not Tabler's).

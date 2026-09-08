@@ -2794,19 +2794,26 @@ window.renderFleetBoostItemsInto = renderFleetBoostItemsInto;
 // than the bonus itself growing per tier the way #68's does).
 const FLEET_RESEARCH_ITEMS = [
   {
-    key: 'fleetAnalysis1', name: 'Fleet Analysis 1 (Research #68)', max: 6,
-    tiers: [
-      'All Rank Installs Max LV x5',
-      '+20 All Ships Rank Points & LP',
-      '+30 All Ships Rank Points & LP',
-      '+40 All Ships Rank Points & LP',
-      '+50 All Ships Rank Points & LP',
-      '+60 All Ships Rank Points & LP',
-    ],
-    // Tier 1's "All Rank Installs Max LV x5" is what nodeMaxLevel()/installCapMultiplier()
-    // (near GEN_TIERS) check for -- SHIP_NODE_CATALOG's `max` fields store the wiki BASE cap
-    // uniformly, and this tier's level (>=1) is the single switch that multiplies it by 5
-    // everywhere a node's effective cap is used, so it can never drift out of sync per-node.
+    // A BOOLEAN, NOT A LEVEL -- matching what the importer already does, and what the tool can
+    // actually model. The research really does have six tiers in game, but they do two unrelated
+    // things and only one of them is ours to compute:
+    //   tier 1     "All Rank Installs Max LV x5" -- a pure switch, read as `level >= 1 ? 5 : 1`
+    //              by installCapMultiplier(). This is the whole of what the tool derives.
+    //   tiers 2-6  +20/+30/+40/+50/+60 All Ships Rank Points & LP -- rank points, which the player
+    //              ENTERS THEMSELVES on the ship setup page, already including this grant.
+    // So counting tiers 2-6 adds rank points a second time. The importer was fixed to clamp to a
+    // boolean for exactly that reason (a silent +50 SP across all seven ships on the reference
+    // account), but the CARD still offered 0-6 and computeFleetResearchSp() still paid out on it --
+    // so the double-count remained fully reachable by hand, on an input a user is likely to set to
+    // its true in-game level precisely because the card asked for one.
+    //
+    // The fix is the control, not the arithmetic: an input that cannot express the wrong thing
+    // cannot be set to it. `boolean: true` renders one toggle whose label states the one modelled
+    // effect, so the card no longer implies the tool tracks the rank-point tiers.
+    key: 'fleetAnalysis1', name: 'Fleet Analysis 1 (Research #68)', max: 1, boolean: true,
+    tiers: ['All Rank Installs Max LV x5'],
+    note: 'Tiers 2-6 grant Rank Points & LP, which you enter yourself on Ship Setup -- '
+      + 'counting them here would add them twice.',
   },
   {
     key: 'fleetAnalysis2', name: 'Fleet Analysis 2 (Research #78)', max: 6,
@@ -2830,17 +2837,31 @@ function defaultFleetResearch() {
 function getFleetResearch() {
   if (!window.store) return defaultFleetResearch();
   if (!window.store.fleetResearch || !window.store.fleetResearch.levels) window.store.fleetResearch = defaultFleetResearch();
+  // MIGRATE A STORED LEVEL DOWN TO THE BOOLEAN. Anyone who set Fleet Analysis 1 to its real
+  // in-game tier while the card offered 0-6 has that value persisted, and it would keep paying out
+  // the double-counted rank points forever -- a UI change alone does not reach data already saved.
+  // Clamping on read (rather than in a one-shot migration) also covers a store restored from an
+  // older backup or synced from another device.
+  const levels = window.store.fleetResearch.levels;
+  FLEET_RESEARCH_ITEMS.forEach((item) => {
+    if (item.boolean && Number(levels[item.key]) > 1) levels[item.key] = 1;
+  });
   return window.store.fleetResearch;
 }
 // Fleet Analysis 1's SP grants (tiers 2-6, cumulative) -- added on top of Fleet Boosts' totals
 // for all 7 ships equally.
+// ALWAYS 0, AND KEPT AS A NAMED FUNCTION RATHER THAN DELETED AT ITS CALL SITES.
+//
+// Fleet Analysis 1's tiers 2-6 grant Rank Points & LP -- but rank points are a number the player
+// TYPES IN on Ship Setup, read off their own game, already including this research's grant. Adding
+// them here counted them twice (a silent +50 SP per ship on the reference account, which then
+// funded installs the account cannot actually buy).
+//
+// This returns 0 rather than being removed so the double-count cannot be reintroduced by someone
+// noticing that the tool "ignores" tiers 2-6 and helpfully wiring them back up. If rank points ever
+// become DERIVED rather than entered, this is the one place that changes.
 function computeFleetResearchSp() {
-  const research = getFleetResearch();
-  const level = research.levels.fleetAnalysis1 || 0;
-  const tierSp = [0, 20, 30, 40, 50, 60];
-  let sp = 0;
-  for (let i = 2; i <= level; i++) sp += tierSp[i - 1];
-  return sp;
+  return 0;
 }
 // Fleet Analysis 2's per-ship x5 multiplier, cumulative by tier (tier N unlocks ship
 // shipOrder[N-1]) -- returns { [shipId]: 5 } for every ship unlocked so far.
@@ -2859,6 +2880,37 @@ function renderFleetResearchCard(item, rerender) {
   const research = getFleetResearch();
   const level = research.levels[item.key] || 0;
   const cap = item.max;
+
+  // A BOOLEAN ITEM GETS A TOGGLE, NOT A 0/1 STEPPER. Capping the stepper at 1 would still present
+  // the control as a level -- the same shape as the six-tier selector it replaces -- and the point
+  // of the change is that the tool models one switch, not a level. A stepper also invites the user
+  // to try to enter their real in-game tier, which is the double-count this is fixing.
+  if (item.boolean) {
+    const on = level >= 1;
+    const card = document.createElement('div');
+    card.className = 'relative rounded-xl overflow-hidden border border-gray-700/50 bg-gradient-to-br from-gray-800/80 via-gray-800/60 to-gray-900/80 p-4 flex flex-col';
+    card.innerHTML = `
+      <div class="flex items-center justify-between gap-2 mb-3">
+        <h3 class="font-semibold text-white truncate min-w-0 flex-1 text-[1.05rem]" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</h3>
+        <div class="px-3 py-1 rounded-lg bg-gray-900/70 border border-gray-700/30"><span class="font-bold text-sm ${on ? 'text-green-400' : 'text-gray-500'}">${on ? 'Owned' : 'Not owned'}</span></div>
+      </div>
+      <div class="bg-gray-900/50 p-3 rounded-md w-full mb-3">
+        <ul class="text-xs space-y-1">
+          ${item.tiers.map((t) => `<li class="${on ? 'text-green-400' : 'text-gray-500'}">${escapeHtml(t)}</li>`).join('')}
+        </ul>
+        ${item.note ? `<p class="text-[11px] text-gray-500 mt-2 leading-snug">${escapeHtml(item.note)}</p>` : ''}
+      </div>
+      <label class="flex items-center gap-2 mt-auto pt-2 cursor-pointer select-none">
+        <input type="checkbox" data-toggle ${on ? 'checked' : ''} class="w-4 h-4 accent-green-500 cursor-pointer">
+        <span class="text-sm text-gray-300">${escapeHtml(item.tiers[0])}</span>
+      </label>`;
+    card.querySelector('[data-toggle]').onchange = (e) => {
+      research.levels[item.key] = e.target.checked ? 1 : 0;
+      window.saveStore();
+      rerender();
+    };
+    return card;
+  }
   const card = document.createElement('div');
   card.className = 'relative rounded-xl overflow-hidden border border-gray-700/50 bg-gradient-to-br from-gray-800/80 via-gray-800/60 to-gray-900/80 p-4 flex flex-col';
   const canDec = level > 0;

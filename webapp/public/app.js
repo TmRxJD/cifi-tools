@@ -512,8 +512,87 @@ window.addEventListener('hashchange', render);
     iconOpen.classList.toggle('hidden', open);
     iconClose.classList.toggle('hidden', !open);
   };
+  // THE DRAWER MIRRORS THE SIDEBAR, AND WITHOUT THIS MOST OF THE APP WAS UNREACHABLE ON A PHONE.
+  //
+  // The sidebar carrying every upgrade category is `hidden md:flex`, so it does not exist below the
+  // md breakpoint -- while the drawer offered four links, one of which ("Upgrades") pointed at
+  // #/upgrades/relics. A phone user therefore tapped Upgrades, landed on Relics, and had NO route
+  // to Gems, Inscryptions, Badges, Loop Mods, Research, Milestones, Ship Setup, Gear Sets, Diamond
+  // Ultima/Specials/Cards or IAP. Reported as "it takes you to relics and there's no navigation to
+  // edit anything else", which is exactly right.
+  //
+  // CLONED FROM THE SIDEBAR, NOT RETYPED. A second hand-written copy of the category list is the
+  // duplication this project bans: the two would drift the first time a category was added, and the
+  // mobile one would be the copy nobody remembers. Cloning also carries `data-unlock-gem/lvl/node`
+  // across, and updateNavGating() queries the whole document, so gated categories hide and unhide
+  // on both surfaces with no extra wiring.
+  // THE LAYOUT IS THE ORIGINAL'S, read out of its own bundle rather than designed here: a row of
+  // TAB BUTTONS, one per category group, and the selected group's links as a TWO-COLUMN GRID
+  // (`tab-navigation` / `tab-button` / `tab-content` / `grid grid-cols-2 gap-3` in cifi-tools'
+  // markup). A phone shows one group at a time instead of a ~17-item scroll, which is why theirs
+  // is pleasant to use and a flat vertical list is not.
+  const sidebar = document.querySelector('aside');
+  const mirror = document.getElementById('mobileNavCategories');
+  if (sidebar && mirror) {
+    const groups = [];
+    sidebar.querySelectorAll(':scope > div > div').forEach((group) => {
+      const heading = group.querySelector('h3');
+      const links = group.querySelectorAll('a[href^="#/"]');
+      if (!links.length || !heading) return;
+      groups.push({ name: heading.textContent.trim(), links: Array.from(links) });
+    });
+
+    if (groups.length) {
+      const tabs = document.createElement('div');
+      tabs.className = 'flex gap-1 overflow-x-auto pb-2 -mx-1 px-1';
+      const content = document.createElement('div');
+      content.className = 'grid grid-cols-2 gap-2 pt-1';
+
+      // The active group is remembered for the session so reopening the drawer returns you to the
+      // group you were working in, rather than snapping back to the first one every time.
+      let active = Number(sessionStorage.getItem('huntersim_mobile_nav_tab')) || 0;
+      if (!(active >= 0 && active < groups.length)) active = 0;
+
+      const paint = () => {
+        Array.from(tabs.children).forEach((b, i) => {
+          b.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap border transition-colors '
+            + (i === active
+              ? 'bg-gray-700 text-white border-gray-500'
+              : 'bg-gray-900/60 text-gray-400 border-gray-700/50');
+        });
+        content.innerHTML = '';
+        // CLONED FROM THE SIDEBAR, NOT RETYPED -- a second hand-written copy of the category list
+        // would drift the first time a category is added, and the mobile one is the copy nobody
+        // remembers. Cloning carries data-unlock-gem/lvl/node across, and updateNavGating() queries
+        // the whole document, so a gated category hides on both surfaces with no extra wiring.
+        groups[active].links.forEach((a) => {
+          const c = a.cloneNode(true);
+          c.className = 'sidebar-link justify-center text-center';
+          content.appendChild(c);
+        });
+        // Re-gate the freshly cloned nodes; without this a locked category stays visible until the
+        // next gem change happens to re-run it.
+        if (typeof updateNavGating === 'function') updateNavGating();
+      };
+
+      groups.forEach((g, i) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = g.name;
+        b.onclick = () => { active = i; sessionStorage.setItem('huntersim_mobile_nav_tab', String(i)); paint(); };
+        tabs.appendChild(b);
+      });
+      mirror.appendChild(tabs);
+      mirror.appendChild(content);
+      paint();
+    }
+  }
+
   toggle.onclick = () => setOpen(menu.classList.contains('hidden'));
-  menu.querySelectorAll('[data-nav]').forEach((el) => el.addEventListener('click', () => setOpen(false)));
+  // EVERY route link closes the drawer, not just [data-nav]. The cloned sidebar links carry
+  // `data-route` instead, and tapping one while already on that route fires no hashchange -- so a
+  // hashchange-only listener would leave the drawer covering the page the user just asked for.
+  menu.querySelectorAll('[data-nav], a[href^="#/"]').forEach((el) => el.addEventListener('click', () => setOpen(false)));
   window.addEventListener('hashchange', () => setOpen(false));
 })();
 
