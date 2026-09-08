@@ -100,7 +100,7 @@ tailwind.config = {
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" />
-<link rel="stylesheet" href="tokens.css?v=20260907d" />
+<link rel="stylesheet" href="tokens.css?v=20260907m-bottomnav" />
 <style>
   body { background: var(--surface-900); color: var(--surface-200); }
   .stepper-btn { @apply w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed text-white; }
@@ -148,26 +148,15 @@ tailwind.config = {
       <div id="cloudAccount" class="relative flex-shrink-0"></div>
       <!-- Mobile menu toggle: same destinations as the desktop nav, just reachable on a phone
            viewport instead of hidden off-screen. -->
-      <button id="mobileNavToggle" class="md:hidden w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-lg bg-gray-700 hover:bg-gray-600 text-white" aria-label="Open menu" aria-expanded="false">
-        <svg id="mobileNavIconOpen" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
-        <svg id="mobileNavIconClose" class="hidden" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
-      </button>
+
     </div>
   </div>
-  <!-- Mobile nav drawer: same links/handlers as the desktop <nav> above (data-nav wiring in
-       app.js queries all [data-nav] elements, so these get the same active-state/gating
-       behavior automatically), just stacked full-width instead of an inline pill row. -->
-  <nav id="mobileNavMenu" class="hidden md:hidden flex-col gap-1 px-4 pb-3 border-t border-gray-700 pt-3">
-    <a href="#/sim" class="nav-pill-mobile" data-nav="sim">Hunters</a>
-    <a href="#/fleet" class="nav-pill-mobile" data-nav="fleet">Fleet</a>
-    <a href="#/settings" class="nav-pill-mobile" data-nav="settings">Settings</a>
-    <!-- Every upgrade category, CLONED FROM THE SIDEBAR at init by app.js (see the mobile drawer
-         block). Deliberately empty here: the sidebar is `hidden md:flex` and so does not exist on a
-         phone, and a second hand-written copy of the list would drift the moment a category is
-         added. The old single "Upgrades" link pointed at #/upgrades/relics and left every other
-         category unreachable on mobile. -->
-    <div id="mobileNavCategories" class="mt-2 pt-2 border-t border-gray-700/60"></div>
-  </nav>
+  <!-- MOBILE NAVIGATION IS BUILT BY app.js -- see buildMobileNav(). Deliberately empty markup:
+       the bar's six destinations and the sheet's contents are derived from the sidebar and the
+       hunter tabs, so the category list has exactly one home and cannot drift. Layout, class names
+       and dimensions are copied from cifi-tools' own mobile nav (a fixed bottom bar over a sheet),
+       not designed here. -->
+  <div id="mobileNav" class="md:hidden"></div>
 </header>
 
 <div class="max-w-[1600px] mx-auto flex">
@@ -736,7 +725,7 @@ tailwind.config = {
      CDN-blocked user still gets the whole tool minus cloud saves. -->
 <script src="https://cdn.jsdelivr.net/npm/appwrite@27.0.0/dist/iife/sdk.js"></script>
 <script src="cloudSync.js?v=20260907c-stamps"></script>
-<script src="app.js?v=20260907l-mobilenav"></script>
+<script src="app.js?v=20260907n-bottomnav"></script>
 <script>
   // Custom (non-Tabler) sidebar icons: real game-asset SVG paths copied verbatim from the
   // live site's rendered DOM (Relics/Loop Mods/Milestones use bespoke icons, not Tabler's).

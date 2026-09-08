@@ -495,106 +495,235 @@ function render() {
 }
 window.addEventListener('hashchange', render);
 
-// Mobile nav drawer (see index.html header): open/close toggle, plus auto-close whenever any
-// nav destination is actually reached -- either a hash route changes (Gems/Fleet/Upgrades/
-// Settings links) or a hunter tab is clicked (those don't change the route if you're already
-// on the sim page, so hashchange alone wouldn't close it).
+// MOBILE NAVIGATION -- A FIXED BOTTOM BAR OVER A SLIDE-UP SHEET.
+//
+// COPIED FROM cifi-tools, NOT DESIGNED HERE. Two earlier attempts at this invented a layout (a
+// hamburger over a vertical link list, then a hamburger over tabbed cards) while the original's own
+// implementation sat in the bundle. The structure below -- six equal-width buttons in a fixed bar,
+// each opening a sheet anchored just above it with a titled header, a scrolling pill tab row and a
+// two-column grid of icon cards -- is theirs, and tokens.css carries their CSS verbatim.
+//
+// The bar's six slots follow the original's: one direct link (Gems) and five sheets. What each
+// sheet CONTAINS is derived from this app's own sidebar and hunter tabs rather than retyped, so the
+// category list keeps exactly one home and a category added later appears on mobile automatically.
+// Cloning also carries data-unlock-gem/lvl/node, and updateNavGating() queries the whole document,
+// so gated entries hide on both surfaces with no extra wiring.
 (function () {
-  const toggle = document.getElementById('mobileNavToggle');
-  const menu = document.getElementById('mobileNavMenu');
-  const iconOpen = document.getElementById('mobileNavIconOpen');
-  const iconClose = document.getElementById('mobileNavIconClose');
-  if (!toggle || !menu) return;
-  const setOpen = (open) => {
-    menu.classList.toggle('hidden', !open);
-    menu.classList.toggle('flex', open);
-    toggle.setAttribute('aria-expanded', String(open));
-    iconOpen.classList.toggle('hidden', open);
-    iconClose.classList.toggle('hidden', !open);
+  const root = document.getElementById('mobileNav');
+  if (!root) return;
+
+  // Sidebar groups, read once. `Fleet` is pulled out into its own bar slot because the original
+  // gives fleet tooling a slot of its own; the rest stay grouped under Upgrades exactly as the
+  // sidebar groups them.
+  const readGroups = () => {
+    const aside = document.querySelector('aside');
+    if (!aside) return [];
+    // Each sidebar GROUP is `<div><h3>Name</h3><div>links…</div></div>`, so the group div carries
+    // both its own heading and its links. An earlier version read `previousElementSibling`, which
+    // walked to the PREVIOUS GROUP and produced tab labels containing a whole group's text.
+    return Array.from(aside.querySelectorAll(':scope > div > div')).map((g) => ({
+      name: ((g.querySelector('h3') || {}).textContent || '').trim(),
+      links: Array.from(g.querySelectorAll('a[href^="#/"]')),
+    })).filter((g) => g.name && g.links.length);
   };
-  // THE DRAWER MIRRORS THE SIDEBAR, AND WITHOUT THIS MOST OF THE APP WAS UNREACHABLE ON A PHONE.
-  //
-  // The sidebar carrying every upgrade category is `hidden md:flex`, so it does not exist below the
-  // md breakpoint -- while the drawer offered four links, one of which ("Upgrades") pointed at
-  // #/upgrades/relics. A phone user therefore tapped Upgrades, landed on Relics, and had NO route
-  // to Gems, Inscryptions, Badges, Loop Mods, Research, Milestones, Ship Setup, Gear Sets, Diamond
-  // Ultima/Specials/Cards or IAP. Reported as "it takes you to relics and there's no navigation to
-  // edit anything else", which is exactly right.
-  //
-  // CLONED FROM THE SIDEBAR, NOT RETYPED. A second hand-written copy of the category list is the
-  // duplication this project bans: the two would drift the first time a category was added, and the
-  // mobile one would be the copy nobody remembers. Cloning also carries `data-unlock-gem/lvl/node`
-  // across, and updateNavGating() queries the whole document, so gated categories hide and unhide
-  // on both surfaces with no extra wiring.
-  // THE LAYOUT IS THE ORIGINAL'S, read out of its own bundle rather than designed here: a row of
-  // TAB BUTTONS, one per category group, and the selected group's links as a TWO-COLUMN GRID
-  // (`tab-navigation` / `tab-button` / `tab-content` / `grid grid-cols-2 gap-3` in cifi-tools'
-  // markup). A phone shows one group at a time instead of a ~17-item scroll, which is why theirs
-  // is pleasant to use and a flat vertical list is not.
-  const sidebar = document.querySelector('aside');
-  const mirror = document.getElementById('mobileNavCategories');
-  if (sidebar && mirror) {
-    const groups = [];
-    sidebar.querySelectorAll(':scope > div > div').forEach((group) => {
-      const heading = group.querySelector('h3');
-      const links = group.querySelectorAll('a[href^="#/"]');
-      if (!links.length || !heading) return;
-      groups.push({ name: heading.textContent.trim(), links: Array.from(links) });
-    });
 
-    if (groups.length) {
-      const tabs = document.createElement('div');
-      tabs.className = 'flex gap-1 overflow-x-auto pb-2 -mx-1 px-1';
-      const content = document.createElement('div');
-      content.className = 'grid grid-cols-2 gap-2 pt-1';
+  const groups = readGroups();
+  const isFleet = (g) => /fleet/i.test(g.name);
+  const upgradeGroups = groups.filter((g) => !isFleet(g));
+  const fleetGroups = groups.filter(isFleet);
 
-      // The active group is remembered for the session so reopening the drawer returns you to the
-      // group you were working in, rather than snapping back to the first one every time.
-      let active = Number(sessionStorage.getItem('huntersim_mobile_nav_tab')) || 0;
-      if (!(active >= 0 && active < groups.length)) active = 0;
+  // A card: the original's `modern-card upgrade-card` > `card-content` > icon + `.label`.
+  const card = (href, label, icon, extraAttrs) => {
+    const a = document.createElement('a');
+    a.href = href;
+    a.className = 'modern-card upgrade-card';
+    a.innerHTML = `<div class="card-content">${window.iconSvg(icon || 'sparkles', 26)}`
+      + `<div class="label">${label}</div></div>`;
+    if (extraAttrs) for (const [k, v] of Object.entries(extraAttrs)) a.setAttribute(k, v);
+    return a;
+  };
 
-      const paint = () => {
-        Array.from(tabs.children).forEach((b, i) => {
-          b.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap border transition-colors '
-            + (i === active
-              ? 'bg-gray-700 text-white border-gray-500'
-              : 'bg-gray-900/60 text-gray-400 border-gray-700/50');
-        });
-        content.innerHTML = '';
-        // CLONED FROM THE SIDEBAR, NOT RETYPED -- a second hand-written copy of the category list
-        // would drift the first time a category is added, and the mobile one is the copy nobody
-        // remembers. Cloning carries data-unlock-gem/lvl/node across, and updateNavGating() queries
-        // the whole document, so a gated category hides on both surfaces with no extra wiring.
-        groups[active].links.forEach((a) => {
-          const c = a.cloneNode(true);
-          c.className = 'sidebar-link justify-center text-center';
-          content.appendChild(c);
-        });
-        // Re-gate the freshly cloned nodes; without this a locked category stays visible until the
-        // next gem change happens to re-run it.
-        if (typeof updateNavGating === 'function') updateNavGating();
-      };
+  // Clone a sidebar link into a card, preserving its gating attributes and icon.
+  const cardFromLink = (link) => {
+    const label = (link.textContent || '').trim();
+    const c = card(link.getAttribute('href'), label, link.dataset.icon);
+    for (const k of ['unlockGem', 'unlockLvl', 'unlockNode']) {
+      if (link.dataset[k] !== undefined) {
+        c.dataset[k] = link.dataset[k];
+      }
+    }
+    if (link.dataset.route) c.dataset.route = link.dataset.route;
+    return c;
+  };
 
-      groups.forEach((g, i) => {
+  // ---- the sections the bar can open -----------------------------------------------------------
+  // `link` sections navigate immediately (the original's Gems slot behaves this way); `sheet`
+  // sections open the panel. Tabs are only rendered when a section has more than one group, which
+  // is what keeps single-group sheets from showing a pointless one-item tab row.
+  const SECTIONS = [
+    { id: 'gems', label: 'Gems', icon: 'sparkles', href: '#/gems' },
+    {
+      id: 'hunters',
+      label: 'Hunters',
+      icon: 'sword',
+      tabs: [{
+        name: 'Hunters',
+        cards: () => Array.from(document.querySelectorAll('#hunterBorgeBtn, #hunterOzzyBtn, #hunterKnoxBtn'))
+          .map((btn) => {
+            // Hunter tabs are BUTTONS that switch hunter without changing the route, so these are
+            // built as buttons too rather than as links to a route that would not change.
+            const c = card('#/sim', (btn.textContent || '').trim(), 'sword');
+            c.addEventListener('click', (e) => { e.preventDefault(); btn.click(); });
+            for (const k of ['unlockGem', 'unlockLvl', 'unlockNode']) {
+              if (btn.dataset[k] !== undefined) c.dataset[k] = btn.dataset[k];
+            }
+            return c;
+          }),
+      }],
+    },
+    {
+      id: 'upgrades',
+      label: 'Upgrades',
+      icon: 'stairs',
+      tabs: upgradeGroups.map((g) => ({ name: g.name, cards: () => g.links.map(cardFromLink) })),
+    },
+    {
+      id: 'fleet',
+      label: 'Fleet',
+      icon: 'adjustments',
+      tabs: [{
+        name: 'Fleet',
+        cards: () => [card('#/fleet', 'Fleet Overview', 'adjustments')]
+          .concat(fleetGroups.flatMap((g) => g.links.map(cardFromLink))),
+      }],
+    },
+    {
+      id: 'account',
+      label: 'Account',
+      icon: 'crown',
+      tabs: [{
+        name: 'Account',
+        cards: () => {
+          const cards = [];
+          const cloud = document.getElementById('cloudAccountBtn');
+          if (cloud) {
+            const c = card('#/settings', 'Cloud Save', 'repeat');
+            c.addEventListener('click', (e) => { e.preventDefault(); cloud.click(); });
+            cards.push(c);
+          }
+          cards.push(card('#/settings', 'Settings', 'settings'));
+          return cards;
+        },
+      }],
+    },
+    {
+      id: 'more',
+      label: 'More',
+      icon: 'folder',
+      tabs: [{
+        name: 'More',
+        cards: () => [
+          card('#/settings', 'Settings', 'settings'),
+          card('#/badges', 'Academy Badges', 'crown'),
+        ],
+      }],
+    },
+  ];
+
+  // ---- build ------------------------------------------------------------------------------------
+  const sheet = document.createElement('div');
+  sheet.className = 'submenu';
+  sheet.innerHTML = '<div class="submenu-header"><h3></h3></div>'
+    + '<div class="tab-navigation"></div><div class="tab-content"></div>';
+  const sheetTitle = sheet.querySelector('h3');
+  const sheetTabs = sheet.querySelector('.tab-navigation');
+  const sheetBody = sheet.querySelector('.tab-content');
+
+  const bar = document.createElement('div');
+  bar.className = 'mobile-navbar';
+  const barInner = document.createElement('div');
+  barInner.className = 'mobile-navbar-inner';
+  bar.appendChild(barInner);
+
+  let openId = null;
+  let activeTab = 0;
+
+  const paintSheet = () => {
+    const sec = SECTIONS.find((s) => s.id === openId);
+    if (!sec || !sec.tabs) return;
+    sheetTitle.textContent = sec.label;
+    sheetTabs.innerHTML = '';
+    // A single-group sheet shows no tab row: one tab is not a choice, and the original does not
+    // render one either.
+    sheetTabs.style.display = sec.tabs.length > 1 ? '' : 'none';
+    if (sec.tabs.length > 1) {
+      sec.tabs.forEach((t, i) => {
         const b = document.createElement('button');
         b.type = 'button';
-        b.textContent = g.name;
-        b.onclick = () => { active = i; sessionStorage.setItem('huntersim_mobile_nav_tab', String(i)); paint(); };
-        tabs.appendChild(b);
+        b.className = 'tab-button' + (i === activeTab ? ' active' : '');
+        b.textContent = t.name;
+        b.onclick = () => { activeTab = i; paintSheet(); };
+        sheetTabs.appendChild(b);
       });
-      mirror.appendChild(tabs);
-      mirror.appendChild(content);
-      paint();
     }
-  }
+    sheetBody.innerHTML = '';
+    const grid = document.createElement('div');
+    grid.className = 'grid grid-cols-2 gap-3';
+    (sec.tabs[activeTab] || sec.tabs[0]).cards().forEach((c) => grid.appendChild(c));
+    sheetBody.appendChild(grid);
+    // Freshly built cards carry gating attributes but have never been evaluated, so a locked
+    // category would stay visible until the next gem change happened to re-run the pass.
+    if (typeof updateNavGating === 'function') updateNavGating();
+  };
 
-  toggle.onclick = () => setOpen(menu.classList.contains('hidden'));
-  // EVERY route link closes the drawer, not just [data-nav]. The cloned sidebar links carry
-  // `data-route` instead, and tapping one while already on that route fires no hashchange -- so a
-  // hashchange-only listener would leave the drawer covering the page the user just asked for.
-  menu.querySelectorAll('[data-nav], a[href^="#/"]').forEach((el) => el.addEventListener('click', () => setOpen(false)));
-  window.addEventListener('hashchange', () => setOpen(false));
+  const paintBar = () => {
+    Array.from(barInner.children).forEach((btn) => {
+      const on = btn.dataset.section === openId;
+      btn.classList.toggle('active', on);
+      const ind = btn.querySelector('.active-indicator');
+      if (on && !ind) btn.insertAdjacentHTML('beforeend', '<span class="active-indicator"></span>');
+      if (!on && ind) ind.remove();
+    });
+  };
+
+  const setOpen = (id) => {
+    openId = id;
+    activeTab = 0;
+    sheet.classList.toggle('visible', !!id);
+    if (id) paintSheet();
+    paintBar();
+  };
+
+  SECTIONS.forEach((sec) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'nav-button relative';
+    btn.dataset.section = sec.id;
+    btn.innerHTML = `<div class="nav-button-inner">${window.iconSvg(sec.icon, 22, 'nav-icon')}`
+      + `<span class="nav-label">${sec.label}</span></div>`;
+    btn.onclick = () => {
+      if (sec.href) { setOpen(null); location.hash = sec.href.slice(1); return; }
+      setOpen(openId === sec.id ? null : sec.id);
+    };
+    barInner.appendChild(btn);
+  });
+
+  root.appendChild(sheet);
+  root.appendChild(bar);
+
+  // Any navigation closes the sheet. Route links inside it fire hashchange, but a link to the route
+  // already showing does not -- so the click is listened for directly as well, or the sheet would
+  // sit over the page the user just asked for.
+  sheet.addEventListener('click', (e) => { if (e.target.closest('a')) setOpen(null); });
+  window.addEventListener('hashchange', () => setOpen(null));
+  // Tapping the page behind the sheet dismisses it, which is what a sheet is expected to do.
+  document.addEventListener('click', (e) => {
+    if (!openId) return;
+    if (sheet.contains(e.target) || bar.contains(e.target)) return;
+    setOpen(null);
+  });
 })();
+
 
 // ==================== SIMULATOR PAGE ====================
 
