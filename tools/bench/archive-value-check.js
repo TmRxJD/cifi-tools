@@ -1,7 +1,8 @@
 'use strict';
 // HOW MUCH OF THE ARCHIVE IS DOING ANYTHING? Same build, shrinking archive budgets.
 //
-//   node tools/bench/archive-value-check.js [--only=a,b,c] [--budgets=1200,400,100]
+//   node tools/bench/archive-value-check.js [--only=a,b,c] [--values=1200,400,100]
+//   node tools/bench/archive-value-check.js --dim=refineSupports --values=8,5,3 --base=complete
 //
 // THE QUESTION. `fast` (archiveEvals 1200) was measured returning the SAME build as `complete`
 // (9600) on nine builds, including the three boss-critical ones -- 0.00% on all three. That kills
@@ -46,12 +47,25 @@ const { makeBudget } = require('./budget.js');
 const args = process.argv.slice(2);
 const opt = (n, d) => { const h = args.find((a) => a.startsWith(`--${n}=`)); return h ? h.slice(n.length + 3) : d; };
 const ONLY = opt('only', 'borge@73,ozzy@62,knox@30');
-const BUDGETS = opt('budgets', '1200,400,100').split(',').map(Number);
+// WHICH DIMENSION TO SWEEP, and what to hold everything else at. `complete` differs from `fast`
+// on TWO dimensions -- archiveEvals (9600 vs 1200) and refineSupports (8 vs 3) -- so a probe that
+// could only vary the archive was unable to say which of the two was buying anything. Everything
+// not being swept is pinned to `--base`, so a difference is attributable to the swept dimension
+// and nothing else.
+const DIM = opt('dim', 'archiveEvals');
+const BASE = opt('base', 'fast');
+const BUDGETS = (opt('values', null) || opt('budgets', '1200,400,100')).split(',').map(Number);
 const ITERS = 1000;
 
 (async () => {
   const known = H.loadKnownBuilds();
-  console.log(`archive budgets: ${BUDGETS.join(', ')} (everything else pinned to Fast)`);
+  const baseSpec = H.Optimizer.EFFORT_LEVELS[BASE];
+  if (!baseSpec) throw new Error(`unknown --base="${BASE}"; expected one of `
+    + Object.keys(H.Optimizer.EFFORT_LEVELS).join(', '));
+  if (!(DIM in baseSpec)) throw new Error(`--dim="${DIM}" is not a field of the ${BASE} effort `
+    + `level (${Object.keys(baseSpec).join(', ')}) -- sweeping a key the spec does not read would `
+    + 'produce three identical arms and look like a null result');
+  console.log(`sweeping ${DIM}: ${BUDGETS.join(', ')} (everything else pinned to ${BASE})`);
   console.log(`differences under ~${NOISE_PCT.meaningful}% are sampling, not signal\n`);
 
   // One optimizer run per (build, budget) pair -- three each by default.
@@ -69,16 +83,23 @@ const ITERS = 1000;
     const primary = (r) => (mode === 'push' ? r.stage : r.loot);
 
     let base = null;
-    for (const archiveEvals of BUDGETS) {
+    for (const value of BUDGETS) {
       const pooled = await H.makePooledScorer(cfg, mode, scoreCtx);
       try {
         const t0 = Date.now();
         const res = await H.Optimizer.optimize(cfg, {
           mode,
           scorer: pooled.score,
-          // Everything except the archive budget is held at Fast's settings, so any difference is
-          // attributable to the archive and nothing else.
-          effort: { archiveEvals, refineSupports: 3 },
+          // Everything except the swept dimension is held at the base level's settings, so a
+          // difference is attributable to that dimension and nothing else. `label`/`help` are
+          // dropped: they are metadata and EFFORT_SPEC_KEYS would accept them, but carrying them
+          // into a synthetic spec makes the arm look like a shipped level in any diag that reads
+          // the label.
+          effort: (() => {
+            const spec = { ...baseSpec, [DIM]: value };
+            delete spec.label; delete spec.help;
+            return spec;
+          })(),
           maxSeconds: 0,   // no cap: a truncated arm would measure the cap, not the archive
         });
         const secs = (Date.now() - t0) / 1000;
@@ -86,7 +107,7 @@ const ITERS = 1000;
         const a = (res.diag && res.diag.archive) || {};
         if (base === null) base = score;
         const pct = 100 * (score - base) / Math.abs(base);
-        console.log(`${String(fx.name).padEnd(10)} archive ${String(archiveEvals).padStart(5)}`
+        console.log(`${String(fx.name).padEnd(10)} ${DIM} ${String(value).padStart(5)}`
           + `  ${secs.toFixed(0).padStart(4)}s  ${String(res.evals).padStart(6)} evals`
           + `  cells ${String(a.cells ?? '?').padStart(4)}`
           + `  killBands ${String(a.killBands ?? '?').padStart(2)}`

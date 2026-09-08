@@ -2093,6 +2093,17 @@
     // this removes a large fraction of the real work rather than a rounding error.
     const cache = new Map();
     const diag = { stages: {}, timings: {} };
+    // STAGE TIMINGS, because `timings` was declared empty and never written -- so every question
+    // about where a run spends itself has been answered by guessing. That is not hypothetical: a
+    // 45s cap was added to a bench expecting a speedup and bought nothing, because the cost was in
+    // a stage the cap never touched. Seconds, one decimal, cumulative per stage so a stage entered
+    // more than once accumulates rather than reporting only its last visit.
+    let stageMark = Date.now();
+    const markStage = (name) => {
+      const now = Date.now();
+      diag.timings[name] = Number((((diag.timings[name] || 0) * 1000 + (now - stageMark)) / 1000).toFixed(1));
+      stageMark = now;
+    };
     const startedAt = Date.now();
     const maxSeconds = Number.isFinite(opts.maxSeconds) ? opts.maxSeconds : DEFAULT_MAX_SECONDS;
     // maxSeconds <= 0 disables the cap entirely, for benches that must never be truncated.
@@ -2214,6 +2225,7 @@
       if (!flatTalents) throw new Error('Could not build a legal starting talent allocation within budget');
       let seedTalents = flatTalents;
 
+      markStage('stage0_seed');
       // --- Stage 1: exhaustive support enumeration and screening. -------------------------
       const supports = Space.enumerateSupports(ATTRIBUTES, deps, attrBudget);
       report('enumerate', supports.length, supports.length);
@@ -2333,6 +2345,7 @@
         }
       }
 
+      markStage('stage1_enumerate_screen');
       // --- Stage 2a: ILLUMINATE THE BEHAVIOUR SPACE. --------------------------------------
       //
       // This replaces the rung/survey schedule, which ranked every candidate by score at
@@ -2460,6 +2473,7 @@
         return { best: surveyed[0], archiveOnly: true, evals, notes, diag };
       }
 
+      markStage('stage2a_archive');
       // --- Stage 2b: full fixpoint refinement of the survivors. ---------------------------
       const finalists = [];
       // REFINEMENT WIDTH IS PART OF THE EFFORT CHOICE, not a fixed 3.
@@ -2571,6 +2585,7 @@
       // legal allocations, just less thoroughly tuned, and keeping them costs nothing at Stage 3.
       finalists.push(...surveyed.filter((e) => toRefine.indexOf(e) === -1));
 
+      markStage('stage2b_refine');
       // --- Stage 2c: REAL COMMUNITY BUILDS, re-fitted to this budget, as extra finalists. -----
       //
       // WHY THIS IS HERE, and why it is not a shortcut. Four rule-based constructions were measured
@@ -2704,6 +2719,7 @@
         diag.corpus = { offered: donors.length, admitted, nearestLevelDistance: corpusNearest };
       }
 
+      markStage('stage2c_corpus');
       // --- Stage 3: full-fidelity decision. -----------------------------------------------
       report('final', 0, 1);
       const unique = [];
@@ -2765,6 +2781,7 @@
         .map((f, i) => ({ talentAlloc: f.talentAlloc, attrAlloc: f.attrAlloc, score: finalScores[i] }))
         .sort((a, b) => b.score - a.score);
 
+      markStage('stage3_decide');
       // POLISH THE WINNER AT THE FIDELITY IT IS JUDGED AT.
       //
       // Stage 3 ranks at FINAL_ITERATIONS, but survey and refine hill-climb at SCREEN_ITERATIONS,
@@ -2991,6 +3008,7 @@
           + 'raise the cap for a deterministic answer.');
       }
 
+      markStage('polish');
       // The split, on every run: a reader comparing `evals` against a budget needs to know the
       // budget counted proposals and this counts evaluations actually performed.
       {
