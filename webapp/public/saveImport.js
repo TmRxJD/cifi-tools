@@ -369,12 +369,27 @@ function mapSaveToStore(save) {
   // corroborates it (UDU levels sum to 69 = 50x1 + 19, matching DiamondUltimaLevel 1 / Progress 19).
   // `UDU7BonusCalc` reads DiamondUltimaBonus2 (1.02) where UDU6 reads DiamondUltimaBonus (1.05).
   //
-  // WHY IT IS OFF ANYWAY. A user reported materials roughly 3x too high, and a direct comparison
-  // against the ORIGINAL for the same build code confirmed it: loot score, average stage and run
-  // time all agree within a few percent, while Farahyte Ore reads 16.51t/run there against
-  // 46.83t/run here. The discrepancy is isolated to MATERIALS -- and `upgrades.ultima.ulti` is
-  // measured to scale mat1/mat2/mat3 and xp linearly while leaving loot score bit-identical, which
-  // is exactly that shape.
+  // WHY IT IS OFF ANYWAY -- AND THE COMPARISON THAT LOOKED LIKE PROOF IS NOT PROOF.
+  //
+  // A user reported materials roughly an order of magnitude too high. Running the same build code
+  // through the original gave 16.51t/run against 46.83t/run in their screenshot, with loot score,
+  // average stage and run time all agreeing within a few percent -- which reads as a clean
+  // materials-only discrepancy of ~2.8x.
+  //
+  // IT IS NOT A VALID COMPARISON. The original was run against ONE account's state and the
+  // screenshot came from a DIFFERENT user's account. Materials scale hard with account-wide
+  // upgrades, so two accounts at the same hunter level legitimately differ by far more than 2.8x.
+  // The numbers are real; the inference from them was not, and it was made because the shape
+  // (materials moved, loot did not) matched the change under suspicion.
+  //
+  // WHAT IS ACTUALLY ESTABLISHED, and it is enough to justify turning this off:
+  //   - `upgrades.ultima.ulti` scales mat1/mat2/mat3 and xp LINEARLY while leaving loot score
+  //     bit-identical across its whole 0-10 range. Measured directly.
+  //   - auto-filling it changed the displayed materials of every scanned build the moment it
+  //     shipped, which is when the report arrived.
+  //   - the ORIGINAL leaves it a manual input that most accounts never set, so filling it makes us
+  //     diverge from the tool whose agreement is this project's verification standard.
+  // That is a reason to stop applying it. It is NOT a demonstration that it caused the report.
   //
   // That does not prove this mapping caused it. What is certain is that the ORIGINAL treats this
   // parameter as a manual input most accounts leave unset, so auto-filling it makes us diverge from
@@ -382,9 +397,10 @@ function mapSaveToStore(save) {
   // scanned build's displayed materials the moment it shipped. Restoring the manual field returns
   // us to parity while the real cause is found.
   //
-  // TO RE-ENABLE: verify against the original with the SAME account state on both sides (set the
-  // multiplier by hand there, compare materials), not against the game's displayed number alone.
-  // The value being right is not the same as the tool being right to apply it here.
+  // TO RE-ENABLE, AND TO FIND THE REAL CAUSE IF IT IS SOMETHING ELSE: both sides of the
+  // comparison must be the SAME ACCOUNT. Take one save, import it here, set the same values by
+  // hand on the original, and compare materials. Anything less compares two accounts and will
+  // support whatever conclusion is already in mind -- as it just did.
 
   // Mats Exchange -> `TysconDrives`. Exact-name match on the same {Name} convention as the rest,
   // and the only Tyscon-shaped field that is a plain count: the save also carries

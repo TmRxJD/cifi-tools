@@ -1,11 +1,6 @@
 {
   "version": "0.0.1",
   "configurations": [
-    {
-      "name": "huntersim-webapp",
-      "runtimeExecutable": "node",
-      "runtimeArgs": ["webapp/server.js"],
-      "port": 5173
-    }
+    { "name": "huntersim", "runtimeExecutable": "node", "runtimeArgs": ["webapp/server.js"], "port": 5173 }
   ]
 }
