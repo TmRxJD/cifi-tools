@@ -1,24 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "CIFI Tools Companion Bridge",
-  "version": "1.0.1",
-  "description": "Lets the CIFI fleet/hunter companion load cifi-tools.com's simulation engine in your own browser, so no copy of it is ever hosted or redistributed.",
-  "permissions": [],
-  "host_permissions": [
-    "https://cifi-tools.com/*",
-    "https://tmrxjd.github.io/*",
-    "http://localhost/*",
-    "http://127.0.0.1/*"
-  ],
+  "name": "CIFI Tools Companion",
+  "version": "2.0.0",
+  "description": "Adds save-file import, fleet/ship install optimization and the hunter build optimizer to cifi-tools.com, in your own browser.",
+  "permissions": ["storage"],
   "content_scripts": [
     {
-      "matches": [
-        "https://tmrxjd.github.io/cifi-tools/*",
-        "http://localhost/*",
-        "http://127.0.0.1/*"
-      ],
-      "js": ["bridge.js"],
-      "run_at": "document_start"
+      "matches": ["https://cifi-tools.com/*"],
+      "js": ["companion.js"],
+      "run_at": "document_idle"
     }
   ]
 }
