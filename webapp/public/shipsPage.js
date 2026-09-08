@@ -536,6 +536,13 @@ const SHIP_RANKUP_METRIC = { 1: 'Generators Purchased', 3: 'Loops Filled', 4: 'C
 // cifi.fandom.com's per-ship pages and the Gear Sets table.
 const SHIP_CODE_PREFIX = { 1: 'CRA', 2: 'AUX', 3: 'ZAG', 4: 'HEP', 5: 'DEM', 6: 'KOI', 7: 'ZEUS' };
 // Real node icon assets (webapp/public/assets/nodes/{CODE}.png, e.g. CRA1.png, DEM8.png).
+// EXTRACTED FROM THE GAME, all 77, at 120-256px -- tools/assets/extract-node-sprites.py.
+// They were previously cropped by hand from cifi.fandom.com and from in-game screenshots, which
+// is where the artifacts and the 55x65 Koios set came from. The game ships them as
+// `RU-<Category><n>-256` sprites keyed by ruId (NOT the install code -- those differ on 15 nodes),
+// and the art abbreviates two categories: Research -> `Res`, Academy -> `Zeus`. Assuming the code's
+// own category names would silently miss Koios and Zeus entirely, which is exactly the gap the old
+// screenshot workaround was filling.
 // Cradle/Auxesia/Zagreus/Hephaestus/Demeter came from cifi.fandom.com's per-ship pages. The wiki
 // has no Koios or Zeus pages, so those two were cut from in-game screenshots instead
 // (tools/assets/extract-node-icons.py) -- Zeus at the same ~128px as the wiki set, Koios still at
