@@ -217,7 +217,7 @@
       // MEASURED against Complete, solo, nine builds levels 20-73: ~1.9x faster, worst quality gap
       // -0.29% (inside the +-0.2% two-score sampling floor), and EXACTLY 0.00% on the three hardest
       // boss builds -- borge@73, ozzy@62, knox@30. It is not a downgrade on anything tested.
-      label: 'Fast', archiveEvals: 1200, refineSupports: 3,
+      label: 'Fast', archiveEvals: 1200, refineSupports: 3, ocbaPolish: true,
       help: 'About twice as quick. Measured across nine builds it returned the same result as '
         + 'Complete, so this is the sensible default.',
     },
@@ -231,7 +231,7 @@
       // refinement has nothing to develop -- it is reliable but needs a foothold (it takes kill 3
       // to kill 53). Doubling the budget produces one, and cells barely move, so this buys DEPTH
       // per lineage rather than coverage.
-      label: 'Complete', archiveEvals: 9600, refineSupports: 8,
+      label: 'Complete', archiveEvals: 9600, refineSupports: 8, ocbaPolish: true,
       // THE OLD HELP CLAIMED IT "finds builds Fast misses". Nine builds later that is not
       // supported: the two returned the same build every time, and Complete spent 2.4x the
       // evaluations to do it. It is kept because the archive is what covers a build the CORPUS
@@ -295,7 +295,22 @@
     'archiveOnly',                                     // ablation: stop after illumination
     'finalIterations',                                 // decision fidelity; A/B only
     'screenIterations',                                // ARCHIVE fidelity; A/B only
-    'ocbaPolish',                                      // OCBA allocation in the final polish
+    // OCBA allocation in the final polish. ON in both shipped levels since 2026-09-07.
+    //
+    // The polish evaluated EVERY candidate move at FINAL_ITERATIONS -- textbook equal allocation.
+    // OCBA (Chen) samples in proportion to (spread/gap)^2, so a move far behind keeps its cheap
+    // estimate while the ones actually contending get the samples. Nothing is DISCARDED, which is
+    // what separates it from the top-K screening shortlist this repo measured and rejected: a
+    // 100-iteration score was seen ordering a 0.32% ridge BACKWARDS by 1.7%.
+    //
+    // MEASURED on four builds including the two hardest, quality judged at 1000 iterations on both
+    // arms so the cheaper one is never scored on its own noisier ruler:
+    //     borge@73  0.00% -> 0.00%   326s -> 276s  1.18x   98% of polish work skipped
+    //     ozzy@62   8.88% -> 8.86%   293s -> 226s  1.30x   97%
+    //     knox@30   1.33% -> 1.33%   124s ->  99s  1.26x   95%
+    //     borge@44  0.05% -> 0.05%   213s -> 193s  1.10x   81%
+    // Worst deviation 0.02%, against a ~0.3% comparison floor -- no measured quality cost.
+    'ocbaPolish',
     'betAndRun',                                       // k independent archives, refine the best
     'bossDamageBands',                                 // split kill-0 cells by boss damage
     'skipPolish',                                      // ablation
