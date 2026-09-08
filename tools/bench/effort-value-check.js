@@ -99,7 +99,14 @@ function pickStratified(flat, n, seed) {
         const res = await H.Optimizer.optimize(cfg, { mode, scorer: pooled.score, effort, maxSeconds: 0 });
         const secs = (Date.now() - t0) / 1000;
         const score = primary(await H.evaluateAllocation(cfg, res.best.talentAlloc, res.best.attrAlloc, ITERS));
-        return { secs, score, evals: res.evals };
+        // FINGERPRINT THE ALLOCATION, NOT JUST THE SCORE. A matching score does not mean a matching
+        // build -- this repo already keeps search-identity-probe.js for exactly that reason. Without
+        // it a "+0.00%" row cannot distinguish "both efforts found the SAME build" (fast loses
+        // nothing) from "they found DIFFERENT builds that happen to score alike" (fast is lucky on
+        // this fixture and says nothing about the next one). Those are different claims about
+        // whether the cheap option is trustworthy, and they must not print identically.
+        const sig = JSON.stringify([res.best.talentAlloc, res.best.attrAlloc]);
+        return { secs, score, evals: res.evals, sig };
       } finally { await pooled.destroy(); }
     };
 
@@ -107,13 +114,15 @@ function pickStratified(flat, n, seed) {
     const complete = await arm('complete');
     const speedup = complete.secs / fast.secs;
     const qualityPct = 100 * (fast.score - complete.score) / Math.abs(complete.score);
-    rows.push({ name: fx.name, level: fx.level, fast, complete, speedup, qualityPct });
+    const sameBuild = fast.sig === complete.sig;
+    rows.push({ name: fx.name, level: fx.level, fast, complete, speedup, qualityPct, sameBuild });
 
     console.log(`${String(fx.name).padEnd(11)} lvl${String(fx.level).padEnd(3)}`
       + `  fast ${fast.secs.toFixed(0).padStart(4)}s/${String(fast.evals).padStart(5)}ev`
       + `  complete ${complete.secs.toFixed(0).padStart(4)}s/${String(complete.evals).padStart(5)}ev`
       + `  speedup ${speedup.toFixed(2)}x`
-      + `  quality ${qualityPct >= 0 ? '+' : ''}${qualityPct.toFixed(2)}%`);
+      + `  quality ${qualityPct >= 0 ? '+' : ''}${qualityPct.toFixed(2)}%`
+      + `  ${sameBuild ? 'same build' : 'DIFFERENT build'}`);
   }
 
   budget.report(rows.length, picks.length);
@@ -123,6 +132,12 @@ function pickStratified(flat, n, seed) {
   const losses = rows.map((r) => r.qualityPct);
   console.log(`median speedup      ${med(speedups).toFixed(2)}x   (range ${Math.min(...speedups).toFixed(2)}x .. ${Math.max(...speedups).toFixed(2)}x)`);
   console.log(`median quality gap  ${med(losses).toFixed(2)}%   (worst ${Math.min(...losses).toFixed(2)}%)`);
+  // Reported, never graded. A different build scoring the same is not a failure -- the objective is
+  // what the user asked for, and two builds can genuinely tie on it. It is stated because it says
+  // how much a 0.00% row generalises: identical builds mean fast lost nothing HERE and would lose
+  // nothing on a rerun, while a tie between different builds is a coincidence of this fixture.
+  const identical = rows.filter((r) => r.sameBuild).length;
+  console.log(`identical builds    ${identical}/${rows.length}`);
 
   // A VERDICT ON A PARTIAL RUN IS A VERDICT ON WHAT RAN. Printing "fast earns its place"
   // after measuring one build of three would be exactly the overclaim this suite exists to
