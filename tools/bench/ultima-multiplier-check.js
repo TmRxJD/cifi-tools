@@ -56,38 +56,14 @@ const check = (label, ok, detail) => {
     const store = sb.mapSaveToStore(save);
     const got = store && store.globalUpgrades ? store.globalUpgrades['ultima.ulti'] : undefined;
 
-    // THE DERIVATION, recomputed here from the save's own fields and the AUTHORED constants.
-    //
-    //   multiplier = 1 + UDU7BaseBonus * UltimaMilestoneExponent2 ^ DiamondUltimaLevel * UDU7Level
-    //
-    // The exponent is the part worth guarding. UDU6 (Mats) and UDU7 (hunter loot) have identical
-    // getters in the game except that UDU6 reads DiamondUltimaBonus (1.05^level) and UDU7 reads
-    // DiamondUltimaBonus2 (1.02^level). On the reference save the two differ by 1.20475 vs
-    // 1.19890, and the player's screen said x1.1989 -- so picking the wrong one is a wrong number,
-    // not a rounding difference.
-    const UDU7_BASE = 0.003;
-    const EXP2 = 1.02;
-    if (save.UDU7Level !== undefined) {
-      const expected = Number((1 + UDU7_BASE * (EXP2 ** Number(save.DiamondUltimaLevel || 0))
-        * Number(save.UDU7Level)).toFixed(4));
-      check(`ultima.ulti is derived from UDU7Level=${save.UDU7Level} and `
-        + `DiamondUltimaLevel=${save.DiamondUltimaLevel} (${decoded})`,
-        got === expected, `got ${got}, expected ${expected}`);
-
-      // The wrong exponent produces a plausible-looking number, so assert it is NOT that one.
-      const wrong = Number((1 + UDU7_BASE * (1.05 ** Number(save.DiamondUltimaLevel || 0))
-        * Number(save.UDU7Level)).toFixed(4));
-      if (wrong !== expected) {
-        check('it does NOT use UDU6\'s 1.05 milestone exponent', got !== wrong,
-          `got ${got}, which is the 1.05 form`);
-      }
-    }
-
-    // The original corruption: the imported value must never be the raw milestone LEVEL.
-    if (save.DiamondUltimaLevel !== undefined && Number(save.DiamondUltimaLevel) !== 1) {
-      check('the raw DiamondUltimaLevel is never used as the multiplier',
-        got !== Number(save.DiamondUltimaLevel));
-    }
+    // THE AUTO-IMPORT IS CURRENTLY OFF, so the gate asserts the ORIGINAL property again: nothing
+    // may write into ultima.ulti. The derivation is verified and recorded in saveImport.js, but a
+    // user-reported materials discrepancy (16.51t/run on the original vs 46.83t/run here, for the
+    // same code, with loot and stage agreeing) means we are not applying it until parity is
+    // re-established. This gate follows the shipped behaviour rather than the intended one --
+    // asserting a derivation the importer deliberately does not perform would fail on purpose.
+    check(`importer does not write ultima.ulti (${decoded})`, got === undefined,
+      got === undefined ? '' : `imported ${got}`);
 
     // MILESTONE ARITHMETIC, checked because it is what makes the derivation trustworthy rather
     // than fitted: the game advances DiamondUltimaLevel once per UltimaMilestoneGoal (50) Ultima

@@ -360,17 +360,31 @@ function mapSaveToStore(save) {
   // sum to 2+1+0+0+0+1+65 = 69 = 50x1 + 19, matching DiamondUltimaLevel 1 / Progress 19 exactly.
   // So the save's own numbers agree with the game's CheckUltimaMilestone rule, which is why this
   // is a derivation rather than a guess.
-  const ULTIMA = { udu7BaseBonus: 0.003, milestoneExponent2: 1.02 };
-  if (save.UDU7Level !== undefined) {
-    const uduLevel = realNum(save.UDU7Level);
-    // A missing milestone level means zero milestones, and 1.02^0 = 1 -- correct, not a fallback.
-    const milestone = save.DiamondUltimaLevel !== undefined ? realNum(save.DiamondUltimaLevel) : 0;
-    const mult = 1 + ULTIMA.udu7BaseBonus * (ULTIMA.milestoneExponent2 ** milestone) * uduLevel;
-    // The control accepts 1.0000-10.0000 (mirroring the original tool), so a value past the top of
-    // that range is clamped rather than written out of bounds. Rounded to the 4 decimals the field
-    // actually stores, so an imported value is bit-identical to the same number typed in by hand.
-    globalUpgrades['ultima.ulti'] = Math.min(10, Math.max(1, Number(mult.toFixed(4))));
-  }
+  // AUTO-IMPORT OF THE ULTIMA MULTIPLIER IS DISABLED PENDING PARITY VERIFICATION.
+  //
+  // The derivation below is CORRECT and stays recorded: the multiplier is
+  //     1 + UDU7BaseBonus * UltimaMilestoneExponent2 ^ DiamondUltimaLevel * UDU7Level
+  //     = 1 + 0.003 * 1.02^1 * 65 = 1.1989
+  // which reproduced the player's in-game x1.1989 exactly, and the milestone arithmetic
+  // corroborates it (UDU levels sum to 69 = 50x1 + 19, matching DiamondUltimaLevel 1 / Progress 19).
+  // `UDU7BonusCalc` reads DiamondUltimaBonus2 (1.02) where UDU6 reads DiamondUltimaBonus (1.05).
+  //
+  // WHY IT IS OFF ANYWAY. A user reported materials roughly 3x too high, and a direct comparison
+  // against the ORIGINAL for the same build code confirmed it: loot score, average stage and run
+  // time all agree within a few percent, while Farahyte Ore reads 16.51t/run there against
+  // 46.83t/run here. The discrepancy is isolated to MATERIALS -- and `upgrades.ultima.ulti` is
+  // measured to scale mat1/mat2/mat3 and xp linearly while leaving loot score bit-identical, which
+  // is exactly that shape.
+  //
+  // That does not prove this mapping caused it. What is certain is that the ORIGINAL treats this
+  // parameter as a manual input most accounts leave unset, so auto-filling it makes us diverge from
+  // the tool whose agreement is this project's verification standard -- and it changed every
+  // scanned build's displayed materials the moment it shipped. Restoring the manual field returns
+  // us to parity while the real cause is found.
+  //
+  // TO RE-ENABLE: verify against the original with the SAME account state on both sides (set the
+  // multiplier by hand there, compare materials), not against the game's displayed number alone.
+  // The value being right is not the same as the tool being right to apply it here.
 
   // Mats Exchange -> `TysconDrives`. Exact-name match on the same {Name} convention as the rest,
   // and the only Tyscon-shaped field that is a plain count: the save also carries
