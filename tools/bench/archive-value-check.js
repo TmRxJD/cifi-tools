@@ -41,6 +41,7 @@
 
 const H = require('./harness.js');
 const { NOISE_PCT } = require('./verdict.js');
+const { makeBudget } = require('./budget.js');
 
 const args = process.argv.slice(2);
 const opt = (n, d) => { const h = args.find((a) => a.startsWith(`--${n}=`)); return h ? h.slice(n.length + 3) : d; };
@@ -53,7 +54,12 @@ const ITERS = 1000;
   console.log(`archive budgets: ${BUDGETS.join(', ')} (everything else pinned to Fast)`);
   console.log(`differences under ~${NOISE_PCT.meaningful}% are sampling, not signal\n`);
 
-  for (const name of ONLY.split(',').map((s) => s.trim()).filter(Boolean)) {
+  // One optimizer run per (build, budget) pair -- three each by default.
+  const names = ONLY.split(',').map((x) => x.trim()).filter(Boolean);
+  const budget = makeBudget(args, { minutes: 20 });
+  let done = 0;
+  for (const name of names) {
+    if (budget.stop(done, names.length)) break;
     let fx; try { fx = H.findFixture(known, name); } catch { continue; }
     const build = await H.parseBuildCode(fx.code, fx.hunter);
     const cfg = H.cfgForImport(fx.hunter, build, { budgetMode: 'spend' });
@@ -88,8 +94,10 @@ const ITERS = 1000;
           + `  vs first ${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`);
       } finally { await pooled.destroy(); }
     }
+    done++;
     console.log('');
   }
+  budget.report(done, names.length);
   console.log('If the score is unchanged as the budget falls, the archive is not deciding these');
   console.log('builds -- but check cells/killBands too: coverage can collapse before the score does.');
 })().catch((e) => { console.error('FAIL ' + ((e && e.stack) || e)); process.exit(1); });

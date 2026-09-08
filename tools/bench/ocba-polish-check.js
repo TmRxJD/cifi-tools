@@ -20,6 +20,7 @@
 // arm is never scored on its own noisier ruler.
 
 const H = require('./harness.js');
+const { makeBudget } = require('./budget.js');
 
 const args = process.argv.slice(2);
 const opt = (n, d) => { const h = args.find((a) => a.startsWith('--' + n + '=')); return h ? h.slice(n.length + 3) : d; };
@@ -34,8 +35,13 @@ const NOISE_PCT = 0.3;
   const known = H.loadKnownBuilds();
   const names = ONLY.split(',').map((s) => s.trim()).filter(Boolean);
   const rows = [];
+  // TWO full optimizer runs per build (OCBA off, then on), so five builds is ten runs and the
+  // cost swings more than 10x with level. Measured: five builds took over 30 minutes, which is
+  // not something to discover by waiting.
+  const budget = makeBudget(args, { minutes: 20 });
 
   for (const name of names) {
+    if (budget.stop(rows.length, names.length)) break;
     const fx = H.findFixture(known, name);
     const build = await H.parseBuildCode(fx.code, fx.hunter);
     const cfg = H.cfgForImport(fx.hunter, build, { budgetMode: 'spend' });
@@ -88,6 +94,7 @@ const NOISE_PCT = 0.3;
     } finally { await pooled.destroy(); }
   }
 
+  budget.report(rows.length, names.length);
   console.log('');
   console.log('VERDICT -- quality is the gate, speed is the report');
   let worse = 0;

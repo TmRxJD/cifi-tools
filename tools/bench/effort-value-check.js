@@ -29,6 +29,7 @@
 
 const H = require('./harness.js');
 const { NOISE_PCT } = require('./verdict.js');
+const { makeBudget } = require('./budget.js');
 
 const args = process.argv.slice(2);
 const opt = (n, d) => { const h = args.find((a) => a.startsWith(`--${n}=`)); return h ? h.slice(n.length + 3) : d; };
@@ -77,8 +78,11 @@ function pickStratified(flat, n, seed) {
   console.log(`Bar: >= ${MIN_SPEEDUP}x faster; ${QUALITY_GOAL_PCT}% of complete is the goal, ${QUALITY_LIMIT_PCT}% the limit.`);
   console.log(`Quality differences under ~${NOISE_PCT.meaningful}% are sampling, not signal.\n`);
 
+  // Two full optimizer runs per build, and per-build cost varies more than 10x with level.
+  const budget = makeBudget(args, { minutes: 20 });
   const rows = [];
   for (const fx of picks) {
+    if (budget.stop(rows.length, picks.length)) break;
     const build = await H.parseBuildCode(fx.code, fx.hunter);
     const cfg = H.cfgForImport(fx.hunter, build, { budgetMode: 'spend' });
     const mode = fx.mode || 'loot';
@@ -112,6 +116,7 @@ function pickStratified(flat, n, seed) {
       + `  quality ${qualityPct >= 0 ? '+' : ''}${qualityPct.toFixed(2)}%`);
   }
 
+  budget.report(rows.length, picks.length);
   console.log('');
   const med = (xs) => xs.slice().sort((a, b) => a - b)[Math.floor(xs.length / 2)];
   const speedups = rows.map((r) => r.speedup);
@@ -119,6 +124,11 @@ function pickStratified(flat, n, seed) {
   console.log(`median speedup      ${med(speedups).toFixed(2)}x   (range ${Math.min(...speedups).toFixed(2)}x .. ${Math.max(...speedups).toFixed(2)}x)`);
   console.log(`median quality gap  ${med(losses).toFixed(2)}%   (worst ${Math.min(...losses).toFixed(2)}%)`);
 
+  // A VERDICT ON A PARTIAL RUN IS A VERDICT ON WHAT RAN. Printing "fast earns its place"
+  // after measuring one build of three would be exactly the overclaim this suite exists to
+  // prevent, so the scope is stated in the verdict line itself rather than only above it.
+  const scope = rows.length < picks.length
+    ? `(ONLY ${rows.length} of ${picks.length} build(s) measured) ` : '';
   const tooSlow = rows.filter((r) => r.speedup < MIN_SPEEDUP);
   const missedGoal = rows.filter((r) => r.qualityPct < -QUALITY_GOAL_PCT);
   const tooWorse = rows.filter((r) => r.qualityPct < -QUALITY_LIMIT_PCT);
@@ -136,11 +146,11 @@ function pickStratified(flat, n, seed) {
       + tooWorse.map((r) => `${r.name} ${r.qualityPct.toFixed(2)}%`).join(', '));
   }
   if (!tooSlow.length && !tooWorse.length) {
-    console.log(`VERDICT: fast earns its place -- consistently faster and inside the `
+    console.log(`VERDICT: ${scope}fast earns its place -- consistently faster and inside the `
       + `${QUALITY_LIMIT_PCT}% limit${missedGoal.length ? `, though ${missedGoal.length} build(s) `
       + `miss the ${QUALITY_GOAL_PCT}% goal` : ' and the ' + QUALITY_GOAL_PCT + '% goal'}.`);
   } else if (tooSlow.length >= Math.ceil(rows.length / 2)) {
-    console.log('VERDICT: fast is NOT meaningfully faster on most builds. An effort level that does '
+    console.log(`VERDICT: ${scope}fast is NOT meaningfully faster`.replace(/`/g,'') + '  on most builds. An effort level that does '
       + 'not save time is a worse build for nothing, and should be removed rather than tuned.');
   } else {
     console.log('VERDICT: mixed -- see the per-build rows above before deciding.');
