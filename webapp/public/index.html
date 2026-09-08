@@ -225,7 +225,10 @@ tailwind.config = {
     </div>
   </aside>
 
-  <div class="flex-1 min-w-0 px-0.5 py-4" id="pageRoot"></div>
+  <!-- pb-4 rather than py-4: the TOP padding put 16px of page background between the header and
+       the first card, and both are the same colour, so it read as an unexplained dark band rather
+       than as spacing. The header's own 1px bottom border is the separator now. -->
+  <div class="flex-1 min-w-0 px-0.5 pb-4" id="pageRoot"></div>
 </div>
 
 <!-- Build Creator Modal -->
@@ -725,7 +728,7 @@ tailwind.config = {
      CDN-blocked user still gets the whole tool minus cloud saves. -->
 <script src="https://cdn.jsdelivr.net/npm/appwrite@27.0.0/dist/iife/sdk.js"></script>
 <script src="cloudSync.js?v=20260907c-stamps"></script>
-<script src="app.js?v=20260907n-bottomnav"></script>
+<script src="app.js?v=20260907q-headerline"></script>
 <script>
   // Custom (non-Tabler) sidebar icons: real game-asset SVG paths copied verbatim from the
   // live site's rendered DOM (Relics/Loop Mods/Milestones use bespoke icons, not Tabler's).
