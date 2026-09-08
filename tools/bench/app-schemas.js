@@ -36,9 +36,33 @@ const gemTree = z.object({
 // has critchance/critpower; Knox has block/charge/reload/proj), so the record is left open on keys
 // and closed on value type -- a stat that arrives as a string is the failure worth catching, and
 // asserting the exact stat list here would duplicate hunterDefs.js and drift from it.
+// A SAVED BUILD. This was `z.unknown()`, which is the biggest gap the store had: builds are the
+// user's own irreplaceable data (there is no backend -- see the store's own warning), and a shape
+// error here is exactly the kind that surfaces as a corrupted build rather than a thrown error.
+//
+// `level` is REQUIRED and positive, because it becomes the wasm `lvl` argument -- an absent one
+// silently evaluates the whole build at level 0 and returns a plausible, meaningless score. That
+// is not hypothetical: it is the bug that produced a "borge@61 is 50% below cifi-tools" report and
+// an investigation into gems, categories and relics before the argument vector was dumped.
+//
+// `talents`/`attributes` are open on KEYS (the node ids differ per hunter, and restating them here
+// would duplicate hunterDefs.js and drift from it) and closed on VALUE -- a level arriving as a
+// string is the failure worth catching. `overrides` is genuinely heterogeneous per upgrade family,
+// so it is open-valued and says so rather than being left off.
+const savedBuild = z.object({
+  // `newDraftBuild()` creates it as null and it stays null until saved, so null is a real state.
+  id: z.union([z.number(), z.string(), z.null()]).optional(),
+  name: z.string(),
+  level: z.number().int().positive(),
+  talents: z.record(z.string().min(1), z.number()),
+  attributes: z.record(z.string().min(1), z.number()),
+  categoryId: z.union([z.number(), z.string(), z.null()]).optional(),
+  overrides: z.record(z.string().min(1), z.unknown()).optional(),
+}).strict();
+
 const hunterState = z.object({
   hunterStats: nonEmptyRecord(z.string().min(1), z.number()),
-  builds: z.array(z.unknown()),
+  builds: z.array(savedBuild),
   iterations: z.number().int().positive(),
   lootFilter: z.object({
     mat1: z.boolean(), mat2: z.boolean(), mat3: z.boolean(), xp: z.boolean(),
@@ -81,9 +105,12 @@ const storeSchema = z.object({
       level: count,
     }).passthrough()).min(1),
   }).passthrough(),
-  fleetBoosts: z.object({ levels: z.record(z.string(), count) }).passthrough(),
-  fleetResearch: z.object({ levels: z.record(z.string(), count) }).passthrough(),
-  fleetBadges: z.object({ owned: z.record(z.string(), z.boolean()) }).passthrough(),
+  // These three were .passthrough(), which accepts any extra key silently -- and a new key is
+  // usually the signal that an extractor learned something no consumer has been taught to read.
+  // Their shapes are fully known, so they are strict now.
+  fleetBoosts: z.object({ levels: z.record(z.string(), count) }).strict(),
+  fleetResearch: z.object({ levels: z.record(z.string(), count) }).strict(),
+  fleetBadges: z.object({ owned: z.record(z.string(), z.boolean()) }).strict(),
   unlockedGens: z.record(numericKey, z.boolean()),
   // Ouroboros account state. Optional inside because a store that has never imported a save has
   // not learned the flag yet, and "unknown" must stay distinguishable from "false" -- the gate

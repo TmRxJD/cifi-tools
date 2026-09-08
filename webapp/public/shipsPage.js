@@ -1523,7 +1523,7 @@ function renderShipSetupPage(root) {
     card.className = `bg-gray-800 rounded-lg border border-gray-700 p-3 ${!rec ? 'opacity-50' : ''}`;
     card.innerHTML = `
       <div class="flex items-center gap-2 mb-2">
-        ${portrait ? `<img src="${shipPortraitPath(n, input.evo)}" class="w-10 h-10 object-contain flex-shrink-0" alt="${shipDisplayName(n)} evo ${input.evo}" onerror="this.src='assets/ships/${portrait}.png'" />` : ''}
+        ${portrait ? `<img src="${shipPortraitPath(n, input.evo)}" class="w-14 h-14 object-contain flex-shrink-0" alt="${shipDisplayName(n)} evo ${input.evo}" onerror="this.src='assets/ships/${portrait}.png'" />` : ''}
         <span class="font-medium text-white text-sm">${shipDisplayName(n)}</span>
       </div>
       <div class="grid grid-cols-2 gap-1 text-xs text-gray-400 mb-2">
@@ -1564,7 +1564,13 @@ function openShipSetupEditor(shipId) {
   // save, silently resetting a real account value. Clamp instead, so the user sees what will be
   // kept. This is reachable: the field was a free number input until now.
   evoSel.value = String(Math.max(0, Math.min(evoTop, Number(input.evo) || 0)));
-  document.getElementById('shipSetupRankPoints').value = input.rankPoints;
+  // Install Points is the other field that can run large on a developed account, so it gets the
+  // same notation treatment. Rank and Crew are deliberately left as plain number inputs: they are
+  // small, bounded values (rank ~179, crew ~942) where abbreviating would only obscure them.
+  window.attachBigNumberInput(document.getElementById('shipSetupRankPoints'), {
+    get: () => input.rankPoints || 0,
+    set: (v) => { input.rankPoints = v; },
+  });
 
   const gear = getShipGear();
   const gearWrap = document.getElementById('shipSetupGearWrap');
@@ -1572,9 +1578,19 @@ function openShipSetupEditor(shipId) {
   gearWrap.classList.toggle('hidden', !gearFields.length);
   document.getElementById('shipSetupGearFields').innerHTML = gearFields.map(([key, label]) => `
     <div><label class="block text-xs text-gray-400 mb-1">${label}</label>
-      <input type="number" min="0" data-gear="${key}" value="${gear[key] || 0}" class="w-full bg-gray-800 border border-gray-600 rounded-md px-2 py-1.5 text-white text-sm" /></div>`).join('');
+      <input data-gear="${key}" class="w-full bg-gray-800 border border-gray-600 rounded-md px-2 py-1.5 text-white text-sm" /></div>`).join('');
+  // These counters run past 2e17 -- "Operations Completed" on a real account reads
+  // 227254992551159000. attachBigNumberInput shows the game's own notation ("227.25qa") and
+  // accepts it back, so the user never has to read or retype a raw 18-digit number. No `value` or
+  // `type` is set in the markup above: the helper owns both, and a stale type="number" would make
+  // the browser blank any value carrying a suffix.
   document.querySelectorAll('#shipSetupGearFields input[data-gear]').forEach((el) => {
-    el.addEventListener('change', () => { gear[el.dataset.gear] = Number(el.value) || 0; window.saveStore(); renderShipSetupHexGrid(); });
+    const key = el.dataset.gear;
+    window.attachBigNumberInput(el, {
+      get: () => gear[key] || 0,
+      set: (v) => { gear[key] = v; },
+      onChange: () => { window.saveStore(); renderShipSetupHexGrid(); },
+    });
   });
 
   document.getElementById('shipBuildModal').classList.remove('hidden');
@@ -1599,7 +1615,11 @@ document.getElementById('updateShipBuildBtn').onclick = () => {
   input.rank = Number(document.getElementById('shipSetupRank').value) || 0;
   input.crew = Number(document.getElementById('shipSetupCrew').value) || 0;
   input.evo = Number(document.getElementById('shipSetupEvo').value) || 0;
-  input.rankPoints = Number(document.getElementById('shipSetupRankPoints').value) || 0;
+  // rankPoints is NOT read back from the field here. It is a big-number input, so its displayed
+  // value is the game's notation ("227.25qa") -- Number() on that is NaN, and the `|| 0` would
+  // have written a silent ZERO over a real value every time the modal was saved.
+  // attachBigNumberInput already writes the parsed number on every edit, so there is nothing to
+  // read back; reading the display string is exactly the round trip the helper exists to avoid.
   window.saveStore();
   document.getElementById('shipBuildModal').classList.add('hidden');
   if (document.getElementById('shipSetupList')) renderShipSetupPage(document.getElementById('pageRoot'));
@@ -1936,7 +1956,7 @@ function renderFleetPage(root) {
     card.innerHTML = `
       ${zaglagBadge}
       <div class="flex items-center gap-2 mb-2 self-start">
-        ${portrait ? `<img src="${shipPortraitPath(n, getShipInput(n).evo)}" class="w-8 h-8 object-contain" alt="${shipDisplayName(n)} evo ${getShipInput(n).evo}" onerror="this.src='assets/ships/${portrait}.png'" />` : ''}
+        ${portrait ? `<img src="${shipPortraitPath(n, getShipInput(n).evo)}" class="w-11 h-11 object-contain" alt="${shipDisplayName(n)} evo ${getShipInput(n).evo}" onerror="this.src='assets/ships/${portrait}.png'" />` : ''}
         <span class="font-medium text-white text-sm">${shipDisplayName(n)}</span>
       </div>
       <div class="flex gap-3 text-[10px] text-gray-400 mb-2 self-start" title="Rank/Crew are your real Ship Setup values -- Installs is the total shown in the grid below (this loadout's plan, or your real current installs if this ship wasn't touched).">

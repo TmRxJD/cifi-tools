@@ -643,6 +643,39 @@
     return `${(n / Math.pow(10, 3 * mag)).toFixed(2)}${SUFFIXES[mag]}`;
   }
 
+  // THE INVERSE OF fmtBig -- parse the game's own notation back to a number.
+  //
+  // Kept HERE, immediately beside fmtBig and sharing its SUFFIXES ladder, because the two are one
+  // fact seen from two sides. A parser with its own copy of the ladder is the duplication this
+  // project has repeatedly watched drift, and here the drift would be silent: an unrecognised
+  // suffix would either read as a smaller number or as NaN, both of which look like a typo rather
+  // than a bug.
+  //
+  // Accepts what a player can reasonably paste from the game or from this tool's own display:
+  // "227.25qa", "1.5m", "3e12", "1,234,567", plain digits, and any of those with stray spaces or a
+  // different case. Returns null -- never 0 -- for anything it cannot read, because a silent 0 is
+  // this project's standing trap: it makes an unparsed value look like a real, deliberate zero.
+  function parseBig(input) {
+    if (typeof input === 'number') return Number.isFinite(input) ? input : null;
+    if (typeof input !== 'string') return null;
+    const raw = input.trim().toLowerCase().replace(/,/g, '').replace(/\s+/g, '');
+    if (!raw) return null;
+    // Scientific notation first: "3e12" would otherwise be read as 3 with a leftover suffix.
+    if (/^[+-]?\d*\.?\d+e[+-]?\d+$/.test(raw)) {
+      const v = Number(raw);
+      return Number.isFinite(v) ? v : null;
+    }
+    const m = /^([+-]?\d*\.?\d+)([a-z]*)$/.exec(raw);
+    if (!m) return null;
+    const mantissa = Number(m[1]);
+    if (!Number.isFinite(mantissa)) return null;
+    if (!m[2]) return mantissa;
+    // Index in the SAME ladder fmtBig prints with, so anything this tool can display it can read.
+    const mag = SUFFIXES.indexOf(m[2]);
+    if (mag <= 0) return null;
+    return mantissa * Math.pow(10, 3 * mag);
+  }
+
   // Knox's "Projectiles Per Salvo" (proj) is a multi-currency stat: each level costs ALL
   // THREE of Knox's resources simultaneously (RD.proj.currencies in the live bundle), each
   // with its own base cost but a shared x1000-per-level multiplier (nV/rV in the live
@@ -751,6 +784,6 @@
     baseStatCostAtLevel, baseStatCostRange,
     relicCostAtLevel, relicCostRange, relicMaxLevel, relicPriceableLevels, gatedRelicCaps, unresolvedRelicCaps, knownRelicIds,
     inscryptionCostAtLevel, inscryptionCostRange,
-    gadgetCostRange, gemAliasCostRange, projCostRange, collectionTimeMinutes, fmtBig,
+    gadgetCostRange, gemAliasCostRange, projCostRange, collectionTimeMinutes, fmtBig, parseBig,
   };
 })(window);

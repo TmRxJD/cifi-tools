@@ -63,7 +63,15 @@ if (!declared.size) {
 
 // A store that has actually been used: import a real build code into it.
 const used = sb.StoreSchema.freshStore();
-used.borge.builds.push({ name: 'probe', code: 'x', allocation: {} });
+// THE REAL BUILD SHAPE, from the app's own factory. This used to push
+// `{ name, code, allocation }` -- a shape NO code path produces (newDraftBuild makes
+// `{id, name, level, talents, attributes, categoryId, overrides}`), so the store-with-a-build case
+// was validating an invented object and could never have caught a real build defect. A fixture
+// that does not match reality is a test of nothing, which is why the schema tightening found it.
+used.borge.builds.push({
+  id: null, name: 'probe', level: 12, talents: { revival: 1 }, attributes: { ares: 2 },
+  categoryId: 'active', overrides: {},
+});
 used.gems.exodus.level = 5;
 used.gems.exodus.nodes = used.gems.exodus.nodes.map(() => true);
 used.fragments.current = 12345;
