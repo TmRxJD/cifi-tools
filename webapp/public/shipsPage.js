@@ -893,6 +893,55 @@ function getUnlockedGens() {
 // MK1-5, and you can't drop MK4 while keeping MK5+ (it'd just re-unlock next sync anyway).
 // Checking a tier force-unlocks every tier below it; unchecking one force-locks every tier at
 // or above it.
+// OUROBOROS STATE. Only `firstOuroResetDone` today; it lives beside unlockedGens because that is
+// the one thing it gates.
+function getOuroState() {
+  // No `|| {}` fallback and no ad-hoc creation: `ouroState` is declared in StoreSchema.SCHEMA, so
+  // every store that exists has it. Creating it here instead would be the silent-default this
+  // project bans -- and a field invented at a call site is one no invariant validates.
+  return (window.store && window.store.ouroState) || {};
+}
+
+// WHICH GENERATOR TIERS THE ACCOUNT CAN ACTUALLY HAVE, read out of the GAME rather than guessed.
+//
+// This was an open question in this file for a long time -- the previous comment said unlocking
+// MK9+ is "gem-gated (Ouroboros Gems Collection)" but that "no wiki/community source states the
+// exact level/gem requirement", named the Evolution gem as "thematically the most likely
+// candidate", and correctly declined to invent a rule. The game states it outright, in
+// `UnlockHandler.CheckMK<n>Overlays()` (recovered C#, 0.7.3.61):
+//
+//   MK1-MK8   no condition at all -- always available
+//   MK9       FirstOuroResetDone && EvolutionQualityLevel >= 1
+//   MK10-12   FirstOuroResetDone && EvolutionQualityLevel >= 2
+//
+// The three top tiers share one threshold; that was checked per tier rather than generalised from
+// MK10, because "they are probably all the same" is how a wrong gate gets shipped.
+//
+// The game renders three states, which is what the >= 1 / >= 2 split is for on MK10-12:
+// below 1 the object is hidden entirely, at exactly 1 it is shown with its lock overlay ON, and
+// at 2+ the lock comes off. We collapse that to available/unavailable because a checklist has no
+// third state, but the requirement text distinguishes them.
+//
+// `EvolutionQualityLevel` IS our `gems.evolution.level`: the importer maps each tree's level from
+// `<Tree>QualityLevel`, verified on a real save (ExodusQualityLevel 4 -> gems.exodus.level 4).
+// This is NOT the gem TREE level from gem-trees.json, whose Evolution entry maxes at 1 -- quality
+// and tree level are different numbers and conflating them would cap the rule at MK9.
+const GEN_TIER_GATES = { 9: 1, 10: 2, 11: 2, 12: 2 };
+function genTierRequirement(n) {
+  const need = GEN_TIER_GATES[n];
+  if (!need) return null;                       // MK1-8 are ungated in the game
+  const gems = (window.store && window.store.gems) || {};
+  const evo = ((gems.evolution || {}).level) || 0;
+  const reset = !!getOuroState().firstOuroResetDone;
+  return {
+    need,
+    met: reset && evo >= need,
+    reset,
+    evo,
+    text: `Requires the first Ouroboros reset and Gem Of Evolution quality ${need}`,
+  };
+}
+
 function setUnlockedGenTier(unlockedGens, n, checked) {
   GEN_TIERS.forEach((tier) => {
     if (checked && tier <= n) unlockedGens[tier] = true;
@@ -1284,6 +1333,10 @@ window.applyImportedShipData = function applyImportedShipData(save, cats = {}) {
   }
   if (cats.unlockedGens) {
     Object.assign(getUnlockedGens(), window.mapCifiSaveToUnlockedGens(save));
+    // The Ouroboros reset flag rides along with the tiers because it gates them -- see
+    // genTierRequirement(). Merged rather than replaced so a save that predates the field does
+    // not wipe a value already known.
+    Object.assign(getOuroState(), window.mapCifiSaveToOuroState(save));
   }
   if (cats.shipGear) {
     // Fleet Stats & Meltdown have no existing "raw store + manual Autofill button" step like
@@ -1374,10 +1427,47 @@ function renderShipSetupPage(root) {
 
   const unlockedGens = getUnlockedGens();
   const gensEl = document.getElementById('shipSetupPageUnlockedGens');
-  gensEl.innerHTML = GEN_TIERS.map((n) => `
-    <label class="flex items-center gap-1 px-2 py-0.5 bg-gray-700 rounded text-xs text-gray-300 cursor-pointer">
-      <input type="checkbox" data-gen="${n}" ${unlockedGens[n] ? 'checked' : ''} class="accent-blue-500" /> MK${n}
-    </label>`).join('');
+  // GATED BY WHAT THE GAME REQUIRES -- see genTierRequirement().
+  //
+  // A GATE MAY NEVER CONTRADICT EVIDENCE. If the tier is already marked unlocked (imported from
+  // the save's own MK<n>UnlockedBool, or ticked by the user), it stays enabled no matter what the
+  // gem state says. Our picture of gem quality comes from the Gem Planner, which a user may simply
+  // not have filled in -- and this project's standing rule that "missing gem state means LOCKED"
+  // is the right default for OFFERING something, not for denying something the account
+  // demonstrably has. Disabling a checkbox the save itself set would be the tool arguing with the
+  // game.
+  gensEl.innerHTML = GEN_TIERS.map((n) => {
+    const req = genTierRequirement(n);
+    const owned = !!unlockedGens[n];
+    const locked = req && !req.met && !owned;
+    const title = locked ? req.text : '';
+    return `
+    <label class="flex items-center gap-1 px-2 py-0.5 rounded text-xs cursor-pointer ${locked
+      ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-700 text-gray-300'}"
+      ${title ? `title="${escapeHtml(title)}"` : ''}>
+      <input type="checkbox" data-gen="${n}" ${owned ? 'checked' : ''} ${locked ? 'disabled' : ''}
+        class="accent-blue-500" /> MK${n}${locked ? ' 🔒' : ''}
+    </label>`;
+  }).join('');
+
+  // WHY THE REQUIREMENT IS STATED, not just enforced. A disabled checkbox with no explanation
+  // reads as a bug -- especially here, where the requirement is obscure enough that this repo
+  // could not name it for months. The note names what is missing for THIS account rather than
+  // restating the rule generically.
+  const gated = GEN_TIERS.map((n) => ({ n, req: genTierRequirement(n) }))
+    .filter(({ n, req }) => req && !req.met && !unlockedGens[n]);
+  if (gated.length) {
+    const anyReset = gated[0].req.reset;
+    const evo = gated[0].req.evo;
+    const note = document.createElement('p');
+    note.className = 'text-[11px] text-gray-500 mt-1 w-full';
+    note.textContent = anyReset
+      ? `MK${gated.map((g) => g.n).join(', MK')} need Gem Of Evolution quality `
+        + `${[...new Set(gated.map((g) => g.req.need))].sort().join(' / ')} (you have ${evo}).`
+      : `MK${gated.map((g) => g.n).join(', MK')} unlock after your first Ouroboros reset, `
+        + 'then at Gem Of Evolution quality 1 (MK9) and 2 (MK10-12).';
+    gensEl.parentElement.appendChild(note);
+  }
   gensEl.querySelectorAll('input[data-gen]').forEach((cb) => {
     cb.addEventListener('change', () => {
       setUnlockedGenTier(unlockedGens, Number(cb.dataset.gen), cb.checked);
@@ -2970,6 +3060,10 @@ function renderResearchPage(root) {
 
 window.renderFleetPage = renderFleetPage;
 window.renderShipSetupPage = renderShipSetupPage;
+// Exported so gen-tier-gate-check.js can assert the gate against the game's own rule. A bench
+// re-implementing the thresholds would test the rule against a copy of itself, which is the
+// parallel-implementation trap this project bans.
+window.genTierRequirement = genTierRequirement;
 window.renderGearSetsPage = renderGearSetsPage;
 window.renderResearchPage = renderResearchPage;
 function renderBadgesPage(root) {

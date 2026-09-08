@@ -246,6 +246,21 @@ function mapSaveToUnlockedGens(save) {
 }
 window.mapCifiSaveToUnlockedGens = mapSaveToUnlockedGens;
 
+// FIRST OUROBOROS RESET -- half of the real generator-unlock condition, so it is imported rather
+// than inferred. `MasterManagerOuro.FirstOuroResetDone` gates MK9-MK12 in the game's own
+// CheckMK<n>Overlays(), alongside the Evolution gem quality level; see genTierRequirement() in
+// shipsPage.js for the full rule and where it was read from.
+//
+// It could plausibly be inferred from Meltdown being non-zero (Meltdown also switches on at the
+// first reset), but that is a second source for one fact and would be wrong the moment a user
+// types a Meltdown value by hand without having reset. The save states it directly.
+function mapSaveToOuroState(save) {
+  const out = {};
+  if (save.FirstOuroResetDone !== undefined) out.firstOuroResetDone = !!save.FirstOuroResetDone;
+  return out;
+}
+window.mapCifiSaveToOuroState = mapSaveToOuroState;
+
 // Per-ship "per X" progression counters that scale ship install node effects (see
 // SHIP_GEAR_FIELDS in shipsPage.js) -- verified directly against a live save via ADB
 // (2026-07-29 diff). Precise per-ship field list corrected after user feedback: these are NOT

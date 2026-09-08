@@ -93,6 +93,12 @@
     fleetResearch: { deep: true, make: () => fleetDefault('fleetResearch') },
     fleetBadges: { deep: true, make: () => fleetDefault('fleetBadges') },
     unlockedGens: { deep: true, make: () => fleetDefault('unlockedGens') },
+    // Ouroboros account state -- currently just `firstOuroResetDone`, which is half of the
+    // condition gating generator tiers MK9-MK12 (the Evolution gem quality level is the other
+    // half, and lives in `gems`). Declared here rather than conjured at the call site, which is
+    // this project's rule for exactly the reason it exists: a shape created ad hoc is a shape no
+    // invariant checks.
+    ouroState: { deep: true, make: () => ({}) },
     optimizerSettings: { deep: true, make: () => fleetDefault('optimizerSettings') },
     importPrefs: { deep: true, make: defaultImportPrefs },
     loadoutTabs: { make: defaultLoadoutTabs },

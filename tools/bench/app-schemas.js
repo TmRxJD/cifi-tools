@@ -85,6 +85,11 @@ const storeSchema = z.object({
   fleetResearch: z.object({ levels: z.record(z.string(), count) }).passthrough(),
   fleetBadges: z.object({ owned: z.record(z.string(), z.boolean()) }).passthrough(),
   unlockedGens: z.record(numericKey, z.boolean()),
+  // Ouroboros account state. Optional inside because a store that has never imported a save has
+  // not learned the flag yet, and "unknown" must stay distinguishable from "false" -- the gate
+  // that reads it treats a missing value as not-reset, which is the safe direction for offering
+  // a tier the account may not have.
+  ouroState: z.object({ firstOuroResetDone: z.boolean().optional() }).strict(),
 
   optimizerSettings: z.object({
     shipEnabled: z.record(numericKey, z.boolean()),
