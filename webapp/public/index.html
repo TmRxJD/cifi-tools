@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>CIFI Sim Tools</title>
-<meta name="description" content="Hunter and fleet build optimizer for CIFI. An independent fork of cifi-tools.com." />
+<meta name="description" content="Hunter and fleet build optimizer for CIFI. Forks the cifi-tools.com hunter sim and adds fleet &amp; ship install optimization and save-file import." />
 <link rel="icon" href="favicon.svg" type="image/svg+xml" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -38,30 +38,59 @@ tailwind.config = {
         display: ['Space Grotesk', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
       },
       colors: {
-        // Cool slate. Same VALUE structure as Tailwind's neutral gray, so every
-        // existing contrast relationship and layout weight is preserved --
-        // rotated to ~218deg with rising saturation toward the dark end.
+        // Midnight. Near-black ground with a strong blue undertone (~222deg),
+        // deliberately DARKER than the neutral-gray original rather than only a
+        // hue rotation -- a first pass preserved the original's exact value
+        // structure and was too conservative to read as a change at all.
         // Mirrors --surface-* in tokens.css; change both together.
         gray: {
-          50:  '#f4f7fb',
-          100: '#e7edf5',
-          200: '#ccd6e5',
-          300: '#b8c3d4',
-          400: '#99a7bd',
-          500: '#7a89a3',
-          600: '#55627a',
-          700: '#38455c',
-          750: '#2c374b',  // was used twice in app.js and is NOT a stock Tailwind
+          50:  '#eef2f8',
+          100: '#dde5f0',
+          200: '#c2cfe2',
+          300: '#9fb0ca',
+          400: '#8b9cb8',
+          500: '#6d80a4',
+          600: '#4a5872',
+          700: '#2c3852',
+          750: '#232d45',  // was used twice in app.js and is NOT a stock Tailwind
                            // shade, so those two call sites silently rendered no
                            // background at all. Defining it fixes them.
-          800: '#212c3e',
-          900: '#141c29',
-          950: '#0c121c',
+          800: '#1a2338',
+          900: '#0e1522',
+          950: '#070b12',
         },
+        // ONE PRIMARY-ACTION COLOUR, REACHED FROM TWO ALIASES.
+        //
+        // Primary actions were split across two hues for no stated reason:
+        // `blue` on the hunter pages (New Build, Import, Borge Stats -- 112
+        // literal usages) and `purple` on the Fleet page (36). Against the
+        // darker ground that split reads as two competing accents rather than
+        // one system. Aliasing BOTH onto the same midnight blue unifies every
+        // primary action in the app without editing a single call site.
+        //
+        // This is only safe because Knox's blue does NOT come from these
+        // literals -- it is built dynamically from HUNTER_ACCENTS in app.js,
+        // which now points at `sky` below. Verified: all 112 `blue-*` usages
+        // are literal generic UI, and zero are the `${accent}` template form.
         purple: {
-          50:  '#f2f0fe', 100: '#e6e2fd', 200: '#cfc7fc', 300: '#a99ffb',
-          400: '#a99ffb', 500: '#8d80f7', 600: '#7059ef', 700: '#5a44d4',
-          800: '#4835ab', 900: '#3a2c87', 950: '#241a58',
+          50:  '#eef2fe', 100: '#dbe3fd', 200: '#bccbfa', 300: '#9db2f7',
+          400: '#7d9bf5', 500: '#5578ee', 600: '#3b5bdb', 700: '#2d46b0',
+          800: '#24398c', 900: '#1e2f70', 950: '#131d47',
+        },
+        blue: {
+          50:  '#eef2fe', 100: '#dbe3fd', 200: '#bccbfa', 300: '#9db2f7',
+          400: '#7d9bf5', 500: '#5578ee', 600: '#3b5bdb', 700: '#2d46b0',
+          800: '#24398c', 900: '#1e2f70', 950: '#131d47',
+        },
+        // KNOX. Moved off `blue` and onto a brighter azure so the hunter
+        // identity stays unmistakably blue to the community while being clearly
+        // separable from the midnight blue that now means "primary action".
+        // Borge red and Ozzy green are untouched; this keeps Knox equally
+        // distinct rather than letting it collapse into the app's accent.
+        sky: {
+          50:  '#eff8ff', 100: '#dbeefe', 200: '#b9e0fe', 300: '#7cccfd',
+          400: '#38b3f8', 500: '#0e99e9', 600: '#027ac7', 700: '#0361a1',
+          800: '#075285', 900: '#0c446e', 950: '#082b49',
         },
       },
     },
@@ -71,7 +100,7 @@ tailwind.config = {
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" />
-<link rel="stylesheet" href="tokens.css?v=20260907a" />
+<link rel="stylesheet" href="tokens.css?v=20260907d" />
 <style>
   body { background: var(--surface-900); color: var(--surface-200); }
   .stepper-btn { @apply w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed text-white; }
@@ -195,9 +224,10 @@ tailwind.config = {
          mt-auto keeps it pinned to the bottom of the sidebar whether or not the
          bridge status block above is visible. -->
     <div class="fork-credit mt-auto px-4 pb-4 pt-2 leading-relaxed border-t border-gray-700/30">
-      An independent fork of
-      <a href="https://cifi-tools.com" target="_blank" rel="noopener noreferrer">cifi-tools.com</a>,
-      rebuilt from the game's own data. Not affiliated with cifi-tools or the CIFI developers.
+      Hunter sim forked from
+      <a href="https://cifi-tools.com" target="_blank" rel="noopener noreferrer">cifi-tools.com</a>.
+      Adds fleet&nbsp;&amp; ship optimization and save import.
+      Not affiliated with cifi-tools or the CIFI developers.
     </div>
   </aside>
 
@@ -701,7 +731,7 @@ tailwind.config = {
      CDN-blocked user still gets the whole tool minus cloud saves. -->
 <script src="https://cdn.jsdelivr.net/npm/appwrite@27.0.0/dist/iife/sdk.js"></script>
 <script src="cloudSync.js?v=20260907c-stamps"></script>
-<script src="app.js?v=20260907j-restyle"></script>
+<script src="app.js?v=20260907k-midnight"></script>
 <script>
   // Custom (non-Tabler) sidebar icons: real game-asset SVG paths copied verbatim from the
   // live site's rendered DOM (Relics/Loop Mods/Milestones use bespoke icons, not Tabler's).

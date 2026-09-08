@@ -26,39 +26,55 @@
 
 :root {
   /* --- Ground / surface ramp -------------------------------------------
-     Cool slate: the same VALUE structure as Tailwind's neutral gray (so every
-     existing layout keeps its contrast relationships and nothing shifts
-     position or weight), rotated to ~218deg and given rising saturation toward
-     the dark end. That hue shift is the whole visual identity change -- the
-     layout is deliberately untouched, because the layout is the familiarity
-     the community already has.
+     Midnight. A near-black ground with a strong blue undertone (~222deg),
+     deliberately DARKER than the neutral-gray original rather than merely a
+     different hue.
+
+     A first pass at this preserved the original's exact value structure and
+     only rotated the hue. That was too conservative to read as a change at all
+     -- it kept the identity of the thing it was supposed to differentiate
+     from. The dark end here drops well below the original (#0e1522 against
+     #111827 for the page ground, #070b12 for the deepest wells), which is what
+     makes the panels separate from the ground on their own rather than needing
+     borders to be legible.
+
+     The LIGHT end and the text steps keep their contrast relationships, so no
+     layout shifts weight and nothing becomes unreadable -- only the grounds
+     move. That is the part worth preserving: the community's familiarity lives
+     in the layout, not in the exact darkness of the background.
 
      These MUST mirror tailwind.config's colors.gray entries exactly. */
-  --surface-50:  #f4f7fb;
-  --surface-100: #e7edf5;
-  --surface-200: #ccd6e5;
-  --surface-300: #b8c3d4;
-  --surface-400: #99a7bd;  /* secondary text -- 7.0:1 on --surface-900 */
-  --surface-500: #7a89a3;  /* muted labels  -- 4.9:1 on --surface-900, passes AA
+  --surface-50:  #eef2f8;
+  --surface-100: #dde5f0;
+  --surface-200: #c2cfe2;
+  --surface-300: #9fb0ca;
+  --surface-400: #8b9cb8;  /* secondary text -- 6.6:1 on --surface-900 */
+  --surface-500: #6d80a4;  /* muted labels  -- 4.6:1 on --surface-900, passes AA
                               where the original's equivalent measured ~4.3:1 */
-  --surface-600: #55627a;
-  --surface-700: #38455c;  /* raised controls, buttons */
-  --surface-800: #212c3e;  /* cards, panels */
-  --surface-900: #141c29;  /* page ground */
-  --surface-950: #0c121c;
+  --surface-600: #4a5872;
+  --surface-700: #2c3852;  /* raised controls, buttons */
+  --surface-800: #1a2338;  /* cards, panels */
+  --surface-900: #0e1522;  /* page ground */
+  --surface-950: #070b12;  /* wells, inset tracks */
 
   /* --- Accent ------------------------------------------------------------
-     Indigo-violet. Not a new choice so much as a FORMALISED one: violet was
-     already the de-facto primary (36 usages, including the Fleet page's main
-     CTA) but was applied ad-hoc alongside blue and indigo with no rule about
-     which meant what. It is kept because it is the one hue that collides with
-     none of the three hunter colours, and shifted toward periwinkle so it is
-     not stock Tailwind purple sitting on a custom ground. */
-  --accent-400: #a99ffb;
-  --accent-500: #8d80f7;
-  --accent-600: #7059ef;   /* primary actions */
-  --accent-700: #5a44d4;
-  --accent-800: #4835ab;
+     Midnight blue. Deep and saturated rather than bright -- it belongs to the
+     same family as the ground, which is what makes the whole app read as one
+     designed surface instead of a neutral shell with coloured buttons stuck
+     on it.
+
+     THE ONE REAL TENSION, STATED RATHER THAN HIDDEN: blue is also Knox's
+     hunter colour. They are kept apart by VALUE and by hue direction -- Knox
+     is a bright sky blue (#60a5fa / #93c5fd, ~213deg, high lightness) applied
+     only to hunter chrome, while this is a deep royal blue (~226deg) applied
+     only to actions. If the two ever start reading as the same thing, this is
+     the knob to turn, not Knox's -- the hunter colours are the game's and are
+     not ours to move. */
+  --accent-400: #7d9bf5;
+  --accent-500: #5578ee;
+  --accent-600: #3b5bdb;   /* primary actions -- 5.6:1 against white label text */
+  --accent-700: #2d46b0;
+  --accent-800: #24398c;
 
   /* --- Semantic ----------------------------------------------------------
      Deliberately NOT retinted. Green/red carry gain/loss in the stat diffs and
@@ -80,9 +96,9 @@
   /* --- Hairlines ---------------------------------------------------------
      Alpha rather than a flat colour so borders read correctly over any of the
      surface steps instead of only over the one they were sampled against. */
-  --line-soft:   rgb(153 167 189 / .10);
-  --line:        rgb(153 167 189 / .16);
-  --line-strong: rgb(153 167 189 / .26);
+  --line-soft:   color-mix(in srgb, var(--surface-400) 10%, transparent);
+  --line:        color-mix(in srgb, var(--surface-400) 16%, transparent);
+  --line-strong: color-mix(in srgb, var(--surface-400) 26%, transparent);
 
   --radius-sm: .25rem;
   --radius:    .375rem;
@@ -160,7 +176,14 @@ h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -.
 /* The fork credit. Deliberately in the persistent chrome rather than buried on
    an About page: this tool borrows its layout, its terminology and half its
    name from cifi-tools.com, and the honest place to say so is wherever those
-   things are visible. */
+   things are visible.
+
+   It leads with what is ADDED rather than with provenance claims about the
+   data. cifi-tools was built in collaboration with the game's developers, so
+   any wording implying we are closer to the source reads as a dig and is not
+   true. The novel surface -- fleet and ship install optimization, save-file
+   import -- is the honest differentiator, and it is substantial: the original
+   models none of it. */
 .fork-credit {
   font-size: 11px;
   color: var(--surface-500);
@@ -197,7 +220,7 @@ h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -.
    .boss-stat-card independently declared the same translucent background with
    no border; they are one thing and are now defined as one. */
 .stat-card, .resource-card, .boss-stat-card {
-  background-color: rgb(33 44 62 / .55);
+  background-color: color-mix(in srgb, var(--surface-800) 55%, transparent);
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-md);
   height: 100%;
@@ -205,7 +228,7 @@ h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -.
 }
 .stat-card:hover, .resource-card:hover, .boss-stat-card:hover {
   border-color: var(--line);
-  background-color: rgb(33 44 62 / .75);
+  background-color: color-mix(in srgb, var(--surface-800) 75%, transparent);
 }
 
 .stat-card { padding: .45rem; }
@@ -267,7 +290,7 @@ h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -.
   border-radius: 9999px;
   margin-top: .25rem;
 }
-.boss-progress-bg { position: absolute; height: 100%; width: 100%; background-color: rgb(56 69 92 / .55); }
+.boss-progress-bg { position: absolute; height: 100%; width: 100%; background-color: color-mix(in srgb, var(--surface-700) 55%, transparent); }
 .boss-progress-fill { position: absolute; height: 100%; transition: width .5s ease-out; }
 
 /* ============================================================================
@@ -291,11 +314,11 @@ h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -.
 .build-card-wrapper.dragging { opacity: .4; }
 
 .header-wrapper {
-  background-color: rgb(33 44 62 / .95);
+  background-color: color-mix(in srgb, var(--surface-800) 95%, transparent);
   border-radius: var(--radius) var(--radius) 0 0;
   overflow: hidden;
 }
-.header-main { background: linear-gradient(to right, rgb(33 44 62 / .95), rgb(20 28 41 / .95)); }
+.header-main { background: linear-gradient(to right, color-mix(in srgb, var(--surface-800) 95%, transparent), color-mix(in srgb, var(--surface-900) 95%, transparent)); }
 
 /* ============================================================================
    Controls
@@ -305,14 +328,14 @@ h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -.
   align-items: center;
   padding: .25rem .5rem;
   border-radius: var(--radius-sm);
-  background-color: rgb(56 69 92 / .40);
+  background-color: color-mix(in srgb, var(--surface-700) 40%, transparent);
   border: 1px solid transparent;
   color: var(--surface-200);
   white-space: nowrap;
   transition: background-color .15s ease, border-color .15s ease, color .15s ease;
 }
 .action-button-compact:hover {
-  background-color: rgb(56 69 92 / .70);
+  background-color: color-mix(in srgb, var(--surface-700) 70%, transparent);
   border-color: var(--line);
   color: #fff;
 }
@@ -326,8 +349,8 @@ h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -.
   min-width: 2.5rem;
   transition: background-color .15s ease, color .15s ease;
 }
-.ctrl-btn--gray { background-color: rgb(56 69 92 / .55); color: var(--surface-200); }
-.ctrl-btn--gray:hover { background-color: rgb(85 98 122 / .75); color: #fff; }
+.ctrl-btn--gray { background-color: color-mix(in srgb, var(--surface-700) 55%, transparent); color: var(--surface-200); }
+.ctrl-btn--gray:hover { background-color: color-mix(in srgb, var(--surface-600) 75%, transparent); color: #fff; }
 
 .grip-handle { touch-action: none; }
 
@@ -335,7 +358,7 @@ h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -.
 .progress-fill--maxed { filter: brightness(2.8) saturate(1.1); }
 
 .category-drop-zone { transition: background-color .15s ease; }
-.category-drop-zone.drag-over { background-color: rgb(112 89 239 / .20); }
+.category-drop-zone.drag-over { background-color: color-mix(in srgb, var(--accent-600) 20%, transparent); }
 
 /* ============================================================================
    Navigation
@@ -351,10 +374,10 @@ h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -.
   color: var(--surface-400);
   transition: color .15s ease, background-color .15s ease, box-shadow .15s ease;
 }
-.sidebar-link:hover { color: var(--surface-100); background-color: rgb(33 44 62 / .70); }
+.sidebar-link:hover { color: var(--surface-100); background-color: color-mix(in srgb, var(--surface-800) 70%, transparent); }
 .sidebar-link.active {
   color: #fff;
-  background-color: rgb(33 44 62 / .95);
+  background-color: color-mix(in srgb, var(--surface-800) 95%, transparent);
   /* An accent rail rather than a plain fill. The old active state differed from
      hover only by background alpha, which is a weak signal on a 14-item list. */
   box-shadow: inset 2px 0 0 var(--accent-500);
@@ -374,8 +397,8 @@ h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -.
   border: 1px solid transparent;
   transition: all .15s ease;
 }
-.nav-pill:hover { color: var(--surface-100); background-color: rgb(56 69 92 / .55); }
-.nav-pill.active { background-color: rgb(56 69 92 / .95); color: #fff; border-color: var(--line); }
+.nav-pill:hover { color: var(--surface-100); background-color: color-mix(in srgb, var(--surface-700) 55%, transparent); }
+.nav-pill.active { background-color: color-mix(in srgb, var(--surface-700) 95%, transparent); color: #fff; border-color: var(--line); }
 
 /* Hunter identity colours are the GAME's, not ours, and the community reads
    them at a glance -- Borge red, Ozzy green, Knox blue. They are deliberately
@@ -388,9 +411,11 @@ h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -.
   background: linear-gradient(to right, rgb(20 83 45 / .45), rgb(20 83 45 / .20));
   color: #86efac; border-color: rgb(21 128 61 / .55);
 }
+/* Knox's azure, matching HUNTER_ACCENTS.knox = 'sky' in app.js. If these two
+   disagree the nav pill and the page chrome render as different hunters. */
 .nav-pill.active-knox {
-  background: linear-gradient(to right, rgb(30 58 138 / .45), rgb(30 58 138 / .20));
-  color: #93c5fd; border-color: rgb(29 78 216 / .55);
+  background: linear-gradient(to right, rgb(8 43 73 / .60), rgb(8 43 73 / .25));
+  color: #7cccfd; border-color: rgb(3 97 161 / .60);
 }
 
 .nav-pill-mobile {
@@ -402,16 +427,16 @@ h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -.
   font-size: 15px;
   font-weight: 500;
   color: var(--surface-300);
-  background-color: rgb(56 69 92 / .55);
+  background-color: color-mix(in srgb, var(--surface-700) 55%, transparent);
   transition: all .15s ease;
 }
-.nav-pill-mobile:hover, .nav-pill-mobile:active { color: #fff; background-color: rgb(85 98 122 / .70); }
+.nav-pill-mobile:hover, .nav-pill-mobile:active { color: #fff; background-color: color-mix(in srgb, var(--surface-600) 70%, transparent); }
 .nav-pill-mobile.active,
 .nav-pill-mobile.active-borge,
 .nav-pill-mobile.active-ozzy,
 .nav-pill-mobile.active-knox {
   color: #fff;
-  background-color: rgb(85 98 122 / .80);
+  background-color: color-mix(in srgb, var(--surface-600) 80%, transparent);
   box-shadow: inset 2px 0 0 var(--accent-500);
 }
 
@@ -438,7 +463,7 @@ h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -.
   width: 2.75rem;
   height: 2.75rem;
   border-radius: var(--radius-lg);
-  background-color: rgb(56 69 92 / .40);
+  background-color: color-mix(in srgb, var(--surface-700) 40%, transparent);
   border: 1px solid var(--line-soft);
   color: var(--surface-500);
   margin-bottom: .25rem;

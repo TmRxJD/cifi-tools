@@ -366,7 +366,13 @@ function evalStateFor(build, iterations) {
 
 const MAT_LABELS = ['Obsidian', 'Behlium', 'Hellish-Biomatter'];
 const HUNTER_TITLES = { borge: 'Borge Simulator', ozzy: 'Ozzy Simulator', knox: 'Knox Simulator' };
-const HUNTER_ACCENTS = { borge: 'red', ozzy: 'green', knox: 'blue' };
+// Knox is `sky`, not `blue`, and that is a palette decision rather than a change
+// of identity: `blue` is now the app's single primary-action colour (see the
+// aliases in index.html's tailwind.config), so leaving Knox on it would have made
+// every Knox page's chrome indistinguishable from its buttons. `sky` is a
+// brighter azure -- still unmistakably Knox blue, clearly separable from the
+// midnight blue that means "action". Borge and Ozzy keep their game colours.
+const HUNTER_ACCENTS = { borge: 'red', ozzy: 'green', knox: 'sky' };
 
 function newDraftBuild() {
   const talents = {}; defs().talents.forEach((t) => { talents[t.id] = 0; });
