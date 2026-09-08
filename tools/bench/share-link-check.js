@@ -71,6 +71,23 @@ for (const [p, q, want] of CASES) {
   check(`404 rewrite ${p}${q || ''} -> ${want}`, got === want, `got ${got}`);
 }
 
+// 4. THE IMPORT MUST FILE UNDER THE CODE'S HUNTER, not whichever one is on screen.
+//
+// Observed live: importing an Ozzy code while viewing Borge filed it under BORGE, and the store
+// validator flagged `borge.builds[0].attributes.timeless = 5 is not legal` -- an Ozzy allocation
+// is illegal in Borge's tree. A build under the wrong hunter is evaluated with the wrong hunter's
+// parameter vector, which this project has already been burned by once.
+// Slice to the NEXT top-level declaration rather than a fixed byte count: the function grew past
+// a 4000-char window when the reasoning was documented, and the check then failed on its own
+// window instead of on the code -- a false failure is as bad as a false pass.
+const applyStart = app.indexOf('function applyImportedBuild');
+const applyEnd = app.indexOf("\ndocument.getElementById('importBuildOnlyBtn')", applyStart);
+const applyFn = app.slice(applyStart, applyEnd > applyStart ? applyEnd : applyStart + 8000);
+check('the imported build is filed under the payload hunter, not currentHunter',
+  /const targetHunter = /.test(applyFn) && /store\[targetHunter\]\.builds\.push\(build\)/.test(applyFn));
+check('the destination does not depend on switchHunter having succeeded',
+  !/store\[currentHunter\]\.builds\.push/.test(applyFn));
+
 console.log('');
 if (failures) {
   console.log(`FAIL  ${failures} problem(s): a shared build link will not open.`);

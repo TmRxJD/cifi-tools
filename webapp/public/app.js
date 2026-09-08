@@ -3306,7 +3306,24 @@ document.getElementById('importCodeInput').addEventListener('input', async (e) =
 });
 
 function applyImportedBuild(payload, includeUpgrades) {
-  if (payload.hunter && payload.hunter !== currentHunter) switchHunter(payload.hunter);
+  // THE BUILD IS FILED UNDER THE CODE'S OWN HUNTER, EXPLICITLY.
+  //
+  // This used to call switchHunter() and then push into `store[currentHunter]`, i.e. it depended
+  // on a SIDE EFFECT of that call having already mutated a global. Observed on the deployed site:
+  // importing an Ozzy code while viewing Borge filed the build under BORGE -- three of them --
+  // and the store validator caught it as `borge.builds[0].attributes.timeless = 5 is not legal`,
+  // because an Ozzy allocation is illegal in Borge's attribute tree.
+  //
+  // A build under the wrong hunter is evaluated with the wrong hunter's parameter vector, which is
+  // the failure this project has already paid for once: a Knox build scored with Ozzy's stats
+  // returned a perfectly plausible number and sent an entire investigation the wrong way.
+  //
+  // `targetHunter` is derived from the payload and used for every write below, so the destination
+  // no longer depends on whether a UI navigation happened to succeed first. switchHunter is still
+  // called -- the user should end up looking at the build they just imported -- but nothing
+  // depends on it having worked.
+  const targetHunter = (payload.hunter && store[payload.hunter]) ? payload.hunter : currentHunter;
+  if (targetHunter !== currentHunter) switchHunter(targetHunter);
   const build = newDraftBuild();
   // Must assign a real id before pushing directly into the store -- leaving it null and
   // relying on the "Save Build" handler to assign one later only works for drafts opened
@@ -3334,21 +3351,21 @@ function applyImportedBuild(payload, includeUpgrades) {
     // store.globalUpgrades / store.gems) so every build -- including ones that don't exist
     // yet -- inherits the real current account state through the normal fallback path,
     // instead of needing its own copy of every override.
-    const baseKeys = new Set(window.HUNTER_DEFS[currentHunter]?.baseStatKeys || []);
+    const baseKeys = new Set(window.HUNTER_DEFS[targetHunter]?.baseStatKeys || []);
     const applyGlobal = (key, val) => {
-      if (baseKeys.has(key)) { store[currentHunter].hunterStats[key] = val; return; }
+      if (baseKeys.has(key)) { store[targetHunter].hunterStats[key] = val; return; }
       const m = /^upgrades\.gems_nodes\.(.+)$/.exec(key);
       if (m) { /* gem node state has its own dedicated store shape; skip rather than guess */ return; }
       const u = /^upgrades\.(.+)$/.exec(key);
       if (u) { store.globalUpgrades[u[1]] = val; return; }
-      if (key in store[currentHunter].hunterStats) store[currentHunter].hunterStats[key] = val;
+      if (key in store[targetHunter].hunterStats) store[targetHunter].hunterStats[key] = val;
     };
     Object.entries(payload.overrides || {}).forEach(([key, val]) => applyGlobal(key, val));
     Object.entries(payload.upgradeOverrides || {}).forEach(([key, val]) => {
       if (!window.isPureLootOverrideKey(key)) applyGlobal(key, val);
     });
   }
-  store[currentHunter].builds.push(build);
+  store[targetHunter].builds.push(build);
   saveStore();
   resetImportModal();
   renderCategoryTabs(); renderBuildList();
