@@ -12,7 +12,7 @@
   // Bump alongside the ?v= on the <script> tags in index.html. A Worker URL is cached
   // independently of the page, so without this a worker.js change silently keeps running the
   // previous version after a reload.
-  const WORKER_VERSION = '20260906e';
+  const WORKER_VERSION = '20260908a-engine';
 
   // Each worker compiles and holds its OWN copy of the WASM module and churns a fresh instance
   // per evaluation (required for determinism -- the evaluator's RNG state lives in mutable wasm
@@ -49,6 +49,25 @@
         this.readyPromises.push(ready);
         this.workers.push(worker);
       }
+
+      // THE ENGINE IS RESOLVED ONCE, HERE, AND HANDED TO EVERY WORKER.
+      //
+      // Only the main thread can reach the companion extension, so only it can obtain
+      // cifi-tools' evaluator without our site serving a copy. Compiling once and cloning the
+      // Module to each worker is also strictly cheaper than N fetches and N compiles.
+      //
+      // A failure is FORWARDED rather than swallowed: each worker is waiting on an injected
+      // module, so without this every one of them would wait forever and ready() would never
+      // settle -- the hang that the onerror handler above exists to prevent for the other
+      // failure mode.
+      this.enginePromise = HunterSim.loadWasmModule().then((mod) => {
+        this.workers.forEach((w) => w.postMessage({ type: 'engine', module: mod }));
+        return null;
+      }).catch((err) => {
+        const error = String((err && err.message) || err);
+        this.workers.forEach((w) => w.postMessage({ type: 'engine', error }));
+        return error;
+      });
     }
 
     _onMessage(e) {
@@ -63,8 +82,10 @@
 
     /** First init error, or null if every worker came up clean. */
     async ready() {
-      const errors = await Promise.all(this.readyPromises);
-      return errors.find((e) => e) || null;
+      // The engine is awaited alongside the workers, so a pool is never reported ready while its
+      // evaluator is still unresolved -- scoring may only start once both are settled.
+      const [engineError, errors] = await Promise.all([this.enginePromise, Promise.all(this.readyPromises)]);
+      return engineError || errors.find((e) => e) || null;
     }
 
     /** Score a batch, split evenly across workers, preserving input order. */

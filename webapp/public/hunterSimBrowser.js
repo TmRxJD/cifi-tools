@@ -41,14 +41,111 @@
     return paramsPromise;
   }
 
+  // WHERE THE SIMULATION ENGINE COMES FROM, and why there are two answers.
+  //
+  // `release.wasm` is cifi-tools.com's compiled evaluator. It is THEIRS. Serving a copy of it from
+  // our own site is redistribution, so the preferred source is the COMPANION EXTENSION
+  // (see extension/), which fetches it into the user's own browser from the origin that owns it.
+  // Nothing is copied and nothing is cached on a server of ours.
+  //
+  // The extension is required because cifi-tools.com sends no Access-Control-Allow-Origin header
+  // on any path -- measured on GET and OPTIONS -- so page JavaScript cannot fetch it cross-origin
+  // at all. That is a browser rule, not a policy choice, and no amount of page-side code works
+  // around it.
+  //
+  // The local fallback exists for DEVELOPMENT, where the file sits next to this one. It is also
+  // what the hosted site currently uses; removing it is a separate decision recorded in
+  // THIRD-PARTY.md, and this loader is the one place that has to change when it is made.
+  const BRIDGE_TIMEOUT_MS = 15000;
+  // Where cifi-tools serves its evaluator today. Changing this needs only a deploy of this file;
+  // the extension validates the origin, not the exact path, precisely so that stays true.
+  const ENGINE_PATH = '/wasm/release.wasm';
+
+  function engineFromExtension() {
+    // Detected from a data attribute the content script sets at document_start. A `window`
+    // property would NOT work: a content script runs in an isolated world, so anything it assigns
+    // to `window` is invisible here.
+    if (typeof document === 'undefined'
+      || document.documentElement?.dataset?.cifiCompanionBridge !== '1') {
+      return Promise.resolve(null);   // not installed -- caller falls back
+    }
+    return new Promise((resolve) => {
+      const id = `eng-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      let done = false;
+      const finish = (value) => {
+        if (done) return;
+        done = true;
+        window.removeEventListener('message', onMessage);
+        clearTimeout(timer);
+        resolve(value);
+      };
+      // A TIMEOUT IS NOT OPTIONAL. If the extension is installed but its service worker is asleep,
+      // disabled mid-session, or its host permission was revoked, the reply simply never arrives
+      // and the app would hang at startup with no error -- the worst failure shape available.
+      const timer = setTimeout(() => finish(null), BRIDGE_TIMEOUT_MS);
+      const onMessage = (event) => {
+        if (event.source !== window) return;
+        const d = event.data;
+        if (!d || d.type !== 'cifi-companion:engine' || d.id !== id) return;
+        if (!d.ok) { console.warn(`[cifi] companion bridge could not load the engine: ${d.error}`); finish(null); return; }
+        const bin = atob(d.base64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        finish(bytes.buffer);
+      };
+      window.addEventListener('message', onMessage);
+      // The path is sent by the PAGE so that if cifi-tools ever renames or moves the engine, this
+      // is a one-line site deploy rather than an extension update and a store review. The
+      // extension pins the ORIGIN; we choose the file within it.
+      window.postMessage({ type: 'cifi-companion:get-engine', id, path: ENGINE_PATH }, window.location.origin);
+    });
+  }
+
   let wasmModulePromise = null;
   function loadWasmModule() {
     if (!wasmModulePromise) {
-      wasmModulePromise = fetch(assetUrl('release.wasm'))
-        .then((r) => r.arrayBuffer())
+      wasmModulePromise = engineFromExtension()
+        .then((buf) => buf || fetch(assetUrl('release.wasm')).then((r) => {
+          if (!r.ok) {
+            throw new Error('The simulation engine is unavailable. Install the CIFI Tools '
+              + 'Companion Bridge extension (see extension/README.md), which loads it from '
+              + 'cifi-tools.com in your own browser.');
+          }
+          return r.arrayBuffer();
+        }))
         .then((buf) => WebAssembly.compile(buf));
     }
     return wasmModulePromise;
+  }
+
+  // INJECTION, FOR WORKERS. A Worker has no `document`, so it can never reach the companion
+  // extension -- the bridge is a content script and content scripts do not run in workers. Left to
+  // itself a worker would fall back to fetching `release.wasm` from our origin, which is precisely
+  // the copy we are trying not to serve.
+  //
+  // So the MAIN THREAD resolves the engine once (through the extension) and hands each worker the
+  // COMPILED MODULE. `WebAssembly.Module` is structured-cloneable, so it crosses postMessage
+  // intact, and compiling once for the whole pool is strictly less work than N fetches.
+  //
+  // `expectInjectedWasm()` must be called BEFORE any evaluation so the fetch path is never taken:
+  // it parks `wasmModulePromise` on a promise the injection settles. A worker that is promised an
+  // engine and never given one therefore WAITS rather than quietly fetching a copy.
+  let injectResolve = null;
+  let injectReject = null;
+  function expectInjectedWasm() {
+    if (wasmModulePromise) return;
+    wasmModulePromise = new Promise((res, rej) => { injectResolve = res; injectReject = rej; });
+  }
+  function setWasmModule(mod) {
+    expectInjectedWasm();
+    if (injectResolve) injectResolve(mod);
+  }
+  // The failure path is not optional: if the main thread cannot obtain the engine, every worker
+  // must be told so its init can fail loudly. Without this they wait on a promise nothing will
+  // ever settle, and the optimizer hangs with no error -- the worst shape available.
+  function failWasmModule(err) {
+    expectInjectedWasm();
+    if (injectReject) injectReject(err instanceof Error ? err : new Error(String(err)));
   }
 
   // Returns a FRESH instance's exports every call -- deliberately not cached, see note above.
@@ -429,7 +526,7 @@
   }
   function isAbort(err) { return !!err && err.name === ABORTED; }
 
-  global.HunterSim = {
+  global.HunterSim = { expectInjectedWasm, setWasmModule, failWasmModule, loadWasmModule,
     evaluate, evaluateDetailed, buildArgs, resolveParam, compileEvaluator, loadParams, loadWasm,
     clearCache, throwIfAborted, isAbort, ABORTED,
     // Exposed so a liveness check can tell "changes no wasm argument" apart from "does nothing":

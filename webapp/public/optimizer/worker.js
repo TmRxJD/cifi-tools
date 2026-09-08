@@ -59,8 +59,24 @@ async function evaluateWithGcRetry(item, iterations) {
   throw lastError;
 }
 
+// A WORKER MUST NEVER FETCH THE ENGINE ITSELF. It has no `document`, so it cannot reach the
+// companion extension (a content script does not run in workers), and falling back to fetching
+// `release.wasm` from our own origin is exactly the copy the extension exists to avoid serving.
+// The pool resolves it once on the main thread and posts the COMPILED MODULE; this parks the
+// loader on a promise that message settles, so an engine that never arrives WAITS visibly rather
+// than silently downloading one.
+HunterSim.expectInjectedWasm();
+
 self.onmessage = async (e) => {
   const msg = e.data;
+
+  // Delivered by ScoringPool right after `init`. `init` is async and awaits the module, so this
+  // message is processed while it waits -- the ordering is safe by construction, not by luck.
+  if (msg.type === 'engine') {
+    if (msg.error) HunterSim.failWasmModule(msg.error);
+    else HunterSim.setWasmModule(msg.module);
+    return;
+  }
 
   if (msg.type === 'init') {
     // A throw here must still post a reply. If it doesn't, the main thread's ready() promise
