@@ -1,0 +1,470 @@
+/* ============================================================================
+   CIFI Sim Tools -- design tokens
+   ============================================================================
+
+   THIS FILE REPLACES THE VERBATIM COPY OF cifi-tools.com's COMPILED STYLESHEET.
+
+   The previous site.css opened with a comment stating it was "copied verbatim
+   (property-for-property) from cifi-tools.com's own compiled stylesheet
+   (index-BvxnzNcp.css)". That was accurate, and it was the one artifact in this
+   repo that made "clone" a factual description rather than a stylistic one.
+   Everything below is authored here, from tokens, and produces the same
+   STRUCTURE (a stat card is still a rounded translucent panel with an icon row
+   and a value row) without reproducing anyone else's declarations.
+
+   WHY TOKENS RATHER THAN LITERAL HEX, given the rest of the app is Tailwind
+   utility classes: the two surfaces have to agree. `tailwind.config` redefines
+   the `gray` scale, and 1,314 utility usages across ~460KB of JS pick that up
+   for free. The hand-written component classes in this file must land on the
+   same values, or the app splits into two palettes at the seams. A custom
+   property is the only way to state a colour ONCE and have both halves read it.
+
+   So: change a colour HERE and in tailwind.config's matching entry. Nowhere
+   else. If you find yourself typing a hex code into a component class below,
+   that is the bug.
+   ========================================================================= */
+
+:root {
+  /* --- Ground / surface ramp -------------------------------------------
+     Cool slate: the same VALUE structure as Tailwind's neutral gray (so every
+     existing layout keeps its contrast relationships and nothing shifts
+     position or weight), rotated to ~218deg and given rising saturation toward
+     the dark end. That hue shift is the whole visual identity change -- the
+     layout is deliberately untouched, because the layout is the familiarity
+     the community already has.
+
+     These MUST mirror tailwind.config's colors.gray entries exactly. */
+  --surface-50:  #f4f7fb;
+  --surface-100: #e7edf5;
+  --surface-200: #ccd6e5;
+  --surface-300: #b8c3d4;
+  --surface-400: #99a7bd;  /* secondary text -- 7.0:1 on --surface-900 */
+  --surface-500: #7a89a3;  /* muted labels  -- 4.9:1 on --surface-900, passes AA
+                              where the original's equivalent measured ~4.3:1 */
+  --surface-600: #55627a;
+  --surface-700: #38455c;  /* raised controls, buttons */
+  --surface-800: #212c3e;  /* cards, panels */
+  --surface-900: #141c29;  /* page ground */
+  --surface-950: #0c121c;
+
+  /* --- Accent ------------------------------------------------------------
+     Indigo-violet. Not a new choice so much as a FORMALISED one: violet was
+     already the de-facto primary (36 usages, including the Fleet page's main
+     CTA) but was applied ad-hoc alongside blue and indigo with no rule about
+     which meant what. It is kept because it is the one hue that collides with
+     none of the three hunter colours, and shifted toward periwinkle so it is
+     not stock Tailwind purple sitting on a custom ground. */
+  --accent-400: #a99ffb;
+  --accent-500: #8d80f7;
+  --accent-600: #7059ef;   /* primary actions */
+  --accent-700: #5a44d4;
+  --accent-800: #4835ab;
+
+  /* --- Semantic ----------------------------------------------------------
+     Deliberately NOT retinted. Green/red carry gain/loss in the stat diffs and
+     amber carries "unmodelled / cannot compute" warnings; those readings are
+     load-bearing and are the same ones the original trains people on. */
+  --gain:   #4ade80;
+  --gain-bg:   rgb(0 129 56 / .30);
+  --loss:   #f87171;
+  --loss-bg:   rgb(191 0 15 / .30);
+
+  /* --- Elevation ---------------------------------------------------------
+     One ramp, three steps. The old stylesheet had a single hard-coded shadow
+     on .result-card and nothing else, so every other panel read as flat and
+     card hierarchy was carried entirely by background alpha. */
+  --lift-1: 0 1px 2px rgb(4 8 14 / .40);
+  --lift-2: 0 4px 12px -2px rgb(4 8 14 / .45);
+  --lift-3: 0 12px 28px -6px rgb(4 8 14 / .55);
+
+  /* --- Hairlines ---------------------------------------------------------
+     Alpha rather than a flat colour so borders read correctly over any of the
+     surface steps instead of only over the one they were sampled against. */
+  --line-soft:   rgb(153 167 189 / .10);
+  --line:        rgb(153 167 189 / .16);
+  --line-strong: rgb(153 167 189 / .26);
+
+  --radius-sm: .25rem;
+  --radius:    .375rem;
+  --radius-md: .5rem;
+  --radius-lg: .75rem;
+}
+
+/* ============================================================================
+   Typography
+   ============================================================================
+   Two faces, one job each.
+
+   Space Grotesk (display) has enough character to be an identity while staying
+   a working UI face -- it reads instrument-panel rather than costume, which is
+   the right register for a game tool that is fundamentally a spreadsheet.
+
+   Inter (UI + numerals) is here for `tnum` specifically. This app is columns of
+   numbers that change as you drag sliders, and proportional figures make those
+   columns jitter and misalign on every re-render. Tabular figures are the one
+   typographic choice in this file that is a FUNCTIONAL fix rather than a
+   stylistic one; see .tnum below.
+
+   Both stacks fall back to system faces, so a blocked font CDN degrades to
+   exactly what the app rendered before rather than to a serif. */
+:root {
+  --font-display: 'Space Grotesk', ui-sans-serif, system-ui, -apple-system,
+                  'Segoe UI', Roboto, sans-serif;
+  --font-ui:      'Inter', ui-sans-serif, system-ui, -apple-system,
+                  'Segoe UI', Roboto, sans-serif;
+}
+
+body { font-family: var(--font-ui); }
+
+h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -.01em; }
+
+/* Tabular figures. Applied to every class below that renders a number, and
+   available as a utility for the ~200 inline stat readouts in app.js and
+   shipsPage.js that build their markup as template strings. */
+.tnum,
+.stat-main-value, .stat-range,
+.boss-stat-value,
+.resource-values,
+.diff-box-green, .diff-box-red {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* ============================================================================
+   Brand
+   ========================================================================= */
+.brand-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background: linear-gradient(140deg, var(--accent-500), var(--accent-700) 65%, var(--accent-800));
+  box-shadow: var(--lift-2), inset 0 1px 0 rgb(255 255 255 / .16);
+  color: #fff;
+}
+.brand-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -.015em;
+  color: #fff;
+  line-height: 1.15;
+}
+.brand-sub {
+  font-size: 11px;
+  line-height: 1.15;
+  color: var(--surface-500);
+}
+/* The fork credit. Deliberately in the persistent chrome rather than buried on
+   an About page: this tool borrows its layout, its terminology and half its
+   name from cifi-tools.com, and the honest place to say so is wherever those
+   things are visible. */
+.fork-credit {
+  font-size: 11px;
+  color: var(--surface-500);
+}
+.fork-credit a {
+  color: var(--surface-400);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--line-strong);
+  transition: color .15s ease, text-decoration-color .15s ease;
+}
+.fork-credit a:hover { color: var(--accent-400); text-decoration-color: var(--accent-600); }
+
+/* ============================================================================
+   Panels and cards
+   ========================================================================= */
+.section-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: .95rem;
+  color: var(--surface-200);
+  padding-bottom: .5rem;
+}
+
+.stats-container { display: flex; flex-direction: column; gap: .875rem; }
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: auto auto;
+  gap: .25rem;
+}
+
+/* The shared panel treatment. Previously each of .stat-card / .resource-card /
+   .boss-stat-card independently declared the same translucent background with
+   no border; they are one thing and are now defined as one. */
+.stat-card, .resource-card, .boss-stat-card {
+  background-color: rgb(33 44 62 / .55);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  height: 100%;
+  transition: border-color .15s ease, background-color .15s ease;
+}
+.stat-card:hover, .resource-card:hover, .boss-stat-card:hover {
+  border-color: var(--line);
+  background-color: rgb(33 44 62 / .75);
+}
+
+.stat-card { padding: .45rem; }
+.boss-stat-card { padding: .75rem; }
+
+.stat-header { display: flex; align-items: center; margin-bottom: .5rem; position: relative; }
+.stat-title { margin-left: .375rem; font-size: .75rem; color: var(--surface-300); }
+.stat-value-row { display: flex; align-items: baseline; gap: .375rem; }
+.stat-main-value { font-size: 1.125rem; font-weight: 600; color: #fff; }
+.stat-range { font-size: .6875rem; color: var(--surface-500); }
+
+.resource-grid { display: grid; grid-template-columns: repeat(1, 1fr); gap: .5rem; }
+.resource-card {
+  display: flex;
+  padding: .75rem;
+  gap: .75rem;
+  border-left-width: 2px;   /* hue set per-resource by the caller */
+}
+.resource-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius);
+  flex-shrink: 0;
+}
+.resource-image { width: 100%; height: 100%; object-fit: contain; }
+.resource-content { flex-grow: 1; min-width: 0; width: 100%; }
+.resource-label { font-size: .75rem; color: var(--surface-400); }
+.resource-values { display: flex; justify-content: space-around; }
+
+/* ============================================================================
+   Deltas
+   ========================================================================= */
+.diff-box-green, .diff-box-red {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  padding-inline: .3rem;
+  font-weight: 500;
+}
+.diff-box-green { background-color: var(--gain-bg); color: var(--gain); }
+.diff-box-red   { background-color: var(--loss-bg); color: var(--loss); }
+.diff-box-small { font-size: .75rem; line-height: 1rem; }
+
+/* ============================================================================
+   Boss panel
+   ========================================================================= */
+.boss-stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .75rem; }
+.boss-stat-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: .5rem; }
+.boss-stat-title { font-size: .75rem; color: var(--surface-300); }
+.boss-stat-value { font-size: 1.125rem; font-weight: 600; color: #fff; margin-bottom: .5rem; }
+.boss-progress {
+  position: relative;
+  height: .375rem;
+  overflow: hidden;
+  border-radius: 9999px;
+  margin-top: .25rem;
+}
+.boss-progress-bg { position: absolute; height: 100%; width: 100%; background-color: rgb(56 69 92 / .55); }
+.boss-progress-fill { position: absolute; height: 100%; transition: width .5s ease-out; }
+
+/* ============================================================================
+   Result / build cards
+   ============================================================================
+   The height:100% pair below is load-bearing and the reason is worth keeping:
+   .build-card-wrapper and .result-card are plain block-level elements, NOT flex
+   columns with inner flex-grow redistributing space. Grid's default
+   align-items:stretch already stretches the wrapper to the row's tallest card;
+   height:100% just lets the card fill that stretched box rather than leaving a
+   gap beneath it. Every card renders the same fixed set of rows, so there is no
+   extra space to distribute -- adding flex-grow spacers here is a recurring
+   wrong fix that breaks row alignment across cards. */
+.result-card {
+  height: 100%;
+  border-radius: var(--radius-md);
+  box-shadow: var(--lift-3);
+}
+.build-card-wrapper { height: 100%; }
+.build-card-wrapper[draggable="true"] { cursor: default; }
+.build-card-wrapper.dragging { opacity: .4; }
+
+.header-wrapper {
+  background-color: rgb(33 44 62 / .95);
+  border-radius: var(--radius) var(--radius) 0 0;
+  overflow: hidden;
+}
+.header-main { background: linear-gradient(to right, rgb(33 44 62 / .95), rgb(20 28 41 / .95)); }
+
+/* ============================================================================
+   Controls
+   ========================================================================= */
+.action-button-compact {
+  display: flex;
+  align-items: center;
+  padding: .25rem .5rem;
+  border-radius: var(--radius-sm);
+  background-color: rgb(56 69 92 / .40);
+  border: 1px solid transparent;
+  color: var(--surface-200);
+  white-space: nowrap;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+.action-button-compact:hover {
+  background-color: rgb(56 69 92 / .70);
+  border-color: var(--line);
+  color: #fff;
+}
+
+.ctrl-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: .5rem;
+  border-radius: var(--radius);
+  min-width: 2.5rem;
+  transition: background-color .15s ease, color .15s ease;
+}
+.ctrl-btn--gray { background-color: rgb(56 69 92 / .55); color: var(--surface-200); }
+.ctrl-btn--gray:hover { background-color: rgb(85 98 122 / .75); color: #fff; }
+
+.grip-handle { touch-action: none; }
+
+.progress-bar--maxed { box-shadow: 0 0 8px -1px rgb(255 255 255 / .15); }
+.progress-fill--maxed { filter: brightness(2.8) saturate(1.1); }
+
+.category-drop-zone { transition: background-color .15s ease; }
+.category-drop-zone.drag-over { background-color: rgb(112 89 239 / .20); }
+
+/* ============================================================================
+   Navigation
+   ========================================================================= */
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .375rem .625rem;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--surface-400);
+  transition: color .15s ease, background-color .15s ease, box-shadow .15s ease;
+}
+.sidebar-link:hover { color: var(--surface-100); background-color: rgb(33 44 62 / .70); }
+.sidebar-link.active {
+  color: #fff;
+  background-color: rgb(33 44 62 / .95);
+  /* An accent rail rather than a plain fill. The old active state differed from
+     hover only by background alpha, which is a weak signal on a 14-item list. */
+  box-shadow: inset 2px 0 0 var(--accent-500);
+}
+.sidebar-link svg { width: 1rem; height: 1rem; flex-shrink: 0; color: var(--surface-500); }
+.sidebar-link.active svg { color: var(--accent-400); }
+
+.nav-pill {
+  display: flex;
+  align-items: center;
+  gap: .375rem;
+  padding: .5rem .875rem;
+  border-radius: 9999px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--surface-400);
+  border: 1px solid transparent;
+  transition: all .15s ease;
+}
+.nav-pill:hover { color: var(--surface-100); background-color: rgb(56 69 92 / .55); }
+.nav-pill.active { background-color: rgb(56 69 92 / .95); color: #fff; border-color: var(--line); }
+
+/* Hunter identity colours are the GAME's, not ours, and the community reads
+   them at a glance -- Borge red, Ozzy green, Knox blue. They are deliberately
+   left on their original hues while everything around them moves. */
+.nav-pill.active-borge {
+  background: linear-gradient(to right, rgb(127 29 29 / .45), rgb(127 29 29 / .20));
+  color: #fca5a5; border-color: rgb(185 28 28 / .55);
+}
+.nav-pill.active-ozzy {
+  background: linear-gradient(to right, rgb(20 83 45 / .45), rgb(20 83 45 / .20));
+  color: #86efac; border-color: rgb(21 128 61 / .55);
+}
+.nav-pill.active-knox {
+  background: linear-gradient(to right, rgb(30 58 138 / .45), rgb(30 58 138 / .20));
+  color: #93c5fd; border-color: rgb(29 78 216 / .55);
+}
+
+.nav-pill-mobile {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: .625rem .875rem;
+  border-radius: var(--radius-md);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--surface-300);
+  background-color: rgb(56 69 92 / .55);
+  transition: all .15s ease;
+}
+.nav-pill-mobile:hover, .nav-pill-mobile:active { color: #fff; background-color: rgb(85 98 122 / .70); }
+.nav-pill-mobile.active,
+.nav-pill-mobile.active-borge,
+.nav-pill-mobile.active-ozzy,
+.nav-pill-mobile.active-knox {
+  color: #fff;
+  background-color: rgb(85 98 122 / .80);
+  box-shadow: inset 2px 0 0 var(--accent-500);
+}
+
+/* ============================================================================
+   Empty states
+   ============================================================================
+   The app previously rendered bare sentences ("No builds in this category
+   yet.") centred in an otherwise empty panel. An empty state is the first
+   thing a new user sees, and a sentence with no affordance reads as a dead end
+   rather than a starting point. */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  padding: 3rem 1.5rem;
+  text-align: center;
+}
+.empty-state-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--radius-lg);
+  background-color: rgb(56 69 92 / .40);
+  border: 1px solid var(--line-soft);
+  color: var(--surface-500);
+  margin-bottom: .25rem;
+}
+.empty-state-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: .95rem;
+  color: var(--surface-200);
+}
+.empty-state-body { font-size: .8125rem; color: var(--surface-500); max-width: 34ch; line-height: 1.5; }
+
+/* ============================================================================
+   Scrollbars
+   ========================================================================= */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--surface-600); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--surface-500); }
+* { scrollbar-color: var(--surface-600) transparent; }
+
+/* Focus ring. There was none -- keyboard navigation was invisible across the
+   whole app, which is both an accessibility failure and the kind of thing that
+   reads as unfinished the moment anyone tabs through it. */
+:focus-visible {
+  outline: 2px solid var(--accent-500);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}

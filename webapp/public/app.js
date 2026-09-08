@@ -1434,7 +1434,17 @@ async function renderBuildList() {
   list.style.gridTemplateColumns = store.viewMode === 'horizontal' ? '1fr' : 'repeat(auto-fill, minmax(340px, 1fr))';
   list.innerHTML = '';
   if (!builds.length) {
-    list.innerHTML = `<div class="col-span-full text-center text-gray-500 py-10 border border-dashed border-gray-700 rounded-lg">No builds in this category yet.</div>`;
+    // An empty state is the first thing a new user sees, so it says what to do
+    // next rather than only reporting that nothing is here. Both routes in are
+    // named because they are genuinely different entry points: "New Build"
+    // starts from scratch, "Import" accepts a share code or a pulled save.
+    list.innerHTML = `<div class="col-span-full empty-state border border-dashed border-gray-700 rounded-lg">
+      <div class="empty-state-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></svg>
+      </div>
+      <div class="empty-state-title">No builds yet</div>
+      <div class="empty-state-body">Add one with <strong class="text-gray-300 font-semibold">New Build</strong>, or bring an existing one in with <strong class="text-gray-300 font-semibold">Import</strong>.</div>
+    </div>`;
     return;
   }
   const accent = HUNTER_ACCENTS[currentHunter];

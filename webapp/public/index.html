@@ -3,16 +3,78 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>HunterSim Optimizer</title>
+<title>CIFI Sim Tools</title>
+<meta name="description" content="Hunter and fleet build optimizer for CIFI. An independent fork of cifi-tools.com." />
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script>tailwind.config = { darkMode: 'class', theme: { extend: { borderWidth: { 3: '3px' } } } };</script>
-<link rel="stylesheet" href="site.css?v=20260810p" />
+<!-- THE PALETTE LIVES HERE AND IN tokens.css, IN TWO PLACES THAT MUST AGREE.
+     Nearly every colour in this app is a Tailwind utility class naming the
+     `gray` scale -- 1,314 of them across ~460KB of app.js / shipsPage.js /
+     index.html, built as template strings at runtime. Redefining `gray` here
+     retints all of them at once; there is no find-and-replace and no build
+     step. That is the ONLY reason a palette change is cheap in this codebase,
+     so resist introducing raw hex at call sites -- each one is a colour that
+     will not follow the next change.
+
+     `purple` is overridden for the same reason: it was already the de-facto
+     accent (36 usages, including the Fleet page's primary CTA), so aliasing it
+     onto the new accent scale formalises the existing choice for free rather
+     than requiring every call site to be rewritten to a new name.
+
+     red / green / blue / amber are deliberately NOT overridden. Red, green and
+     blue are Borge, Ozzy and Knox -- the GAME's identity colours, which the
+     community reads at a glance -- and amber is the "unmodelled / cannot
+     compute" warning used by the fleet honesty notices. Retinting those would
+     change meaning, not just appearance. -->
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      borderWidth: { 3: '3px' },
+      fontFamily: {
+        sans:    ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+        display: ['Space Grotesk', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+      },
+      colors: {
+        // Cool slate. Same VALUE structure as Tailwind's neutral gray, so every
+        // existing contrast relationship and layout weight is preserved --
+        // rotated to ~218deg with rising saturation toward the dark end.
+        // Mirrors --surface-* in tokens.css; change both together.
+        gray: {
+          50:  '#f4f7fb',
+          100: '#e7edf5',
+          200: '#ccd6e5',
+          300: '#b8c3d4',
+          400: '#99a7bd',
+          500: '#7a89a3',
+          600: '#55627a',
+          700: '#38455c',
+          750: '#2c374b',  // was used twice in app.js and is NOT a stock Tailwind
+                           // shade, so those two call sites silently rendered no
+                           // background at all. Defining it fixes them.
+          800: '#212c3e',
+          900: '#141c29',
+          950: '#0c121c',
+        },
+        purple: {
+          50:  '#f2f0fe', 100: '#e6e2fd', 200: '#cfc7fc', 300: '#a99ffb',
+          400: '#a99ffb', 500: '#8d80f7', 600: '#7059ef', 700: '#5a44d4',
+          800: '#4835ab', 900: '#3a2c87', 950: '#241a58',
+        },
+      },
+    },
+  },
+};
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" />
+<link rel="stylesheet" href="tokens.css?v=20260907a" />
 <style>
-  body { background:#111827; color:#e5e7eb; }
+  body { background: var(--surface-900); color: var(--surface-200); }
   .stepper-btn { @apply w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed text-white; }
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
-  ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
 </style>
 </head>
 <body class="min-h-screen">
@@ -22,10 +84,21 @@
 <header class="bg-gray-800 border-b border-gray-700">
   <div class="max-w-[1600px] mx-auto px-4 h-16 flex items-center justify-between">
     <div class="flex items-center gap-3 min-w-0">
-      <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center text-white font-bold flex-shrink-0">C</div>
+      <!-- Wordmark. The previous mark was a "C" in a purple-to-blue gradient with
+           the name "CIFI Tools" and the tagline "Hunter Simulator & Game Tools"
+           -- that is cifi-tools.com's identity, not ours. This one is our own,
+           and the fork credit below states the relationship rather than leaving
+           it to be inferred from the resemblance. -->
+      <div class="brand-mark" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="7.5" />
+          <path d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4" />
+          <circle cx="12" cy="12" r="2.25" fill="currentColor" stroke="none" />
+        </svg>
+      </div>
       <div class="min-w-0 truncate">
-        <div class="font-semibold text-white leading-tight truncate">CIFI Tools</div>
-        <div class="text-[11px] text-gray-500 leading-tight truncate hidden sm:block">Hunter Simulator &amp; Game Tools</div>
+        <div class="brand-name truncate">CIFI Sim&nbsp;Tools</div>
+        <div class="brand-sub truncate hidden sm:block">Hunter &amp; Fleet Optimizer</div>
       </div>
     </div>
     <!-- Desktop nav: unchanged, just gated to md+ now that mobile gets its own menu below
@@ -115,6 +188,16 @@
     <div id="bridgeStatusSidebar" class="hidden mt-auto mx-3 mb-3 px-2.5 py-2 rounded-lg bg-gray-800/80 border border-gray-700/50 flex items-center gap-2 text-xs">
       <span id="bridgeStatusDot" class="w-2 h-2 rounded-full bg-gray-500 flex-shrink-0"></span>
       <span id="bridgeStatusText" class="text-gray-400 truncate">CIFI Bridge</span>
+    </div>
+    <!-- Fork credit. This tool takes its layout, its category structure, its
+         terminology and half its name from cifi-tools.com; saying so plainly in
+         the persistent chrome is what makes it a fork rather than a look-alike.
+         mt-auto keeps it pinned to the bottom of the sidebar whether or not the
+         bridge status block above is visible. -->
+    <div class="fork-credit mt-auto px-4 pb-4 pt-2 leading-relaxed border-t border-gray-700/30">
+      An independent fork of
+      <a href="https://cifi-tools.com" target="_blank" rel="noopener noreferrer">cifi-tools.com</a>,
+      rebuilt from the game's own data. Not affiliated with cifi-tools or the CIFI developers.
     </div>
   </aside>
 
@@ -603,7 +686,7 @@
      re-fitting a real build reaches +2.37% / +1.33% WITH the boss kill. -->
 <script src="optimizer/refit.js?v=20260907a-corpus"></script>
 <script src="optimizer/corpus.js?v=20260907s-modes"></script>
-<script src="optimizer/search.js?v=20260907zb-refine3"></script>
+<script src="optimizer/search.js?v=20260907zc-refine8"></script>
 <script src="optimizer/runner.js?v=20260907b-maxsec"></script>
 <script src="saveImport.js?v=20260907d-correction"></script>
 <script src="buildCode.js?v=20260810p"></script>
@@ -618,7 +701,7 @@
      CDN-blocked user still gets the whole tool minus cloud saves. -->
 <script src="https://cdn.jsdelivr.net/npm/appwrite@27.0.0/dist/iife/sdk.js"></script>
 <script src="cloudSync.js?v=20260907c-stamps"></script>
-<script src="app.js?v=20260907i-fileinput"></script>
+<script src="app.js?v=20260907j-restyle"></script>
 <script>
   // Custom (non-Tabler) sidebar icons: real game-asset SVG paths copied verbatim from the
   // live site's rendered DOM (Relics/Loop Mods/Milestones use bespoke icons, not Tabler's).

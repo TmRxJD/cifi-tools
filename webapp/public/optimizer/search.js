@@ -231,25 +231,26 @@
       // refinement has nothing to develop -- it is reliable but needs a foothold (it takes kill 3
       // to kill 53). Doubling the budget produces one, and cells barely move, so this buys DEPTH
       // per lineage rather than coverage.
-      // refineSupports 3, DOWN FROM 8, MEASURED. Sweeping this dimension alone with the archive
-      // pinned at 9600:
-      //     borge@73  8 -> 5 -> 3   310s -> 222s -> 161s   score +0.00% at every step
-      //                             cells 477, killBands 14, bestKill 99 -- IDENTICAL throughout
-      //     knox@30   8 -> 5 -> 3   102s ->  88s ->  71s   score +0.00%, coverage identical
-      // 1.93x faster on the hardest known build for no measured quality and no lost coverage.
+      // refineSupports STAYS AT 8. A cut to 3 was measured, shipped, and REVERTED within the hour.
       //
-      // WHY THIS IS SAFE WHERE CUTTING THE ARCHIVE WAS NOT. Coverage -- cells, kill bands, boss
-      // reach -- is produced by the ARCHIVE. Refinement develops what the archive already found,
-      // so narrowing it cannot lose a region; the identical cells/killBands/bestKill across all
-      // three arms is that stated as a measurement rather than an argument. Cutting archiveEvals
-      // 1200 -> 100 by contrast halved the cells and dropped bestKill 99 -> 96 for ~14% of time.
+      // The case for cutting looked strong: sweeping the dimension alone on borge@73 and knox@30
+      // gave 1.93x faster for +0.00% score with cells, killBands and bestKill IDENTICAL at 8, 5
+      // and 3. The reasoning was that coverage comes from the archive and refinement only develops
+      // what the archive already found, so narrowing it cannot lose a region.
       //
-      // So the two shipped levels now differ in EXACTLY ONE dimension, which is also the honest
-      // description of what Complete buys: a wider archive, i.e. coverage for builds the corpus
-      // does not reach.
+      // A 9-BUILD SWEEP FOUND TWO FAILURES, ONE CATASTROPHIC:
+      //     ozzy@63    29,087,847 -> 10,956,102   -62.33%   kill rate 51.5% -> 0.0%
+      //     borge@71c   2.683e9   ->  2.639e9      -1.62%
+      // The Ozzy build lost its boss kill outright. Identical ARCHIVE coverage does not mean the
+      // boss-killing elite gets REFINED: refinement is what turns a foothold into a kill, and at
+      // width 3 the candidate that would have become a killer is not among those developed. The
+      // two builds I measured on happened not to depend on that -- borge@73 kills from a corpus
+      // donor, knox@30 kills nothing at any width.
       //
-      // SAMPLE: two builds, one of them the hardest known. Worth widening if a third disagrees.
-      label: 'Complete', archiveEvals: 9600, refineSupports: 3, ocbaPolish: true,
+      // The lesson is the one this file already records about maxevals: a budget justified on a
+      // handful of builds is a SAMPLE STATISTIC, NOT A BOUND. Two builds agreeing is not evidence
+      // that a third will. Widening the sweep is cheap next to shipping a 62% regression.
+      label: 'Complete', archiveEvals: 9600, refineSupports: 8, ocbaPolish: true,
       // THE OLD HELP CLAIMED IT "finds builds Fast misses". Nine builds later that is not
       // supported: the two returned the same build every time, and Complete spent 2.4x the
       // evaluations to do it. It is kept because the archive is what covers a build the CORPUS
