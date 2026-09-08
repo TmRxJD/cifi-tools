@@ -83,6 +83,12 @@ const LOCAL = [
   //                          an A/B would have recorded the control's number as "no effect"
   //   boss-parity-check   -- the optimizer must never clear fewer bosses than the build it is given
   'describe-run-check', 'effort-option-check', 'boss-parity-check',
+  // Derived from the source, because a hand-maintained list of flags drifts: CLAUDE.md said
+  // five flags were deleted and the whitelist was 11 keys, while one was back and it was 18.
+  'effort-flag-audit',
+  // Share links were broken at BOTH ends for as long as the feature existed, and the person
+  // who generates one never sees it fail -- only whoever clicks it does.
+  'share-link-check',
   // Structural/self-audit gates that existed but were in no list, so nothing ran them.
   'config-sanity-check', 'guard-liveness-check', 'dead-symbol-audit',
   // THE MEASUREMENT MODULE'S OWN NEGATIVE CONTROLS. Every case is a real failure replayed: an

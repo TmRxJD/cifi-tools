@@ -2258,9 +2258,18 @@ fixed traversal order give identical output for identical input.
       FRONTIER_SHARE + the frontier emitter     broke a working seed on ozzy@62
       DEPTH_SHARE + depthMove()                 coverage up, champion quality flat or worse
       clampToHeadroom                           superseded by break-point spending
-  `illuminate()` drops from SIXTEEN positional parameters to twelve and the effort whitelist from
-  15 keys to 11. The MEASUREMENTS stay in this file so nobody re-runs them; only the code went,
-  which is what "git history is the archive" means.
+  `illuminate()` drops from SIXTEEN positional parameters to twelve. The MEASUREMENTS stay in this
+  file so nobody re-runs them; only the code went, which is what "git history is the archive" means.
+  **CORRECTED 2026-09-07: ONE OF THE FIVE IS BACK, AND THE KEY COUNT IN THIS ENTRY WAS STALE.**
+  `bossDamageBands` was re-added to run the FI comparison two entries below (the `axis+FI off/ON`
+  arms need the axis to exist), and it is still in the code today -- in `cellOf`, in `illuminate`,
+  and in the whitelist. The whitelist is **18** keys, not 11. So this entry described a state the
+  code left, in the file that is supposed to be the record of what the code does.
+  That is the failure this file warns about in its own words -- "a comment describing a fix, and a
+  CLAUDE.md entry describing a fix, are not evidence the fix exists" -- applied to itself, and the
+  reason `tools/bench/effort-flag-audit.js` now derives the list from the source instead.
+  The flag still ships OFF and is still measured redundant; what changed is only that the claim
+  "it is deleted" stopped being true.
   **VERIFIED, NOT ASSUMED.** `search-identity-probe.js` fingerprints the returned ALLOCATION (not
   just a score, which could coincide) before and after: ozzy@11 and knox@12 came back byte-for-byte
   identical -- same evals, same cells, same loot to six decimals. That check exists because "inert

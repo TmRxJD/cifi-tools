@@ -3203,7 +3203,20 @@ function openShareModal(build, code, lootScore) {
   if (existing) existing.remove();
   const hunterName = currentHunter[0].toUpperCase() + currentHunter.slice(1);
   const discordText = `**${hunterName}**  •  ${HUNTER_DISCORD_EMOJI[currentHunter] || ''} Level ${build.level}  •  🔥 ${fmt(lootScore)} Loot Score\n\`\`\`\n${code}\n\`\`\``;
-  const link = `${location.origin}${location.pathname.replace(/\/$/, '')}/${currentHunter}?code=${encodeURIComponent(code)}`;
+  // A QUERY ON THE APP ROOT, NOT A PATH SEGMENT.
+  //
+  // This used to build `<root>/ozzy?code=XXXX`, copying the original site's path format. The
+  // original is served by something that can route; this app is static files on GitHub Pages,
+  // where `/ozzy` is simply not a file -- so EVERY share link this button produced returned a 404
+  // page. It had never worked in production, and could not be noticed by whoever generated one,
+  // only by whoever clicked it.
+  //
+  // `<root>/?hunter=ozzy&code=XXXX` requests the app root, which is a real file everywhere, and
+  // carries the same information. 404.html still rewrites the old path form for links already
+  // pasted into Discord.
+  const shareRoot = `${location.origin}${location.pathname.replace(/[^/]*$/, '')}`;
+  const link = `${shareRoot}?hunter=${encodeURIComponent(currentHunter)}`
+    + `&code=${encodeURIComponent(code)}`;
   const overlay = document.createElement('div');
   overlay.id = 'shareBuildModal';
   overlay.className = 'fixed inset-0 z-50 overflow-y-auto bg-gray-900/80 flex items-center justify-center p-4';
@@ -3960,6 +3973,37 @@ async function reloadIfShellIsStale() {
 
 render();
 reloadIfShellIsStale();
+
+// A SHARED BUILD ARRIVING BY URL. Nothing read this before, so even a link that RESOLVED would
+// have shown the normal start page and silently dropped the build -- the share feature was broken
+// at both ends, and neither end could be noticed by the person who generated the link.
+//
+// It goes through the SAME parseBuildCode + applyImportedBuild the paste-a-code dialog uses, so a
+// link and a pasted code cannot diverge in what they produce. The hunter comes from the CODE's own
+// header rather than the `hunter=` query param -- the param exists only so 404.html can preserve
+// the old path form, and trusting it over the code would let a hand-edited URL open a build under
+// the wrong hunter.
+//
+// `includeUpgrades: false` deliberately: a shared build carries the sender's account-wide upgrade
+// levels, and applying those to the recipient would silently overwrite their own gems and
+// upgrades with a stranger's. The dialog offers that as an explicit second choice; a link must not
+// make it for you.
+async function consumeSharedBuildFromUrl() {
+  let code = null;
+  try { code = new URLSearchParams(location.search).get('code'); } catch { return; }
+  if (!code) return;
+  // Strip the query BEFORE importing: importing re-renders, and a refresh mid-import would
+  // otherwise import the same build a second time.
+  try { history.replaceState(null, '', location.pathname); } catch { /* file:// */ }
+  try {
+    const payload = await window.parseBuildCode(code.trim());
+    if (!payload) throw new Error('the code was not recognised');
+    applyImportedBuild(payload, false);
+  } catch (e) {
+    alert(`That shared build could not be opened: ${e.message}`);
+  }
+}
+consumeSharedBuildFromUrl();
 // The header account button lives OUTSIDE the routed view, so it is drawn once at startup rather
 // than from render() -- a per-render call would rebuild it (and close its dropdown) on every
 // navigation. It re-renders itself after each sync action.

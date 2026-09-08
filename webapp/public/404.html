@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>CIFI Tools</title>
+  <meta name="robots" content="noindex" />
+  <script>
+    // GITHUB PAGES SPA FALLBACK, so already-shared build links keep working.
+    //
+    // Share links were generated as `/cifi-tools/ozzy?code=XXXX` -- a PATH, matching the original
+    // site's format. GitHub Pages serves static files only: there is no `/ozzy` file, so every one
+    // of those links 404s. They have been broken for as long as the share button has existed, and
+    // the only reason it was not noticed sooner is that the person clicking is never the person
+    // who generated it.
+    //
+    // Pages serves this file for any unmatched path, so it rewrites the request into a form the
+    // real app can read and hands it to index.html. New links use the query form directly and
+    // never touch this file; this exists for links already pasted into Discord.
+    //
+    // replace(), not assign(): the 404 must not sit in history, or Back from the app lands on it.
+    (function () {
+      var path = location.pathname.replace(/\/+$/, '');
+      var hunter = (path.split('/').pop() || '').toLowerCase();
+      var known = { borge: 1, ozzy: 1, knox: 1 };
+      // The repo is served from /cifi-tools/, so the app root is everything up to the hunter
+      // segment. Derived rather than hard-coded, so a rename or a user fork still works.
+      var root = known[hunter] ? path.slice(0, path.length - hunter.length - 1) : path;
+      var qs = location.search || '';
+      var sep = qs ? '&' : '?';
+      var target = (root || '/') + '/' + qs + (known[hunter] ? sep + 'hunter=' + hunter : '');
+      location.replace(target.replace(/([^:]\/)\/+/g, '$1'));
+    }());
+  </script>
+</head>
+<body>
+  <p>Redirecting…</p>
+</body>
+</html>
