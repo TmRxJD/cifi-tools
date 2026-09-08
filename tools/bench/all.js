@@ -66,7 +66,7 @@ const LOCAL = [
   'node-coefficient-check', 'node-counter-check', 'node-name-check', 'node-effect-probe',
   'node-resource-check', 'node-factor-check', 'fleet-formula-check',
   'ship-node-gate-check', 'badge-check', 'uniform-term-check', 'crew-rank-check',
-  'big-number-io-check', 'ship-evo-art-check', 'gen-tier-gate-check', 'growth-counter-check', 'allocator-check', 'ship-test',
+  'big-number-io-check', 'gear-icon-check', 'ship-evo-art-check', 'gen-tier-gate-check', 'growth-counter-check', 'allocator-check', 'ship-test',
   'attribute-tree-check', 'cap-raise-check',
   'gem-coverage-test', 'gem-tree-test',
   'param-plumbing-check', 'override-liveness-check', 'wasm-arity-check',

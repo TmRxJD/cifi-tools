@@ -528,6 +528,27 @@ function unmodelledEvolutionTerms() {
     ? [`AttractionGU6 (level ${gu6}) raises every evolution bonus to a power this tool cannot compute`]
     : [];
 }
+// GEAR PIECE ICONS, extracted from the game -- see tools/assets/extract-gear-icons.py.
+//
+// Keyed by the DISPLAYED NAME rather than by an index, because that is what the gear store itself
+// keys pieces on (getGearSets reconciles by name). Deriving the file name from the name with the
+// same slug rule the extractor uses means there is no second lookup table to drift.
+//
+// A piece with no icon renders WITHOUT one rather than with a placeholder: the three sets the tool
+// does not model (Yellow, Black) and any piece renamed in a future build would otherwise show a
+// silently wrong picture, and a missing icon beside a correct name is the honest failure.
+function gearIconSlug(name) {
+  return String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+}
+function gearIconImg(name, px) {
+  const slug = gearIconSlug(name);
+  if (!slug) return '';
+  const size = px || 22;
+  return `<img src="assets/gear/${slug}.png" alt="" aria-hidden="true" `
+    + `style="width:${size}px;height:${size}px" class="object-contain flex-shrink-0" `
+    + `onerror="this.remove()" />`;
+}
+
 const SHIP_PORTRAITS = { 1: 'cradle', 2: 'auxesia', 3: 'zagreus', 4: 'hephaestus', 5: 'demeter', 6: 'koios', 7: 'zeus', 8: 'ouroboros' };
 // HOW MANY EVOLUTION STAGES EACH SHIP HAS, and therefore which artwork exists. From
 // FleetManager's own `Ship<n>Evolution<m>` field declarations -- see
@@ -1785,7 +1806,7 @@ function renderGearSetsPage(root) {
       const row = document.createElement('div');
       row.className = `grid grid-cols-2 sm:grid-cols-5 gap-2 items-center rounded p-2 border-l-4 ${GEAR_COLOR_STYLES[color] || 'border-gray-500 bg-gray-700/40'}`;
       row.innerHTML = `
-        <div class="flex items-center gap-1.5"><input type="checkbox" data-f="owned" ${piece.owned ? 'checked' : ''} class="accent-blue-500" /><span class="text-sm text-white">${escapeHtml(piece.name)}</span></div>
+        <div class="flex items-center gap-1.5"><input type="checkbox" data-f="owned" ${piece.owned ? 'checked' : ''} class="accent-blue-500" />${gearIconImg(piece.name, 28)}<span class="text-sm text-white">${escapeHtml(piece.name)}</span></div>
         <div><label class="block text-[10px] text-gray-400">Level</label><input type="number" min="0" data-f="level" value="${piece.level || 0}" class="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-white text-xs" /></div>
         <div class="text-xs text-gray-400"><span class="text-gray-500">Set Bonus:</span> ${piece.setBonus
           ? escapeHtml(piece.setBonus)
@@ -3193,6 +3214,10 @@ function shipNodeWeight(shipId, slot, weights) {
 
 window.ShipData = {
   SHIP_NODE_CATALOG,
+  // Exported for gear-icon-check.js: the slug rule lives in two places (here and the extractor)
+  // and a drift between them silently removes every icon, so the bench compares them directly.
+  gearIconSlug,
+  REAL_GEAR_PIECES,
   // Exported so ship-evo-art-check.js can assert the clamp and the per-ship stage ceilings
   // against the extracted reference, rather than a bench re-deriving them from a second copy.
   SHIP_MAX_EVO,

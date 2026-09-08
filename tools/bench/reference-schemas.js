@@ -354,6 +354,13 @@ const schemas = {
   // dropdown as 0..maxStage -- a gap would offer a stage with no artwork. maxStage is bounded at 7
   // (Cradle's, the highest the game declares); a larger value almost certainly means the extractor
   // matched something that is not a stage, such as CradleEvo7_1.
+  // Gear piece icons: displayed name -> file. Keyed by the GAME's uppercase names; the UI resolves
+  // by slug, so the KEY casing is not load-bearing but the file name is.
+  'gear-icons.json': z.object({
+    ...meta,
+    icons: nonEmptyRecord(z.string().min(1), z.string().regex(/^[a-z0-9-]+\.png$/)),
+  }).strict(),
+
   'ship-evo-stages.json': z.object({
     ...meta,
     ships: nonEmptyRecord(z.string().min(1), z.object({
