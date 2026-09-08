@@ -21,6 +21,22 @@
 // ~1% is not a difference. The interesting result here is EXACT equality, which is what the
 // previous nine-build comparison produced.
 //
+// FIRST RESULT: 1200 IS ALREADY AT THE KNEE. DO NOT SHRINK IT FURTHER.
+//
+//   borge@73  1200->100  147s -> 126s (-14%)  score +0.00%  cells 115->62  killBands 9->7  bestKill 99->96
+//   ozzy@62   1200->100  164s -> 137s (-16%)  score +0.00%  cells  75->26  killBands 1->1  bestKill  0-> 0
+//   knox@30   1200->100   63s ->  59s ( -6%)  score +0.00%  cells   5-> 5  (already degenerate)
+//
+// The score never moves, which invites the conclusion that the archive is free to delete. The
+// TIME says otherwise: total evaluations barely change (13,983 -> 13,800), because at 1200 the
+// archive is already a small fraction of the run and the climb dominates. So the trade on offer
+// is ~14% wall clock in exchange for measurably less coverage -- and coverage is the insurance for
+// builds the CORPUS does not cover, which is not these three. Corpus coverage is partial (knox
+// donors stop at level 40), so paying 14% to keep it is the right side of that trade.
+//
+// This is why the check reports cells/killBands/bestKill and not just the score: judged on score
+// alone, "archive 100" looks like a free 14% win on every build here.
+//
 // REPORT, not a gate: it informs a default, and that choice is the project owner's.
 
 const H = require('./harness.js');
