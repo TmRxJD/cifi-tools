@@ -13,17 +13,22 @@
 // It survived because the field NAME looked exactly like every other confirmed mapping, and because
 // the reference account read 1 -- which is a legal multiplier, so nothing downstream complained.
 //
-// GATE: importing a real save must not touch ultima.ulti, and the UI must offer it as a decimal
-// multiplier rather than an integer level.
+// GATE: the import must DERIVE the multiplier from UDU7Level and DiamondUltimaLevel, must not
+// use UDU6's exponent, must never write the raw level, and the UI must offer a decimal
+// multiplier rather than an integer level. The save's own milestone arithmetic is checked too,
+// since that is what makes the derivation trustworthy rather than merely fitted.
 
 const fs = require('fs');
 const path = require('path');
 const H = require('./harness.js');
 
 let failures = 0;
+// DETAIL ON FAILURE ONLY. Printing it unconditionally made a PASSING line read
+// "ok ... which is the 1.05 form", which states the opposite of what the check just proved. A
+// diagnostic that contradicts its own verdict is worse than no diagnostic.
 const check = (label, ok, detail) => {
   if (!ok) failures++;
-  console.log(`${ok ? 'ok  ' : 'FAIL'} ${label}${detail ? `  -- ${detail}` : ''}`);
+  console.log(`${ok ? 'ok  ' : 'FAIL'} ${label}${!ok && detail ? `  -- ${detail}` : ''}`);
 };
 
 (async () => {
@@ -31,7 +36,15 @@ const check = (label, ok, detail) => {
   //    whatever the fixture author believed, which is the belief that was wrong.
   const saveDir = path.join(__dirname, '..', 'gamefiles', 'save');
   const decoded = fs.existsSync(saveDir)
-    ? fs.readdirSync(saveDir).filter((f) => f.endsWith('.decoded.json') || /^decoded-/.test(f)).sort().pop()
+    // NEWEST BY MTIME, not by filename. A .sort().pop() put "decoded-20260903.json" after
+    // "DATA-20260907.decoded.json" (uppercase sorts first), so the gate silently checked a
+    // four-day-old save -- and an importer bug introduced since would have gone unnoticed while
+    // the board stayed green.
+    ? fs.readdirSync(saveDir)
+      .filter((f) => f.endsWith('.decoded.json') || /^decoded-/.test(f))
+      .map((f) => ({ f, mtime: fs.statSync(path.join(saveDir, f)).mtimeMs }))
+      .sort((a, b) => b.mtime - a.mtime)
+      .map((x) => x.f)[0]
     : null;
 
   if (!decoded) {
@@ -42,13 +55,51 @@ const check = (label, ok, detail) => {
     const sb = H.browserSandbox();
     const store = sb.mapSaveToStore(save);
     const got = store && store.globalUpgrades ? store.globalUpgrades['ultima.ulti'] : undefined;
-    check(`importer leaves ultima.ulti alone (${decoded})`, got === undefined,
-      got === undefined ? '' : `imported ${got} from DiamondUltimaLevel=${save.DiamondUltimaLevel}`);
 
-    // The specific corruption: whatever the save says, the imported value must never be the level.
-    if (save.DiamondUltimaLevel !== undefined) {
+    // THE DERIVATION, recomputed here from the save's own fields and the AUTHORED constants.
+    //
+    //   multiplier = 1 + UDU7BaseBonus * UltimaMilestoneExponent2 ^ DiamondUltimaLevel * UDU7Level
+    //
+    // The exponent is the part worth guarding. UDU6 (Mats) and UDU7 (hunter loot) have identical
+    // getters in the game except that UDU6 reads DiamondUltimaBonus (1.05^level) and UDU7 reads
+    // DiamondUltimaBonus2 (1.02^level). On the reference save the two differ by 1.20475 vs
+    // 1.19890, and the player's screen said x1.1989 -- so picking the wrong one is a wrong number,
+    // not a rounding difference.
+    const UDU7_BASE = 0.003;
+    const EXP2 = 1.02;
+    if (save.UDU7Level !== undefined) {
+      const expected = Number((1 + UDU7_BASE * (EXP2 ** Number(save.DiamondUltimaLevel || 0))
+        * Number(save.UDU7Level)).toFixed(4));
+      check(`ultima.ulti is derived from UDU7Level=${save.UDU7Level} and `
+        + `DiamondUltimaLevel=${save.DiamondUltimaLevel} (${decoded})`,
+        got === expected, `got ${got}, expected ${expected}`);
+
+      // The wrong exponent produces a plausible-looking number, so assert it is NOT that one.
+      const wrong = Number((1 + UDU7_BASE * (1.05 ** Number(save.DiamondUltimaLevel || 0))
+        * Number(save.UDU7Level)).toFixed(4));
+      if (wrong !== expected) {
+        check('it does NOT use UDU6\'s 1.05 milestone exponent', got !== wrong,
+          `got ${got}, which is the 1.05 form`);
+      }
+    }
+
+    // The original corruption: the imported value must never be the raw milestone LEVEL.
+    if (save.DiamondUltimaLevel !== undefined && Number(save.DiamondUltimaLevel) !== 1) {
       check('the raw DiamondUltimaLevel is never used as the multiplier',
-        got !== Number(save.DiamondUltimaLevel) || got === undefined);
+        got !== Number(save.DiamondUltimaLevel));
+    }
+
+    // MILESTONE ARITHMETIC, checked because it is what makes the derivation trustworthy rather
+    // than fitted: the game advances DiamondUltimaLevel once per UltimaMilestoneGoal (50) Ultima
+    // purchases across ALL SEVEN UDU upgrades. If the save's own numbers stop agreeing with that,
+    // the model behind the import is wrong even if the multiplier still looks reasonable.
+    const uduSum = [1, 2, 3, 4, 5, 6, 7]
+      .reduce((sum, n) => sum + Number(save[`UDU${n}Level`] || 0), 0);
+    if (uduSum > 0) {
+      const level = Number(save.DiamondUltimaLevel || 0);
+      const progress = Number(save.DiamondUltimaProgress || 0);
+      check(`UDU levels sum to the milestone state (${uduSum} = 50x${level} + ${progress})`,
+        uduSum === 50 * level + progress, `sum ${uduSum}, state 50x${level}+${progress}`);
     }
   }
 

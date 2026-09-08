@@ -335,30 +335,42 @@ function mapSaveToStore(save) {
     if (v !== undefined) globalUpgrades[`researches.${id}`] = realNum(v);
   }
 
-  // DIAMOND ULTIMA IS DELIBERATELY NOT IMPORTED, AND MAPPING IT WAS ACTIVELY DESTRUCTIVE.
+  // DIAMOND ULTIMA: DERIVED, NOT READ. `upgrades.ultima.ulti` holds the loot MULTIPLIER, and the
+  // save holds the two inputs it is computed from.
   //
-  // `upgrades.ultima.ulti` IS NOT A LEVEL. The stored value is the loot MULTIPLIER itself -- the
-  // original tool's Ultima page renders it `display-as-multiplier`, as a 1.0000-10.0000 value with
-  // step 0.0001 labelled "Current Multiplier x", and our own card at app.js says the same.
+  // This was previously not imported at all, because a `{Name}Level` field was written straight
+  // into it and reset a real x1.1989 to x1.0000 on every import. The mapping is now known:
   //
-  // This line wrote `DiamondUltimaLevel` into it. That field is a small integer (1 on the reference
-  // account), so every save import silently reset a user's real multiplier -- x1.1989 in game --
-  // back to 1.0000, i.e. no boost at all. It reads as "Diamond Ultima isn't being scanned", and it
-  // is worse than not importing: a level of 7 would have been fed to the evaluator as x7 loot.
-  // The name matched the {Name}Level convention, which is exactly why it looked confirmed.
+  //     multiplier = 1 + UDU7BaseBonus * UltimaMilestoneExponent2 ^ DiamondUltimaLevel * UDU7Level
   //
-  // WHAT THE GAME ACTUALLY SAYS, so the next attempt starts further along. `DiamondShop` computes
-  // `DiamondUltimaBonus = Pow(UltimaMilestoneExponent, DiamondUltimaLevel)` with the authored
-  // `UltimaMilestoneExponent = 1.05` (`UltimaMilestoneExponent2 = 1.02`, `UltimaMilestoneGoal = 50`).
-  // But that is NOT the number on screen: a save pulled the same day the player reported x1.1989
-  // carries `DiamondUltimaLevel = 1` and `DiamondUltimaProgress = 19`, and no integer power of 1.05
-  // or 1.02 reaches 1.1989 (3.72 and 9.16 respectively). The hunter game contexts carry a separate
-  // `DiamondUltimaRewardsBonus` (BigDouble) beside `AllDiamondUltimas` (int), and neither the DU
-  // level family (sums to 165) nor anything else in the save produces 1.1989. So the derivation is
-  // UNRESOLVED, and the original tool does not derive it either -- its input is typed by the user.
+  // UDU7 is the "Battle Rewards" Ultima upgrade, which is what the tool calls Ultima Hunter Loot
+  // Rewards Boost. Confirmed against the GAME rather than fitted: `DiamondShop.UDU7BonusCalc` and
+  // `UDU6BonusCalc` are structurally identical getters -- base bonus, times a milestone factor,
+  // times the upgrade's level, plus one -- and they differ in exactly one respect:
   //
-  // Leaving it to the user's own input is therefore the honest behaviour, not a gap. Do not restore
-  // a mapping here without a value-diff proof that the field reproduces the displayed multiplier.
+  //     UDU6BonusCalc reads DiamondUltimaBonus   (UltimaMilestoneExponent  = 1.05)   <- Mats
+  //     UDU7BonusCalc reads DiamondUltimaBonus2  (UltimaMilestoneExponent2 = 1.02)   <- Hunter loot
+  //
+  // THAT DISTINCTION IS THE WHOLE THING, and getting it wrong is not subtle: with 1.05 the same
+  // save yields 1.20475, with 1.02 it yields 1.19890, and the player's screen said x1.1989.
+  // The constants are authored data (`typetree.py --dump DiamondShop`), not derived.
+  //
+  // The milestone level is corroborated independently: DiamondUltimaLevel/Progress advance by one
+  // per 50 Ultima purchases across ALL SEVEN UDU upgrades, and on the reference save the levels
+  // sum to 2+1+0+0+0+1+65 = 69 = 50x1 + 19, matching DiamondUltimaLevel 1 / Progress 19 exactly.
+  // So the save's own numbers agree with the game's CheckUltimaMilestone rule, which is why this
+  // is a derivation rather than a guess.
+  const ULTIMA = { udu7BaseBonus: 0.003, milestoneExponent2: 1.02 };
+  if (save.UDU7Level !== undefined) {
+    const uduLevel = realNum(save.UDU7Level);
+    // A missing milestone level means zero milestones, and 1.02^0 = 1 -- correct, not a fallback.
+    const milestone = save.DiamondUltimaLevel !== undefined ? realNum(save.DiamondUltimaLevel) : 0;
+    const mult = 1 + ULTIMA.udu7BaseBonus * (ULTIMA.milestoneExponent2 ** milestone) * uduLevel;
+    // The control accepts 1.0000-10.0000 (mirroring the original tool), so a value past the top of
+    // that range is clamped rather than written out of bounds. Rounded to the 4 decimals the field
+    // actually stores, so an imported value is bit-identical to the same number typed in by hand.
+    globalUpgrades['ultima.ulti'] = Math.min(10, Math.max(1, Number(mult.toFixed(4))));
+  }
 
   // Mats Exchange -> `TysconDrives`. Exact-name match on the same {Name} convention as the rest,
   // and the only Tyscon-shaped field that is a plain count: the save also carries
