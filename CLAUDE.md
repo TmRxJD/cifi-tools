@@ -117,6 +117,12 @@ or "fixing" it.
 
 ## Layout
 
+**OPEN ITEM: this repo commits and serves third-party content -- cifi-tools' compiled
+`release.wasm` and ~17MB of artwork extracted from the game APK. See `THIRD-PARTY.md` for
+the full inventory, why hosting it elsewhere does not resolve it, and what happens on each
+answer. Pending the rights-holder's reply; do not add more third-party binaries or art.**
+
+
 | Path | What it is |
 |---|---|
 | `webapp/public/` | The shipped app. Vanilla HTML/CSS/JS, **no build step**, loaded via `<script>` tags in dependency order. |

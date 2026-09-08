@@ -17,6 +17,9 @@ tools/bench/results/
 package-lock.json
 
 # Extracted game assets / APK working files -- large, and not ours to redistribute.
+# NOTE: webapp/public/assets/{nodes,ships,gear} and webapp/public/release.wasm are
+# currently COMMITTED despite that rule. That is a known open item, inventoried in
+# THIRD-PARTY.md and pending the rights-holder's answer. Do not add more.
 tools/save/upgrade-names.json
 # Pulled game files (APKs ~235MB, IL2CPP metadata, real save data). See tools/gamefiles/README.md,
 # which IS committed -- it documents what lives here and how to re-pull it.
