@@ -3244,6 +3244,10 @@ function shipNodeWeight(shipId, slot, weights) {
 
 window.ShipData = {
   SHIP_NODE_CATALOG,
+  // Exported for meltdown-allocation-check.js, which asserts a pre-Ouroboros account is not
+  // pushed into direct-resource nodes. That property is only observable through the real
+  // allocator; a bench reimplementing it would test its own copy of the exponent rule.
+  optimizeShipInstalls,
   // Exported for gear-icon-check.js: the slug rule lives in two places (here and the extractor)
   // and a drift between them silently removes every icon, so the bench compares them directly.
   gearIconSlug,
