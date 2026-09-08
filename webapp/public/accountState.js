@@ -76,6 +76,29 @@
       }
     }
 
+    // A MISSING LEVEL IS A SILENT lvl:0, AND IT LOOKS EXACTLY LIKE A PARITY FAILURE.
+    //
+    // `level` is passed straight through to simState/optimizerCfg, so a build object without one
+    // resolves the wasm's `lvl` argument to 0 -- a legal-looking number that evaluates the whole
+    // build as if the account were level 0. Nothing throws, nothing is undefined downstream, and
+    // the result is a plausible score for a build nobody has. It is the same failure shape as the
+    // hunterStats guard above, which is why it belongs at the same chokepoint.
+    //
+    // It has already cost real time: the same-account parity harness built its build object without
+    // a level and reported borge@61 as "~50% low against cifi-tools", which was investigated as a
+    // product defect through gem ablation, category ablation and a relic probe before the argument
+    // vector was dumped and `lvl` read 0. With the level supplied, all three hunters agree with the
+    // live site to within 0.24%.
+    //
+    // Guarded here rather than at the call sites because every path -- cfgFor, evalStateFor, the
+    // optimizer, every bench -- funnels through this constructor, so a new caller cannot bypass it.
+    if (!Number.isFinite(b.level) || b.level <= 0) {
+      throw new Error(`AccountState: build for "${hunter}" has no usable level (got ${b.level}). `
+        + 'level is required: it becomes the wasm `lvl` argument, so an absent one silently '
+        + 'evaluates the build at level 0 and returns a plausible but meaningless score rather '
+        + 'than failing.');
+    }
+
     const buildOverrides = b.overrides || {};
     // Caps are resolved ONCE, here, for this account -- never re-derived per consumer. Borge's
     // Call Me Lucky Loot caps at 12 rather than 10 once Attraction gem node 2 is owned, and a

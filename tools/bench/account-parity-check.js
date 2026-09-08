@@ -54,9 +54,15 @@ const FIELDS = [
   ['xpPerRun', 'XP / run'],
 ];
 
-// Monte Carlo plus the site's own display rounding. The evaluator is deterministic, but the two
-// sides run different iteration counts and the site prints to 4-5 significant figures, so a few
-// tenths of a percent is presentation rather than disagreement. Anything at 10x reads as ~900%.
+// THE NOISE FLOOR. The evaluator is deterministic, so this is NOT search variance -- no search runs
+// here, and the ~7-point seed spread that governs optimizer comparisons does not apply. What
+// remains is Monte Carlo sampling (~0.12% mean, 0.35% worst between two FINAL_ITERATIONS scores,
+// per eval-precision-check) plus the site's own display rounding to 4-5 significant figures, which
+// on a 3-significant-figure reading like "104" minutes is worth several tenths of a percent on its
+// own. So anything under ~1% is presentation, not disagreement.
+//
+// 3% is therefore loose enough to never fire on rounding and far tighter than any real defect:
+// the mistake this check exists to catch reads as ~100-900%, not as 3%.
 const TOLERANCE_PCT = 3;
 
 function findSave() {
@@ -93,11 +99,21 @@ function findSave() {
   // Comparing the account's ACTUAL allocation is what the question asks: it is the build the user
   // is looking at when they say the numbers are wrong.
   const build = {
+    // LEVEL IS REQUIRED, and omitting it does not throw -- AccountState reads `build.level`, so an
+    // absent one resolves the wasm's `lvl` argument to 0 and silently evaluates every build as if
+    // it were level 0. The first version of this check omitted it and reported borge@61 as "50%
+    // low against the site", which was this bug, not a product defect. It is asserted rather than
+    // defaulted: a level of 0 is a legal-looking number that quietly changes the answer.
+    level: hunterState.level,
     name: `${HUNTER}@${hunterState.level} (scanned)`,
     talents: hunterState.talents,
     attributes: hunterState.attributes,
     overrides: {},
   };
+  if (!Number.isFinite(build.level) || build.level <= 0) {
+    throw new Error(`importer gave no usable level for ${HUNTER} (got ${build.level}); refusing to `
+      + 'evaluate, because a missing level resolves lvl to 0 and looks like a parity failure');
+  }
 
   console.log(`hunter  ${HUNTER}  level ${hunterState.level}  highestStage ${hunterState.highestStage}`);
   console.log(`account ${Object.keys(store.globalUpgrades || {}).length} global upgrade(s), `

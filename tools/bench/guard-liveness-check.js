@@ -57,6 +57,26 @@ async function guard(name, where, trigger) {
     });
   });
 
+  // 1b. AccountState rejects a build with no level.
+  //
+  // `level` becomes the wasm `lvl` argument, so an absent one evaluates the build at level 0 --
+  // a legal-looking number, no undefined anywhere, and a plausible score for a build nobody has.
+  // That is why it must THROW rather than default: the same-account parity harness omitted it and
+  // reported borge@61 as 50% below cifi-tools, which was then investigated as a product defect
+  // through gem ablation, category ablation and a relic probe before anyone dumped the argument
+  // vector. Supplying the level put all three hunters within 0.24% of the live site.
+  await guard('build with no level', 'AccountState.build', () => {
+    const { level, ...noLevel } = build;
+    sb.AccountState.build({
+      hunter: 'knox',
+      build: noLevel,
+      hunterStats: {},
+      globalUpgrades: {},
+      gems: {},
+      showAdvancedTalents: false,
+    });
+  });
+
   // 2. AccountState.workerCfg refuses to drop a field a worker needs.
   await guard('workerCfg missing field', 'AccountState.workerCfg', () => {
     const broken = { ...cfg };
