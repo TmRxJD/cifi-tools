@@ -88,6 +88,35 @@ check('the imported build is filed under the payload hunter, not currentHunter',
 check('the destination does not depend on switchHunter having succeeded',
   !/store\[currentHunter\]\.builds\.push/.test(applyFn));
 
+// 5. FILE INPUTS MUST CLEAR THEIR SELECTION AFTER READING.
+//
+// A file input fires `change` only when the chosen file DIFFERS from what it already holds, so
+// re-importing the SAME save fires nothing and reads as "the import silently refused to overwrite
+// my data" -- reported exactly that way, with reloading the page as the only workaround.
+// Cheap to assert, invisible until someone tries it twice.
+// SCOPED TO EACH HANDLER, not searched across the whole file. The first version of this check
+// matched the string anywhere in app.js -- and there are TWO resets (the change handler and the
+// drop handler), so deleting the one that matters still passed. A negative control caught it;
+// without one this would have been a check that could never fail.
+const handlerOf = (start, end) => {
+  const a = app.indexOf(start);
+  if (a === -1) return '';
+  const b = app.indexOf(end, a);
+  return app.slice(a, b === -1 ? a + 1200 : b);
+};
+// A newline via fromCharCode rather than an escape sequence. The patch scripts that generated
+// this file kept turning the two-character escape into a REAL line break inside a string literal,
+// producing a syntax error three times running. Sidestepping the escape is more legible than
+// getting the quoting right through two layers of tooling.
+const NL = String.fromCharCode(10);
+const changeHandler = handlerOf('importSaveFileInput.onchange', NL + '};');
+const dropHandler = handlerOf('importSaveDropZone.ondrop', NL + '};');
+const backupHandler = handlerOf("document.getElementById('uploadBackupFile').onchange", NL + '  };');
+check('the save file input clears its selection in the CHANGE handler',
+  /importSaveFileInput\.value = ''/.test(changeHandler));
+check('the drop handler clears it too', /importSaveFileInput\.value = ''/.test(dropHandler));
+check('the backup file input clears its selection', /value = ''/.test(backupHandler));
+
 console.log('');
 if (failures) {
   console.log(`FAIL  ${failures} problem(s): a shared build link will not open.`);

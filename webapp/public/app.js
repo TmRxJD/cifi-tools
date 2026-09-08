@@ -2555,6 +2555,9 @@ function renderSettingsPage(root) {
   document.getElementById('uploadBackupBtn').onclick = () => document.getElementById('uploadBackupFile').click();
   document.getElementById('uploadBackupFile').onchange = (e) => {
     const file = e.target.files[0];
+    // Same no-event trap as the save import: without clearing, re-picking the same backup file
+    // does nothing and reads as "restore is broken".
+    e.target.value = '';
     if (!file) return;
     file.text().then((t) => { document.getElementById('restoreCodeInput').value = t.trim(); });
   };
@@ -3694,10 +3697,24 @@ importSaveDropZone.ondrop = (e) => {
   e.preventDefault();
   importSaveDropZone.classList.remove('border-blue-500');
   const file = e.dataTransfer.files?.[0];
+  // Drops do not go through the input, but clear it anyway: dropping a file and then PICKING the
+  // same one through the dialog would otherwise hit the same no-event trap.
+  importSaveFileInput.value = '';
   if (file) readImportSaveFile(file);
 };
 importSaveFileInput.onchange = () => {
   const file = importSaveFileInput.files?.[0];
+  // CLEAR THE SELECTION AFTER READING, or picking the SAME file again does nothing at all.
+  //
+  // A file input fires `change` only when the selected file DIFFERS from what it already holds.
+  // Re-importing the same save -- the normal thing to do after pulling a fresh copy to the same
+  // path, or simply retrying -- selected an identical value, fired no event, and looked like the
+  // import had silently refused to overwrite anything. The only way out was reloading the page,
+  // which is exactly what was reported.
+  //
+  // Cleared BEFORE the async read starts, so the input is ready again immediately and a fast
+  // second pick is not swallowed. `file` is already captured, so clearing cannot lose it.
+  importSaveFileInput.value = '';
   if (file) readImportSaveFile(file);
 };
 // Paste path -- same decode/apply pipeline as a dropped file, just a different way of getting
