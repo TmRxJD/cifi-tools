@@ -3244,6 +3244,12 @@ function shipNodeWeight(shipId, slot, weights) {
 
 window.ShipData = {
   SHIP_NODE_CATALOG,
+  // Exported so a bench can read the per-node marginal directly. The Meltdown exponent lives in
+  // here, and whether it reaches the ranking is only observable at this granularity -- a plan
+  // comparison cannot distinguish "the exponent did nothing" from "caps decided everything".
+  nodeMarginalLogGain,
+  nodeLinearIncrement,
+  nodeMaxLevel,
   // Exported for meltdown-allocation-check.js, which asserts a pre-Ouroboros account is not
   // pushed into direct-resource nodes. That property is only observable through the real
   // allocator; a bench reimplementing it would test its own copy of the exponent rule.
