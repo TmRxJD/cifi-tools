@@ -1767,13 +1767,25 @@ function installMultDisplay(code, perLevelMult, level) {
   </div>`;
 }
 const GEAR_EFFECTIVE_PATH_RESOURCES = ['cells', 'shards', 'researchPoints', 'modPoints', 'academyPoints', 'missionMaterials'];
+// GEAR SETS -- WHERE THE DATA COMES FROM. This used to be printed on the page itself as a
+// paragraph of sourcing notes; it belongs here instead. A user opening the page wants to enter
+// their gear, not read an audit trail.
+//
+//   - Piece stats were transcribed from cifi.fandom.com/wiki/Gear_Sets, EXCEPT the White set,
+//     which the wiki does not document and which came from the game.
+//   - Piece NAMES and SET-BONUS RESOURCES also come from the game, and that is what corrected
+//     three names the wiki had wrong (Gamma Round -> Gamma Rounds, Chrysis -> Crysis Suit,
+//     Cell Based Loop Tank -> Cell Based Loop-Tank). See tools/reference/gear-names.json.
+//   - Each piece's level buffs its two target installs multiplicatively (x1.01 and x1.02 per
+//     level, both confirmed against the authored Gear.GearBaseBonus1/2), and a set bonus applies
+//     once the whole colour is owned. Both feed the Fleet page's resource totals.
 function renderGearSetsPage(root) {
   const gearSets = getGearSets();
   root.innerHTML = `
     <div class="mb-4 rounded-lg overflow-hidden shadow-lg">
       <div class="bg-gradient-to-r from-blue-900 to-gray-800 px-5 py-4 border-b border-gray-600">
         <h1 class="text-xl font-bold">Gear Sets</h1>
-        <p class="text-xs text-gray-300 mt-0.5">Crafted/leveled with Academy Points (unlocked via Zeus). Data transcribed from cifi.fandom.com/wiki/Gear_Sets, except the White set, which the wiki does not document and which comes from the game itself -- as do all the piece names and set-bonus resources, which is what corrected three names the wiki had wrong. Each piece's own level buffs its 2 target installs multiplicatively (x1.01/level, x1.02/level), and each piece's own Set Bonus applies once its whole color is owned -- both feed into the Fleet page's resource totals.</p>
+        <p class="text-xs text-gray-300 mt-0.5">Crafted with Academy Points. Each piece's level buffs its two install nodes; a set bonus applies once you own the whole colour.</p>
       </div>
       <div class="bg-gray-800/70 px-4 py-3 border-t border-gray-700">
         <h3 class="text-xs font-semibold text-gray-300 mb-2">Gear Effective Path -- what to buy next, by resource</h3>
