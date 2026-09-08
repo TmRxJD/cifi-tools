@@ -318,14 +318,12 @@ check('greedy always spends on the single best-scoring eligible node at each ste
       const slot = clicks[i];
       const isAotc = shipId === AOTC.shipId && slot === AOTC.slot;
       if (!isAotc) {
-        const tags = sb.effectResources(CATALOG[shipId][slot].effect);
-        const cats = [...new Set(tags.map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))];
-        // SUM, matching optimizeShipInstalls' own nodeWeight: maximising prod(resource ^ weight)
-        // means a node feeding two buckets contributes both. This is a DUPLICATE of the shipped
-        // rule (nodeWeight is module-private), so it is a known drift hazard -- it was still on the
-        // old MAX form after the tool moved to sum, and reported the allocator as wrong for
-        // correctly preferring a dual-resource node.
-        const w = cats.reduce((sum, c) => sum + (weights[c] || 0), 0);
+        // THE SHIPPED RULE, not a copy of it. This used to re-derive the weight here, and when
+        // the tool moved from `max` to `sum` the copy stayed on `max` and reported the allocator
+        // as WRONG for correctly preferring a dual-resource node. A bench carrying its own copy
+        // of the rule under test cannot detect a change to that rule -- only disagreement with a
+        // stale transcription.
+        const w = sb.ShipData.shipNodeWeight(shipId, slot, weights);
         const rivalBest = bestEligibleScore(shipId, levels, total, unlocked, weights, 'long', slot);
         if (w > 0) {
           const ownScore = sb.nodeMarginalLogGain(shipId, slot, levels, 'long') * w;

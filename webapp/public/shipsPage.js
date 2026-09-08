@@ -2267,10 +2267,7 @@ function allocateShipInstallsOnce(shipId, budget, weights, prepForLongRun, runLe
   // took a max. That silently undervalued every dual-resource node by treating one of its two
   // contributions as free, and it contradicted the marginal-value derivation quoted at the pick
   // site three lines below.
-  const categoryOf = {}; // slot -> [categories]
-  slots.forEach((slot) => {
-    categoryOf[slot] = [...new Set(effectResources(catalog[slot].effect).map((r) => RESOURCE_TO_WEIGHT_BUCKET[r]).filter(Boolean))];
-  });
+
   // SUM, not max, across the buckets a node feeds. The objective is
   // `maximise prod(resource_r ^ weight_r)`, whose log is `sum(weight_r * log(resource_r))` -- so a
   // node whose effect reads "+X% Cells & Shards gained" multiplies TWO resources and contributes
@@ -2279,7 +2276,7 @@ function allocateShipInstallsOnce(shipId, budget, weights, prepForLongRun, runLe
   // literal "A & B gained" effects, so this is not a hypothetical.
   // Summing preserves the property the previous max was there for -- a node stays eligible whenever
   // ANY slider touching it is above zero, since a sum of non-negative weights is > 0 iff one is.
-  const nodeWeight = (slot) => categoryOf[slot].reduce((sum, c) => sum + (weights[c] || 0), 0);
+  const nodeWeight = (slot) => shipNodeWeight(shipId, slot, weights);
   // Nothing to suppress any more: the main loop evaluates AOTC on its merits like any other node.
   // It is only pre-filled above when prepForLongRun has already maxed it.
   const aotcSuppressed = shipId === AOTC_SHIP_ID && (prepForLongRun || pinnedAotc != null);
@@ -2946,6 +2943,37 @@ window.renderBadgesPage = renderBadgesPage;
 // benchmark can exercise the real ones rather than a Node copy that drifts. Top-level `const`
 // declarations are not global properties, so without this the ship optimizer could be called
 // from a test but nothing about its inputs could be inspected or asserted.
+/**
+ * The weight a node carries under the user's resource sliders: the SUM of the weights of every
+ * bucket its effect feeds.
+ *
+ * ONE HOME, because this rule has had two and they disagreed. The allocator had it inline as a
+ * closure and `ship-test.js` carried its own copy; when the shipped rule moved from `max` to
+ * `sum`, the bench stayed on `max` and reported the allocator as WRONG for correctly preferring a
+ * dual-resource node. A duplicated RULE is the specific thing this project bans, and a bench
+ * carrying its own copy of the rule it is checking cannot detect a change to that rule -- it can
+ * only detect disagreement with a stale transcription of it.
+ *
+ * SUM, not max: the objective is `maximise prod(resource_r ^ weight_r)`, whose log is
+ * `sum(weight_r * log(resource_r))`, so a node reading "+X% Cells & Shards gained" contributes to
+ * both. Taking the strongest slider undervalued exactly those nodes by up to 2x -- five of the 77
+ * (Koios 6, Zeus 4/5/6/7). Summing also preserves the eligibility property the old max was there
+ * for: a sum of non-negative weights is > 0 iff at least one of them is.
+ *
+ * @param {string|number} shipId
+ * @param {string} slot
+ * @param {Record<string, number>} weights  bucket -> slider weight
+ * @returns {number}
+ */
+function shipNodeWeight(shipId, slot, weights) {
+  const meta = (SHIP_NODE_CATALOG[shipId] || {})[slot];
+  if (!meta) throw new Error(`shipNodeWeight: no catalog entry for ship ${shipId} slot ${slot}`);
+  const buckets = [...new Set(effectResources(meta.effect)
+    .map((r) => RESOURCE_TO_WEIGHT_BUCKET[r])
+    .filter(Boolean))];
+  return buckets.reduce((sum, c) => sum + ((weights && weights[c]) || 0), 0);
+}
+
 window.ShipData = {
   SHIP_NODE_CATALOG,
   // Exported so ship-test.js can replay the save import (slot -> ruId -> RU{id}{Category}Level)
@@ -2955,6 +2983,9 @@ window.ShipData = {
   computeTechPoolBadgeMultiplier,
   unmodelledTechPoolTerms,
   RESOURCE_TO_WEIGHT_BUCKET,
+  // The node-weight rule itself, so no caller has to re-derive it from
+  // RESOURCE_TO_WEIGHT_BUCKET and get the sum-vs-max question wrong again.
+  shipNodeWeight,
   // Demeter's "Ahead of the Curve" is special-cased in the allocator (its payoff lands next
   // loop, so the marginal-value engine cannot score it). Named here so the rule is greppable
   // rather than appearing as a bare `shipId === 5 && slot === '1'`.
