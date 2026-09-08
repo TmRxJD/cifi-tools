@@ -2035,11 +2035,6 @@
   // NEVER LOWER THIS TO MAKE SOMETHING FASTER. The moment it binds routinely it is a budget again
   // and every A/B measured under it is noise.
   const DEFAULT_MAX_SECONDS = 600;
-  // How many finalists still get a full-fidelity score once the deadline has passed. Enough that
-  // the champion is chosen by measurement rather than by screening order -- screening is measured
-  // inverting a 0.32% ridge by 1.7%, so picking the winner on a screen score is how the search
-  // lands on a build that is genuinely worse. Corpus donors are kept on top of this count.
-  const FINALISTS_WHEN_LATE = 8;
 
   async function optimize(cfg, opts = /** @type {any} */ ({})) {
     let fidelityClaimed = false;
@@ -2757,20 +2752,30 @@
       // finalists is HOW the champion is chosen, and a cap that skipped it would return an unranked
       // guess rather than a slightly less refined build.
       //
-      // So it is trimmed instead, and the ones kept are chosen by the screening score already paid
-      // for -- plus every corpus donor unconditionally, because donors are the safety net that
-      // guarantees the answer is never worse than a known good build, and dropping them to save
-      // time would trade the one property a rushed run most needs to keep.
-      let toScore = unique;
-      if (ctx.pastDeadline() && unique.length > FINALISTS_WHEN_LATE) {
-        const donors = unique.filter((f) => f.fromCorpus !== undefined);
-        const rest = unique.filter((f) => f.fromCorpus === undefined)
-          .sort((a, b) => (b.score || -Infinity) - (a.score || -Infinity));
-        toScore = donors.concat(rest).slice(0, Math.max(FINALISTS_WHEN_LATE, donors.length));
-        ctx.note(`time cap: scoring ${toScore.length} of ${unique.length} finalists at full `
-          + `fidelity (every corpus donor kept)`);
-      }
-      const finalScores = await ctx.score(toScore.map((f) => ({ talentAlloc: f.talentAlloc, attrAlloc: f.attrAlloc })), FINAL_ITERATIONS);
+      // THE FINALIST LIST IS NEVER TRIMMED. A time cap may bound WORK; it may not bound the
+      // DECISION.
+      //
+      // A trim was tried here and measured costing a real build everything: ozzy@63 returned
+      // 10,956,103 with kill 0.0 truncated, against 30,193,657 with kill 52.3 untruncated -- a 62%
+      // loss, because the finalist that killed the stage-200 boss did not rank top-8 by screening
+      // score and was dropped before anything measured it.
+      //
+      // THAT IS THE BOSS-PLATEAU PROBLEM ARRIVING THROUGH A NEW DOOR. A build about to cross a boss
+      // wall scores badly on loot-per-minute right up until it crosses, so ranking candidates by
+      // that metric and discarding the tail is exactly how the winner gets thrown away. The archive
+      // solves it by giving such builds their own behaviour cell; a top-K trim has no equivalent
+      // and cannot acquire one, because the property it would need to rank on -- does this kill a
+      // boss -- is only known AFTER the evaluation the trim is trying to avoid.
+      //
+      // Keeping boss-killers explicitly was tried first and would have been near-inert: archive
+      // elites carry `kill`, but finalists returned by refinement carry only {talentAlloc,
+      // attrAlloc, score}, and refinement is precisely what CREATES kills. The guard would have
+      // protected the candidates least likely to need it.
+      //
+      // So Stage 3 always scores every unique finalist. The cap still bites where the time actually
+      // goes -- polish is skipped wholesale above, which measured 64s -> 28s on the probe -- and a
+      // capped run now returns a build chosen from the full candidate set, merely less polished.
+      const finalScores = await ctx.score(unique.map((f) => ({ talentAlloc: f.talentAlloc, attrAlloc: f.attrAlloc })), FINAL_ITERATIONS);
       // Did refinement CREATE boss capability from the archive's foothold, or fail to? The archive
       // reaching kill 1 vs kill 7 decides the whole run, so the question is whether a weak foothold
       // refines up or dies. Reported, not acted on.
@@ -2790,13 +2795,7 @@
           stage: 'refined', talentAlloc: bestRefined.talentAlloc, attrAlloc: bestRefined.attrAlloc,
         });
       }
-      // `toScore`, NOT `unique`. finalScores is parallel to what was actually SCORED, and when the
-      // time cap trims the finalist list those two stop being the same array -- mapping over
-      // `unique` here would pair each build with another build's score, silently crowning the
-      // wrong champion (and handing `undefined` to the sort for the trimmed tail). Exactly the
-      // index-misalignment this project has been bitten by before, in new code, an hour after
-      // writing the trim.
-      const ranked = toScore
+      const ranked = unique
         .map((f, i) => ({ talentAlloc: f.talentAlloc, attrAlloc: f.attrAlloc, score: finalScores[i] }))
         .sort((a, b) => b.score - a.score);
 

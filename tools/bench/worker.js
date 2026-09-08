@@ -128,7 +128,19 @@ parentPort.on('message', async (fixture) => {
     // same blind spot that let `fast` ship a crash on ozzy@11, and the same shape as `boss` and
     // `bossTimeless` having zero coverage while being offered in the same UI.
     const effort = fixture.effort || undefined;
-    const result = await H.Optimizer.optimize(cfg, { mode: fixture.mode, scorer, ...(effort ? { effort } : {}) });
+    // maxSeconds: 0 -- THE GATE MUST NEVER BE TRUNCATED.
+    //
+    // This compares an optimizer result against a recorded build, so a truncated run does not
+    // report a worse search, it reports a shorter one -- and the number is not reproducible on a
+    // different machine. Measured: ozzy@63 came back 10,956,103 with kill 0.0 here while a direct
+    // run gave 30,193,657 with kill 52.3, and the whole difference was `truncated=true`.
+    //
+    // It bit HERE and not in the app because this harness's scorer is roughly 4x slower per
+    // evaluation than the browser's worker pool (665s for 11,823 evaluations against 343s for
+    // 22,918), so the gate blew through a 600s default the app would not have reached. A bench
+    // inheriting a user-facing time limit measures the bench's own speed, not the search.
+    const result = await H.Optimizer.optimize(cfg,
+      { mode: fixture.mode, scorer, maxSeconds: 0, ...(effort ? { effort } : {}) });
     const optimized = await H.evaluateAllocation(cfg, result.best.talentAlloc, result.best.attrAlloc);
 
     parentPort.postMessage({
