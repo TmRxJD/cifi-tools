@@ -1139,10 +1139,6 @@ function computeGearSetBonusMultipliers() {
 // Gear piece leveling cost -- see REAL_GEAR_PIECES' costBase/costScalar note for the (low)
 // confidence tier this is at. `level` is the level being bought (1-indexed): cost to go from
 // level-1 to level.
-function gearPieceCostAtLevel(piece, level) {
-  if (!piece.costBase || !piece.costScalar || level < 1) return Infinity;
-  return piece.costBase * Math.pow(piece.costScalar, level - 1);
-}
 // Which resource(s) a gear piece's installs feed, and how much %/level each install is worth
 // toward them (install1 = x1.01/level = 1, install2 = x1.02/level = 2) -- summed if BOTH
 // installs happen to feed the SAME resource, since one level-up buffs both installs at once for

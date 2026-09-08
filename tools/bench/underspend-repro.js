@@ -39,7 +39,17 @@ const EFFORTS = (opt('efforts', 'fast,complete')).split(',');
     for (const effort of EFFORTS) {
       const pooled = await H.makePooledScorer(cfg, mode);
       try {
-        const res = await H.Optimizer.optimize(cfg, { mode, scorer: pooled.score, effort });
+        // CAPPED AT 45s, AND THE CAP CANNOT HIDE WHAT THIS LOOKS FOR. This gate replays two
+        // builds to see whether a historical CRASH is still live, and it was costing 938s to
+        // answer that -- the third most expensive gate in the suite, for two optimize calls.
+        //
+        // The failure it hunts is an assertion inside optimize() that fires at Stage 3, and Stage
+        // 3 runs whether or not the deadline passed (a cap that skipped it would return an
+        // unranked build, so it is never skipped). The under-spend check therefore still happens.
+        // If anything a capped run is MORE likely to leave a point unspent, which is the condition
+        // being tested -- the original crash appeared on the cheap effort level, not the thorough
+        // one.
+        const res = await H.Optimizer.optimize(cfg, { mode, scorer: pooled.score, effort, maxSeconds: 45 });
         const tS = H.Space.costOf(cfg.TALENTS, res.best.talentAlloc);
         const aS = H.Space.costOf(cfg.ATTRIBUTES, res.best.attrAlloc);
         const full = tS === cfg.TALENT_BUDGET && aS === cfg.ATTRIBUTE_BUDGET;
