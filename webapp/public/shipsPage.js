@@ -529,6 +529,32 @@ function unmodelledEvolutionTerms() {
     : [];
 }
 const SHIP_PORTRAITS = { 1: 'cradle', 2: 'auxesia', 3: 'zagreus', 4: 'hephaestus', 5: 'demeter', 6: 'koios', 7: 'zeus', 8: 'ouroboros' };
+// HOW MANY EVOLUTION STAGES EACH SHIP HAS, and therefore which artwork exists. From
+// FleetManager's own `Ship<n>Evolution<m>` field declarations -- see
+// tools/assets/extract-ship-evo-sprites.py and tools/reference/ship-evo-stages.json.
+//
+// THE COUNTS ARE NOT UNIFORM, which is the whole reason this table exists: assuming eight stages
+// everywhere would ask for demeter-evo7.png, which does not exist, and a broken <img> is a worse
+// answer than the static portrait.
+const SHIP_MAX_EVO = { 1: 7, 2: 4, 3: 4, 4: 5, 5: 3, 6: 4, 7: 6 };
+// The artwork for the evo level the account has entered, falling back to the static portrait.
+// Ouroboros (8) has no entry in SHIP_MAX_EVO and so always falls back -- the tool does not model
+// it, so no per-stage art was extracted for it.
+function shipPortraitPath(shipId, evoLevel) {
+  const portrait = SHIP_PORTRAITS[shipId];
+  if (!portrait) return null;
+  const max = SHIP_MAX_EVO[shipId];
+  if (max === undefined) return `assets/ships/${portrait}.png`;
+  // CLAMPED, NOT TRUSTED. `evo` is a free-text field the user types, so it can be blank, negative,
+  // or above the real ceiling; clamping keeps a typo showing a real ship rather than a broken
+  // image. Above the cap the ship is at its final form, which is what the game shows too.
+  // FLOORED as well as clamped: bounding the range alone still lets a fractional value through,
+  // and `1.7` produced `koios-evo1.7.png` -- a path that cannot exist. Caught by
+  // ship-evo-art-check.js on its first run, which is why that bench asserts the FILE exists
+  // rather than merely that the number is in range.
+  const stage = Math.max(0, Math.min(max, Math.floor(Number(evoLevel) || 0)));
+  return `assets/ships/${portrait}-evo${stage}.png`;
+}
 // What each ship actually ranks up by, per cifi.fandom.com's ship pages -- drives the Ship
 // Setup page's "progress toward next rank" field label.
 const SHIP_RANKUP_METRIC = { 1: 'Generators Purchased', 3: 'Loops Filled', 4: 'Cells Accumulated', 5: 'Operations Completed', 6: 'Studies Completed', 7: 'Missions Completed' };
@@ -1440,13 +1466,15 @@ function renderShipSetupPage(root) {
     const req = genTierRequirement(n);
     const owned = !!unlockedGens[n];
     const locked = req && !req.met && !owned;
-    const title = locked ? req.text : '';
+    // HIDDEN, NOT DISABLED -- which is what the game does. Below the gem requirement the game does
+    // not render a greyed-out generator, it does not render the object at all
+    // (CheckMK<n>Overlays sets the whole GameObject inactive), and a row of permanently dead
+    // checkboxes is clutter that tells the user nothing they can act on. The requirement is still
+    // stated below the row, so the tiers are not silently missing.
+    if (locked) return '';
     return `
-    <label class="flex items-center gap-1 px-2 py-0.5 rounded text-xs cursor-pointer ${locked
-      ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-700 text-gray-300'}"
-      ${title ? `title="${escapeHtml(title)}"` : ''}>
-      <input type="checkbox" data-gen="${n}" ${owned ? 'checked' : ''} ${locked ? 'disabled' : ''}
-        class="accent-blue-500" /> MK${n}${locked ? ' 🔒' : ''}
+    <label class="flex items-center gap-1 px-2 py-0.5 rounded text-xs cursor-pointer bg-gray-700 text-gray-300">
+      <input type="checkbox" data-gen="${n}" ${owned ? 'checked' : ''} class="accent-blue-500" /> MK${n}
     </label>`;
   }).join('');
 
@@ -1495,7 +1523,7 @@ function renderShipSetupPage(root) {
     card.className = `bg-gray-800 rounded-lg border border-gray-700 p-3 ${!rec ? 'opacity-50' : ''}`;
     card.innerHTML = `
       <div class="flex items-center gap-2 mb-2">
-        ${portrait ? `<img src="assets/ships/${portrait}.png" class="w-10 h-10 object-contain flex-shrink-0" alt="${shipDisplayName(n)}" />` : ''}
+        ${portrait ? `<img src="${shipPortraitPath(n, input.evo)}" class="w-10 h-10 object-contain flex-shrink-0" alt="${shipDisplayName(n)} evo ${input.evo}" onerror="this.src='assets/ships/${portrait}.png'" />` : ''}
         <span class="font-medium text-white text-sm">${shipDisplayName(n)}</span>
       </div>
       <div class="grid grid-cols-2 gap-1 text-xs text-gray-400 mb-2">
@@ -1519,7 +1547,23 @@ function openShipSetupEditor(shipId) {
   document.getElementById('shipBuildModalShipName').textContent = shipDisplayName(shipId);
   document.getElementById('shipSetupRank').value = input.rank;
   document.getElementById('shipSetupCrew').value = input.crew;
-  document.getElementById('shipSetupEvo').value = input.evo;
+  // The evolution options are PER SHIP -- Demeter has 4 stages where Cradle has 8 -- so they are
+  // built when the modal opens rather than declared once in the markup. A ship with no entry in
+  // SHIP_MAX_EVO (Ouroboros) gets a single 0 option instead of an empty select.
+  const evoSel = document.getElementById('shipSetupEvo');
+  const evoMax = SHIP_MAX_EVO[shipId];
+  const evoTop = evoMax === undefined ? 0 : evoMax;
+  evoSel.innerHTML = '';
+  for (let e = 0; e <= evoTop; e++) {
+    const opt = document.createElement('option');
+    opt.value = String(e);
+    opt.textContent = e === evoTop && evoTop > 0 ? `${e} (max)` : String(e);
+    evoSel.appendChild(opt);
+  }
+  // A stored value above this ship's ceiling would otherwise select nothing and read back as 0 on
+  // save, silently resetting a real account value. Clamp instead, so the user sees what will be
+  // kept. This is reachable: the field was a free number input until now.
+  evoSel.value = String(Math.max(0, Math.min(evoTop, Number(input.evo) || 0)));
   document.getElementById('shipSetupRankPoints').value = input.rankPoints;
 
   const gear = getShipGear();
@@ -1892,7 +1936,7 @@ function renderFleetPage(root) {
     card.innerHTML = `
       ${zaglagBadge}
       <div class="flex items-center gap-2 mb-2 self-start">
-        ${portrait ? `<img src="assets/ships/${portrait}.png" class="w-8 h-8 object-contain" alt="${shipDisplayName(n)}" />` : ''}
+        ${portrait ? `<img src="${shipPortraitPath(n, getShipInput(n).evo)}" class="w-8 h-8 object-contain" alt="${shipDisplayName(n)} evo ${getShipInput(n).evo}" onerror="this.src='assets/ships/${portrait}.png'" />` : ''}
         <span class="font-medium text-white text-sm">${shipDisplayName(n)}</span>
       </div>
       <div class="flex gap-3 text-[10px] text-gray-400 mb-2 self-start" title="Rank/Crew are your real Ship Setup values -- Installs is the total shown in the grid below (this loadout's plan, or your real current installs if this ship wasn't touched).">
@@ -3129,6 +3173,10 @@ function shipNodeWeight(shipId, slot, weights) {
 
 window.ShipData = {
   SHIP_NODE_CATALOG,
+  // Exported so ship-evo-art-check.js can assert the clamp and the per-ship stage ceilings
+  // against the extracted reference, rather than a bench re-deriving them from a second copy.
+  SHIP_MAX_EVO,
+  shipPortraitPath,
   // Exported so ship-test.js can replay the save import (slot -> ruId -> RU{id}{Category}Level)
   // and check the result against the gates. Without it that test silently skipped every ship.
   SHIP_CATEGORY,

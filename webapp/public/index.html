@@ -304,7 +304,12 @@ tailwind.config = {
       <div class="mb-5 bg-gray-700 rounded-lg p-4 border border-gray-600 grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div><label class="block text-xs text-gray-400 mb-1">Rank</label><input id="shipSetupRank" type="number" min="0" class="w-full bg-gray-800 border border-gray-600 rounded-md px-2 py-1.5 text-white text-sm" /></div>
         <div><label class="block text-xs text-gray-400 mb-1">Crew</label><input id="shipSetupCrew" type="number" min="0" class="w-full bg-gray-800 border border-gray-600 rounded-md px-2 py-1.5 text-white text-sm" /></div>
-        <div><label class="block text-xs text-gray-400 mb-1">Evolution</label><input id="shipSetupEvo" type="number" min="0" class="w-full bg-gray-800 border border-gray-600 rounded-md px-2 py-1.5 text-white text-sm" /></div>
+        <!-- A SELECT, NOT A NUMBER FIELD. Each ship has a different, small number of evolution
+             stages (Demeter 4, Cradle 8), and the value now picks the ship's artwork -- so a typo
+             could ask for a picture that does not exist. Options are filled per ship from
+             SHIP_MAX_EVO when the modal opens; an input that cannot express an invalid value is
+             better than one that validates after the fact. -->
+        <div><label class="block text-xs text-gray-400 mb-1">Evolution</label><select id="shipSetupEvo" class="w-full bg-gray-800 border border-gray-600 rounded-md px-2 py-1.5 text-white text-sm"></select></div>
         <div><label class="block text-xs text-gray-400 mb-1">Install Points</label><input id="shipSetupRankPoints" type="number" min="0" class="w-full bg-gray-800 border border-gray-600 rounded-md px-2 py-1.5 text-white text-sm" /></div>
       </div>
 
@@ -700,7 +705,7 @@ tailwind.config = {
 <script src="hunterDefs.js?v=20260903a"></script>
 <script src="shipSchema.js?v=20260907r-genGate"></script>
 <script src="accountState.js?v=20260907g-levelguard"></script>
-<script src="shipsPage.js?v=20260907r-genGate"></script>
+<script src="shipsPage.js?v=20260907t-evoart"></script>
 <script src="upgradeEffects.js?v=20260810p"></script>
 <script src="hunterSimBrowser.js?v=20260903l"></script>
 <script src="optimizer/space.js?v=20260907q-guards"></script>

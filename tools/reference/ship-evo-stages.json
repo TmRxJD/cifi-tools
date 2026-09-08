@@ -1,0 +1,82 @@
+{
+  "_source": "sharedassets0 sprites, checked against FleetManager Ship<n>Evolution<m>",
+  "_game": "apk-0.7.3.61",
+  "_meaning": "per-ship evolution stages and therefore which artwork exists; stage counts are NOT uniform (Cradle 8 ... Demeter 4)",
+  "ships": {
+    "cradle": {
+      "stages": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "maxStage": 7
+    },
+    "auxesia": {
+      "stages": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "maxStage": 4
+    },
+    "zagreus": {
+      "stages": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "maxStage": 4
+    },
+    "hephaestus": {
+      "stages": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "maxStage": 5
+    },
+    "demeter": {
+      "stages": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "maxStage": 3
+    },
+    "koios": {
+      "stages": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "maxStage": 4
+    },
+    "zeus": {
+      "stages": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "maxStage": 6
+    }
+  }
+}

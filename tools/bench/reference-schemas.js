@@ -350,6 +350,18 @@ const schemas = {
     unnamedSlots: z.array(z.number().int().min(1).max(110)),
   }).strict(),
 
+  // Ship evolution stages. `stages` must start at 0 and be contiguous, because the UI builds its
+  // dropdown as 0..maxStage -- a gap would offer a stage with no artwork. maxStage is bounded at 7
+  // (Cradle's, the highest the game declares); a larger value almost certainly means the extractor
+  // matched something that is not a stage, such as CradleEvo7_1.
+  'ship-evo-stages.json': z.object({
+    ...meta,
+    ships: nonEmptyRecord(z.string().min(1), z.object({
+      stages: z.array(z.number().int().min(0).max(7)).min(1),
+      maxStage: z.number().int().min(0).max(7),
+    }).strict()),
+  }).strict(),
+
   'relic-caps.json': z.object({
     ...meta,
     _raises: z.string().min(1),
