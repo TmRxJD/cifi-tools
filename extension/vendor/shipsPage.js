@@ -2774,7 +2774,18 @@ document.getElementById('generateLoadoutBtn').onclick = () => {
   // (nothing reachable yet) does NOT count as ready -- that's "too early to tell", not "done".
   const zaglagChecklist = optSettings.zaglag ? computeZaglagChecklist() : null;
   const zaglagReady = !!zaglagChecklist && zaglagChecklist.length > 0 && zaglagChecklist.every((it) => it.isReady);
-  const perShip = {};
+  // SEEDED FROM THE EXISTING PLANS, NOT EMPTY, AND THIS WAS A REAL DATA-LOSS BUG.
+  //
+  // The whole map is reassigned to `activeLoadout.perShip` below, so starting empty DELETED every
+  // ship the batch skipped -- exactly the ships the loop's own comment promises to "leave
+  // untouched". Optimize one ship individually, then run a batch with it unchecked (or with
+  // Zagreus still Zaglag-delayed), and its levels and install order were silently gone; the card
+  // then fell back to showing real installs with no order, which reads as "the optimizer forgot"
+  // rather than as deletion.
+  //
+  // A shallow copy is right: the loop REPLACES a ship's entry wholesale rather than mutating it, so
+  // carried-over entries are never shared with a new plan.
+  const perShip = { ...activeLoadout.perShip };
   document.querySelectorAll('[data-ship-points]').forEach((el) => {
     const shipId = Number(el.dataset.shipPoints);
     if (optSettings.shipEnabled[shipId] === false) return; // unchecked -- leave untouched, not part of this batch
@@ -2833,8 +2844,31 @@ function openLoadoutDetail(shipId, levels, mode, clicks) {
   let note;
   let nextClicks = null; // only set for 'path' mode -- needed below to commit a confirmed prefix
   if (mode === 'order') {
-    lines = expandClicks(clicks || [], catalog, {}, shipId);
-    note = 'Every individual point-spend to build this card\'s levels from scratch, in the exact order the optimizer picked them -- interleaved across nodes, never bulk-bought into one node before touching another.';
+    // A CARD ONLY CARRIES A CLICK SEQUENCE IF THE ACTIVE LOADOUT PLANNED THAT SHIP
+    // (`loadout.perShip[n]?.clicks || []`). For an untouched ship the card shows the player's REAL
+    // current installs, which have no recorded order -- so this said "No points to allocate" to
+    // someone looking at 513 installed points, which is useless and reads as a bug.
+    //
+    // The honest fallback is the IDEAL sequence to reach that same total, which is what
+    // `optimizeShipInstalls` produces and what Effective Path already uses as its reference. It is
+    // NOT a reconstruction of what they actually bought and must not claim to be: the levels it
+    // reaches are the optimizer's, not theirs. Labelled accordingly.
+    let ordered = clicks || [];
+    let derived = false;
+    if (!ordered.length) {
+      const realTotal = Object.values(getShipInput(shipId).installs).reduce((a, b) => a + (b || 0), 0);
+      if (realTotal > 0) {
+        const gear = getShipGear();
+        const optSettings = getOptimizerSettings();
+        const prep = shipId === AOTC_SHIP_ID && optSettings.prepForLongRun;
+        ordered = optimizeShipInstalls(shipId, realTotal, gear.focusWeights, prep, optSettings.runLength).clicks;
+        derived = true;
+      }
+    }
+    lines = expandClicks(ordered, catalog, {}, shipId);
+    note = derived
+      ? `This ship isn't part of the active loadout, so there is no recorded plan. Showing the <strong>ideal</strong> order to spend your current ${lines.length} installs from scratch -- the same reference the Effective Path uses. The levels below are the optimizer's, not necessarily your current ones.`
+      : 'Every individual point-spend to build this card\'s levels from scratch, in the exact order the optimizer picked them -- interleaved across nodes, never bulk-bought into one node before touching another.';
   } else {
     // Effective Path answers "what should I buy next, right now" -- it finds where your REAL
     // current total install count sits along this same ideal sequence, then shows the next 30
