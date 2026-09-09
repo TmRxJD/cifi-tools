@@ -1,6 +1,16 @@
 # Third-party content in this repo — OPEN ITEM, pending permission
 
-**Status: unresolved. Awaiting a reply from the cifi-tools author (Vash).**
+**Status: item 1 (the wasm) has a resolution IN PROGRESS — see route 4 below. Item 2 (game
+artwork) is unchanged and still unresolved. Still awaiting a reply from the cifi-tools author
+(Vash).**
+
+**What changed:** `extension/` is now a companion that runs INSIDE cifi-tools.com rather than a
+bridge into our own site. On their origin their engine is same-origin, so it is fetched from the
+server that owns it and nothing is copied. That resolves the wasm question **for the extension**.
+It does NOT resolve it for the website: `webapp/public/release.wasm` is still committed and still
+served from GitHub Pages, because the website still exists and cannot run without it. The wasm item
+below closes completely only if the website is retired in favour of the extension — which is now a
+real option rather than a hypothetical, and is the decision this file is waiting on.
 
 This repo currently commits, and GitHub Pages currently serves, content that this project did not
 author. That is redistribution regardless of intent, and it is deliberately recorded here rather
@@ -54,6 +64,24 @@ Considered and rejected, recorded so it is not revisited as though it were new:
    recovered C#, the authored coefficients and `params.json`'s full interface. Be clear-eyed about
    scale: 101/89/91 parameters across three hunters, a whole combat/loot simulation, and it must be
    comparable to the original or every bench loses its reference.
+4. **Run inside cifi-tools.com as a browser extension.** IMPLEMENTED — `extension/`. Their page
+   loads their engine from their server; our content script adds fleet/ship pages beside it. No
+   copy is made, hosted, or transmitted, and the user is already signed in to their own cifi-tools
+   account, so no account data leaves their control either.
+
+   **Why this is different from routes 1–3 rather than a variant of them.** Route 2 (local-only)
+   still asks every user to fetch the binary themselves; this asks nobody for anything, because the
+   fetch is one their browser already makes when they open the site. Hosting is not involved at
+   all, so the objection that sank Appwrite does not apply.
+
+   **What it does NOT do, stated plainly:** it does not remove `webapp/public/release.wasm` from
+   this repo. Anyone using the website still receives their binary from us. The redistribution ends
+   only when the website does.
+
+   **The remaining question is social, not technical.** This modifies their UI in the user's own
+   browser — the ad-blocker model, and far safer ground than hosting their build output. But it is
+   still their interface, and the courtesy of asking is worth more than the argument that we may.
+   Nothing here changes the plan to talk to Vash first.
 
 ---
 

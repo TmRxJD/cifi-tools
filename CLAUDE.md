@@ -122,6 +122,12 @@ or "fixing" it.
 the full inventory, why hosting it elsewhere does not resolve it, and what happens on each
 answer. Pending the rights-holder's reply; do not add more third-party binaries or art.**
 
+**The wasm half now has an implemented answer: `extension/` runs INSIDE cifi-tools.com, where their
+engine is same-origin, so nothing of theirs is copied or hosted. It does NOT clear the repo --
+`webapp/public/release.wasm` still ships for the website, which cannot run without it. The
+redistribution ends only if the website is retired in favour of the extension. The ARTWORK is
+untouched by any of this and remains fully open.**
+
 
 | Path | What it is |
 |---|---|
@@ -130,6 +136,7 @@ answer. Pending the rights-holder's reply; do not add more third-party binaries 
 | `webapp/public/optimizer/` | The build optimizer — see below. |
 | `tools/bench/` | The optimizer acceptance gate and schema tests. Runs under Node against the **shipped** browser files. |
 | `compare-mcp/` | MCP server + fixtures for comparing the clone against the live cifi-tools.com site. |
+| `extension/` | The **companion extension**: a content script that adds the fleet/ship pages to cifi-tools.com itself. `companion.css` and `vendor/` are BUILD OUTPUT of `tools/build-companion.js` -- edit `webapp/public/`, never the copies. See `extension/README.md`. |
 | `bridge/` | **SUPERSEDED.** The old single-game `cifi-bridge`. The shipped bridge is now `adb-bridge` (`C:\Users\jdion\Projects\adb-bridge`, npm `adb-bridge`, TmRxJD/adb-bridge) — one process serving many games from JSON profiles, with CIFI on port 43791. **Fix bridge bugs THERE, not here**; the site's own dialog tells users `npx adb-bridge cifi`. This directory's `waitForAndroidBoot` / `dedupeSameDevice` fixes were ported upstream in adb-bridge 0.2.4. |
 
 Run it: `node webapp/server.js` → http://localhost:5173
@@ -153,6 +160,8 @@ There is exactly one place for each of these. **Do not add a second.**
 | Purchase-path config | `app.js` → `statPathCfgFor(hunter, baseline)` |
 | Purchase-path walk (stats/inscriptions/relics) | `hunterStatPathBrowser.js` → `greedyPurchasePath()` |
 | Relic + fragment costs | `webapp/public/costFormulas.js` (`RELIC_SPECS`, `fragmentsOnHand`) |
+| Big-number (game notation) inputs | `webapp/public/bigNumberInput.js` (`attachBigNumberInput`) — lifted OUT of `app.js` so the extension can use it without loading 3,100 lines of routing and auth |
+| Companion extension build | `tools/build-companion.js` (scoped CSS, `shell.js`, `vendor/`) |
 | Upgrade unlock gates | `webapp/public/hunterDefs.js` (`UPGRADE_GATES`, `isUpgradeUnlocked`) |
 | Full gem/gate reference (all 97) | `tools/reference/gem-gates.json`, `tools/reference/gem-trees.json` |
 | Inscryption display-id -> save slot | `tools/reference/inscryption-slots.json` (+ the resolver in `saveImport.js`) |
@@ -2812,6 +2821,9 @@ node tools/bench/search-quality-check.js  # can the search FIND the import with 
 node tools/bench/budget-monotonicity-check.js # more budget never scores worse, in every mode
 node tools/bench/underspend-diagnose.js <hunter> <index> # WHICH stage loses the value
 node tools/bench/route-test.js         # unknown hash routes normalise instead of hard-locking
+node tools/build-companion.js          # rebuild extension/ (scoped CSS, shell.js, vendor/)
+node tools/build-companion.js --check  # fail if extension/ has drifted from webapp/public/
+node tools/bench/companion-deps-check.js # the extension's script subset + LOAD ORDER is sound
 node tools/bench/relic-sweep.js        # which relics actually move the sim (slow)
 node tools/bench/gem-coverage-test.js  # every gem param is reachable from the Gem Planner
 node tools/bench/gem-tree-test.js      # tree shape + every unlock gate is satisfiable
@@ -2917,6 +2929,24 @@ runs-per-day. Do this whenever a number is in question.
 - **Never wipe localStorage or IndexedDB.** There is no backend. The store is mirrored to
   IndexedDB precisely because browsers bundle localStorage into "clear cache". Losing both is
   unrecoverable user data.
+- **`shipsPage.js` BINDS FIVE MODALS AT TOP LEVEL, AND THAT FAILS AS SOMETHING ELSE ENTIRELY.**
+  Its last ~1,200 lines include `document.getElementById('closeShipBuildModalBtn').onclick = …` for
+  `shipBuildModal`, `newLoadoutModal`, `optimizeShipModal`, `zaglagChecklistModal` and
+  `loadoutDetailModal` — markup that lives in `index.html`. Anywhere that markup is absent (the
+  companion extension, a bench, a test harness) the FIRST of them throws, and because it is top
+  level **the rest of the file never executes** — including `window.FleetStoreDefaults` at line
+  3281. The symptom is `storeSchema: FleetStoreDefaults.shipGear is missing (shipsPage.js must load
+  before storeSchema.js)` thrown 1,600 lines later, which reads as a load-ORDER bug and is not one.
+  The extension supplies the markup from `extension/shell.js`, generated from `index.html` by
+  `tools/build-companion.js` so it cannot drift. **Before diagnosing a missing global from
+  `shipsPage.js`, check whether an earlier top-level line threw.**
+- **THE EXTENSION'S LOAD ORDER IS DERIVED FROM `index.html`, NOT HAND-LISTED, BECAUSE THE HAND-LIST
+  IS WHAT FAILED.** `companion-deps-check.js` originally asserted a hand-written list of ordering
+  pairs. It checked `hunterDefs -> storeSchema` and `shipSchema -> shipsPage`, PASSED, and shipped a
+  manifest with `storeSchema` before `shipsPage` — a pair nobody thought to list, and the one that
+  broke boot. It now compares the manifest's relative order against `index.html` for every shared
+  file, so no pair can be forgotten. A hand-kept copy of an ordering that already exists elsewhere
+  is the duplicated-rule trap this file keeps recording.
 - **Don't yield with `requestAnimationFrame` in a long computation** — it's paused in a
   background tab and the work stalls entirely. Use `setTimeout(…, 0)`.
 

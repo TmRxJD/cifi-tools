@@ -1,108 +1,97 @@
-# CIFI Tools Companion Bridge
+# CIFI Tools Companion
 
-A ~90-line browser extension whose entire job is to fetch **cifi-tools.com's simulation engine into
-your own browser**, so this companion site never hosts or redistributes a copy of it.
+A browser extension that adds this project's **fleet and ship-install tools** to
+**cifi-tools.com**, running in your own browser.
 
-## Why it exists
+It is not a copy of cifi-tools and does not host anything of theirs. Their page loads their
+simulator from their own server, exactly as it always has; this adds pages beside it.
 
-The companion site is our own work — save import, fleet and ship-install optimization, the hunter
-UI. The simulator itself is cifi-tools.com's compiled `release.wasm`, and that is **theirs**.
-Serving a copy of it from our GitHub Pages site is redistribution however it is framed, so this
-moves the fetch to where it belongs: your browser, talking to the origin that owns the file,
-exactly as if you had opened cifi-tools.com yourself.
+---
 
-Nothing is copied to a server of ours, nothing is cached anywhere but your own browser, and if
-cifi-tools goes away the tool fails cleanly rather than serving a stale unauthorised copy.
+## Why it works this way
 
-## Why it has to be an extension
+The simulator is cifi-tools' compiled `release.wasm` — their build output, not ours. The companion
+website in `webapp/` has to serve a copy of it to function, which is redistribution however
+carefully it is labelled.
 
-Because a web page physically cannot do this. cifi-tools.com sends **no
-`Access-Control-Allow-Origin` header on any path** — measured on GET and on OPTIONS preflight,
-against `/`, `/wasm/release.wasm` and `/assets/`. So a page on our origin is blocked by CORS before
-its JavaScript ever sees the bytes. That is a browser rule, not a policy choice, and no amount of
-page-side cleverness works around it.
+Running **inside their page** removes the problem rather than relocating it:
 
-An extension with `host_permissions` is exempt, because **you** installed it and granted that
-access.
+- their engine is **same-origin** there, so it is fetched from the server that owns it;
+- the **account state is already in the browser**, so there is nothing to import or sync;
+- the user is **already signed in to their own cifi-tools account**, so this keeps no user records
+  and runs no backend.
 
-## Install
+An earlier version of this extension did the opposite — a content script on *our* site relaying
+their wasm across origins to defeat CORS. That was solving a problem that only existed because we
+were on the wrong origin, and it left the local copy shipping anyway for anyone without the
+extension. It is deleted, not disabled.
 
-Not yet published to a store. To load it unpacked:
+See `../THIRD-PARTY.md` (route 4) for what this resolves and what it does not.
 
-**Chrome / Edge**
-1. `chrome://extensions`
-2. Enable **Developer mode**
-3. **Load unpacked** → select this `extension/` folder
+---
 
-**Firefox** (including Firefox for Android)
-1. `about:debugging#/runtime/this-firefox`
-2. **Load Temporary Add-on** → select `manifest.json`
+## Install (unpacked)
 
-Then open the companion site. If the bridge is active the page uses it automatically; there is no
-setting and no UI.
+1. `node tools/build-companion.js` from the repo root — generates `companion.css` and `vendor/`.
+2. Chrome → `chrome://extensions` → enable **Developer mode**.
+3. **Load unpacked** → select this `extension/` directory.
+4. Open **https://cifi-tools.com** and reload the page.
 
-## Mobile
+You should see **Fleet · Ships · Gear · Research · Badges** appear in their nav, and this in the
+console:
 
-| platform | works? |
+```
+[cifi-companion] active on https://cifi-tools.com
+```
+
+There is no popup and the toolbar icon does nothing — it works passively on the page.
+
+---
+
+## Layout
+
+| Path | What it is |
 |---|---|
-| **Firefox for Android** | yes — the practical mobile path |
-| **Chrome for Android** | no. Chrome on Android does not support extensions at all |
-| **Safari on iOS** | possible in principle, but an extension must ship inside a native app through the App Store |
-| **Samsung Internet** | content blockers only |
+| `manifest.json` | MV3. One content script, `storage` permission, no host permissions and no background worker — none are needed on their origin. |
+| `companion.js` | Nav injection, router hook, and mounting our pages. |
+| `companionStore.js` | `window.store` / `window.saveStore`, namespaced and mirrored. |
+| `shell.js` | **Generated** from `index.html`: the five modals `shipsPage.js` binds at load time. Must load before it. |
+| `companion.css` | **Generated** from `webapp/public/tokens.css`, every selector scoped. |
+| `vendor/` | **Generated** copies of `webapp/public/` files. Do not edit. |
 
-This is the honest cost of the approach: CIFI is a mobile game, and most of its players are on
-Chrome for Android where extensions do not exist.
+**`companion.css` and `vendor/` are build output.** `webapp/public/` is the one canonical source;
+`node tools/build-companion.js --check` fails if either has drifted, and
+`tools/bench/companion-deps-check.js` runs that check as part of `tools/bench/all.js`.
 
-## What it can and cannot reach
+---
 
-Deliberately narrow:
+## Four things that will bite you
 
-- **one origin**: `https://cifi-tools.com` and nothing else
-- **`.wasm` paths only**
-- only on pages matching the content script's `matches` (the companion site, and localhost for
-  development)
+- **`shipsPage.js` binds five modals at TOP LEVEL** against markup from `index.html`. Without it the
+  first binding throws and the rest of the file — including `FleetStoreDefaults` — never runs, which
+  surfaces 1,600 lines later as a `storeSchema` error that looks like a load-order bug. `shell.js`
+  supplies that markup and must load first.
 
-The **page** chooses which `.wasm` file; the **extension** pins the origin. That is why a rename on
-cifi-tools' side is a one-line site deploy rather than an extension update. Accepting an arbitrary
-URL from the page would turn this into an open cross-origin proxy for anything running on our
-origin, which is exactly the capability the same-origin policy exists to withhold.
 
-## It stays dumb, on purpose
+- **The stylesheet must stay scoped.** A content script's CSS applies to the whole document.
+  `tokens.css` styles `body` and `:root`, so loading it unscoped would restyle *their* site. The
+  generator re-roots every selector at `#cifi-companion-root` and verifies its own output — it has
+  had two bugs that produced valid-looking CSS with rules silently deleted.
 
-It relays bytes. No game logic, no optimizer, no UI, no knowledge of what the engine does — all of
-that lives on the website and deploys independently, so iterating on the tool never needs an
-extension update.
+- **Every storage key is namespaced `cifi-companion:`.** We share their origin and therefore their
+  localStorage, which already holds ~1,430 of their keys. The durable mirror is
+  `chrome.storage.local`, not IndexedDB, because a user clearing *their* site data has no reason to
+  expect it would destroy *our* store.
 
-**It must never fetch and run code.** Eliminating remotely-hosted code is the whole point of
-Manifest V3; the Chrome Web Store and AMO both reject or remove extensions that execute code
-fetched at runtime. "Serve the extension's logic from a server so users never have to update" is
-precisely the pattern that policy forbids — and it solves a problem that does not exist, because a
-store-published extension auto-updates within hours anyway.
+- **Nav entries are cloned from a live link, never authored.** Their site is Vue; nav links carry a
+  scoped-style attribute (`data-v-…`) whose hash changes when they rebuild, and their Tailwind
+  classes can be retuned at any deploy. Cloning is what makes our entries indistinguishable from
+  theirs and what keeps them that way. For the same reason, Vue discarding our nodes on re-render
+  is expected: a `MutationObserver` reinstates them.
 
-## How the page uses it
+---
 
-`webapp/public/hunterSimBrowser.js` → `engineFromExtension()`:
+## Status
 
-1. The content script sets `document.documentElement.dataset.cifiCompanionBridge = '1'` at
-   `document_start`, so presence is detectable synchronously. (A `window` property would NOT work —
-   a content script runs in an isolated world, so anything it assigns to `window` is invisible to
-   the page. That is the classic way this pattern silently does nothing.)
-2. The page posts a request; the bridge relays it to the service worker, which fetches and returns
-   the bytes base64-encoded (`chrome.runtime.sendMessage` serializes as JSON and would deliver an
-   ArrayBuffer as `{}` — silently, as a zero-length engine).
-3. A 15s timeout falls back rather than hanging, because an installed-but-asleep worker or a
-   revoked permission otherwise produces a reply that never arrives.
-
-**Workers get the compiled module, not a URL.** A Worker has no `document`, so it can never reach a
-content script; left alone it would fetch `release.wasm` from our origin — the exact copy this
-exists to avoid. So the main thread resolves the engine once and posts the compiled
-`WebAssembly.Module` (which is structured-cloneable) to every worker, which is also cheaper than N
-fetches and N compiles. `HunterSim.expectInjectedWasm()` parks the loader on a promise the
-injection settles, so a worker that is promised an engine and never given one **waits visibly**
-instead of quietly downloading its own.
-
-## Current status
-
-The hosted site still ships `release.wasm` directly, and the loader falls back to it when the
-extension is absent. Removing that fallback is a separate decision — see `THIRD-PARTY.md` for the
-inventory and the options.
+Fleet, Ships, Gear, Research and Badges are mounted. The **hunter optimizer is not yet ported** —
+it needs its Web Worker pool, which requires `web_accessible_resources` in the manifest.

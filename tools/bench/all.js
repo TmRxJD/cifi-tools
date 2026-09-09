@@ -75,6 +75,11 @@ const LOCAL = [
   'inscryption-slot-test', 'scene-defs-test',
   'path-relic-test', 'path-abort-test', 'route-test', 'gate-visibility-check',
   'underspend-test',
+  // THE COMPANION EXTENSION loads a 10-file SUBSET of the website's 25 scripts, so a global that
+  // moves out of that subset breaks it silently -- not at load, but as "undefined is not a
+  // function" inside a click handler, after shipping. It also vendors copies of webapp/public files
+  // that go stale the moment either side is edited. Both are checked here.
+  'companion-deps-check',
   // SEARCH-SIDE INVARIANTS. These were written for the borge@73 investigation and each one caught
   // a real defect while being written, which is the argument for running them every time:
   //   describe-run-check  -- describeRun labelled a stage-303 run "boss at 400", contradicting the

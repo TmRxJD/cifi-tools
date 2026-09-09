@@ -1,13 +1,26 @@
 {
   "manifest_version": 3,
   "name": "CIFI Tools Companion",
-  "version": "2.0.0",
-  "description": "Adds save-file import, fleet/ship install optimization and the hunter build optimizer to cifi-tools.com, in your own browser.",
+  "version": "2.2.0",
+  "description": "Adds save-file import and fleet/ship install optimization to cifi-tools.com, in your own browser.",
   "permissions": ["storage"],
   "content_scripts": [
     {
       "matches": ["https://cifi-tools.com/*"],
-      "js": ["companion.js"],
+      "js": [
+        "vendor/icons.js",
+        "vendor/hunterDefs.js",
+        "vendor/shipSchema.js",
+        "shell.js",
+        "vendor/shipsPage.js",
+        "vendor/optimizer/space.js",
+        "vendor/storeSchema.js",
+        "vendor/costFormulas.js",
+        "vendor/bigNumberInput.js",
+        "companionStore.js",
+        "companion.js"
+      ],
+      "css": ["companion.css"],
       "run_at": "document_idle"
     }
   ]
