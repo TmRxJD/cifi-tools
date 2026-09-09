@@ -1,0 +1,4285 @@
+'use strict';
+
+// Fresh-install defaults -- deliberately all-zero/agnostic. An earlier version of this file
+// seeded these from one specific real account's own captured localStorage (specific
+// non-zero relic/inscryption/milestone/loot-multiplier levels), which meant every NEW install
+// of this tool silently started with someone else's progression baked in, and -- worse --
+// any field a user hadn't gotten around to re-configuring on the Gems/Upgrades pages kept
+// contributing that stranger's numbers to their own sim results indefinitely. This surfaced
+// as a real, measurable bug: several "pure loot" fields (hunterloot, ultima, scavenger2,
+// milestone count, iridian/gaiden cards, gem loot-bonus nodes) are deliberately excluded from
+// build-share codes since they don't move Loot SCORE, but they very much move the raw
+// mat1/mat2/mat3/xp yield shown on a build card -- confirmed directly: evaluating the exact
+// same build with the old anchored defaults vs. all-zero inflated mat1 by ~1000x. Every field
+// here must be filled in by the user (Gems page, Upgrades pages, Hunter Stats modal) to match
+// their own real account -- there is no substitute "reasonable" non-zero default that isn't
+// just some other account's data.
+// "stage" (highest stage ever reached) is a required sim input, not just display -- the
+// site's own EVAL_PARAMS list includes it (resolved from hunterStats.stage), and leaving
+// it at 0 visibly breaks the simulation (flat 100-100 stage range with zero Monte Carlo
+// variance). 1 is the minimal honest value true of any account, real or brand new.
+// Seeded per-hunter base stats now come from storeSchema.js's seedHunterStats(), which derives
+// the key list from HUNTER_DEFS[h].baseStatKeys rather than repeating it -- the hand-written
+// copy here had to be edited every time a hunter's stat list changed, and silently disagreed
+// with baseStatKeys if you forgot.
+
+// Every build id used to be `String(Date.now())` (optionally +hunterKey), which collides
+// whenever two builds get created/saved within the same millisecond -- e.g. running the
+// optimizer, saving, then immediately importing another build. A collision means two builds
+// share one id, so any id-keyed lookup (delete's `filter(b => b.id !== id)`, save's
+// `findIndex(b => b.id === id)`) silently affects BOTH of them at once: deleting one build
+// deleted another that happened to share its id (and, since duplicate/re-saved builds often
+// share a name too, looked like "deleting by name"), and importing a new build could stomp an
+// existing one it collided with. crypto.randomUUID() (or a random-suffix fallback on very old
+// browsers) makes a collision astronomically unlikely instead of merely "unlikely within the
+// same millisecond of normal clicking."
+function genBuildId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+// EMBEDDED MODE: this file is also loaded by the companion EXTENSION, inside cifi-tools.com.
+// There it must not own the page -- their app does -- and it must not write unnamespaced keys into
+// their origin's localStorage, which already holds ~1,430 of theirs. Both are configured by the
+// embedder BEFORE this file runs; on the website neither is set and everything below is unchanged.
+const EMBEDDED = !!window.HUNTERSIM_EMBEDDED;
+const STORAGE_KEY = window.HUNTERSIM_STORAGE_KEY || 'huntersim_clone_v2';
+
+// Both of these are the schema (storeSchema.js), not separate shape declarations. Adding a
+// store field is a one-line change there and needs no edit here.
+const freshStore = () => window.StoreSchema.freshStore();
+const defaultImportPrefs = () => window.StoreSchema.defaultImportPrefs();
+
+// One-time repair for data saved before genBuildId() existed: every build/category id used
+// to be String(Date.now()) (optionally +hunterKey), which collides whenever two were
+// created/saved within the same millisecond -- so an account that hit that bug before the
+// fix can have ACTUAL duplicate ids already sitting in its saved data. Fixing the generator
+// only prevents NEW collisions; it does nothing for ones already persisted, which is exactly
+// why "delete one build with the same name deleted both" could still happen even after that
+// fix landed -- the two builds already shared one id from before. Keeps the first occurrence
+// of each id as-is and reassigns a fresh unique id to every later collision.
+function dedupeIds(list) {
+  const seen = new Set();
+  let changed = false;
+  for (const item of list) {
+    if (!item || !item.id || seen.has(item.id)) {
+      if (item) { item.id = genBuildId(); changed = true; }
+    } else {
+      seen.add(item.id);
+    }
+  }
+  return changed;
+}
+function dedupeStoreIds(parsed) {
+  let changed = dedupeIds(parsed.categories || []);
+  ['borge', 'ozzy', 'knox'].forEach((h) => { if (dedupeIds(parsed[h]?.builds || [])) changed = true; });
+  return changed;
+}
+
+function loadStore() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+
+      // Carry a pre-tabs single `currentLoadout` into tab 1 before the schema fills in a fresh
+      // loadoutTabs and the retired key gets dropped. This is the one genuine data TRANSFORM in
+      // the migration; everything else is "fill in what's missing", which the schema does.
+      if (!parsed.loadoutTabs && parsed.currentLoadout) {
+        parsed.loadoutTabs = window.StoreSchema.defaultLoadoutTabs();
+        parsed.loadoutTabs.tabs[0].name = parsed.currentLoadout.name || parsed.loadoutTabs.tabs[0].name;
+        parsed.loadoutTabs.tabs[0].perShip = parsed.currentLoadout.perShip || {};
+      }
+
+      const migration = window.StoreSchema.migrateStore(parsed);
+      const problems = window.StoreSchema.validateStore(parsed);
+      if (problems.length) {
+        // Log loudly but do not throw: a validation bug must never lock someone out of their
+        // own data, and this app has no backend to restore from. The benchmark treats the same
+        // violations as hard failures, which is where they get caught before shipping.
+        console.error(`[store] ${problems.length} invariant violation(s) after load:\n  ${problems.join('\n  ')}`);
+      }
+      if (migration.changed || dedupeStoreIds(parsed)) {
+        // Persist the repair immediately rather than waiting for the next unrelated save --
+        // otherwise a read-only session (just browsing, no edits) would silently re-detect
+        // and "fix" the same already-in-memory duplicates every reload without ever writing
+        // the correction back.
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+        idbSet(STORAGE_KEY, JSON.stringify(parsed));
+      }
+      return parsed;
+    }
+  } catch { /* fall through to defaults */ }
+  __storeWasFreshOnLoad = true;
+  return freshStore();
+}
+
+// Redundant persistence: testers reported losing all builds/settings after a "clear
+// cache"/browser data-clear around an update -- some browsers (especially mobile) bundle
+// localStorage into that clear even though it's technically "site data", not "cache". IndexedDB
+// is stored separately from most browsers' quick "clear cache" action and often survives it, so
+// every save is mirrored there too (fire-and-forget, never blocks the UI), and on startup -- if
+// localStorage came back empty -- we fall back to whatever IndexedDB still has before giving up
+// and seeding fresh defaults.
+const IDB_NAME = window.HUNTERSIM_IDB_NAME || 'huntersim_backup';
+const IDB_STORE = 'kv';
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) { reject(new Error('no indexedDB')); return; }
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbSet(key, value) {
+  try {
+    const db = await idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put(value, key);
+      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+    });
+  } catch { /* best effort only */ }
+}
+async function idbGet(key) {
+  try {
+    const db = await idbOpen();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  } catch { return undefined; }
+}
+// True only when loadStore() had to fall back to fresh defaults (no usable localStorage
+// data) -- gates the one-time IndexedDB recovery attempt at startup below.
+let __storeWasFreshOnLoad = false;
+function saveStore() {
+  const json = JSON.stringify(store);
+  localStorage.setItem(STORAGE_KEY, json);
+  idbSet(STORAGE_KEY, json);
+  updateNavGating();
+}
+
+// THE BACKUP FORMAT, IN ONE PLACE. These were inline in the Settings page's two click handlers
+// until cloud sync needed the same bytes. A second copy of a SERIALIZATION rule is the worst kind
+// of duplicate: the two can drift into producing codes that each accepts and the other rejects,
+// and the symptom is "my backup won't restore" long after the change that caused it.
+//
+// The encoding (`btoa(unescape(encodeURIComponent(...)))`) is the pre-existing one and is kept
+// byte-for-byte, so every backup code users already hold still restores.
+function createStoreBackup() {
+  return btoa(unescape(encodeURIComponent(JSON.stringify(store))));
+}
+
+/**
+ * Replace the entire store from a backup code, then persist and redraw.
+ *
+ * Mutates the existing `store` object rather than rebinding it, because modules captured a
+ * reference to it at load time -- reassigning would leave them pointed at the old object and
+ * silently editing data the user can no longer see.
+ *
+ * Throws on a malformed code; the caller reports it. It must NOT half-apply: parse first, and
+ * only clear the live store once the replacement is known to be valid JSON.
+ */
+function restoreStoreBackup(code) {
+  const restored = JSON.parse(decodeURIComponent(escape(atob(String(code).trim()))));
+  if (!restored || typeof restored !== 'object' || Array.isArray(restored)) {
+    throw new Error('backup did not decode to a store object');
+  }
+  Object.keys(store).forEach((k) => delete store[k]);
+  Object.assign(store, restored);
+  saveStore();
+  render();
+  return true;
+}
+window.createStoreBackup = createStoreBackup;
+window.restoreStoreBackup = restoreStoreBackup;
+
+/**
+ * Reset every hunter, build, upgrade and setting back to a fresh profile.
+ *
+ * Overwrites BOTH copies. localStorage and IndexedDB mirror each other precisely because
+ * browsers bundle localStorage into "clear cache" -- so wiping only one would leave the other
+ * to be reloaded on next boot, and the reset would silently undo itself. Writes the fresh store
+ * rather than deleting the keys, for the same reason: an absent key is indistinguishable from a
+ * storage failure at load time.
+ *
+ * The confirmation and the backup-first prompt live at the call site; this is the mechanism.
+ */
+function resetAllData() {
+  const fresh = StoreSchema.freshStore();
+  Object.keys(store).forEach((k) => delete store[k]);
+  Object.assign(store, fresh);
+  saveStore();
+  render();
+}
+
+/**
+ * Apply Settings → Interface preferences to the shell. Called on boot and whenever the
+ * preference changes, so the two cannot drift apart.
+ */
+function applyInterfacePrefs() {
+  const aside = document.querySelector('aside');
+  if (!aside) return;
+  // The sidebar is `hidden md:flex` by default; hiding it means suppressing the md: breakpoint
+  // rule too, so toggle a plain `hidden` alongside removing the flex class.
+  const show = store.settings.ui.upgradesSidebar !== false;
+  aside.classList.toggle('md:flex', show);
+  aside.classList.toggle('md:hidden', !show);
+}
+
+// Confirmed exact from the live bundle's isUnlocked() (AppNavbar.vue): a gem tree level
+// gate, plus an optional specific node (1-based) that must also be toggled on.
+function isGemUnlocked(gemKey, lvl, node) {
+  if (!gemKey || !lvl) return true;
+  const state = store.gems[gemKey];
+  if (!state) return false;
+  if (state.level < lvl) return false;
+  if (node !== undefined && !(state.nodes && state.nodes[node - 1])) return false;
+  return true;
+}
+window.isGemUnlocked = isGemUnlocked;
+
+// Hides hunter nav tabs + sidebar category links until their real unlock condition is met
+// (Ozzy needs Exodus lvl2, Knox lvl4, Gadgets Exodus lvl4, Researches Innovation lvl2, CMs
+// Power lvl2, Trinkets Creation lvl4 + node 5 -- all confirmed straight from Ld.hunters /
+// Ld.upgradeCategories in the live bundle). If the active hunter/route becomes locked
+// (e.g. the user lowers a gem level back down), falls back to Borge / the sim page.
+function updateNavGating() {
+  let activeHunterLocked = false;
+  document.querySelectorAll('[data-unlock-gem]').forEach((el) => {
+    const gem = el.dataset.unlockGem;
+    const lvl = Number(el.dataset.unlockLvl);
+    const node = el.dataset.unlockNode ? Number(el.dataset.unlockNode) : undefined;
+    const unlocked = isGemUnlocked(gem, lvl, node);
+    el.classList.toggle('hidden', !unlocked);
+    if (!unlocked && el.dataset.nav === currentHunter) activeHunterLocked = true;
+    if (!unlocked && el.dataset.route === currentRoute()) navigate('sim');
+  });
+  if (activeHunterLocked) switchHunter('borge');
+}
+window.updateNavGating = updateNavGating;
+
+let store = loadStore();
+window.store = store;
+// Restored from the store, not defaulted to Borge. `store` is loaded two lines above, so the
+// selection survives a refresh instead of being reset every load. Validated against the real
+// hunter list so a corrupted or renamed value cannot leave the app pointing at a hunter that
+// does not exist.
+let currentHunter = (['borge', 'ozzy', 'knox'].includes(store.lastHunter) ? store.lastHunter : 'borge');
+let editingBuild = null;
+let showCategoryId = 'active';
+try { window.__lastScan = JSON.parse(localStorage.getItem('huntersim_last_scan') || '{}'); } catch { window.__lastScan = {}; }
+
+// One-time startup recovery: localStorage came back empty (freshStore() defaults), so check
+// the IndexedDB mirror before the user ever sees the seeded defaults -- if it has real data,
+// restore it, re-persist to localStorage, and re-render whatever's already on screen.
+if (__storeWasFreshOnLoad) {
+  idbGet(STORAGE_KEY).then((json) => {
+    if (!json) return;
+    try {
+      const recovered = JSON.parse(json);
+      // Same schema migration as the localStorage path -- NOT a second, shorter copy of it.
+      // This branch used to backfill only gems/categories/viewMode/knox, so a store restored
+      // from the IndexedDB mirror came back missing importPrefs, optimizerSettings, loadoutTabs,
+      // ships and the rest, and then threw on the first screen that touched one. A backup path
+      // that only half-restores is worse than no backup path, and it could only ever be caught
+      // by someone actually losing their localStorage.
+      window.StoreSchema.migrateStore(recovered);
+      const recoveredProblems = window.StoreSchema.validateStore(recovered);
+      if (recoveredProblems.length) {
+        console.error(`[store] ${recoveredProblems.length} invariant violation(s) in the IndexedDB backup:\n  ${recoveredProblems.join('\n  ')}`);
+      }
+      dedupeStoreIds(recovered);
+      Object.keys(store).forEach((k) => delete store[k]);
+      Object.assign(store, recovered);
+      const repairedJson = JSON.stringify(recovered);
+      localStorage.setItem(STORAGE_KEY, repairedJson);
+      idbSet(STORAGE_KEY, repairedJson);
+      if (typeof render === 'function') render();
+    } catch { /* corrupt backup, ignore */ }
+  });
+}
+
+function defs() { return window.HUNTER_DEFS[currentHunter]; }
+
+// THE cap-resolution context for a build. A node's max level is usually constant but not always
+// (hunterDefs.js `dynamicMaxLevel`), and the rule reads both account-wide gem state and this
+// build's own overrides -- the same two inputs the live site's getMaxValue uses.
+function capContextFor(build) {
+  return { gemPlannerStore: { gemStates: store.gems }, buildOverrides: (build && build.overrides) || {} };
+}
+
+/** A hunter's talents/attributes with caps resolved for the given build. */
+function cappedDefs(hunter, build) {
+  const d = window.HUNTER_DEFS[hunter];
+  const ctx = capContextFor(build);
+  return {
+    talents: window.resolveMaxLevels(d.talents, ctx),
+    attributes: window.resolveMaxLevels(d.attributes, ctx),
+  };
+}
+function budgetsForLevel(level) { return { talentBudget: window.talentBudgetForLevel(level), attributeBudget: window.attributeBudgetForLevel(level) }; }
+
+// THE canonical evaluation state for a build. Every HunterSim.evaluate/evaluateDetailed call
+// in this file goes through here.
+//
+// This used to be a copy-pasted object literal at each call site -- the build card, the stats
+// modal, the compare-efficiency modal, the share dialog -- differing only in key order. That is
+// how a field goes missing from one path and nowhere else: the optimizer's worker config once
+// omitted gemPlannerStore, so the search scored candidates in a gem-less world while the build
+// card scored them in the real one, and the two disagreed for reasons nothing in the UI could
+// explain. One builder means a field can only be missing everywhere at once, which is a bug you
+// notice immediately rather than a silent per-surface divergence.
+// THE iteration count for the hunter currently on screen. Per hunter, persisted, and clamped
+// to whatever ceiling Settings currently allows -- read from the store rather than the input so
+// that a value set before High Iterations Mode was switched off cannot silently reach the
+// evaluator, and so non-UI callers do not depend on a DOM node existing.
+function currentIterations() {
+  return StoreSchema.clampIterations(store[currentHunter].iterations, store);
+}
+
+function accountStateFor(hunter, build) {
+  return window.AccountState.build({
+    hunter,
+    build,
+    hunterStats: store[hunter].hunterStats,
+    globalUpgrades: store.globalUpgrades,
+    gems: store.gems,
+    showAdvancedTalents: shouldShowAdvancedTalents(hunter),
+  });
+}
+
+// MEASUREMENT TAKES THE HUNTER EXPLICITLY. `evalStateFor` reads the `currentHunter` global, which
+// is correct for the app -- the build on screen always belongs to the hunter on screen -- and is a
+// trap for anything else. A bench or console script that loops over hunters calling it scores every
+// build with ONE hunter's stats and returns plausible numbers for builds nobody has; that produced
+// a phantom "Knox is 0.48% short" defect that was really 18.48% ahead. AccountState now throws on a
+// stats/hunter mismatch, so this is belt and braces -- but the explicit form is what callers
+// outside the render path should use, because it states the assumption instead of inheriting it.
+function evalStateForHunter(hunter, build, iterations) {
+  if (!hunter) throw new Error('evalStateForHunter: hunter is required');
+  return window.AccountState.simState(accountStateFor(hunter, build), iterations);
+}
+
+function evalStateFor(build, iterations) {
+  return evalStateForHunter(currentHunter, build, iterations);
+}
+
+const MAT_LABELS = ['Obsidian', 'Behlium', 'Hellish-Biomatter'];
+const HUNTER_TITLES = { borge: 'Borge Simulator', ozzy: 'Ozzy Simulator', knox: 'Knox Simulator' };
+// Knox is `sky`, not `blue`, and that is a palette decision rather than a change
+// of identity: `blue` is now the app's single primary-action colour (see the
+// aliases in index.html's tailwind.config), so leaving Knox on it would have made
+// every Knox page's chrome indistinguishable from its buttons. `sky` is a
+// brighter azure -- still unmistakably Knox blue, clearly separable from the
+// midnight blue that means "action". Borge and Ozzy keep their game colours.
+const HUNTER_ACCENTS = { borge: 'red', ozzy: 'green', knox: 'sky' };
+
+function newDraftBuild() {
+  const talents = {}; defs().talents.forEach((t) => { talents[t.id] = 0; });
+  const attributes = {}; defs().attributes.forEach((a) => { attributes[a.id] = 0; });
+  return { id: null, name: '', level: 1, talents, attributes, categoryId: 'active', overrides: {} };
+}
+
+// THE canonical purchase-path config, for greedyPurchasePath (hunterStatPathBrowser.js).
+//
+// A third shape exists because that walk varies BASE STATS and inscription levels while
+// holding talents/attributes fixed -- the mirror image of the optimizer, which varies
+// talents/attributes while holding everything else fixed. Hence `talents`/`attributes` as
+// pinned inputs here versus `currentTalents`/`currentAttrs` as a starting point in cfgFor().
+// It was written out as an identical object literal at both call sites in
+// hunterStatPathPage.js; this is that literal, once.
+function statPathCfgFor(hunter, baseline) {
+  return window.AccountState.pathCfg(accountStateFor(hunter, baseline));
+}
+
+// The optimizer's view of the account. A projection of accountStateFor(), NOT a second builder:
+// the two entry points differ only in the names their APIs demand (`overrides`/`upgrades` versus
+// `baseOverrides`/`globalUpgrades`), and that renaming is all the adapter does. Adding an
+// account-state field is now a one-line change in accountState.js that every consumer sees at
+// once, instead of a rule asking three call sites to be edited together.
+function cfgFor(hunter, build) {
+  return window.AccountState.optimizerCfg(accountStateFor(hunter, build));
+}
+
+// ONE number formatter, and it is CostFormulas.fmtBig -- the live site's own suffix ladder
+// (k/m/b/t/qa/qu/sx/sp/oc/n/d), ported verbatim for parity.
+//
+// This function used to carry its own ladder that stopped at "b", so anything past a trillion was
+// printed in the wrong scale: 7.17e12 rendered as "7170.83b" where the original tool shows
+// "7.10t". Identical magnitude, unreadable next to the tool it is meant to clone -- and the
+// correct ladder already existed one file away, exported and unused.
+function fmt(n) {
+  if (n === undefined || n === null) return '-';
+  return window.CostFormulas.fmtBig(n);
+}
+
+function fmtTime(minutes) {
+  if (!minutes) return '-';
+  const h = Math.floor(minutes / 60); const m = Math.round(minutes % 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+function escapeHtml(s) { return (s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+// Verbatim port of the live site's "Clone Build" naming rule (confirmed directly: cloning
+// "Borge Loot" gives "Borge Loot (Copy)"; cloning THAT gives "Borge Loot (Copy 2)"; cloning
+// again gives "(Copy 3)", etc.) -- based on the SOURCE build's own name, not a scan for
+// name collisions across the list.
+function nextCopyName(name) {
+  const m = name.match(/^(.*) \(Copy(?: (\d+))?\)$/);
+  if (!m) return `${name} (Copy)`;
+  const n = m[2] ? parseInt(m[2], 10) + 1 : 2;
+  return `${m[1]} (Copy ${n})`;
+}
+
+// ==================== ROUTER ====================
+
+// Every route this app actually renders. Anything else resolves to the sim page.
+//
+// This list is not decoration: render() falls back to renderSimPage() for an unrecognised
+// route, but renderSimPage calls switchHunter(), whose "am I already on the sim page?" guard
+// is `currentRoute() === 'sim'`. With an unknown route that guard was false while the sim page
+// was nonetheless being rendered, so switchHunter called render() again -- render -> sim page
+// -> switchHunter -> render, until "Maximum call stack size exceeded". Any stale bookmark or
+// mistyped hash (`#/hunterstats` was the one that surfaced it) hard-locked the page.
+//
+// Normalising HERE rather than adding a guard inside switchHunter is deliberate: the bug was
+// two places disagreeing about which route is current, so the fix is to leave exactly one
+// answer to that question.
+const KNOWN_ROUTES = new Set([
+  'sim', 'gems', 'fleet', 'shipsetup', 'gearsets', 'research', 'badges', 'settings',
+]);
+
+function currentRoute() {
+  const hash = location.hash.replace(/^#\/?/, '');
+  if (!hash) return 'sim';
+  if (KNOWN_ROUTES.has(hash) || hash.startsWith('upgrades/')) return hash;
+  return 'sim';
+}
+
+function navigate(route) { location.hash = `#/${route}`; }
+
+// Top header nav: "Hunters" covers the whole sim route, "Fleet" covers only the literal Fleet
+// Optimizer page (route === 'fleet' -- Ship Setup/Gear Sets are sidebar-only pages, not this),
+// "Settings" is an exact match, and "Upgrades" is the catch-all for every OTHER sidebar page
+// (upgrades/*, shipsetup, gearsets, research, badges, gems) since none of those have their own
+// dedicated header button.
+const DEDICATED_NAV_ROUTES = { sim: 'sim', fleet: 'fleet', settings: 'settings' };
+
+function render() {
+  const route = currentRoute();
+  updateNavGating();
+  applyInterfacePrefs();
+  const milestoneLabel = document.getElementById('milestoneSidebarLabel');
+  if (milestoneLabel) milestoneLabel.textContent = `Milestone #0 (${store.globalUpgrades['shardmilestones.m0'] || 0})`;
+  document.querySelectorAll('.sidebar-link').forEach((el) => {
+    el.classList.toggle('bg-gray-800', el.dataset.route === route);
+    el.classList.toggle('text-white', el.dataset.route === route);
+  });
+  document.querySelectorAll('[data-nav]').forEach((el) => {
+    const nav = el.dataset.nav;
+    if (['borge', 'ozzy', 'knox'].includes(nav)) return; // handled by switchHunter's own active-<hunter> styling
+    const isActive = nav === 'upgrades'
+      ? !Object.values(DEDICATED_NAV_ROUTES).includes(route)
+      : DEDICATED_NAV_ROUTES[nav] === route;
+    el.classList.toggle('active', isActive);
+  });
+  const root = document.getElementById('pageRoot');
+  if (route === 'gems') { renderGemsPage(root); return; }
+  if (route === 'fleet') { renderFleetPage(root); return; }
+  if (route === 'shipsetup') { renderShipSetupPage(root); return; }
+  if (route === 'gearsets') { renderGearSetsPage(root); return; }
+  if (route === 'research') { renderResearchPage(root); return; }
+  if (route === 'badges') { renderBadgesPage(root); return; }
+  if (route === 'settings') { renderSettingsPage(root); return; }
+  if (route.startsWith('upgrades/')) { renderUpgradesPage(root, route.slice('upgrades/'.length)); return; }
+  renderSimPage(root);
+}
+// The website routes on the hash. Embedded, the COMPANION owns routing (cifi-tools uses paths,
+// not hashes) and calls render() itself, so this listener would fight it.
+if (!EMBEDDED) window.addEventListener('hashchange', render);
+
+// MOBILE NAVIGATION -- A FIXED BOTTOM BAR OVER A SLIDE-UP SHEET.
+//
+// COPIED FROM cifi-tools, NOT DESIGNED HERE. Two earlier attempts at this invented a layout (a
+// hamburger over a vertical link list, then a hamburger over tabbed cards) while the original's own
+// implementation sat in the bundle. The structure below -- six equal-width buttons in a fixed bar,
+// each opening a sheet anchored just above it with a titled header, a scrolling pill tab row and a
+// two-column grid of icon cards -- is theirs, and tokens.css carries their CSS verbatim.
+//
+// The bar's six slots follow the original's: one direct link (Gems) and five sheets. What each
+// sheet CONTAINS is derived from this app's own sidebar and hunter tabs rather than retyped, so the
+// category list keeps exactly one home and a category added later appears on mobile automatically.
+// Cloning also carries data-unlock-gem/lvl/node, and updateNavGating() queries the whole document,
+// so gated entries hide on both surfaces with no extra wiring.
+(function () {
+  const root = document.getElementById('mobileNav');
+  if (!root) return;
+
+  // Sidebar groups, read once. `Fleet` is pulled out into its own bar slot because the original
+  // gives fleet tooling a slot of its own; the rest stay grouped under Upgrades exactly as the
+  // sidebar groups them.
+  const readGroups = () => {
+    const aside = document.querySelector('aside');
+    if (!aside) return [];
+    // Each sidebar GROUP is `<div><h3>Name</h3><div>links…</div></div>`, so the group div carries
+    // both its own heading and its links. An earlier version read `previousElementSibling`, which
+    // walked to the PREVIOUS GROUP and produced tab labels containing a whole group's text.
+    return Array.from(aside.querySelectorAll(':scope > div > div')).map((g) => ({
+      name: ((g.querySelector('h3') || {}).textContent || '').trim(),
+      links: Array.from(g.querySelectorAll('a[href^="#/"]')),
+    })).filter((g) => g.name && g.links.length);
+  };
+
+  const groups = readGroups();
+  const isFleet = (g) => /fleet/i.test(g.name);
+  const upgradeGroups = groups.filter((g) => !isFleet(g));
+  const fleetGroups = groups.filter(isFleet);
+
+  // A card: the original's `modern-card upgrade-card` > `card-content` > icon + `.label`.
+  const card = (href, label, icon, extraAttrs) => {
+    const a = document.createElement('a');
+    a.href = href;
+    a.className = 'modern-card upgrade-card';
+    a.innerHTML = `<div class="card-content">${window.iconSvg(icon || 'sparkles', 26)}`
+      + `<div class="label">${label}</div></div>`;
+    if (extraAttrs) for (const [k, v] of Object.entries(extraAttrs)) a.setAttribute(k, v);
+    return a;
+  };
+
+  // Clone a sidebar link into a card, preserving its gating attributes and icon.
+  const cardFromLink = (link) => {
+    const label = (link.textContent || '').trim();
+    const c = card(link.getAttribute('href'), label, link.dataset.icon);
+    for (const k of ['unlockGem', 'unlockLvl', 'unlockNode']) {
+      if (link.dataset[k] !== undefined) {
+        c.dataset[k] = link.dataset[k];
+      }
+    }
+    if (link.dataset.route) c.dataset.route = link.dataset.route;
+    return c;
+  };
+
+  // ---- the sections the bar can open -----------------------------------------------------------
+  // `link` sections navigate immediately (the original's Gems slot behaves this way); `sheet`
+  // sections open the panel. Tabs are only rendered when a section has more than one group, which
+  // is what keeps single-group sheets from showing a pointless one-item tab row.
+  const SECTIONS = [
+    { id: 'gems', label: 'Gems', icon: 'sparkles', href: '#/gems' },
+    {
+      id: 'hunters',
+      label: 'Hunters',
+      icon: 'sword',
+      tabs: [{
+        name: 'Hunters',
+        cards: () => Array.from(document.querySelectorAll('#hunterBorgeBtn, #hunterOzzyBtn, #hunterKnoxBtn'))
+          .map((btn) => {
+            // Hunter tabs are BUTTONS that switch hunter without changing the route, so these are
+            // built as buttons too rather than as links to a route that would not change.
+            const c = card('#/sim', (btn.textContent || '').trim(), 'sword');
+            c.addEventListener('click', (e) => { e.preventDefault(); btn.click(); });
+            for (const k of ['unlockGem', 'unlockLvl', 'unlockNode']) {
+              if (btn.dataset[k] !== undefined) c.dataset[k] = btn.dataset[k];
+            }
+            return c;
+          }),
+      }],
+    },
+    {
+      id: 'upgrades',
+      label: 'Upgrades',
+      icon: 'stairs',
+      tabs: upgradeGroups.map((g) => ({ name: g.name, cards: () => g.links.map(cardFromLink) })),
+    },
+    {
+      id: 'fleet',
+      label: 'Fleet',
+      icon: 'adjustments',
+      tabs: [{
+        name: 'Fleet',
+        cards: () => [card('#/fleet', 'Fleet Overview', 'adjustments')]
+          .concat(fleetGroups.flatMap((g) => g.links.map(cardFromLink))),
+      }],
+    },
+    {
+      id: 'account',
+      label: 'Account',
+      icon: 'crown',
+      tabs: [{
+        name: 'Account',
+        cards: () => {
+          const cards = [];
+          const cloud = document.getElementById('cloudAccountBtn');
+          if (cloud) {
+            const c = card('#/settings', 'Cloud Save', 'repeat');
+            c.addEventListener('click', (e) => { e.preventDefault(); cloud.click(); });
+            cards.push(c);
+          }
+          cards.push(card('#/settings', 'Settings', 'settings'));
+          return cards;
+        },
+      }],
+    },
+    {
+      id: 'more',
+      label: 'More',
+      icon: 'folder',
+      tabs: [{
+        name: 'More',
+        cards: () => [
+          card('#/settings', 'Settings', 'settings'),
+          card('#/badges', 'Academy Badges', 'crown'),
+        ],
+      }],
+    },
+  ];
+
+  // ---- build ------------------------------------------------------------------------------------
+  const sheet = document.createElement('div');
+  sheet.className = 'submenu';
+  sheet.innerHTML = '<div class="submenu-header"><h3></h3></div>'
+    + '<div class="tab-navigation"></div><div class="tab-content"></div>';
+  const sheetTitle = sheet.querySelector('h3');
+  const sheetTabs = sheet.querySelector('.tab-navigation');
+  const sheetBody = sheet.querySelector('.tab-content');
+
+  const bar = document.createElement('div');
+  bar.className = 'mobile-navbar';
+  const barInner = document.createElement('div');
+  barInner.className = 'mobile-navbar-inner';
+  bar.appendChild(barInner);
+
+  let openId = null;
+  let activeTab = 0;
+
+  const paintSheet = () => {
+    const sec = SECTIONS.find((s) => s.id === openId);
+    if (!sec || !sec.tabs) return;
+    sheetTitle.textContent = sec.label;
+    sheetTabs.innerHTML = '';
+    // A single-group sheet shows no tab row: one tab is not a choice, and the original does not
+    // render one either.
+    sheetTabs.style.display = sec.tabs.length > 1 ? '' : 'none';
+    if (sec.tabs.length > 1) {
+      sec.tabs.forEach((t, i) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'tab-button' + (i === activeTab ? ' active' : '');
+        b.textContent = t.name;
+        b.onclick = () => { activeTab = i; paintSheet(); };
+        sheetTabs.appendChild(b);
+      });
+    }
+    sheetBody.innerHTML = '';
+    const grid = document.createElement('div');
+    grid.className = 'grid grid-cols-2 gap-3';
+    (sec.tabs[activeTab] || sec.tabs[0]).cards().forEach((c) => grid.appendChild(c));
+    sheetBody.appendChild(grid);
+    // Freshly built cards carry gating attributes but have never been evaluated, so a locked
+    // category would stay visible until the next gem change happened to re-run the pass.
+    if (typeof updateNavGating === 'function') updateNavGating();
+  };
+
+  const paintBar = () => {
+    Array.from(barInner.children).forEach((btn) => {
+      const on = btn.dataset.section === openId;
+      btn.classList.toggle('active', on);
+      const ind = btn.querySelector('.active-indicator');
+      if (on && !ind) btn.insertAdjacentHTML('beforeend', '<span class="active-indicator"></span>');
+      if (!on && ind) ind.remove();
+    });
+  };
+
+  const setOpen = (id) => {
+    openId = id;
+    activeTab = 0;
+    sheet.classList.toggle('visible', !!id);
+    if (id) paintSheet();
+    paintBar();
+  };
+
+  SECTIONS.forEach((sec) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'nav-button relative';
+    btn.dataset.section = sec.id;
+    btn.innerHTML = `<div class="nav-button-inner">${window.iconSvg(sec.icon, 22, 'nav-icon')}`
+      + `<span class="nav-label">${sec.label}</span></div>`;
+    btn.onclick = () => {
+      if (sec.href) { setOpen(null); location.hash = sec.href.slice(1); return; }
+      setOpen(openId === sec.id ? null : sec.id);
+    };
+    barInner.appendChild(btn);
+  });
+
+  root.appendChild(sheet);
+  root.appendChild(bar);
+
+  // Any navigation closes the sheet. Route links inside it fire hashchange, but a link to the route
+  // already showing does not -- so the click is listened for directly as well, or the sheet would
+  // sit over the page the user just asked for.
+  sheet.addEventListener('click', (e) => { if (e.target.closest('a')) setOpen(null); });
+  window.addEventListener('hashchange', () => setOpen(null));
+  // Tapping the page behind the sheet dismisses it, which is what a sheet is expected to do.
+  document.addEventListener('click', (e) => {
+    if (!openId) return;
+    if (sheet.contains(e.target) || bar.contains(e.target)) return;
+    setOpen(null);
+  });
+})();
+
+
+// ==================== SIMULATOR PAGE ====================
+
+function renderSimPage(root) {
+  // RENDER THE CURRENT HUNTER, NOT BORGE-THEN-FIX-IT.
+  //
+  // This template used to hard-code Borge's portrait, title and red banner, leaving switchHunter to
+  // overwrite all three immediately afterwards. Every sim-page render therefore painted Borge for a
+  // frame before showing the hunter actually selected -- visible as the page "refreshing back to
+  // Borge" on the way to Ozzy or Knox. The markup now states the truth the first time; switchHunter
+  // still updates the same nodes when the hunter changes without a re-render.
+  const h = currentHunter;
+  root.innerHTML = `
+    <div class="mb-6 rounded-lg overflow-hidden shadow-lg">
+      <div class="bg-gray-800 pt-3 pb-1 flex items-center justify-center gap-1">
+        <button id="hunterBorgeBtn" class="nav-pill ${h === 'borge' ? 'active-borge' : ''}" data-nav="borge">Borge</button>
+        <button id="hunterOzzyBtn" class="nav-pill ${h === 'ozzy' ? 'active-ozzy' : ''}" data-nav="ozzy" data-unlock-gem="exodus" data-unlock-lvl="2">Ozzy</button>
+        <button id="hunterKnoxBtn" class="nav-pill ${h === 'knox' ? 'active-knox' : ''}" data-nav="knox" data-unlock-gem="exodus" data-unlock-lvl="4">Knox</button>
+      </div>
+      <div id="hunterBanner" class="bg-gradient-to-r ${HUNTER_BANNER_GRADIENT[h]} to-gray-800 px-5 py-5 sm:py-0.5 border-b border-gray-600">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div class="flex items-center gap-4">
+            <div class="hidden sm:flex items-center justify-center">
+              <img id="hunterPortrait" src="assets/hunter_${h}.png" alt="${escapeHtml(HUNTER_TITLES[h].replace(' Simulator', ''))}" class="object-contain rounded-lg select-none w-16 h-16" draggable="false" style="filter: drop-shadow(rgba(0,0,0,0.5) 0px 0px 4px);" />
+            </div>
+            <div>
+              <h1 id="hunterTitle" class="text-2xl font-bold mb-1">${escapeHtml(HUNTER_TITLES[h])}</h1>
+              <p class="text-sm text-gray-300">Compare builds and optimize your performance</p>
+            </div>
+          </div>
+          <div class="flex flex-row flex-wrap justify-end gap-2">
+            <button id="hunterStatsBtn" class="flex items-center space-x-1 px-3 py-2 rounded-full bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 text-white font-semibold shadow-lg transition-colors duration-200 text-xs sm:text-sm">${iconSvg('chart-arrows-vertical', 16)}<span id="hunterStatsBtnLabel">${escapeHtml(HUNTER_TITLES[h].replace(' Simulator', ''))} Stats</span></button>
+            <button id="newBuildBtn" class="flex items-center space-x-1 px-3 py-2 rounded-full bg-gradient-to-r from-gray-500 to-gray-700 hover:from-gray-600 hover:to-gray-800 text-white font-semibold shadow-lg transition-colors duration-200 text-xs sm:text-sm">${iconSvg('plus', 16)}<span>New Build</span></button>
+            <button id="importBtn" class="flex items-center space-x-1 px-3 py-2 rounded-full bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 text-white font-semibold shadow-lg transition-colors duration-200 text-xs sm:text-sm">${iconSvg('download', 16)}<span>Import</span></button>
+          </div>
+        </div>
+      </div>
+      <div class="bg-gray-800 py-3 px-4 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-sm text-gray-400">Settings:</span>
+          <label class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors cursor-pointer"
+                 title="Higher iterations give more accurate results but take longer to compute. Set per hunter; raise the ceiling in Settings → Enthusiast Mode.">
+            ${iconSvg('repeat', 14, 'text-blue-400')}
+            <input id="baseIterations" type="number" class="w-20 bg-transparent text-white focus:outline-none" />
+            <span>iterations</span>
+          </label>
+          <button id="lootFilterBtn" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors" title="Choose which loot should be displayed in the build cards">${iconSvg('filter', 14, 'text-emerald-400')}<span>Filter</span></button>
+          <label class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors cursor-pointer" title="Fragments are account-wide and aren't produced by the simulation — they come from campaign/boss content. Enter your rate to get relic costs in time as well as fragments.">
+            ${iconSvg('sparkles', 14, 'text-purple-400')}
+            <input id="fragsPerDay" type="number" min="0" step="1" class="w-20 bg-transparent text-white focus:outline-none" placeholder="0" />
+            <span>frags/day</span>
+          </label>
+          <button id="manageCategoriesBtn" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors">${iconSvg('folder', 14, 'text-blue-400')}<span>Manage Categories</span></button>
+          <button id="viewVerticalBtn" class="flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors" title="Vertical View">${iconSvg('layout-distribute-vertical', 14)}<span>Vertical</span></button>
+          <button id="viewHorizontalBtn" class="flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors" title="Horizontal View">${iconSvg('layout-distribute-horizontal', 14)}<span>Horizontal</span></button>
+        </div>
+        <button id="temporaryUpgradesBtn" class="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg border border-gray-600 transition-colors">${iconSvg('clock', 16)}<span class="text-sm font-medium">Temporary Upgrades</span></button>
+      </div>
+      <div class="flex items-stretch bg-gray-900 border-b border-gray-700 overflow-x-auto" id="categoryTabs"></div>
+    </div>
+    <div id="buildList" class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));"></div>`;
+
+  wireHunterTabs();
+  switchHunter(currentHunter, true);
+  document.getElementById('newBuildBtn').onclick = () => openBuildModal(newDraftBuild());
+  document.getElementById('importBtn').onclick = () => document.getElementById('importModal').classList.remove('hidden');
+  document.getElementById('hunterStatsBtn').onclick = openStatsModal;
+  document.getElementById('hunterStatsBtnLabel').textContent = `${HUNTER_TITLES[currentHunter].replace(' Simulator', '')} Stats`;
+  document.getElementById('manageCategoriesBtn').onclick = openCategoriesModal;
+  document.getElementById('temporaryUpgradesBtn').onclick = openTemporaryModal;
+  // Iterations are PER HUNTER (see storeSchema): a level-79 Borge costs far more per
+  // evaluation than a level-12 Knox, so the accuracy/speed tradeoff is genuinely different for
+  // each. The input is re-seeded on every hunter switch for that reason.
+  const iterInput = document.getElementById('baseIterations');
+  const IT = StoreSchema.ITERATIONS;
+  iterInput.min = IT.min;
+  iterInput.step = IT.step;
+  iterInput.max = StoreSchema.iterationCeiling(store);
+  iterInput.value = currentIterations();
+  iterInput.addEventListener('change', () => {
+    const clamped = StoreSchema.clampIterations(iterInput.value, store);
+    iterInput.value = clamped;               // show the user what actually took effect
+    store[currentHunter].iterations = clamped;
+    saveStore();
+    renderBuildList();
+  });
+  document.getElementById('lootFilterBtn').onclick = openLootFilterModal;
+  // Fragments per day is ACCOUNT-wide (relics are bought once for the account, not per hunter),
+  // so it is read from and written to the top-level store, never store[hunter].
+  const fragsInput = document.getElementById('fragsPerDay');
+  fragsInput.value = store.fragments.perDay || '';
+  fragsInput.addEventListener('change', () => {
+    store.fragments.perDay = Math.max(0, Number(fragsInput.value) || 0);
+    saveStore();
+    renderBuildList();
+  });
+  document.getElementById('viewVerticalBtn').onclick = () => setViewMode('vertical');
+  document.getElementById('viewHorizontalBtn').onclick = () => setViewMode('horizontal');
+  updateViewModeButtons();
+  renderCategoryTabs();
+  renderBuildList();
+}
+
+function setViewMode(mode) { store.viewMode = mode; saveStore(); updateViewModeButtons(); renderBuildList(); }
+function updateViewModeButtons() {
+  const v = document.getElementById('viewVerticalBtn'); const h = document.getElementById('viewHorizontalBtn');
+  if (!v || !h) return;
+  v.className = `flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors ${store.viewMode === 'vertical' ? 'bg-gradient-to-r from-blue-500 to-blue-700 text-white font-semibold shadow-lg' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`;
+  h.className = `flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors ${store.viewMode === 'horizontal' ? 'bg-gradient-to-r from-blue-500 to-blue-700 text-white font-semibold shadow-lg' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`;
+}
+
+function renderCategoryTabs() {
+  const wrap = document.getElementById('categoryTabs');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  store.categories.forEach((cat) => {
+    const count = store[currentHunter].builds.filter((b) => (b.categoryId || 'active') === cat.id).length;
+    const zone = document.createElement('div');
+    zone.className = 'category-drop-zone relative flex-shrink-0';
+    zone.dataset.categoryId = cat.id;
+    const active = showCategoryId === cat.id;
+    zone.innerHTML = `<button class="relative px-4 py-3 font-semibold text-sm transition-all duration-200 border-r border-gray-800 whitespace-nowrap ${active ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-300 hover:bg-gray-700/40'}">
+        <div class="flex items-center gap-2">${iconSvg('folder', 18, active ? 'text-blue-400' : 'text-gray-600')}<span>${escapeHtml(cat.name)}</span>
+          <div class="ml-2 px-2.5 py-0.5 text-xs font-bold rounded-md ${active ? 'bg-blue-500 text-blue-100 border border-blue-400' : 'bg-gray-800 text-gray-600 border border-gray-700'}">${count}</div>
+        </div>
+        ${active ? '<div class="absolute bottom-0 left-0 right-0 h-1 rounded-t-sm bg-blue-500"></div>' : ''}
+      </button>`;
+    zone.querySelector('button').onclick = () => { showCategoryId = cat.id; renderCategoryTabs(); renderBuildList(); };
+    zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault(); zone.classList.remove('drag-over');
+      const buildId = e.dataTransfer.getData('text/build-id');
+      const build = store[currentHunter].builds.find((b) => b.id === buildId);
+      if (build) { build.categoryId = cat.id; saveStore(); renderCategoryTabs(); renderBuildList(); }
+    });
+    wrap.appendChild(zone);
+  });
+}
+
+const MAT_ASSETS = ['assets/loot_mat1.png', 'assets/loot_mat2.png', 'assets/loot_mat3.png'];
+const MAT_BORDER_COLORS = ['border-red-600/30', 'border-orange-600/30', 'border-amber-600/30', 'border-blue-600/30'];
+const MAT_TEXT_COLORS = ['text-red-300', 'text-orange-300', 'text-amber-300', 'text-blue-300'];
+
+// Small <img>/icon for a cost-formula resource key (mat1/mat2/mat3 use the same real loot
+// material art the build cards show; Fragments/Hellish-Biomatter have no local asset since
+// they never appear in the sim's own loot output, so they fall back to a generic icon).
+function matIcon(resKey) {
+  const idx = { mat1: 0, mat2: 1, mat3: 2 }[resKey];
+  if (idx !== undefined) return `<img src="${MAT_ASSETS[idx]}" alt="${resKey}" class="w-4 h-4 inline-block" />`;
+  return iconSvg(resKey === 'frags' ? 'sparkles' : 'crown', 14, 'text-purple-300');
+}
+
+// Re-confirmed directly against the live site's CURRENT rendered DOM (button titles/order
+// read straight off a live card): the Lvl badge, "View override costs" (red circle), and
+// "Re-evaluate Build" (gray circle) are absolute-positioned in the header's top-right corner
+// (Lvl to the left, the two circles stacked top-1.5/top-8 at the far right) -- rendered
+// directly in the card template now, not from this list. The action bar is a single centered
+// row with these 8 buttons; "Screenshot to clipboard" lives separately, inline with the
+// "Main Statistics" section title (confirmed: only one camera icon exists on the whole card,
+// and it's there, not in the action bar).
+const ACTION_BUTTONS = [
+  { act: 'edit', icon: 'edit', title: 'Edit build' },
+  { act: 'dup', icon: 'copy', title: 'Copy build' },
+  { act: 'overrides', icon: 'adjustments-horizontal', title: 'Overrides' },
+  { act: 'compareEfficiency', icon: 'scale', title: 'Compare upgrade efficiency' },
+  { act: 'buildStats', icon: 'chart-bar', title: 'Show Build Statistics' },
+  { act: 'effectivePath', icon: 'chart-arrows-vertical', title: 'Effective Path (recommended stat/inscription upgrades)' },
+  { act: 'export', icon: 'share', title: 'Share build code' },
+  { act: 'archive', icon: 'archive', title: 'Archive build' },
+  { act: 'delete', icon: 'trash', title: 'Delete build', extra: 'hover:text-red-400' },
+];
+const SECOND_ROW_BUTTONS = [
+  { act: 'screenshot', icon: 'camera', title: 'Screenshot to clipboard' },
+];
+
+// The live site lets each build override the account's GLOBAL upgrade values (e.g. a build
+// planned around spending diamonds/currency to push ATK Speed, an inscription level, or a
+// gem's catch-up power above the account's current value) -- confirmed via a live build
+// ("Borge Loot") whose HP Regen/Evade/Effect/Crit Chance/ATK Speed AND an inscription level
+// and gem catch-up value all differed from the account's global state. Grouped here the
+// same way the live site's Overrides panel groups them (Base Stats / Relics / Inscryptions
+// / Loop Mods / Diamond Specials / Diamond Cards / Gem Nodes), each row showing the
+// account's current global value alongside the override input, matching the live UI.
+const BASE_STAT_LABELS = {
+  hp: 'Max HP', atk: 'ATK Power', regen: 'HP Regen', dr: 'DMG Reduction',
+  evade: 'Evade Chance', effect: 'Effect Chance',
+  critchance: 'Crit Chance', critpower: 'Crit Power', atkspeed: 'ATK Speed',
+  multichance: 'Multistrike Chance', multipower: 'Multistrike Power',
+  block: 'Block Chance', charge: 'Charge Chance', chargeGain: 'Charge Gained', reload: 'Reload Time',
+  proj: 'Projectiles Per Salvo',
+};
+
+// Built per-hunter (Base Stats / Relics / Inscryptions read straight from HUNTER_DEFS so
+// Ozzy/Knox get their OWN relic and inscription ID lists -- these are NOT shared with
+// Borge's; e.g. Ozzy's relics are r4/r7/r17/t2r7, not Borge's r4/r7/r16/r19, and each
+// hunter's inscription IDs are entirely disjoint).
+//
+// GENERIC_GLOBAL_GROUPS (below) used to be a Borge-only hardcoded block (Loop Mods/Diamond
+// Specials/Diamond Cards, on the mistaken assumption Ozzy/Knox equivalents "hadn't been
+// mapped out"). HUNTER_DEFS already declares all of these per hunter with the right
+// per-hunter item lists (Ozzy's Loop Mods is scavenger2+stelzi, not trample+scavenger;
+// Knox's is stelzi alone) -- this reads that generically instead, the same way
+// Relics/Inscryptions/Gadgets already do a few lines up.
+function getOverrideGroups() {
+  const d = defs();
+  const groups = [
+    {
+      title: 'Base Stats',
+      fields: d.baseStatKeys.filter((k) => k !== 'stage' && k !== 'proj').map((key) => ({
+        key, label: BASE_STAT_LABELS[key] || key, global: () => store[currentHunter].hunterStats[key],
+      })),
+    },
+  ];
+  const relics = d.globalUpgrades?.relics?.items || [];
+  if (relics.length) {
+    groups.push({
+      title: 'Relics',
+      fields: relics.map((r) => ({
+        key: `upgrades.relics.${r.id}`, label: r.label, global: () => store.globalUpgrades[`relics.${r.id}`],
+      })),
+    });
+  }
+  const inscryptions = d.globalUpgrades?.inscryptions?.items || [];
+  if (inscryptions.length) {
+    groups.push({
+      title: 'Inscryptions',
+      fields: inscryptions.map((i) => ({
+        key: `upgrades.inscryptions.${i.id}`, label: i.label, global: () => store.globalUpgrades[`inscryptions.${i.id}`],
+      })),
+    });
+  }
+  // Gadgets (Wrench/Zaptron/Anchor) were missing from this panel entirely -- the live site's
+  // Overrides editor has its own priced Gadgets section (confirmed via its `O()`/cost-badge
+  // function, which has a whole branch for "upgrades.gadgets." keys).
+  const GADGET_BY_HUNTER = { borge: { id: 'wrench', label: 'The Wrench of Gore' }, ozzy: { id: 'zaptron', label: 'Zaptron-533 Bio-Repair Tool' }, knox: { id: 'anchor', label: 'The Anchor of Ages' } };
+  const gadget = GADGET_BY_HUNTER[currentHunter];
+  if (gadget) {
+    groups.push({
+      title: 'Gadgets',
+      fields: [{ key: `upgrades.gadgets.${gadget.id}`, label: gadget.label, global: () => store.globalUpgrades[`gadgets.${gadget.id}`] }],
+    });
+  }
+  // Every remaining globalUpgrades category HUNTER_DEFS declares (loopmods/diamondspecials/
+  // diamondcards/iap/ultima/trinkets/cms), read the same generic way as Relics/Inscryptions/
+  // Gadgets above -- one group per category, one field per item, for whichever hunter is
+  // current. `toggle: true` on a maxLevel-1 item matches the boolean-pill rendering the
+  // Loop Mods/Diamond Cards rows already used for Trample/Gaiden/Iridian.
+  const GENERIC_GLOBAL_GROUPS = [
+    ['loopmods', 'Loop Mods'], ['diamondspecials', 'Diamond Specials'], ['diamondcards', 'Diamond Cards'],
+    ['iap', 'IAP'], ['ultima', 'Diamond Ultima'], ['trinkets', 'Trinkets'], ['cms', 'Construction Milestones'],
+  ];
+  GENERIC_GLOBAL_GROUPS.forEach(([cat, title]) => {
+    const items = d.globalUpgrades?.[cat]?.items || [];
+    if (!items.length) return;
+    groups.push({
+      title,
+      fields: items.map((it) => ({
+        key: `upgrades.${cat}.${it.id}`,
+        label: it.label,
+        toggle: it.maxLevel === 1,
+        global: () => store.globalUpgrades[`${cat}.${it.id}`],
+      })),
+    });
+  });
+  if (currentHunter === 'borge') {
+    groups.push({
+      title: 'Gem Nodes & Upgrades',
+      fields: [
+        { key: 'upgrades.gems_nodes.attraction_level', label: 'Attraction Gem Level', global: () => store.gems?.attraction?.level },
+        { key: 'upgrades.gems_nodes.attraction_catchUp', label: 'Attraction Catch-Up Power', global: () => store.gems?.attraction?.upgrades?.['catch-up-power-borge-ozzy'] },
+        { key: 'upgrades.gems_nodes.attraction_lootBorge', label: 'Attraction Loot (Borge)', global: () => store.gems?.attraction?.upgrades?.['borge-loot-bonus'] },
+      ],
+    });
+  }
+  return groups;
+}
+
+// Verbatim port of the live Overrides panel's row template (captured via outerHTML from
+// cifi-tools.com): a numeric row is a double-chevron (jump) + single-chevron (step)
+// stepper on each side of a read-only value box -- unlike the Build Creator card, this one
+// DOES have the << / >> jump buttons -- and a boolean row is a global ON/OFF badge next to
+// a single toggle pill button. Classes copied 1:1 from the live DOM.
+// Resolves which resource (mat1/mat2/mat3/frags/hbm) a given Overrides-panel field key
+// costs, for the current hunter -- used to show the same material icon next to each row
+// that the live site's panel does (previously missing entirely).
+function overrideFieldResource(key) {
+  const CF = window.CostFormulas;
+  if (key.startsWith('upgrades.relics.')) return CF.relicResource(currentHunter);
+  if (key.startsWith('upgrades.inscryptions.')) return CF.inscryptionResource(currentHunter);
+  if (key.startsWith('upgrades.')) return null;
+  return CF.baseStatResource(currentHunter, key);
+}
+
+// Verbatim port of the live Overrides panel's `A(e)` (is this row eligible to show a "Cost:"
+// badge at all) and `O(e)` (the cost itself) -- extracted directly from
+// cifi-tools.com/assets/index-CBtvNH_D.js. The live panel does NOT show every row's diff as
+// a cost: only baseStats/relics/gadgets/inscryptions/gems_nodes rows, only while an override
+// is actually set, and only when it's a POSITIVE difference (current > global) -- a lowered
+// override still shows red/green value coloring but never a Cost badge, since you can't
+// "buy" your way down. "stage"/"proj" are excluded entirely (matches `A(e)`'s first check).
+// Our clone previously showed no Cost badge at all for any row, which is the actual bug being
+// fixed here -- not a sign-based row *filter* (the live site never hides rows by sign).
+function overrideCostEligible(key, current, globalVal) {
+  if (key === 'stage' || key === 'proj') return false;
+  if (current === '' || current <= globalVal) return false;
+  return !key.startsWith('upgrades.') || key.startsWith('upgrades.relics.') || key.startsWith('upgrades.gadgets.')
+    || key.startsWith('upgrades.inscryptions.') || key.startsWith('upgrades.gems_nodes.');
+}
+
+// Extracts a gems_nodes field's named-upgrade alias the same way resolveParam
+// (hunterSimBrowser.js) does: split at the FIRST underscore (gemName_alias, e.g.
+// "attraction_lootBorge" -> "lootBorge"), then look up the one shared canonical table
+// (window.GEM_UPGRADE_ALIASES, defined in hunterDefs.js) instead of hand-listing every
+// gemName+alias combination in a separate table here -- that hardcoded list previously had
+// to be kept in sync by hand and would silently miss any new tree/alias pairing.
+function gemFieldAlias(field) {
+  const us = field.indexOf('_');
+  if (us <= 0) return null;
+  const suffix = field.substring(us + 1);
+  return window.GEM_UPGRADE_ALIASES[suffix] ? suffix : null;
+}
+
+// Mirrors `O(e)`'s per-category dispatch to the real cost-range formulas (relics -> dV,
+// gadgets -> fV, inscryptions -> yV, the aliased gem named-upgrades -> wV, everything else
+// -- base stats, and any gems_nodes key that isn't an aliased named-upgrade, exactly matching
+// the live site's own fallthrough -- -> aV/baseStatCostRange).
+function overrideCost(key, fromLevel, toLevel) {
+  const CF = window.CostFormulas;
+  if (key.startsWith('upgrades.relics.')) return CF.relicCostRange(key.split('.')[2], fromLevel, toLevel);
+  if (key.startsWith('upgrades.gadgets.')) return CF.gadgetCostRange(key.split('.')[2], fromLevel, toLevel);
+  if (key.startsWith('upgrades.inscryptions.')) return CF.inscryptionCostRange(key.split('.')[2], fromLevel, toLevel);
+  if (key.startsWith('upgrades.gems_nodes.')) {
+    const alias = gemFieldAlias(key.split('.')[2]);
+    if (alias) return CF.gemAliasCostRange(alias, fromLevel, toLevel);
+    return CF.baseStatCostRange(key, fromLevel, toLevel, currentHunter);
+  }
+  return CF.baseStatCostRange(key, fromLevel, toLevel, currentHunter);
+}
+
+function overrideNumericRow(f, current, globalVal, onChange) {
+  const overridden = current !== '';
+  const displayVal = overridden ? current : globalVal;
+  const valueClass = overridden ? (current > globalVal ? 'text-green-400' : current < globalVal ? 'text-red-400' : 'text-gray-500') : 'text-gray-500';
+  const resource = overrideFieldResource(f.key);
+  const costEligible = overrideCostEligible(f.key, current, globalVal);
+  const costLine = costEligible
+    ? `<div class="text-[10px] text-amber-400 mt-0.5">Cost: ${window.CostFormulas.fmtBig(overrideCost(f.key, Math.floor(globalVal), Math.floor(current)))}</div>` : '';
+  const div = document.createElement('div');
+  div.className = 'bg-gray-750/60 rounded-md p-1.5 bg-gray-700/60 transition-colors border border-transparent hover:border-gray-600';
+  div.innerHTML = `
+    <div class="flex justify-between items-center mb-1">
+      <div class="flex-1 mr-2 flex items-center gap-1.5">${resource ? matIcon(resource) : ''}<span class="text-xs font-medium text-gray-300">${escapeHtml(f.label)}</span></div>
+    </div>
+    <div class="flex items-center justify-between">
+      <div class="flex items-center">
+        <div class="text-[10px] mr-2 uppercase text-gray-400">global</div>
+        <div class="text-xs text-gray-300">${globalVal}</div>
+      </div>
+      <div class="flex items-center">
+        <div class="flex items-center">
+          <button data-min class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded-l-md mr-px"><div class="flex">${iconSvg('chevron-left', 14)}${iconSvg('chevron-left', 14, '-ml-2')}</div></button>
+          <button data-dec class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white">${iconSvg('chevron-left', 14)}</button>
+          <div class="min-w-[45px] text-center bg-gray-800 py-[1px] h-6 border-y border-gray-600 flex items-center justify-center"><span class="${valueClass}">${displayVal}</span></div>
+          <button data-inc class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white">${iconSvg('chevron-right', 14)}</button>
+          <button data-max class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded-r-md ml-px"><div class="flex">${iconSvg('chevron-right', 14)}${iconSvg('chevron-right', 14, '-ml-2')}</div></button>
+        </div>
+      </div>
+    </div>
+    ${costLine}`;
+  div.querySelector('[data-inc]').onclick = () => onChange((overridden ? current : globalVal) + 1);
+  div.querySelector('[data-dec]').onclick = () => onChange((overridden ? current : globalVal) - 1);
+  div.querySelector('[data-max]').onclick = () => onChange((overridden ? current : globalVal) + 10);
+  div.querySelector('[data-min]').onclick = () => onChange('');
+  return div;
+}
+
+function overrideToggleRow(f, current, globalVal, onChange) {
+  const isOn = current === '' ? !!globalVal : !!current;
+  const div = document.createElement('div');
+  div.className = 'bg-gray-750/60 rounded-md p-1.5 bg-gray-700/60 transition-colors border border-transparent hover:border-gray-600';
+  div.innerHTML = `
+    <div class="flex justify-between items-center mb-1">
+      <div class="flex-1 mr-2"><span class="text-xs font-medium text-gray-300">${escapeHtml(f.label)}</span></div>
+    </div>
+    <div class="flex items-center justify-between">
+      <div class="flex items-center">
+        <div class="text-[10px] mr-2 uppercase text-gray-400">global</div>
+        <div class="text-xs px-1.5 py-0.5 rounded ${globalVal ? 'bg-green-900/50 text-green-300' : 'bg-gray-700 text-gray-400'}">${globalVal ? 'ON' : 'OFF'}</div>
+      </div>
+      <div class="flex">
+        <button data-toggle class="text-xs px-2 py-0.5 rounded bg-gray-700 hover:bg-red-800/50 text-white"> ${isOn ? 'OFF' : 'ON'} </button>
+      </div>
+    </div>`;
+  div.querySelector('[data-toggle]').onclick = () => onChange(isOn ? 0 : 1);
+  return div;
+}
+
+// Looks up a field's max level so "Hide Maxed" can tell whether the account is already
+// capped on it -- base stats use the sim's own statCaps, upgrade fields (key format
+// "upgrades.<category>.<id>") look themselves up in window.ALL_UPGRADE_CATEGORIES by id.
+function overrideFieldMaxLevel(key) {
+  if (!key.startsWith('upgrades.')) return defs().statCaps[key] ?? Infinity;
+  const parts = key.split('.');
+  const id = parts[parts.length - 1];
+  for (const cat of Object.values(window.ALL_UPGRADE_CATEGORIES || {})) {
+    const item = cat.items?.find((i) => i.id === id);
+    if (item) return item.maxLevel;
+  }
+  return Infinity;
+}
+
+function openOverridesModal(build, onSave) {
+  const existing = document.getElementById('overridesModal');
+  if (existing) existing.remove();
+  const overrides = { ...(build.overrides || {}) };
+  let hideMaxed = false;
+  const overlay = document.createElement('div');
+  overlay.id = 'overridesModal';
+  overlay.className = 'fixed inset-0 z-50 overflow-y-auto bg-gray-900/80';
+  overlay.innerHTML = `
+    <div class="flex min-h-full items-end sm:items-center justify-center p-2 pb-[70px] sm:p-4 sm:pb-4">
+      <div class="bg-gray-800 rounded-t-xl sm:rounded-lg shadow-2xl w-full max-w-3xl max-h-[85dvh] sm:max-h-[90vh] overflow-y-auto animate-fade-in border border-gray-700">
+        <div class="bg-gradient-to-r from-gray-700 to-gray-800 p-2.5 border-b border-gray-600 sticky top-0 z-10">
+          <div class="flex justify-between items-center mb-2 sm:mb-0">
+            <div class="flex-1"><h2 class="text-base sm:text-lg font-bold text-white truncate mr-2 flex items-center"><span class="text-red-400">${escapeHtml(build.name || 'Unnamed')}</span><span> - Overrides</span></h2></div>
+            <div class="flex items-center gap-2">
+              <div class="hidden sm:block bg-gray-800/50 rounded-lg border border-gray-700/50 p-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-gray-300 text-xs font-medium mr-3">Hide Maxed:</span>
+                  <button data-hide-maxed class="relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none bg-gray-600"><span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform translate-x-1"></span></button>
+                </div>
+              </div>
+              <button data-reset class="px-2 py-1 sm:px-3 bg-gray-600 hover:bg-gray-500 text-xs sm:text-sm text-white rounded-md"> Reset </button>
+              <button data-close class="p-1.5 rounded-full hover:bg-gray-700 transition-colors">${iconSvg('x', 16)}</button>
+            </div>
+          </div>
+          <div class="block sm:hidden mt-2">
+            <div class="bg-gray-800/50 rounded-lg border border-gray-700/50 p-2">
+              <div class="flex items-center justify-between">
+                <span class="text-gray-300 text-xs font-medium">Hide Maxed:</span>
+                <button data-hide-maxed-m class="relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none bg-gray-600"><span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform translate-x-1"></span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="p-3 sm:p-4" id="overridesBody"></div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const body = overlay.querySelector('#overridesBody');
+  const renderBody = () => {
+    body.innerHTML = '';
+    getOverrideGroups().forEach((group) => {
+      const rowsData = group.fields.map((f) => {
+        const current = overrides[f.key] !== undefined ? overrides[f.key] : '';
+        const globalVal = f.global() ?? 0;
+        const maxLevel = overrideFieldMaxLevel(f.key);
+        const isMaxed = maxLevel !== Infinity && (current !== '' ? current : globalVal) >= maxLevel;
+        return { f, current, globalVal, isMaxed };
+      }).filter((r) => !hideMaxed || !r.isMaxed);
+      if (!rowsData.length) return;
+      const section = document.createElement('div');
+      section.className = 'mb-3';
+      section.innerHTML = `<div class="flex items-center mb-1.5"><div class="w-1.5 h-5 bg-blue-500 rounded-r mr-2"></div><h3 class="font-medium text-sm text-blue-200">${escapeHtml(group.title)}</h3></div>`;
+      const grid = document.createElement('div');
+      grid.className = 'grid grid-cols-1 sm:grid-cols-2 gap-1.5';
+      rowsData.forEach(({ f, current, globalVal }) => {
+        const onChange = (val) => { if (val === '') delete overrides[f.key]; else overrides[f.key] = val; renderBody(); };
+        grid.appendChild(f.toggle ? overrideToggleRow(f, current, globalVal, onChange) : overrideNumericRow(f, current, globalVal, onChange));
+      });
+      section.appendChild(grid);
+      body.appendChild(section);
+    });
+  };
+  renderBody();
+  const setHideMaxed = (val) => {
+    hideMaxed = val;
+    ['[data-hide-maxed]', '[data-hide-maxed-m]'].forEach((sel) => {
+      const btn = overlay.querySelector(sel);
+      btn.className = `relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none ${hideMaxed ? 'bg-blue-600' : 'bg-gray-600'}`;
+      btn.querySelector('span').className = `inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${hideMaxed ? 'translate-x-5' : 'translate-x-1'}`;
+    });
+    renderBody();
+  };
+  overlay.querySelector('[data-hide-maxed]').onclick = () => setHideMaxed(!hideMaxed);
+  overlay.querySelector('[data-hide-maxed-m]').onclick = () => setHideMaxed(!hideMaxed);
+  const close = () => {
+    if (onSave) onSave(overrides);
+    else {
+      const target = store[currentHunter].builds.find((b) => b.id === build.id);
+      if (target) { target.overrides = overrides; saveStore(); renderBuildList(); }
+    }
+    overlay.remove();
+  };
+  overlay.querySelector('[data-close]').onclick = close;
+  overlay.querySelector('[data-reset]').onclick = () => { Object.keys(overrides).forEach((k) => delete overrides[k]); renderBody(); };
+}
+
+function genericModal(title, bodyHtml, id) {
+  const existing = document.getElementById(id);
+  if (existing) existing.remove();
+  const overlay = document.createElement('div');
+  overlay.id = id;
+  overlay.className = 'fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4';
+  overlay.innerHTML = `
+    <div class="bg-gray-800 rounded-lg shadow-xl max-w-lg w-full max-h-[85vh] overflow-y-auto border border-gray-700">
+      <div class="flex justify-between items-center p-4 border-b border-gray-700">
+        <h3 class="text-lg font-semibold text-white">${title}</h3>
+        <button data-close class="text-gray-400 hover:text-white">&times;</button>
+      </div>
+      <div class="p-4">${bodyHtml}</div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('[data-close]').onclick = close;
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  return overlay;
+}
+
+// Shared shell matching the live site's larger modals (Build Statistics, Upgrade
+// Efficiency, etc.): gradient header with a left icon + red-accented title and a max-w-5xl
+// body, as opposed to genericModal's plain max-w-lg dialog used for smaller popups.
+function titledModal(icon, title, bodyHtml, id) {
+  const existing = document.getElementById(id);
+  // Reopening replaces the old overlay, which is just as much a close as clicking the X -- so it
+  // has to fire the same event, or a re-open would orphan whatever the previous instance had in
+  // flight. This is the exact path that stacked abandoned Effective Path runs.
+  if (existing) {
+    existing.dispatchEvent(new CustomEvent('modal-close'));
+    existing.remove();
+  }
+  const overlay = document.createElement('div');
+  overlay.id = id;
+  overlay.className = 'fixed inset-0 z-50 overflow-y-auto bg-gray-900/80 flex items-center justify-center p-2 sm:p-4 pb-[70px] pt-[50px] sm:py-0';
+  overlay.innerHTML = `
+    <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto animate-fade-in border border-gray-700">
+      <div class="bg-gradient-to-r from-gray-700 to-gray-800 p-4 border-b border-gray-600 sticky top-0 z-10 flex justify-between items-center">
+        <h2 class="text-xl font-bold text-white flex items-center">${iconSvg(icon, 20, 'mr-2 text-red-400')} ${title}</h2>
+        <button data-close class="p-1.5 rounded-full hover:bg-gray-700 transition-colors text-gray-300 hover:text-white">${iconSvg('x', 18)}</button>
+      </div>
+      <div class="p-5">${bodyHtml}</div>
+    </div>`;
+  document.body.appendChild(overlay);
+  // Announce the close BEFORE removing, so a feature with work in flight can cancel it. Without
+  // this, a modal that kicked off a long async computation leaves it running after the user
+  // closes -- invisible, uncancellable, and still competing for the main thread and for wasm
+  // instantiation. See the Effective Path modal, which listens for this.
+  const close = () => {
+    overlay.dispatchEvent(new CustomEvent('modal-close'));
+    overlay.remove();
+  };
+  overlay.querySelector('[data-close]').onclick = close;
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  return overlay;
+}
+
+// Verbatim port of the live "Override Costs" modal (captured via outerHTML): grouped
+// per-category tables (Base Stats / Relics / Inscryptions) with Upgrade/Global/
+// Override/Difference/Resource/Cost columns, a per-resource cost total per category header,
+// and a footer grid of grand totals per resource -- using the real cost-curve formulas
+// extracted from the live bundle (costFormulas.js), not a placeholder. The live modal also
+// has a "Collection Time" column computed from the account's per-resource production rate;
+// we don't have that production-rate data (it isn't in the save file or any API we read),
+// so that column is intentionally omitted rather than showing a fabricated duration.
+async function openOverrideCostsModal(build) {
+  const overrides = build.overrides || {};
+  const CF = window.CostFormulas;
+  const d = defs();
+  const overrideGroups = getOverrideGroups();
+
+  // Collection Time is inferred (not a stored value) from THIS build's own simulated
+  // per-resource loot rate (mat1/mat2/mat3 per run * runs/day) -- the same numbers already
+  // shown on the build card's Main Statistics.
+  //
+  // Fragments are the exception and always will be: they come from campaign/boss content the
+  // evaluator does not model, so no amount of simulating produces a rate. The user supplies it
+  // (Settings -> Fragments per day). When they have, relic rows get a real Collection Time like
+  // everything else; when they haven't, perDayRate.frags stays 0 and the row renders unknown --
+  // which is the honest answer, not a zero.
+  let perDayRate = {};
+  try {
+    const iterations = currentIterations();
+    const r = await HunterSim.evaluate(currentHunter, evalStateFor(build, iterations));
+    const runsPerDay = r.avgTime ? 1440 / r.avgTime : 0;
+    perDayRate = { mat1: r.mat1 * runsPerDay, mat2: r.mat2 * runsPerDay, mat3: r.mat3 * runsPerDay };
+  } catch { /* Collection Time just won't be shown if evaluation fails */ }
+  perDayRate.frags = Number(store.fragments.perDay) || 0;
+
+  // Verbatim behavior port of the live "Override Costs" modal's own computation (its `C()`
+  // function, extracted directly from the bundle): it iterates ONLY the keys actually present
+  // in build.overrides, computes `difference = overrideValue - globalValue`, and INCLUDES A
+  // ROW ONLY WHEN `difference > 0` -- i.e. only upgrades you don't already have (an override
+  // set below or equal to your current global value is never shown here at all, not even
+  // with a zero/negative cost). Our clone previously showed every overridden field regardless
+  // of sign, which is the bug being fixed.
+  const positiveOverrideKeys = (prefix) => Object.keys(overrides).filter((k) => {
+    if (!k.startsWith(prefix)) return false;
+    const field = overrideGroups.flatMap((g) => g.fields).find((f) => f.key === k);
+    const globalVal = field ? (field.global() ?? 0) : 0;
+    return overrides[k] > globalVal;
+  });
+  const positiveOverrideBaseStats = d.baseStatKeys.filter((k) => {
+    if (overrides[k] === undefined) return false;
+    const field = overrideGroups.find((g) => g.title === 'Base Stats').fields.find((f) => f.key === k);
+    const globalVal = field ? (field.global() ?? 0) : 0;
+    return overrides[k] > globalVal;
+  });
+
+  const groups = [
+    {
+      title: 'Base Stats', icon: 'writing',
+      rows: positiveOverrideBaseStats.map((k) => {
+        const field = overrideGroups.find((g) => g.title === 'Base Stats').fields.find((f) => f.key === k);
+        const globalVal = field ? (field.global() ?? 0) : 0;
+        const overrideVal = overrides[k];
+        const resource = CF.baseStatResource(currentHunter, k);
+        const cost = resource ? CF.baseStatCostRange(k, globalVal, overrideVal, currentHunter) : undefined;
+        return { label: field ? field.label : k, globalVal, overrideVal, resource, cost };
+      }),
+    },
+    {
+      title: 'Relics', icon: 'scale',
+      rows: positiveOverrideKeys('upgrades.relics.').map((k) => {
+        const id = k.split('.')[2];
+        const field = overrideGroups.find((g) => g.title === 'Relics')?.fields.find((f) => f.key === k);
+        const globalVal = field ? (field.global() ?? 0) : 0;
+        const overrideVal = overrides[k];
+        const resource = CF.relicResource(currentHunter);
+        const cost = resource ? CF.relicCostRange(id, globalVal, overrideVal) : undefined;
+        return { label: field ? field.label : id, globalVal, overrideVal, resource, cost };
+      }),
+    },
+    {
+      title: 'Gadgets', icon: 'settings',
+      rows: positiveOverrideKeys('upgrades.gadgets.').map((k) => {
+        const id = k.split('.')[2];
+        const field = overrideGroups.find((g) => g.title === 'Gadgets')?.fields.find((f) => f.key === k);
+        const globalVal = field ? (field.global() ?? 0) : 0;
+        const overrideVal = overrides[k];
+        // No resource/material table extracted for gadgets yet -- shown without a material
+        // icon (still a real, correctly-formatted cost number, just no currency badge).
+        const cost = CF.gadgetCostRange(id, globalVal, overrideVal);
+        return { label: field ? field.label : id, globalVal, overrideVal, resource: null, cost };
+      }),
+    },
+    {
+      title: 'Inscryptions', icon: 'chart-bar',
+      rows: positiveOverrideKeys('upgrades.inscryptions.').map((k) => {
+        const id = k.split('.')[2];
+        const field = overrideGroups.find((g) => g.title === 'Inscryptions')?.fields.find((f) => f.key === k);
+        const globalVal = field ? (field.global() ?? 0) : 0;
+        const overrideVal = overrides[k];
+        const resource = CF.inscryptionResource(currentHunter);
+        const cost = resource ? CF.inscryptionCostRange(id, globalVal, overrideVal) : undefined;
+        return { label: field ? field.label : id, globalVal, overrideVal, resource, cost };
+      }),
+    },
+    {
+      title: 'Gem Nodes', icon: 'diamond',
+      rows: positiveOverrideKeys('upgrades.gems_nodes.').map((k) => {
+        const suffix = k.split('.')[2];
+        const field = overrideGroups.find((g) => g.title === 'Gem Nodes & Upgrades')?.fields.find((f) => f.key === k);
+        const globalVal = field ? (field.global() ?? 0) : 0;
+        const overrideVal = overrides[k];
+        const alias = gemFieldAlias(suffix);
+        const cost = alias ? CF.gemAliasCostRange(alias, globalVal, overrideVal) : CF.baseStatCostRange(k, globalVal, overrideVal, currentHunter);
+        return { label: field ? field.label : suffix, globalVal, overrideVal, resource: null, cost };
+      }),
+    },
+  ].filter((g) => g.rows.length);
+
+  const modeledPrefixes = ['upgrades.inscryptions.', 'upgrades.relics.', 'upgrades.gadgets.', 'upgrades.gems_nodes.'];
+  const knownKeys = new Set([
+    ...positiveOverrideBaseStats,
+    ...modeledPrefixes.flatMap((p) => positiveOverrideKeys(p)),
+  ]);
+  // Anything else with a positive override we don't have a cost formula for yet -- still
+  // flagged for transparency (an intentional divergence from the live site, which -- since it
+  // has cost data for every category it supports -- would never hit this "unknown" case at
+  // all; ours honestly says so instead of fabricating a number).
+  const unmodeledKeys = Object.keys(overrides).filter((k) => {
+    if (knownKeys.has(k)) return false;
+    const field = overrideGroups.flatMap((g) => g.fields).find((f) => f.key === k);
+    const globalVal = field ? (field.global() ?? 0) : 0;
+    return overrides[k] > globalVal;
+  });
+
+  const resourceTotals = {};
+  groups.forEach((g) => g.rows.forEach((r) => {
+    if (r.cost === undefined || !r.resource) return;
+    resourceTotals[r.resource] = (resourceTotals[r.resource] || 0) + r.cost;
+  }));
+
+  const fmtTimeShort = (mins) => {
+    if (mins === null || mins === undefined || !isFinite(mins)) return '—';
+    const days = Math.floor(mins / 1440); const hrs = Math.floor((mins % 1440) / 60);
+    if (days > 0) return `${days}d ${hrs}h`;
+    if (hrs > 0) return `${hrs}h ${Math.round(mins % 60)}m`;
+    return `${Math.round(mins)}m`;
+  };
+
+  const rowHtml = (r) => {
+    const rate = r.resource ? perDayRate[r.resource] : undefined;
+    const timeMins = (r.cost !== undefined && rate) ? CF.collectionTimeMinutes(r.cost, rate) : null;
+    return `
+    <tr class="border-b border-gray-700/50">
+      <td class="py-1.5 pr-3 text-white font-medium">${escapeHtml(r.label)}</td>
+      <td class="py-1.5 pr-3 text-gray-400">${r.globalVal}</td>
+      <td class="py-1.5 pr-3 text-blue-300">${r.overrideVal}</td>
+      <td class="py-1.5 pr-3 text-green-400">${r.overrideVal - r.globalVal}</td>
+      <td class="py-1.5 pr-3">${r.resource ? `<span class="inline-flex items-center gap-1">${matIcon(r.resource)}${CF.resourceAbbr(currentHunter, r.resource)}</span>` : '—'}</td>
+      <td class="py-1.5 pr-3 text-amber-400 font-medium">${r.cost === undefined ? 'unknown' : CF.fmtBig(r.cost)}</td>
+      <td class="py-1.5 pr-3 text-gray-400">${fmtTimeShort(timeMins)}</td>
+    </tr>`;
+  };
+
+  const groupHtml = groups.map((g) => {
+    const totalsForGroup = {};
+    g.rows.forEach((r) => { if (r.cost !== undefined && r.resource) totalsForGroup[r.resource] = (totalsForGroup[r.resource] || 0) + r.cost; });
+    const totalsBadges = Object.entries(totalsForGroup).map(([res, amt]) => `<span class="text-amber-400 font-medium ml-3 inline-flex items-center gap-1">${matIcon(res)}${CF.fmtBig(amt)}</span>`).join('');
+    return `
+      <div class="mb-4 rounded-lg border border-gray-700 overflow-hidden">
+        <div class="flex items-center justify-between px-3 py-2 bg-gray-700/50">
+          <div class="flex items-center gap-2">${iconSvg(g.icon, 16, 'text-blue-400')}<span class="font-semibold text-white text-sm">${escapeHtml(g.title)}</span><span class="text-xs text-gray-400 bg-gray-800 px-1.5 py-0.5 rounded">${g.rows.length} upgrade${g.rows.length === 1 ? '' : 's'}</span></div>
+          <div class="text-xs">${totalsBadges}</div>
+        </div>
+        <div class="overflow-x-auto"><table class="w-full text-sm">
+          <thead><tr class="text-left text-xs text-gray-400 border-b border-gray-700"><th class="py-1.5 pr-3 font-normal">Upgrade</th><th class="py-1.5 pr-3 font-normal">Global</th><th class="py-1.5 pr-3 font-normal">Override</th><th class="py-1.5 pr-3 font-normal">Difference</th><th class="py-1.5 pr-3 font-normal">Resource</th><th class="py-1.5 pr-3 font-normal">Cost</th><th class="py-1.5 pr-3 font-normal">Collection Time</th></tr></thead>
+          <tbody>${g.rows.map(rowHtml).join('')}</tbody>
+        </table></div>
+      </div>`;
+  }).join('');
+
+  const footerHtml = Object.keys(resourceTotals).length ? `
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      ${Object.entries(resourceTotals).map(([res, amt]) => `
+        <div class="bg-gray-700/50 rounded-lg p-3">
+          <div class="text-xs text-gray-400 mb-1 flex items-center gap-1.5">${matIcon(res)}${CF.resourceLabel(currentHunter, res)}</div>
+          <div class="text-amber-400 font-bold">${CF.fmtBig(amt)}</div>
+        </div>`).join('')}
+    </div>` : '';
+
+  const unmodeledHtml = unmodeledKeys.length ? `<p class="text-xs text-gray-500 mt-3">Cost formula not yet extracted for: ${unmodeledKeys.map(escapeHtml).join(', ')}.</p>` : '';
+  const timeNoteHtml = `<p class="text-xs text-gray-500 mt-2">Collection Time is inferred from this build's own simulated loot rate for the 3 hunter-specific stat resources. Fragments come from campaign/boss content the sim doesn't model, so they use your ${
+    perDayRate.frags
+      ? `entered rate of ${CF.fmtBig(perDayRate.frags)} fragments/day`
+      : 'entered fragments/day rate &mdash; <span class="text-amber-400">not set yet</span>, so relic times show as unknown'
+  }. Hellish-Biomatter isn't modelled either way.</p>`;
+
+  const body = Object.keys(overrides).length
+    ? `<p class="text-sm text-gray-300 mb-4">This overview shows the cost differences between your global values and the override values used in this build.</p>${groupHtml}${footerHtml}${unmodeledHtml}${timeNoteHtml}`
+    : '<p class="text-sm text-gray-400">No overrides set on this build.</p>';
+
+  titledModal('adjustments-horizontal', `Override Costs: ${escapeHtml(build.name || 'Unnamed')}`, body, 'overrideCostsModal');
+}
+
+// Evaluates the build's current Loot Score, then tries +1 on every talent/attribute that
+// has budget room, sorting by the resulting Loot Score delta -- a real, computed "which
+// point gets you the most" ranking (not currency-cost-normalized like the live site's
+// version, since we don't have upgrade price data, but genuinely useful for build planning).
+async function openCompareEfficiencyModal(build) {
+  const overlay = titledModal('scale', `Upgrade Efficiency: ${escapeHtml(build.name || 'Unnamed')}`,
+    '<p class="text-sm text-gray-400">Evaluating...</p>', 'compareEfficiencyModal');
+  const iterations = currentIterations();
+  const baseState = evalStateFor(build, iterations);
+  const base = await HunterSim.evaluate(currentHunter, baseState);
+  const d = defs();
+  const capped = cappedDefs(currentHunter, build);
+  const { talentBudget, attributeBudget } = budgetsForLevel(build.level);
+  const talentSpent = capped.talents.reduce((s, t) => s + (build.talents[t.id] || 0), 0);
+  const attrSpent = AllocSpace.costOf(capped.attributes, build.attributes);
+  const deps = d.attributeDependencies;
+  const minVal = d.attributeMinValue;
+
+  const candidates = [];
+  const showAdvancedForCompare = shouldShowAdvancedTalents(currentHunter);
+  capped.talents.filter((t) => !t.advanced || showAdvancedForCompare || (build.talents[t.id] || 0) > 0).forEach((t) => {
+    const level = build.talents[t.id] || 0;
+    if (level < t.maxLevel && talentSpent < talentBudget) {
+      candidates.push({ label: t.label, kind: 'talent', apply: (talents) => { talents[t.id] = level + 1; } });
+    }
+  });
+  capped.attributes.forEach((a) => {
+    const level = build.attributes[a.id] || 0;
+    const canInc = AllocSpace.isEligible(a, capped.attributes, deps, minVal, build.attributes)
+      && attrSpent + (a.cost || 1) <= attributeBudget;
+    if (canInc) candidates.push({ label: a.label, kind: 'attribute', apply: (attrs) => { attrs[a.id] = level + 1; } });
+  });
+
+  const results = [];
+  for (const c of candidates) {
+    const talents = { ...build.talents };
+    const attributes = { ...build.attributes };
+    if (c.kind === 'talent') c.apply(talents); else c.apply(attributes);
+    const r = await HunterSim.evaluate(currentHunter, { ...baseState, talents, attributes });
+    results.push({ label: c.label, kind: c.kind, lootDelta: r.lootPerMin - base.lootPerMin, stageDelta: r.avgStage - base.avgStage });
+  }
+  results.sort((a, b) => b.lootDelta - a.lootDelta);
+
+  const rows = results.length ? results.map((r) => `
+    <div class="flex items-center justify-between py-1.5 border-b border-gray-700/50 text-sm">
+      <span class="text-gray-300">${escapeHtml(r.label)} <span class="text-gray-500">(${r.kind})</span></span>
+      <span class="text-right">
+        <div class="${r.lootDelta >= 0 ? 'text-green-400' : 'text-red-400'} font-medium">${r.lootDelta >= 0 ? '+' : ''}${fmt(r.lootDelta)} loot</div>
+        <div class="text-xs text-gray-500">${r.stageDelta >= 0 ? '+' : ''}${r.stageDelta.toFixed(2)} stage</div>
+      </span>
+    </div>`).join('') : '<p class="text-sm text-gray-400">No further points can be spent at this level.</p>';
+
+  overlay.querySelector('.p-5').innerHTML = `
+    <div class="text-sm text-gray-300 mb-4">Compare different upgrade combinations to find the best cost-efficiency.</div>
+    <p class="text-xs text-gray-400 mb-3">Ranked by Loot Score gained per next available talent/attribute point (not currency-cost-normalized -- we don't have the game's price tables reverse-engineered yet, so resource/scenario picking isn't modeled here).</p>
+    ${rows}`;
+}
+
+// Build Statistics modal -- Stage Distribution (per-stage hit histogram) and Build Stats
+// (final post-upgrade combat numbers), both read from real wasm getters via
+// HunterSim.evaluateDetailed(). The live site has 4 tabs (Stage Distribution, Stage Odds,
+// Revive Distribution, Build Stats); Stage Odds/Revive Distribution need boss/death-tracking
+// data we haven't wired up yet, so those two tabs are shown (matching the real 4-tab
+// layout) but with an honest "not available yet" placeholder instead of fabricated numbers.
+async function openBuildStatsModal(build) {
+  const overlay = titledModal('chart-bar', `Build Statistics: ${escapeHtml(build.name || 'Unnamed')}`,
+    '<p class="text-sm text-gray-400">Evaluating...</p>', 'buildStatsModal');
+  const iterations = currentIterations();
+  const r = await HunterSim.evaluateDetailed(currentHunter, evalStateFor(build, iterations));
+
+  const dist = r.stageDistribution || [];
+  const maxCount = Math.max(1, ...dist.map((d) => d.count));
+  const distHtml = dist.length ? `
+    <div class="flex items-end gap-0.5 h-40 mb-2">
+      ${dist.map((d) => `<div class="flex-1 bg-gradient-to-t from-red-700 to-red-400 rounded-t" style="height:${(d.count / maxCount) * 100}%" title="Stage ${d.stage}: ${d.count} runs"></div>`).join('')}
+    </div>
+    <div class="grid grid-cols-3 gap-2 text-center text-sm">
+      <div class="bg-gray-700 rounded p-2"><div class="text-gray-400 text-xs">Min Stage</div><div class="font-bold text-white">${r.minStage?.toFixed(1)}</div></div>
+      <div class="bg-gray-700 rounded p-2"><div class="text-gray-400 text-xs">Avg Stage</div><div class="font-bold text-white">${r.avgStage?.toFixed(1)}</div></div>
+      <div class="bg-gray-700 rounded p-2"><div class="text-gray-400 text-xs">Max Stage</div><div class="font-bold text-white">${r.maxStage?.toFixed(1)}</div></div>
+    </div>` : '<p class="text-sm text-gray-400">No stage-distribution data returned by the wasm for this hunter.</p>';
+
+  const statLabels = {
+    MaxHp: 'MAX HP', Atk: 'ATK Power', Regen: 'HP Regen', Dr: 'DMG Reduction', Evade: 'Evade Chance',
+    Effect: 'Effect Chance', CritRate: 'Crit Chance', CritPower: 'Crit Power', Reload: 'ATK Speed',
+    Multistrike: 'Multistrike Chance', MultistrikePower: 'Multistrike Power',
+    Block: 'Block Chance', Charge: 'Charge', ChargeGain: 'Charge Gain', Sc: 'Shield Capacity',
+  };
+  const pctFields = new Set(['Dr', 'Evade', 'Effect', 'CritRate', 'Multistrike', 'Block', 'Charge']);
+  const statsHtml = `<div class="grid grid-cols-3 gap-2 text-center text-sm">
+    ${Object.entries(r.finalStats || {}).map(([key, val]) => `
+      <div class="bg-gray-700 rounded p-2">
+        <div class="text-gray-400 text-xs">${statLabels[key] || key}</div>
+        <div class="font-bold text-white">${pctFields.has(key) ? `${(val * 100).toFixed(2)}%` : val.toFixed(2)}</div>
+      </div>`).join('')}
+  </div>`;
+
+  const notAvailableHtml = (what) => `<p class="text-sm text-gray-400">${what} isn't available yet -- it needs boss/death-tracking data the sim doesn't currently record.</p>`;
+  const TABS = [
+    { key: 'dist', label: 'Stage Distribution', icon: 'chart-bar', html: distHtml },
+    { key: 'odds', label: 'Stage Odds', icon: 'scale', html: notAvailableHtml('Stage Odds') },
+    { key: 'revive', label: 'Revive Distribution', icon: 'refresh', html: notAvailableHtml('Revive Distribution') },
+    { key: 'stats', label: 'Build Stats', icon: 'adjustments-horizontal', html: statsHtml },
+  ];
+  const tabBtnClass = (active) => `flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium ${active ? 'bg-red-600 text-white' : 'bg-gray-700 text-gray-300'}`;
+  overlay.querySelector('.p-5').innerHTML = `
+    <div class="flex gap-2 mb-4 flex-wrap">
+      ${TABS.map((t, i) => `<button data-tab="${t.key}" class="${tabBtnClass(i === 0)}">${iconSvg(t.icon, 14)}${escapeHtml(t.label)}</button>`).join('')}
+    </div>
+    ${TABS.map((t, i) => `<div data-pane="${t.key}" class="${i === 0 ? '' : 'hidden'}">${t.html}</div>`).join('')}`;
+
+  overlay.querySelectorAll('[data-tab]').forEach((btn, i) => {
+    btn.onclick = () => {
+      overlay.querySelectorAll('[data-tab]').forEach((b) => { b.className = tabBtnClass(false); });
+      btn.className = tabBtnClass(true);
+      overlay.querySelectorAll('[data-pane]').forEach((p) => p.classList.add('hidden'));
+      overlay.querySelector(`[data-pane="${btn.dataset.tab}"]`).classList.remove('hidden');
+    };
+  });
+}
+
+async function screenshotCard(card, build) {
+  if (!window.html2canvas) { alert('Screenshot library failed to load.'); return; }
+  try {
+    const canvas = await window.html2canvas(card, { backgroundColor: '#1f2937' });
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      } catch (e) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `${(build.name || 'build').replace(/[^a-z0-9]/gi, '_')}.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    }, 'image/png');
+  } catch (e) {
+    alert('Screenshot failed: ' + e.message);
+  }
+}
+
+// renderBuildList is async and `await`s the first card's evaluation mid-loop (see below) --
+// if it gets called again (any of the many action handlers that call it: delete, archive,
+// reorder, category switch, re-evaluate...) while a previous call is still paused on that
+// await, the second call clears and rebuilds the whole list, and then the FIRST call's stale
+// continuation resumes and appends its own leftover cards on top of the second call's fresh
+// ones. Confirmed directly: this produced a visually-duplicated card for a SINGLE underlying
+// build (store had 3 builds, the DOM showed 4 cards, one name appearing twice) -- not an id
+// collision at all. Deleting one visual copy removed the one real build both copies pointed
+// to, which looked exactly like "deleting one card deletes both". A monotonically increasing
+// token lets a stale call detect it's been superseded and bail out before touching the DOM
+// again instead of racing the newer call.
+let renderBuildListToken = 0;
+async function renderBuildList() {
+  const myToken = ++renderBuildListToken;
+  const list = document.getElementById('buildList');
+  if (!list) return;
+  const builds = store[currentHunter].builds.filter((b) => (b.categoryId || 'active') === showCategoryId);
+  // Auto-fill by available width instead of a fixed column count -- fixed 3-up columns were
+  // squeezing each card narrower than its own content (stat labels like "Runs per Day"
+  // wrapping/cutting) whenever the viewport had room to spare. minmax(340px, 1fr) lets cards
+  // grow to fill the canvas and only wraps to a new row once space actually runs out.
+  list.className = 'grid gap-4';
+  list.style.gridTemplateColumns = store.viewMode === 'horizontal' ? '1fr' : 'repeat(auto-fill, minmax(340px, 1fr))';
+  list.innerHTML = '';
+  if (!builds.length) {
+    // An empty state is the first thing a new user sees, so it says what to do
+    // next rather than only reporting that nothing is here. Both routes in are
+    // named because they are genuinely different entry points: "New Build"
+    // starts from scratch, "Import" accepts a share code or a pulled save.
+    list.innerHTML = `<div class="col-span-full empty-state border border-dashed border-gray-700 rounded-lg">
+      <div class="empty-state-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></svg>
+      </div>
+      <div class="empty-state-title">No builds yet</div>
+      <div class="empty-state-body">Add one with <strong class="text-gray-300 font-semibold">New Build</strong>, or bring an existing one in with <strong class="text-gray-300 font-semibold">Import</strong>.</div>
+    </div>`;
+    return;
+  }
+  const accent = HUNTER_ACCENTS[currentHunter];
+  // Verbatim port of the live site's build-comparison feature: every card after the first
+  // in the list shows a green/red arrow+percentage badge on each stat, computed against the
+  // FIRST card's own values (confirmed live: card 2 showed "+32.9%" Loot Score / "+6.9" Ø
+  // Stage / a red "+18%" Ø Time, all relative to card 1) -- not against a user-chosen
+  // baseline. Lower-is-better for Ø Time only; every other stat is higher-is-better.
+  let comparisonBaseline = null;
+  const deltaBadge = (current, base, invert) => {
+    if (!base || current === undefined || current === null) return '';
+    const pct = ((current - base) / Math.abs(base)) * 100;
+    if (Math.abs(pct) < 0.05) return '';
+    const good = invert ? pct < 0 : pct > 0;
+    const cls = good ? 'diff-box-green' : 'diff-box-red';
+    const icon = pct >= 0 ? 'arrow-up' : 'arrow-down';
+    return `<span class="${cls} diff-box-small items-center ml-1">${iconSvg(icon, 10, 'mr-0.5')}${Math.abs(pct).toFixed(1)}%</span>`;
+  };
+  for (const [buildIdx, build] of builds.entries()) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'build-card-wrapper';
+    // Only draggable while the mouse is actually down on the grip handle -- making the
+    // WHOLE card draggable=true breaks normal button clicks inside it (native HTML5 DnD
+    // hijacks the mousedown before click fires), which is why buttons stopped opening
+    // anything before this fix.
+    wrapper.draggable = false;
+    wrapper.addEventListener('dragstart', (e) => {
+      wrapper.classList.add('dragging');
+      e.dataTransfer.setData('text/build-id', build.id);
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    wrapper.addEventListener('dragend', () => { wrapper.classList.remove('dragging'); wrapper.draggable = false; });
+    // Reordering within the grid -- the category tabs already had drop zones for MOVING a
+    // build to a different category, but nothing handled dropping one card onto another to
+    // REORDER them within the same list, so drags never actually changed card position.
+    wrapper.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    });
+    wrapper.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const draggedId = e.dataTransfer.getData('text/build-id');
+      if (!draggedId || draggedId === build.id) return;
+      const arr = store[currentHunter].builds;
+      const fromIdx = arr.findIndex((b) => b.id === draggedId);
+      const toIdx = arr.findIndex((b) => b.id === build.id);
+      if (fromIdx === -1 || toIdx === -1) return;
+      const [moved] = arr.splice(fromIdx, 1);
+      arr.splice(toIdx, 0, moved);
+      saveStore();
+      renderBuildList();
+    });
+
+    const card = document.createElement('div');
+    // Confirmed directly on the live site: the FIRST card in the list (the comparison
+    // reference/baseline every other card's delta badges are computed against) gets a
+    // yellow left border instead of the hunter's accent color, and carries
+    // is-reference-build="true" -- every other card keeps the normal accent border.
+    const isReferenceBuild = buildIdx === 0;
+    card.className = `result-card border-l-4 bg-gray-800 rounded-lg shadow-xl overflow-hidden transition-all duration-200 hover:shadow-2xl border-${isReferenceBuild ? 'yellow' : accent}-500`;
+    if (isReferenceBuild) card.setAttribute('is-reference-build', 'true');
+    card.innerHTML = `
+      <div class="header-wrapper relative">
+        <div class="absolute top-1.5 right-[34px] z-10 bg-gray-700/80 text-gray-200 rounded-lg px-1 py-1 shadow-lg text-xs font-medium text-center leading-tight w-9 h-12" title="Build Level">
+          <div><div class="pb-2">Lvl</div><div class="font-bold">${build.level}</div></div>
+        </div>
+        <button data-act="overrideCosts" class="absolute top-1.5 right-2 z-10 text-white rounded-full p-1 shadow-lg transition-colors cursor-pointer bg-red-500/50 hover:bg-red-500/70" title="View override costs">${iconSvg('adjustments-horizontal', 14, 'text-red-300')}</button>
+        <button data-act="reEvaluate" class="absolute top-8 right-2 z-10 bg-gray-600 text-gray-300 rounded-full p-1 shadow-lg hover:bg-gray-500 hover:text-white transition-colors" title="Re-evaluate Build">${iconSvg('refresh', 14)}</button>
+        <div class="header-main p-4 flex justify-between items-center">
+          <div class="flex items-center flex-1 min-w-0">
+            <div class="grip-handle mr-2 text-gray-500 hover:text-gray-300 hover:bg-gray-700 rounded cursor-grab active:cursor-grabbing flex-shrink-0" style="padding:2px;" title="Drag to reorder">${iconSvg('grip-vertical', 20, 'text-gray-500')}</div>
+            <div class="flex overflow-hidden min-w-0">
+              <div class="self-center cursor-pointer mr-1.5 flex-shrink-0 hover:text-gray-300 transition-colors" data-act="edit">${iconSvg('edit-circle', 20, 'text-gray-400')}</div>
+              <div class="flex items-baseline flex-wrap min-w-0 overflow-hidden">
+                <h3 class="text-lg font-semibold text-white truncate max-w-full cursor-pointer hover:text-gray-300 transition-colors" data-act="edit">${escapeHtml(build.name || 'Unnamed')}</h3>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="action-bar py-2 px-1 flex justify-between items-center bg-gray-800/70 border-t border-b border-gray-700/50">
+          <div class="flex items-center gap-1.5 flex-1 justify-center">
+            ${ACTION_BUTTONS.map((b) => `<button data-act="${b.act}" class="action-button-compact ${b.extra || ''}" title="${b.title}">${iconSvg(b.icon, 16)}</button>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="p-4 pb-3 pt-2">
+        <div class="space-y-2">
+          <div class="stats-container">
+            <div class="flex items-center justify-between">
+              <h4 class="section-title">Main Statistics</h4>
+              ${SECOND_ROW_BUTTONS.map((b) => `<button data-act="${b.act}" class="action-button-compact ${b.extra || ''}" title="${b.title}">${iconSvg(b.icon, 16)}</button>`).join('')}
+            </div>
+            <div class="border-b border-gray-700/40 -mt-2 mb-1"></div>
+            <div class="stats-grid" data-mainstats>
+              <div class="stat-card"><div class="text-gray-500 text-sm">Simulating...</div></div>
+            </div>
+          </div>
+          <div>
+            <h4 class="section-title">Loot</h4>
+            <div class="resource-grid mt-3" data-loot></div>
+          </div>
+          <div data-boss-section class="hidden">
+            <h4 class="section-title">Boss Statistics</h4>
+            <div class="boss-stats-grid mt-3" data-boss></div>
+          </div>
+        </div>
+      </div>`;
+
+    card.querySelector('.grip-handle').addEventListener('mousedown', () => { wrapper.draggable = true; });
+    // Both the title (h3) and the action-bar button use data-act="edit" (matching the real
+    // site, where clicking either opens the editor) -- wire up every match, not just the
+    // first, or querySelector's single-match behavior silently leaves one of them dead.
+    card.querySelectorAll('[data-act="edit"]').forEach((el) => { el.onclick = () => openBuildModal(build); });
+    // "Copy build" on the live site opens the Build Creator prefilled with the source
+    // build's data (not an instant silent duplicate) -- confirmed by clicking it there and
+    // getting the same modal as "New Build"/"Edit", just pre-populated. Passing id:null (and
+    // a "(copy)" name) means Save Build creates a brand-new entry instead of overwriting the
+    // original, since the update handler only overwrites when an id match is found.
+    card.querySelector('[data-act=dup]').onclick = () => {
+      const copy = JSON.parse(JSON.stringify(build));
+      copy.id = null;
+      copy.name = nextCopyName(build.name || 'Unnamed');
+      openBuildModal(copy);
+    };
+    card.querySelector('[data-act=archive]').onclick = () => {
+      const archivedCat = store.categories.find((c) => c.id === 'archived');
+      const isArchived = build.categoryId === 'archived';
+      build.categoryId = isArchived ? 'active' : (archivedCat ? 'archived' : 'active');
+      saveStore(); renderCategoryTabs(); renderBuildList();
+    };
+    card.querySelector('[data-act=overrides]').onclick = () => openOverridesModal(build);
+    // Captured at RENDER time: whichever hunter this list was drawn for is the hunter this card's
+    // code describes, regardless of what the global says by the time the button is clicked.
+    const cardHunter = currentHunter;
+    card.querySelector('[data-act=export]').onclick = () => exportBuildCode(build, cardHunter);
+    card.querySelector('[data-act=delete]').onclick = () => {
+      store[currentHunter].builds = store[currentHunter].builds.filter((b) => b.id !== build.id);
+      saveStore(); renderCategoryTabs(); renderBuildList();
+    };
+    card.querySelector('[data-act=reEvaluate]').onclick = () => renderBuildList();
+    card.querySelector('[data-act=overrideCosts]').onclick = () => openOverrideCostsModal(build);
+    card.querySelector('[data-act=compareEfficiency]').onclick = () => openCompareEfficiencyModal(build);
+    card.querySelector('[data-act=buildStats]').onclick = () => openBuildStatsModal(build);
+    card.querySelector('[data-act=effectivePath]').onclick = () => openBuildEffectivePathModal(build);
+    card.querySelector('[data-act=screenshot]').onclick = () => screenshotCard(card, build);
+    wrapper.appendChild(card);
+    list.appendChild(wrapper);
+
+    const iterations = currentIterations();
+    const evalPromise = HunterSim.evaluate(currentHunter, evalStateFor(build, iterations));
+    if (buildIdx === 0) {
+      comparisonBaseline = await evalPromise;
+      // A newer renderBuildList() call started while we were paused here -- it already
+      // cleared and repopulated `list` with its own fresh cards, so continuing this loop
+      // would append stale duplicates on top of them. Stop immediately.
+      if (myToken !== renderBuildListToken) return;
+    }
+    evalPromise.then((r) => {
+      if (myToken !== renderBuildListToken) return;
+      const runsPerDay = r.avgTime ? 1440 / r.avgTime : 0;
+      const base = buildIdx > 0 ? comparisonBaseline : null;
+      const baseRunsPerDay = base?.avgTime ? 1440 / base.avgTime : 0;
+      card.querySelector('[data-mainstats]').innerHTML = `
+        <div class="stat-card"><div class="stat-header"><div class="flex items-center">${iconSvg('report-money', 16, 'text-amber-400')}<span class="stat-title">Loot Score</span></div></div>
+          <div class="stat-value-row"><div class="stat-main-value">${fmt(r.lootPerMin)}</div>${base ? deltaBadge(r.lootPerMin, base.lootPerMin, false) : ''}</div></div>
+        <div class="stat-card"><div class="stat-header"><div class="flex items-center">${iconSvg('clock', 16, 'text-blue-400')}<span class="stat-title">Ø Time</span></div></div>
+          <div class="stat-value-row"><div class="stat-main-value">${fmtTime(r.avgTime)}</div>${base ? deltaBadge(r.avgTime, base.avgTime, true) : ''}</div></div>
+        <div class="stat-card"><div class="stat-header"><div class="flex items-center">${iconSvg('stairs', 16, 'text-red-400')}<span class="stat-title">Ø Stage</span></div></div>
+          <div class="stat-value-row"><div class="flex items-baseline"><div class="stat-main-value">${r.avgStage?.toFixed(1)}</div><div class="stat-range ml-2">${r.minStage?.toFixed(0)}-${r.maxStage?.toFixed(0)}</div></div>${base ? deltaBadge(r.avgStage, base.avgStage, false) : ''}</div></div>
+        <div class="stat-card"><div class="stat-header">${iconSvg('repeat', 16, 'text-purple-400')}<span class="stat-title">Runs per Day</span></div>
+          <div class="stat-value-row"><div class="stat-main-value">${runsPerDay.toFixed(2)}</div>${base ? deltaBadge(runsPerDay, baseRunsPerDay, false) : ''}</div></div>`;
+
+      const values = [r.mat1, r.mat2, r.mat3, r.xp];
+      const baseValues = base ? [base.mat1, base.mat2, base.mat3, base.xp] : null;
+      // Which loot rows this hunter's Filter leaves visible. Purely presentational -- the
+      // evaluator still returns all four and nothing downstream reads this, so hiding a row
+      // never changes a score.
+      const lootFilter = store[currentHunter].lootFilter;
+      const lootCards = [0, 1, 2, 3].filter((i) => lootFilter[StoreSchema.LOOT_KEYS[i]] !== false).map((i) => `
+        <div class="resource-card ${MAT_BORDER_COLORS[i]}">
+          <div class="resource-icon">${i < 3 ? `<img src="${MAT_ASSETS[i]}" alt="Material ${i + 1}" class="resource-image" />` : `<span class="text-lg">✦</span>`}</div>
+          <div class="resource-content"><div class="resource-values">
+            <div class="flex flex-col items-center"><span class="value ${MAT_TEXT_COLORS[i]} font-semibold">${fmt(values[i])}</span>${(baseValues && deltaBadge(values[i], baseValues[i], false)) || '<span class="unit text-xs text-gray-500">per run</span>'}</div>
+            <div class="flex flex-col items-center"><span class="value ${MAT_TEXT_COLORS[i]} font-semibold">${fmt(values[i] * runsPerDay)}</span>${(baseValues && deltaBadge(values[i] * runsPerDay, baseValues[i] * baseRunsPerDay, false)) || '<span class="unit text-xs text-gray-500">per day</span>'}</div>
+          </div></div>
+        </div>`).join('');
+      card.querySelector('[data-loot]').innerHTML = lootCards;
+
+      // Verbatim port of the live site's "Boss Statistics" section (captured via
+      // outerHTML): only shown when the wasm actually returns boss data for this hunter
+      // (confirmed real on a shared/imported build) -- heart icon + red bar for Boss HP %,
+      // sword icon + emerald bar for Boss Kill %, each with the same delta badge as every
+      // other stat when comparing against the reference build.
+      // Boss stages are every 100th stage (100, 200, 300...) -- only show Boss Statistics
+      // when the build's simulated stage RANGE actually reaches one (i.e. there's a real
+      // chance of a boss encounter this run), not just whenever the wasm happens to return
+      // boss fields. A build that dies at stage 40 every run never sees a boss at all.
+      const hasBossInRange = r.minStage !== undefined && r.maxStage !== undefined
+        && Math.floor(r.maxStage / 100) >= Math.max(1, Math.ceil(r.minStage / 100));
+      if (hasBossInRange && r.bossHpPercent !== undefined && r.bossKillRate !== undefined) {
+        card.querySelector('[data-boss-section]').classList.remove('hidden');
+        const hpPct = r.bossHpPercent, killPct = r.bossKillRate;
+        const baseHpPct = base?.bossHpPercent, baseKillPct = base?.bossKillRate;
+        card.querySelector('[data-boss]').innerHTML = `
+          <div class="boss-stat-card">
+            <div class="boss-stat-header"><div class="flex items-center">${iconSvg('heart-filled', 16, 'text-red-400 mr-1.5')}<span class="boss-stat-title">Boss HP %</span></div>${base ? deltaBadge(hpPct, baseHpPct, true) : ''}</div>
+            <div class="boss-stat-value">${hpPct.toFixed(1)}%</div>
+            <div class="boss-progress"><div class="boss-progress-bg"></div><div class="boss-progress-fill bg-red-500" style="width:${Math.min(100, hpPct)}%"></div></div>
+          </div>
+          <div class="boss-stat-card">
+            <div class="boss-stat-header"><div class="flex items-center">${iconSvg('sword', 16, 'text-emerald-400 mr-1.5')}<span class="boss-stat-title">Boss Kill %</span></div>${base ? deltaBadge(killPct, baseKillPct, false) : ''}</div>
+            <div class="boss-stat-value">${killPct.toFixed(1)}%</div>
+            <div class="boss-progress"><div class="boss-progress-bg"></div><div class="boss-progress-fill bg-emerald-500" style="width:${Math.min(100, killPct)}%"></div></div>
+          </div>`;
+      }
+    });
+  }
+}
+
+const HUNTER_BANNER_GRADIENT = { borge: 'from-red-900', ozzy: 'from-green-900', knox: 'from-blue-900' };
+
+function switchHunter(h, skipNav) {
+  currentHunter = h;
+  // Remember it, so a refresh comes back to this hunter.
+  if (store.lastHunter !== h) { store.lastHunter = h; saveStore(); }
+  showCategoryId = 'active';
+  // The hunter pills live on the SIM PAGE, so they do not exist while another page is showing.
+  // This loop assumed they always did and threw a TypeError on a null element -- three lines into
+  // the function, AFTER `currentHunter` had already been reassigned but BEFORE the title, banner,
+  // portrait, iterations input and re-render below. Switching hunter from any other page therefore
+  // left the app half-switched: the new hunter selected internally, the old one still on screen,
+  // corrected only by whatever render happened next. That is the "it refreshes back to Borge before
+  // letting me switch" behaviour.
+  //
+  // Every other DOM lookup in this function is already null-guarded; this one now matches.
+  ['borge', 'ozzy', 'knox'].forEach((hh) => {
+    const btn = document.getElementById(`hunter${hh[0].toUpperCase()}${hh.slice(1)}Btn`);
+    if (btn) btn.className = `nav-pill ${h === hh ? `active-${hh}` : ''}`;
+  });
+  if (!skipNav && currentRoute() !== 'sim') navigate('sim');
+  const title = document.getElementById('hunterTitle');
+  const banner = document.getElementById('hunterBanner');
+  const portrait = document.getElementById('hunterPortrait');
+  if (title) title.textContent = HUNTER_TITLES[h];
+  if (banner) banner.className = `bg-gradient-to-r ${HUNTER_BANNER_GRADIENT[h]} to-gray-800 px-5 py-5 sm:py-0.5 border-b border-gray-600`;
+  if (portrait) { portrait.src = `assets/hunter_${h}.png`; portrait.alt = HUNTER_TITLES[h].replace(' Simulator', ''); }
+  const statsLabel = document.getElementById('hunterStatsBtnLabel');
+  if (statsLabel) statsLabel.textContent = `${HUNTER_TITLES[h].replace(' Simulator', '')} Stats`;
+  // Iterations is per hunter, so the input has to follow the hunter. Without this it keeps
+  // showing the previous hunter's number while the evaluator uses this one's -- a displayed
+  // value that quietly disagrees with the value in effect.
+  const iterInput = document.getElementById('baseIterations');
+  if (iterInput) iterInput.value = currentIterations();
+  // WHICH OPTIMIZE MODES EXIST IS PER HUNTER, so the dropdown has to follow the hunter too.
+  // renderOptimizeModes() ran exactly once at module load, so a page opened on Borge kept offering
+  // "Boss kill with Timeless maxed" after switching to Knox -- which has no `timeless` attribute
+  // and throws out of applyPins when the mode is run. Rebuilding it here is the same reason the
+  // iterations input above is refreshed: a control left showing the previous hunter's options is a
+  // displayed value that disagrees with what the engine will accept.
+  if (document.getElementById('optimizeMode')) renderOptimizeModes();
+  if (currentRoute() === 'sim') { renderCategoryTabs(); renderBuildList(); }
+  else render();
+  updateNavGating();
+}
+// Hunter tabs live on the sim page itself now (not the app header, which just has one
+// "Hunters" link) -- wired here via data-nav rather than fixed IDs so it's a single loop.
+function wireHunterTabs() {
+  document.querySelectorAll('[data-nav="borge"]').forEach((el) => { el.onclick = () => switchHunter('borge'); });
+  document.querySelectorAll('[data-nav="ozzy"]').forEach((el) => { el.onclick = () => switchHunter('ozzy'); });
+  document.querySelectorAll('[data-nav="knox"]').forEach((el) => { el.onclick = () => switchHunter('knox'); });
+}
+// Import Save applies globally (it can populate any/all hunters from one save file), so it
+// lives in the app header now instead of being duplicated per-hunter-page.
+document.getElementById('importSaveBtnIcon').innerHTML = iconSvg('download', 16);
+document.getElementById('copyBridgeCmdBtn').innerHTML = iconSvg('copy', 16);
+document.getElementById('copyBridgeCmdBtn').onclick = () => {
+  const cmd = document.getElementById('bridgeInstallCmd').textContent;
+  navigator.clipboard?.writeText(cmd).catch(() => {});
+  const btn = document.getElementById('copyBridgeCmdBtn');
+  btn.innerHTML = iconSvg('info-circle', 16, 'text-green-400');
+  setTimeout(() => { btn.innerHTML = iconSvg('copy', 16); }, 1200);
+};
+document.getElementById('importSaveBtn').onclick = openImportSaveModal;
+
+// Shows the local CIFI Bridge's connection state in the sidebar whenever it's reachable, so
+// you don't have to open the Import Save modal just to check. Polls rather than holding one
+// persistent socket open in the background, since the bridge can start/stop independently
+// of this page and reconnecting per-check is simpler than managing socket lifecycle here.
+// Describes what CHECK_ADB's ADB_STATUS response means for the connected-device line, e.g.
+// "connected — emulator detected" vs "connected — no device detected". emulatorCount/
+// physicalCount come from the bridge's adb devices probe (bridge/adb-status.mjs).
+function describeAdbDeviceStatus(status) {
+  if (!status || status.serverRunning === false) return null;
+  const { emulatorCount = 0, physicalCount = 0 } = status;
+  if (emulatorCount > 0 && physicalCount > 0) return 'emulator + device detected';
+  if (emulatorCount > 1) return `${emulatorCount} emulators detected`;
+  if (emulatorCount === 1) return 'emulator detected';
+  if (physicalCount > 1) return `${physicalCount} devices detected`;
+  if (physicalCount === 1) return 'device detected';
+  return 'no device detected';
+}
+
+let bridgeStatusWs = null;
+async function refreshBridgeAdbStatusText(ws, text) {
+  const status = await window.checkCifiBridgeAdbStatus(ws);
+  const desc = describeAdbDeviceStatus(status);
+  text.textContent = desc ? `CIFI Bridge connected — ${desc}` : 'CIFI Bridge connected';
+}
+// Chromium throttles repeated WebSocket connection attempts to a host:port that keeps refusing
+// the connection -- after several failures in a row it silently delays the ACTUAL socket-level
+// connect attempt further and further (independent of our own JS-level timeout), a well-known
+// gotcha for exactly this "poll a maybe-not-running local server" pattern. Hammering it on a
+// fixed short interval while the bridge is down just keeps racking up that penalty, so once the
+// bridge actually starts, the next attempt can still silently sit throttled past our own 1s
+// timeout -- which is why this used to need a hard refresh (that resets the per-page counter)
+// to redetect. Fix: back off further while failing (so we never trip Chromium's own throttle),
+// and snap back to fast polling immediately once connected.
+const BRIDGE_POLL_MIN_MS = 4000;
+const BRIDGE_POLL_MAX_MS = 30000;
+let bridgePollDelay = BRIDGE_POLL_MIN_MS;
+let bridgePollTimer = null;
+function scheduleBridgePoll(delay) {
+  clearTimeout(bridgePollTimer);
+  bridgePollTimer = setTimeout(pollBridgeStatus, delay);
+}
+async function updateBridgeStatusIndicator() {
+  const box = document.getElementById('bridgeStatusSidebar');
+  const dot = document.getElementById('bridgeStatusDot');
+  const text = document.getElementById('bridgeStatusText');
+  try {
+    const ws = await window.tryConnectCifiBridge(1000);
+    if (ws) {
+      bridgeStatusWs = ws;
+      bridgePollDelay = BRIDGE_POLL_MIN_MS; // connected -- reset backoff so a future drop recovers fast again
+      box.classList.remove('hidden');
+      dot.className = 'w-2 h-2 rounded-full bg-green-500 flex-shrink-0';
+      text.textContent = 'CIFI Bridge connected';
+      refreshBridgeAdbStatusText(ws, text);
+      ws.addEventListener('close', () => {
+        bridgeStatusWs = null;
+        dot.className = 'w-2 h-2 rounded-full bg-gray-500 flex-shrink-0';
+        text.textContent = 'CIFI Bridge disconnected';
+      });
+      return true;
+    }
+    box.classList.add('hidden');
+    return false;
+  } catch { box.classList.add('hidden'); return false; }
+}
+async function pollBridgeStatus() {
+  let connected;
+  if (!bridgeStatusWs || bridgeStatusWs.readyState !== WebSocket.OPEN) {
+    connected = await updateBridgeStatusIndicator();
+  } else {
+    await refreshBridgeAdbStatusText(bridgeStatusWs, document.getElementById('bridgeStatusText'));
+    connected = true;
+  }
+  bridgePollDelay = connected ? BRIDGE_POLL_MIN_MS : Math.min(bridgePollDelay * 2, BRIDGE_POLL_MAX_MS);
+  scheduleBridgePoll(bridgePollDelay);
+}
+// The adb bridge indicator lives in the website's sidebar; embedded there is nothing to update and
+// no reason to poll localhost on someone else's site.
+if (!EMBEDDED) { updateBridgeStatusIndicator(); scheduleBridgePoll(bridgePollDelay); }
+// Redetect immediately when the tab regains focus/visibility -- covers "I started the bridge
+// while this tab was in the background" without waiting out the current backoff delay.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleBridgePoll(0); });
+window.addEventListener('focus', () => scheduleBridgePoll(0));
+
+// ==================== AUTO-POLL FOR SAVE UPDATES ====================
+// Opt-in (see importPrefs.autoPoll): periodically pulls the raw save text via the CIFI Bridge
+// and re-runs the normal import pipeline (scoped to whatever's checked in the import checklist).
+// processImportedSaveText's own diffApply logic decides whether anything semantically changed --
+// only THAT (not "did the raw bytes differ") gates the toast, since an idle game's raw save
+// drifts on nearly every pull regardless of whether anything the user cares about changed.
+const AUTO_POLL_SAVE_INTERVAL_MS = 20000;
+let autoPollSaveTimer = null;
+// Surfaced in the Import modal (see wireImportChecklist) so a silently-failing poll is
+// actually visible/debuggable instead of just "nothing seems to happen."
+let autoPollLastStatus = null; // { at: Date, ok: bool, detail: string }
+function setAutoPollStatus(ok, detail) {
+  autoPollLastStatus = { at: new Date(), ok, detail };
+  renderAutoPollStatus();
+}
+function renderAutoPollStatus() {
+  const el = document.getElementById('importAutoPollStatus');
+  if (!el || !autoPollLastStatus) return;
+  const time = autoPollLastStatus.at.toLocaleTimeString();
+  el.textContent = `Last check ${time}: ${autoPollLastStatus.detail}`;
+  el.classList.toggle('text-red-400', !autoPollLastStatus.ok);
+  el.classList.toggle('text-gray-500', autoPollLastStatus.ok);
+}
+async function autoPollSaveTick() {
+  const prefs = getImportPrefs();
+  if (!prefs.autoPoll) return;
+  try {
+    // No explicit short timeout override here -- an artificially tight reconnect window was a
+    // real risk of silently never succeeding if the bridge took even slightly longer to
+    // respond than that. Falls back to tryConnectCifiBridge's own default timeout instead.
+    const ws = bridgeStatusWs && bridgeStatusWs.readyState === WebSocket.OPEN ? bridgeStatusWs : await window.tryConnectCifiBridge();
+    if (!ws) {
+      setAutoPollStatus(false, 'CIFI Bridge not reachable');
+    } else {
+      const rawText = await window.pullCifiSaveViaBridge(ws);
+      // No hash short-circuit here -- an idle game's raw save differs on nearly every pull
+      // (currency/timers/tick counters drift constantly) even when nothing meaningful changed,
+      // so a raw-content hash can't tell "real update" from "background drift" anyway. The
+      // real, semantic diff happens inside processImportedSaveText (see diffApply) -- that's
+      // what actually decides whether a toast fires, so trust its result here instead.
+      const result = await processImportedSaveText(rawText, true);
+      setAutoPollStatus(true, result.applied.length ? `update found (${result.applied.join(', ')})` : 'no changes');
+    }
+  } catch (e) {
+    setAutoPollStatus(false, `pull failed (${e.message})`);
+  }
+  scheduleAutoPollSave();
+}
+function scheduleAutoPollSave() {
+  clearTimeout(autoPollSaveTimer);
+  if (!getImportPrefs().autoPoll) return;
+  autoPollSaveTimer = setTimeout(autoPollSaveTick, AUTO_POLL_SAVE_INTERVAL_MS);
+}
+if (!EMBEDDED) scheduleAutoPollSave();
+
+// ==================== MANAGE CATEGORIES ====================
+
+// Verbatim port of the live "Category Management" modal's layout (captured via outerHTML):
+// System Categories (blue accent bar, builds count, non-deletable "System" pill) and Custom
+// Categories (purple accent bar, "Add Category" button, empty-state folder icon) as two
+// separate sections, plus a summary line and a "Done" footer button instead of a Save/Close
+// pair.
+function categoryTreeRow(cat, count, isSystem, color) {
+  const row = document.createElement('div');
+  row.className = 'category-tree-item-draggable';
+  row.innerHTML = `
+    <div class="p-2 rounded-lg border transition-all border-${color}-500/30 bg-${color}-900/10 hover:border-gray-500">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2 flex-1 min-w-0">
+          <div class="w-[22px]"></div>
+          <div class="flex-shrink-0"><div class="w-4 h-4 rounded bg-${color}-500"></div></div>
+          <div class="flex-1 min-w-0"><div class="text-sm font-medium text-white truncate">${escapeHtml(cat.name)}</div><div class="text-xs text-gray-400">${count} builds</div></div>
+        </div>
+        <div class="flex items-center gap-1 flex-shrink-0">
+          ${isSystem
+            ? '<div class="text-xs text-gray-500 px-2" title="System category cannot be modified"> System </div>'
+            : '<button data-del class="text-xs px-2 py-1 bg-red-900/50 hover:bg-red-800 rounded text-white">Delete</button>'}
+        </div>
+      </div>
+    </div>`;
+  if (!isSystem) {
+    row.querySelector('[data-del]').onclick = () => {
+      store.categories = store.categories.filter((c) => c.id !== cat.id);
+      ['borge', 'ozzy', 'knox'].forEach((h) => {
+        store[h].builds.forEach((b) => { if (b.categoryId === cat.id) b.categoryId = 'active'; });
+      });
+      saveStore(); renderCategoriesList(); renderCategoryTabs(); renderBuildList();
+    };
+  }
+  return row;
+}
+// "Choose which loot should be displayed in the build cards" -- the original tool's Filter
+// control, per hunter as it is there. Labels come from CostFormulas so a hunter whose third
+// resource is Hellish-Biomatter says so, rather than a generic "Material 3".
+function openLootFilterModal() {
+  const CF = window.CostFormulas;
+  const filter = store[currentHunter].lootFilter;
+  const label = (key) => (key === 'xp' ? 'XP' : CF.resourceLabel(currentHunter, key));
+  const rows = StoreSchema.LOOT_KEYS.map((key) => `
+    <label class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-700/50 cursor-pointer">
+      <input type="checkbox" data-loot-filter="${key}" ${filter[key] !== false ? 'checked' : ''}
+             class="w-4 h-4 accent-emerald-500" />
+      <span class="text-gray-200">${escapeHtml(label(key))}</span>
+    </label>`).join('');
+
+  const overlay = titledModal('filter', 'Loot Filter', `
+    <div class="text-sm text-gray-400 mb-3">Choose which loot should be displayed in the build cards.</div>
+    <div class="space-y-1">${rows}</div>`, 'lootFilterModal');
+
+  overlay.querySelectorAll('[data-loot-filter]').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      store[currentHunter].lootFilter[cb.dataset.lootFilter] = cb.checked;
+      saveStore();
+      renderBuildList();
+    });
+  });
+}
+
+function openCategoriesModal() {
+  const title = document.getElementById('categoriesModalTitle');
+  if (!title.querySelector('svg')) title.insertAdjacentHTML('afterbegin', iconSvg('folder', 16, 'mr-2 text-blue-400'));
+  renderCategoriesList();
+  document.getElementById('categoriesModal').classList.remove('hidden');
+}
+function renderCategoriesList() {
+  const buildCount = (id) => ['borge', 'ozzy', 'knox'].reduce((s, h) => s + store[h].builds.filter((b) => b.categoryId === id).length, 0);
+  const sysList = document.getElementById('systemCategoriesList');
+  sysList.innerHTML = '';
+  const systemCats = store.categories.filter((c) => c.isSystem);
+  const customCats = store.categories.filter((c) => !c.isSystem);
+  systemCats.forEach((cat) => sysList.appendChild(categoryTreeRow(cat, buildCount(cat.id), true, cat.id === 'active' ? 'blue' : 'gray')));
+  document.getElementById('customCategoriesCount').textContent = `(${customCats.length})`;
+  const customList = document.getElementById('customCategoriesList');
+  customList.innerHTML = '';
+  if (!customCats.length) {
+    customList.innerHTML = `<div class="text-center py-4">
+      <div class="text-gray-600 mb-2">${iconSvg('folder', 32)}</div>
+      <p class="text-gray-400 mb-2 text-xs">No custom categories yet</p>
+      <button id="addFirstCategoryBtn" class="bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 rounded-md transition-colors inline-flex items-center gap-1 text-xs">${iconSvg('plus', 12)} Add First Category</button>
+    </div>`;
+    document.getElementById('addFirstCategoryBtn').onclick = addCustomCategory;
+  } else {
+    customCats.forEach((cat) => customList.appendChild(categoryTreeRow(cat, buildCount(cat.id), false, 'purple')));
+  }
+  document.getElementById('categoriesSummary').innerHTML = `<strong>${systemCats.length} system categories</strong> and <strong>${customCats.length} custom categories</strong> available.`;
+}
+function addCustomCategory() {
+  const name = prompt('New category name:');
+  if (!name || !name.trim()) return;
+  store.categories.push({ id: genBuildId(), name: name.trim(), isSystem: false });
+  saveStore(); renderCategoriesList(); renderCategoryTabs();
+}
+document.getElementById('closeCategoriesBtn').onclick = () => document.getElementById('categoriesModal').classList.add('hidden');
+document.getElementById('closeCategoriesDoneBtn').onclick = () => document.getElementById('categoriesModal').classList.add('hidden');
+document.getElementById('addCategoryBtn').onclick = addCustomCategory;
+
+// ==================== TEMPORARY UPGRADES ====================
+
+// Verbatim port of the live "Temporary Upgrades" popover's row template (captured via
+// outerHTML): a compact single-chevron-each-side stepper with a read-only value box for
+// leveled upgrades, or a pill toggle switch for boolean ones -- grouped under a blue-bar
+// section header per category, same visual language as the Overrides panel's rows but more
+// compact (no double/jump chevrons here).
+function renderTemporaryRow(catKey, item) {
+  const fullKey = `${catKey}.${item.id}`;
+  const isBoolean = item.maxLevel === 1;
+  const level = store.globalUpgrades[fullKey] || 0;
+  const row = document.createElement('div');
+  row.className = 'flex items-center justify-between px-2 py-1.5 hover:bg-gray-700/30 rounded transition-colors';
+  const setLevel = (v) => {
+    store.globalUpgrades[fullKey] = Math.max(0, item.maxLevel === Infinity ? v : Math.min(item.maxLevel, v));
+    saveStore();
+    renderTemporaryPopoverBody();
+  };
+  if (isBoolean) {
+    row.innerHTML = `
+      <span class="text-xs text-white flex-1 mr-2 leading-relaxed">${escapeHtml(item.label)}</span>
+      <button data-toggle class="w-10 h-5 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 ${level ? 'bg-green-600' : 'bg-red-600'}">
+        <div class="w-4 h-4 bg-white rounded-full shadow transform transition-transform duration-200 ${level ? 'translate-x-5' : ''}"></div>
+      </button>`;
+    row.querySelector('[data-toggle]').onclick = () => setLevel(level ? 0 : 1);
+    return row;
+  }
+  const canDec = level > 0;
+  const canInc = item.maxLevel === Infinity || level < item.maxLevel;
+  row.innerHTML = `
+    <span class="text-xs text-white flex-1 mr-2 leading-relaxed">${escapeHtml(item.label)}</span>
+    <div class="flex-shrink-0"><div class="flex items-center">
+      <button data-dec class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded-l-md ${canDec ? '' : 'opacity-20 cursor-not-allowed'}" ${canDec ? '' : 'disabled'}>${iconSvg('chevron-left', 14)}</button>
+      <div class="min-w-[45px] text-center bg-gray-800 py-[1px] h-6 border-y border-gray-600 flex items-center justify-center"><span class="${level ? 'text-green-400' : 'text-gray-500'}">${level}</span></div>
+      <button data-inc class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded-r-md ${canInc ? '' : 'opacity-20 cursor-not-allowed'}" ${canInc ? '' : 'disabled'}>${iconSvg('chevron-right', 14)}</button>
+    </div></div>`;
+  if (canDec) row.querySelector('[data-dec]').onclick = () => setLevel(level - 1);
+  if (canInc) row.querySelector('[data-inc]').onclick = () => setLevel(level + 1);
+  return row;
+}
+
+function renderTemporaryPopoverBody() {
+  const body = document.getElementById('temporaryBody');
+  body.innerHTML = '';
+  Object.entries(window.ALL_UPGRADE_CATEGORIES).forEach(([catKey, cat]) => {
+    const tempItems = cat.items.filter((i) => i.temporary);
+    if (!tempItems.length) return;
+    const section = document.createElement('div');
+    section.className = 'mb-2 last:mb-0';
+    section.innerHTML = `<div class="px-3 py-2 bg-gray-700/50 border-b border-gray-600/30 flex items-center"><div class="w-1.5 h-5 bg-blue-500 rounded-r mr-2"></div><h4 class="text-xs font-semibold text-gray-200 uppercase tracking-wide">${escapeHtml(cat.label)}</h4></div>`;
+    const list = document.createElement('div');
+    list.className = 'p-1 space-y-1';
+    tempItems.forEach((item) => list.appendChild(renderTemporaryRow(catKey, item)));
+    section.appendChild(list);
+    body.appendChild(section);
+  });
+}
+
+function openTemporaryModal() {
+  const popover = document.getElementById('temporaryPopover');
+  const btn = document.getElementById('temporaryUpgradesBtn');
+  renderTemporaryPopoverBody();
+  const rect = btn.getBoundingClientRect();
+  popover.style.top = `${rect.bottom + 4}px`;
+  popover.style.left = `${rect.left}px`;
+  popover.classList.remove('hidden');
+  const onOutsideClick = (e) => {
+    if (!popover.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+      popover.classList.add('hidden');
+      document.removeEventListener('click', onOutsideClick, true);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', onOutsideClick, true), 0);
+}
+
+// ==================== UPGRADE CATEGORY PAGES ====================
+
+// Matches the real Upgrades category page's card style: title + level badge, an effect-
+// preview box (e.g. "Borge Max HP x1.24"), and a chevron/progress-bar/chevron control row
+// with << >> jump-to-min/max. Effect previews use the real per-item formulas from
+// upgradeEffects.js (verified against the live site's own displayed values); researches use
+// their exact tier tables; gadgets and Diamond Ultima don't have a confirmed preview formula
+// so they show level-only.
+function effectBox(lines) {
+  if (!lines.length) return '';
+  return `<div class="bg-gray-900/50 p-3 rounded-md w-full mb-3">${lines.map((l) => `
+      <div class="flex justify-between items-start py-1 gap-2"><span class="text-gray-400 text-sm min-w-0 flex-1 break-words">${l.label}</span><span class="text-white font-medium text-sm flex-shrink-0 whitespace-nowrap">${l.value}</span></div>`).join('')}</div>`;
+}
+
+// The original HIDES a gated upgrade until its gem requirement is met -- it does not show it with
+// a "requires X" note. Its pages filter the item list through isUpgradeUnlocked's predicate
+// (assets/Trinkets-*.js does exactly this), and the sidebar filters links the same way, dropping a
+// whole category once nothing in it is visible. Annotating instead of hiding was a real parity
+// break: you could see, and edit, upgrades the original would not have shown you yet.
+function visibleUpgradeItems(catKey, items) {
+  return (items || []).filter((item) => window.isUpgradeUnlocked(`upgrades.${catKey}.${item.id}`, store.gems));
+}
+
+function renderUpgradeInput(catKey, item) {
+  const fullKey = `${catKey}.${item.id}`;
+  const isBoolean = item.maxLevel === 1;
+  const level = store.globalUpgrades[fullKey] || 0;
+  const cap = item.maxLevel === Infinity ? null : item.maxLevel;
+  const card = document.createElement('div');
+  card.className = 'relative rounded-xl overflow-hidden border border-gray-700/50 bg-gradient-to-br from-gray-800/80 via-gray-800/60 to-gray-900/80 p-4 flex flex-col';
+  if (fullKey === 'ultima.ulti') {
+    // Confirmed real (live Ultima.vue): this isn't a leveled upgrade at all -- the stored
+    // value itself IS the loot multiplier, set directly via a 1.0000-3.4476 slider (a number
+    // input allows typing up to 10.0000 manually). No level/curve formula involved.
+    const mult = level || 1;
+    card.innerHTML = `
+      <div class="flex items-center justify-between gap-2 mb-3">
+        <h3 class="font-semibold text-white truncate min-w-0 flex-1 text-[1.05rem]" title="${item.label}">${item.label}</h3>
+      </div>
+      ${effectBox([{ label: 'Loot Reward', value: `x${mult.toFixed(4)}` }])}
+      <div class="flex flex-col items-center gap-2">
+        <input data-ulti-input type="number" step="0.0001" min="1" max="10" value="${mult.toFixed(4)}" class="bg-gray-900/70 border border-gray-700/30 text-white text-center font-mono rounded-lg py-1 w-28" />
+        <input data-ulti-slider type="range" min="1" max="3.4476" step="0.0001" value="${Math.min(mult, 3.4476)}" class="w-full appearance-none bg-gray-700/60 h-3 rounded-full outline-none cursor-pointer" />
+      </div>`;
+    const setUlti = (v) => {
+      v = Math.max(1, Math.min(10, v));
+      store.globalUpgrades[fullKey] = parseFloat(v.toFixed(4));
+      saveStore();
+      renderUpgradesPage(document.getElementById('pageRoot'), catKey);
+    };
+    card.querySelector('[data-ulti-input]').onchange = (e) => setUlti(parseFloat(e.target.value) || 1);
+    card.querySelector('[data-ulti-slider]').oninput = (e) => setUlti(parseFloat(e.target.value));
+    return card;
+  }
+
+  if (isBoolean) {
+    const f = window.UPGRADE_FORMULAS[fullKey];
+    const lines = f && f.type === 'boolean-bonuses' ? f.bonuses.map((b) => ({ label: b.stat, value: `x${b.value.toFixed(2)}` })) : [];
+    card.innerHTML = `<div class="flex items-center justify-between gap-2 mb-2">
+        <h3 class="font-semibold text-white text-[1.05rem]" title="${item.label}">${item.label}</h3>
+        <span class="text-xs font-semibold ${level ? 'text-green-400' : 'text-gray-500'}">${level ? 'Active' : 'Inactive'}</span>
+      </div>
+      ${effectBox(lines)}
+      <label class="flex items-center cursor-pointer mt-auto"><input type="checkbox" ${level ? 'checked' : ''} class="sr-only peer" /><div class="w-10 h-5 bg-gray-700 peer-checked:bg-green-600 rounded-full transition-colors relative"><div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div></div></label>`;
+    card.querySelector('input').onchange = (e) => { store.globalUpgrades[fullKey] = e.target.checked ? 1 : 0; saveStore(); renderUpgradesPage(document.getElementById('pageRoot'), catKey); };
+    return card;
+  }
+
+  const lines = window.RESEARCH_TIERS[item.id] ? window.computeResearchLines(item.id, level)
+    : window.GADGET_FORMULAS[item.id] ? window.computeGadgetLines(item.id, level)
+    : window.computeEffectLines(fullKey, level, catKey === 'inscryptions');
+  const canDec = level > 0;
+  const canInc = cap === null || level < cap;
+  const pct = cap ? (level / cap) * 100 : 0;
+  // "Next Level Cost" -- real, extracted cost formulas (costFormulas.js), matching the live
+  // Upgrades page's own cards exactly (e.g. Inscryption #60 at level 0 shows "4.00b").
+  let nextCostLine = '';
+  const CF = window.CostFormulas;
+  if (canInc && CF) {
+    let cost;
+    if (catKey === 'relics') cost = CF.relicCostRange(item.id, level, level + 1);
+    else if (catKey === 'inscryptions') cost = CF.inscryptionCostRange(item.id, level, level + 1);
+    if (cost !== undefined && cost !== null) nextCostLine = `<div class="flex justify-between items-center py-1 border-t border-gray-700/50 mt-1 pt-2"><span class="text-gray-400 text-sm">Next Level Cost</span><span class="text-amber-400 font-medium text-sm">${CF.fmtBig(cost)}</span></div>`;
+  }
+  // Most non-base-stat upgrades are gated behind a gem tree level (UPGRADE_GATES in
+  // hunterDefs.js, transcribed from the live bundle). Say so on the card rather than letting
+  // someone plan around something their account cannot own yet. The input is NOT hard-disabled:
+  // our picture of an account's gem levels comes from the Gem Planner, which the user may
+  // simply not have filled in, and refusing their own real number would be worse than a note.
+  card.innerHTML = `
+    <div class="flex items-center justify-between gap-2 mb-3">
+      <h3 class="font-semibold text-white truncate min-w-0 flex-1 text-[1.05rem]" title="${item.label}">${item.label}</h3>
+      <div class="px-3 py-1 rounded-lg bg-gray-900/70 border border-gray-700/30"><span class="font-bold text-lg text-gray-300" data-level>${level}</span><span class="text-xs text-gray-500">/${cap ?? '∞'}</span></div>
+    </div>
+    ${effectBox(lines)}${nextCostLine}
+    <div class="flex items-center justify-between mt-auto pt-2 gap-1.5">
+      <button data-min class="ctrl-btn ctrl-btn--gray" ${canDec ? '' : 'disabled style="opacity:.3"'}>${iconSvg('chevron-left', 16)}${iconSvg('chevron-left', 16, '-ml-2.5')}</button>
+      <button data-dec class="ctrl-btn ctrl-btn--gray" ${canDec ? '' : 'disabled style="opacity:.3"'}>${iconSvg('chevron-left', 16)}</button>
+      <div class="w-full rounded-full overflow-hidden relative h-2 border border-gray-500/20 flex-1 h-5">
+        <div class="absolute inset-0 bg-gray-800/90 rounded-full"></div>
+        <div data-fill class="h-full relative rounded-full transition-all duration-300 overflow-hidden bg-gradient-to-r from-gray-600 via-gray-500 to-gray-400" style="width:${pct}%"></div>
+      </div>
+      <button data-inc class="ctrl-btn ctrl-btn--gray" ${canInc ? '' : 'disabled style="opacity:.3"'}>${iconSvg('chevron-right', 16)}</button>
+      <button data-max class="ctrl-btn ctrl-btn--gray" ${canInc ? '' : 'disabled style="opacity:.3"'}>${iconSvg('chevron-right', 16)}${iconSvg('chevron-right', 16, '-ml-2.5')}</button>
+    </div>`;
+  const setLevel = (v) => {
+    v = Math.max(0, cap !== null ? Math.min(v, cap) : v);
+    store.globalUpgrades[fullKey] = v;
+    saveStore();
+    renderUpgradesPage(document.getElementById('pageRoot'), catKey);
+  };
+  // Confirmed real (live ToolValueControls.vue): the double chevrons are a fastStep of 10,
+  // not a jump-to-min/max -- W()/X() do value +/- fastStep (clamped to min/max), same as the
+  // single chevrons just with a bigger step.
+  card.querySelector('[data-inc]').onclick = () => setLevel(level + 1);
+  card.querySelector('[data-dec]').onclick = () => setLevel(level - 1);
+  card.querySelector('[data-max]').onclick = () => setLevel(level + 10);
+  card.querySelector('[data-min]').onclick = () => setLevel(level - 10);
+  return card;
+}
+
+// Inscryptions is the one category page that uses per-hunter tabs + a "Hide Maxed" toggle
+// on the real site (confirmed live) -- every other category just lists all items with
+// inline per-hunter effect lines instead.
+let inscriptionsTabHunter = 'Borge';
+let hideMaxedInscriptions = false;
+let showFleetLoopMods = false;
+
+function renderUpgradesPage(root, catKey) {
+  const cat = window.ALL_UPGRADE_CATEGORIES[catKey];
+  if (!cat) { root.innerHTML = ''; return; }
+
+  if (catKey === 'inscryptions') {
+    root.innerHTML = `
+      <div class="flex items-center justify-center gap-2 mb-4 flex-wrap" id="inscTabs"></div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="upgradeItemsGrid"></div>`;
+    const tabs = document.getElementById('inscTabs');
+    ['Borge', 'Ozzy', 'Knox'].forEach((h) => {
+      const btn = document.createElement('button');
+      btn.textContent = h;
+      btn.className = `px-4 py-1.5 rounded-full text-sm font-semibold ${inscriptionsTabHunter === h ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`;
+      btn.onclick = () => { inscriptionsTabHunter = h; renderUpgradesPage(root, catKey); };
+      tabs.appendChild(btn);
+    });
+    const hideBtn = document.createElement('button');
+    hideBtn.className = 'ml-auto flex items-center gap-2 text-xs text-gray-400';
+    hideBtn.innerHTML = `<span>Hide Maxed</span><div class="w-9 h-5 rounded-full transition-colors ${hideMaxedInscriptions ? 'bg-blue-600' : 'bg-gray-700'}"><div class="w-4 h-4 bg-white rounded-full m-0.5 transition-transform ${hideMaxedInscriptions ? 'translate-x-4' : ''}"></div></div>`;
+    hideBtn.onclick = () => { hideMaxedInscriptions = !hideMaxedInscriptions; renderUpgradesPage(root, catKey); };
+    tabs.appendChild(hideBtn);
+
+    const grid = document.getElementById('upgradeItemsGrid');
+    visibleUpgradeItems(catKey, cat.items)
+      .filter((item) => {
+        const f = window.UPGRADE_FORMULAS[`inscryptions.${item.id}`];
+        return f && f.effects[0].hunter === inscriptionsTabHunter;
+      })
+      .filter((item) => !hideMaxedInscriptions || (store.globalUpgrades[`inscryptions.${item.id}`] || 0) < item.maxLevel)
+      .forEach((item) => { grid.appendChild(renderUpgradeInput(catKey, item)); });
+    return;
+  }
+
+  // Relics are the one category with a real second numbering tier (t2-prefixed ids) -- give
+  // it its own "Tier 2" section header instead of repeating "Tier 2" in every item's label
+  // (which read as an unexplained duplicate against tier 1's same-numbered items).
+  const isRelics = catKey === 'relics';
+  // ALL_UPGRADE_CATEGORIES merges each hunter's relic list in hunter-processing order
+  // (borge, ozzy, knox) and only appends an item the first time its id is new -- so a later
+  // hunter's own relic (e.g. Ozzy's #17, Knox's Tier-2 #5) lands wherever it happened to be
+  // first introduced, not in numeric position (confirmed: merged order was #4,#7,#16,#19,
+  // Tier2#7,#17,Tier2#5). Sort by the number in each item's own "#N" label instead of trusting
+  // merge-insertion order.
+  const numOf = (item) => parseInt((item.label.match(/#(\d+)/) || [])[1] || '0', 10);
+  const byNumber = (a, b) => numOf(a) - numOf(b);
+  const shown = visibleUpgradeItems(catKey, cat.items);
+  const tier1Items = (isRelics ? shown.filter((i) => !i.id.startsWith('t2')) : shown).slice().sort(isRelics ? byNumber : () => 0);
+  const tier2Items = (isRelics ? shown.filter((i) => i.id.startsWith('t2')) : []).slice().sort(byNumber);
+
+  root.innerHTML = `
+    <h1 class="text-2xl font-bold text-white text-center mb-4">${cat.label}</h1>
+    <div class="text-center text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Tier 1</div>
+    ${catKey === 'loopmods' ? '<div class="flex justify-center mb-4"><button id="fleetModsToggle" class="flex items-center gap-2 text-xs text-gray-400"><span>Show Fleet Mods</span></button></div>' : ''}
+    <div id="upgradeItemsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+    ${tier2Items.length ? `
+    <div class="text-center text-sm font-semibold text-gray-500 uppercase tracking-wider mt-8 mb-4">Tier 2</div>
+    <div id="upgradeItemsGridTier2" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>` : ''}`;
+  const grid = document.getElementById('upgradeItemsGrid');
+  if (catKey === 'loopmods') {
+    const toggleBtn = document.getElementById('fleetModsToggle');
+    toggleBtn.innerHTML = `<span>Show Fleet Mods</span><div class="w-9 h-5 rounded-full transition-colors ${showFleetLoopMods ? 'bg-blue-600' : 'bg-gray-700'}"><div class="w-4 h-4 bg-white rounded-full m-0.5 transition-transform ${showFleetLoopMods ? 'translate-x-4' : ''}"></div></div>`;
+    toggleBtn.onclick = () => { showFleetLoopMods = !showFleetLoopMods; renderUpgradesPage(root, catKey); };
+    if (showFleetLoopMods) { window.renderFleetBoostItemsInto(grid, 'Loop Mod'); return; }
+  }
+  tier1Items.forEach((item) => { grid.appendChild(renderUpgradeInput(catKey, item)); });
+  if (tier2Items.length) {
+    const grid2 = document.getElementById('upgradeItemsGridTier2');
+    tier2Items.forEach((item) => { grid2.appendChild(renderUpgradeInput(catKey, item)); });
+  }
+}
+
+// ==================== SETTINGS PAGE ====================
+// Verbatim-structure port of the live Settings page's four sections (Backup & Restore,
+// Storage Issues, Cache Management, Advanced Talents Settings). "Backup & Restore" here is
+// a REAL full-store export/import (base64 of the same JSON saveStore() already persists to
+// localStorage) rather than a placeholder -- pasting a previously generated code actually
+// restores every hunter's builds/settings. "Advanced Talents Settings" stores each hunter's
+// gate level in the store and actually hides talents whose `advancedMinLevel` is above it
+// (see HUNTER_DEFS talents) once a talent is marked as advanced -- currently no talent in
+// HUNTER_DEFS is flagged advanced, since "The Legacy of Ultima" (confirmed real, level-70+
+// gated on the live site) hasn't been reverse-engineered into the talent list yet, so the
+// gate exists and is wired up but has nothing to hide yet.
+// ---- Cloud Save panel -------------------------------------------------------------------------
+//
+// Mirrors cifi-tools' own account panel: sign in, an explicit Save-to-cloud and Load-from-cloud,
+// the two timestamps, and a "New Backup Available" notice. Nothing syncs automatically -- see the
+// header of cloudSync.js for why a store cannot be safely merged field by field.
+function cloudTimeText(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+}
+
+// ---- Cloud save UI ----------------------------------------------------------------------------
+//
+// The markup here is COPIED FROM THE ORIGINAL TOOL, not designed: its `NeonAuthModal` for the
+// signed-out dialog and its header account dropdown for the signed-in state. Users move between
+// the two tools, so the surface they already know is the right one. Copying it also means the
+// layout questions were answered by someone who shipped it, rather than re-litigated here.
+//
+// Changed on purpose, both requested: the provider is DISCORD rather than Google, and an
+// email/password form sits under a divider for accounts not tied to Discord.
+let __cloudMenuOpen = false;
+
+function cloudTimeText(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+}
+
+const CLOUD_DISCORD_LOGO = '<svg class="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="#5865F2">'
+  + '<path d="M20.317 4.369a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.249a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.036A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.009c.12.099.246.198.373.292a.077.077 0 0 1-.006.127 12.3 12.3 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.056c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.331c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>';
+
+/** Header slot: a Sign In button when signed out, the account avatar + dropdown when signed in. */
+async function renderCloudAccountButton() {
+  const host = document.getElementById('cloudAccount');
+  if (!host) return;
+  const CS = window.CloudSync;
+  if (!CS) { host.innerHTML = ''; return; }
+  const s = await CS.init();
+  // The SDK is fetched from a CDN. If that was blocked, render nothing rather than a button that
+  // cannot work -- Backup & Restore in Settings still covers the same need offline.
+  if (!s.available) { host.innerHTML = ''; return; }
+
+  if (!s.isAuthenticated) {
+    host.innerHTML = '<button id="cloudAccountBtn" class="flex items-center space-x-1 px-3 py-1.5 '
+      + 'rounded-full bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900 '
+      + 'text-white font-semibold shadow-lg transition-colors duration-200 text-xs sm:text-sm">'
+      + '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">'
+      + '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" '
+      + 'd="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>'
+      + '<span class="hidden xs:inline">Sign In</span></button>';
+    document.getElementById('cloudAccountBtn').onclick = () => openCloudAuthModal();
+    return;
+  }
+
+  const initial = ((s.userDisplayName || 'U').trim()[0] || 'U').toUpperCase();
+  host.innerHTML = `
+    <button id="cloudAccountBtn" class="px-3 py-1.5 rounded-lg transition-colors duration-200 flex items-center hover:bg-gray-700 relative text-gray-300 hover:text-white">
+      <div class="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">${escapeHtml(initial)}</div>
+      <span class="ml-1.5 text-sm hidden sm:inline max-w-[8rem] truncate">${escapeHtml(s.userDisplayName || 'User')}</span>
+      ${s.hasNewerCloudBackup ? '<span class="absolute top-0 right-0 w-2 h-2 bg-yellow-400 rounded-full"></span>' : ''}
+    </button>
+    <div id="cloudMenu" class="${__cloudMenuOpen ? '' : 'hidden '}absolute top-full right-0 mt-2 bg-gray-800 rounded-xl shadow-xl z-50 border border-gray-700 w-64 overflow-hidden">
+      <div class="p-3 border-b border-gray-700">
+        <div class="flex items-center">
+          <div class="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold">${escapeHtml(initial)}</div>
+          <div class="ml-2 min-w-0">
+            <div class="text-sm font-medium text-white truncate">${escapeHtml(s.userDisplayName || 'User')}</div>
+            <div class="text-xs text-gray-400 truncate">${escapeHtml((s.user && s.user.email) || 'No email')}</div>
+          </div>
+        </div>
+      </div>
+      <div class="p-3 border-b border-gray-700">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs text-gray-400">Cloud Backup</span>
+          ${s.hasNewerCloudBackup && !s.isSyncing ? '<span class="text-xs text-yellow-400">New Backup Available</span>' : ''}
+          ${s.isSyncing || s.lastSyncError ? `<span class="flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full inline-block ${s.isSyncing ? 'bg-yellow-400 animate-pulse' : 'bg-red-500'}"></span>
+              <span class="text-xs ${s.lastSyncError ? 'text-red-400' : 'text-yellow-400'}">${s.isSyncing ? 'Syncing...' : 'Error'}</span>
+            </span>` : ''}
+        </div>
+        <div class="space-y-1">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-gray-500">Saved</span>
+            <span class="text-xs font-mono ${s.lastCloudSaveTime ? 'text-green-400' : 'text-gray-600'}">${cloudTimeText(s.lastCloudSaveTime)}</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-gray-500">Loaded</span>
+            <span class="text-xs font-mono ${s.lastDownloadTime ? 'text-blue-400' : 'text-gray-600'}">${cloudTimeText(s.lastDownloadTime)}</span>
+          </div>
+        </div>
+      </div>
+      <div class="p-1">
+        <button id="cloudSaveBtn" class="w-full text-left px-3 py-2 text-sm text-blue-300 hover:bg-blue-900/20 rounded">Save to Cloud</button>
+        <button id="cloudLoadBtn" class="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded">Load from Cloud</button>
+        <button id="cloudSignOutBtn" class="w-full text-left px-3 py-2 text-sm text-red-300 hover:bg-red-900/20 rounded">Sign Out</button>
+      </div>
+      <p id="cloudMsg" class="text-xs px-3 pb-2"></p>
+    </div>`;
+
+  const menuEl = document.getElementById('cloudMenu');
+  document.getElementById('cloudAccountBtn').onclick = (ev) => {
+    ev.stopPropagation();
+    __cloudMenuOpen = !__cloudMenuOpen;
+    menuEl.classList.toggle('hidden', !__cloudMenuOpen);
+  };
+  menuEl.onclick = (ev) => ev.stopPropagation();
+
+  const msg = (text, cls) => {
+    const el = document.getElementById('cloudMsg');
+    if (!el) return;
+    el.className = `text-xs px-3 pb-2 ${cls}`;
+    el.textContent = text;
+  };
+  document.getElementById('cloudSaveBtn').onclick = async () => {
+    msg('Saving...', 'text-gray-400');
+    try { await CS.syncToServer(); renderCloudAccountButton(); }
+    catch (e) { msg(e.message, 'text-red-400'); }
+  };
+  document.getElementById('cloudLoadBtn').onclick = async () => {
+    // The same confirmation the local restore uses. There is no undo and no merge, so the
+    // destructive direction is an explicit choice every time.
+    if (!confirm('This will replace all data on THIS device with your cloud backup. '
+      + 'This action cannot be undone. Continue?')) return;
+    msg('Loading...', 'text-gray-400');
+    try {
+      const r = await CS.syncFromServer();
+      if (!r.restored) { msg('No cloud backup found yet.', 'text-amber-400'); return; }
+      __cloudMenuOpen = false;
+      renderCloudAccountButton();
+      alert('Cloud backup restored.');
+    } catch (e) { msg(e.message, 'text-red-400'); }
+  };
+  document.getElementById('cloudSignOutBtn').onclick = async () => {
+    await CS.signOut(); __cloudMenuOpen = false; renderCloudAccountButton();
+  };
+}
+
+/**
+ * The sign-in dialog, matching the original's NeonAuthModal: same overlay, card, header, centred
+ * blurb, error box and provider-button classes. Discord replaces Google, and an email/password
+ * form is added below a divider.
+ */
+function openCloudAuthModal() {
+  const CS = window.CloudSync;
+  if (!CS) return;
+  const existing = document.getElementById('cloudAuthModal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'cloudAuthModal';
+  overlay.className = 'fixed inset-0 z-50 overflow-y-auto bg-gray-900/80 flex items-center justify-center p-4';
+  overlay.innerHTML = `
+    <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-sm overflow-hidden animate-fade-in border border-gray-700">
+      <div class="bg-gradient-to-r from-gray-700 to-gray-800 p-4 border-b border-gray-600 flex justify-between items-center">
+        <h2 class="text-xl font-bold text-white flex items-center">
+          <svg class="w-5 h-5 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+          Sign In
+        </h2>
+        <button data-close class="p-1.5 rounded-full hover:bg-gray-700 transition-colors text-gray-400 hover:text-white">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="p-5">
+        <p class="text-gray-400 text-sm mb-4 text-center">Sign in to sync your data across devices</p>
+        <div id="cloudAuthError" class="hidden mb-4 p-3 bg-red-900/30 border border-red-700 rounded-lg">
+          <p class="text-red-300 text-sm"></p>
+        </div>
+        <button id="cloudDiscordBtn" class="w-full flex items-center justify-center px-4 py-3 border border-gray-600 rounded-lg shadow-sm text-sm font-medium text-gray-200 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 transition-colors">
+          ${CLOUD_DISCORD_LOGO} Continue with Discord
+        </button>
+        <div class="flex items-center gap-3 my-4">
+          <div class="flex-1 h-px bg-gray-700"></div>
+          <span class="text-[11px] text-gray-500 uppercase tracking-wide">or</span>
+          <div class="flex-1 h-px bg-gray-700"></div>
+        </div>
+        <input id="cloudEmail" type="email" autocomplete="email" placeholder="Email"
+          class="w-full mb-2 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white" />
+        <input id="cloudPassword" type="password" autocomplete="current-password" placeholder="Password"
+          class="w-full mb-3 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white" />
+        <div class="flex gap-2">
+          <button id="cloudSignInBtn" class="flex-1 px-4 py-2 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 transition-colors">Sign In</button>
+          <button id="cloudSignUpBtn" class="flex-1 px-4 py-2 rounded-lg text-sm font-medium text-gray-200 bg-gray-700 hover:bg-gray-600 border border-gray-600 transition-colors">Create Account</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  overlay.querySelector('[data-close]').onclick = close;
+  overlay.onclick = (ev) => { if (ev.target === overlay) close(); };
+
+  const showError = (text) => {
+    const box = document.getElementById('cloudAuthError');
+    box.classList.remove('hidden');
+    box.querySelector('p').textContent = text;
+  };
+  const el = (id) => document.getElementById(id);
+  const creds = () => ({ email: el('cloudEmail').value.trim(), password: el('cloudPassword').value });
+
+  el('cloudDiscordBtn').onclick = () => {
+    // OAuth navigates the whole page out to Discord and back. Nothing to await: the session lands
+    // in the SDK's storage and the header re-reads it on the next boot.
+    try { CS.signInWithDiscord(); } catch (e) { showError(e.message); }
+  };
+  el('cloudSignInBtn').onclick = async () => {
+    const { email, password } = creds();
+    if (!email || !password) { showError('Enter an email and password.'); return; }
+    try { await CS.signIn(email, password); close(); renderCloudAccountButton(); }
+    catch (e) { showError(e.message); }
+  };
+  el('cloudSignUpBtn').onclick = async () => {
+    const { email, password } = creds();
+    if (!email || !password) { showError('Enter an email and password.'); return; }
+    try { await CS.signUp(email, password); close(); renderCloudAccountButton(); }
+    catch (e) { showError(e.message); }
+  };
+}
+
+// Close the account dropdown on an outside click. Registered once at module level, so repeated
+// renders cannot stack duplicate listeners.
+document.addEventListener('click', () => {
+  if (!__cloudMenuOpen) return;
+  __cloudMenuOpen = false;
+  const m = document.getElementById('cloudMenu');
+  if (m) m.classList.add('hidden');
+});
+
+function settingsSection(icon, iconColor, title, bodyHtml) {
+  return `<div class="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden mb-5">
+    <div class="bg-gray-700/40 px-4 py-3 border-b border-gray-700 flex items-center gap-2">
+      ${iconSvg(icon, 18, iconColor)}<h2 class="font-semibold text-white">${title}</h2>
+    </div>
+    <div class="p-4">${bodyHtml}</div>
+  </div>`;
+}
+
+function renderSettingsPage(root) {
+  root.innerHTML = `
+    <h1 class="text-2xl font-bold text-white text-center mb-6">Settings</h1>
+    <div class="max-w-3xl mx-auto">
+      ${settingsSection('download', 'text-blue-400', 'Backup &amp; Restore', `
+        <h3 class="text-sm font-semibold text-gray-200 mb-1">Create a Backup</h3>
+        <p class="text-xs text-gray-400 mb-2">Create a backup of your entire profile, including all hunters, builds, and settings. You can use this backup to restore your data on another device or after clearing your browser data.</p>
+        <button id="generateBackupBtn" class="px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-md text-white text-sm mb-4">Generate Backup Code</button>
+        <div id="backupCodeOut" class="hidden mb-4"><textarea readonly class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-xs text-gray-300 font-mono h-24"></textarea></div>
+        <h3 class="text-sm font-semibold text-gray-200 mb-1">Restore from Backup</h3>
+        <p class="text-xs text-gray-400 mb-2">Restore your data from a previously created backup. This will replace all current data. <span class="text-red-400">This action cannot be undone.</span></p>
+        <textarea id="restoreCodeInput" placeholder="Paste your backup code here..." class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-xs text-gray-300 font-mono h-20 mb-2"></textarea>
+        <div class="flex gap-2">
+          <button id="restoreBackupBtn" class="px-3 py-2 bg-amber-700 hover:bg-amber-600 rounded-md text-white text-sm">Restore from Backup</button>
+          <button id="uploadBackupBtn" class="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-md text-white text-sm">Upload Backup File</button>
+          <input id="uploadBackupFile" type="file" accept=".txt,.json" class="hidden" />
+        </div>
+      `)}
+      ${settingsSection('refresh', 'text-orange-400', 'Storage Issues', `
+        <h3 class="text-sm font-semibold text-gray-200 mb-1">Quick Fix Storage</h3>
+        <p class="text-xs text-gray-400 mb-2">If you experience data loss on page refresh or storage warnings, use this quick fix. It re-saves your current data to browser storage.</p>
+        <p class="text-xs text-gray-400 mb-2">Current usage: <span id="storageUsage" class="text-gray-300">measuring…</span></p>
+        <button id="quickFixBtn" class="px-3 py-2 bg-orange-700 hover:bg-orange-600 rounded-md text-white text-sm">Quick Fix Storage Issues</button>
+        <span id="quickFixResult" class="text-xs text-green-400 ml-2"></span>
+      `)}
+      ${settingsSection('folder', 'text-amber-400', 'Cache Management', `
+        <p class="text-xs text-gray-400 mb-2">Clear the evaluation cache to free up memory. This won't affect your builds or settings, but may temporarily slow down the application as the cache rebuilds.</p>
+        <button id="clearCacheBtn" class="px-3 py-2 bg-orange-700 hover:bg-orange-600 rounded-md text-white text-sm">Clear Evaluation Cache</button>
+        <span id="clearCacheResult" class="text-xs text-green-400 ml-2"></span>
+      `)}
+      ${settingsSection('settings', 'text-purple-400', 'Advanced Talents Settings', `
+        <p class="text-xs text-gray-400 mb-3">Advanced talents like "The Legacy of Ultima" are only available at higher Hunter Levels. These settings control when those talents are shown, to provide a beginner-friendly experience.</p>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3" id="advancedTalentsGrid"></div>
+      `)}
+      ${settingsSection('adjustments', 'text-sky-400', 'Interface', `
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h3 class="text-sm font-semibold text-gray-200 mb-1">Upgrades Sidebar in Hunter View</h3>
+            <p class="text-xs text-gray-400">Show the upgrades navigation sidebar on the Hunter View page. Disable if the sidebar takes up too much space on your screen.</p>
+          </div>
+          <button id="sidebarToggleBtn" class="flex-shrink-0 px-3 py-1.5 rounded-md text-sm"></button>
+        </div>
+      `)}
+      ${settingsSection('sparkles', 'text-fuchsia-400', 'Enthusiast Mode', `
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h3 class="text-sm font-semibold text-gray-200 mb-1">Enable High Iterations Mode</h3>
+            <p class="text-xs text-gray-400">Allows setting iterations up to ${StoreSchema.ITERATIONS.maxHigh.toLocaleString()} in build evaluation for higher precision results. Note: Higher iterations require significantly more processing time.</p>
+          </div>
+          <button id="highIterationsBtn" class="flex-shrink-0 px-3 py-1.5 rounded-md text-sm"></button>
+        </div>
+      `)}
+      ${settingsSection('trash', 'text-red-400', 'Reset Data', `
+        <p class="text-xs text-gray-400 mb-2">This will reset all your data including all hunters, builds, and upgrades. <span class="text-red-400">This action cannot be undone.</span></p>
+        <button id="resetAllDataBtn" class="px-3 py-2 bg-red-800 hover:bg-red-700 rounded-md text-white text-sm">Reset All Data</button>
+      `)}
+    </div>`;
+
+  document.getElementById('generateBackupBtn').onclick = () => {
+    const code = createStoreBackup();
+    const box = document.getElementById('backupCodeOut');
+    box.classList.remove('hidden');
+    box.querySelector('textarea').value = code;
+  };
+  document.getElementById('restoreBackupBtn').onclick = () => {
+    const raw = document.getElementById('restoreCodeInput').value.trim();
+    if (!raw) return;
+    if (!confirm('This will replace all current data. This action cannot be undone. Continue?')) return;
+    try {
+      restoreStoreBackup(raw);
+      alert('Backup restored.');
+    } catch (e) { alert('Invalid backup code: ' + e.message); }
+  };
+  document.getElementById('uploadBackupBtn').onclick = () => document.getElementById('uploadBackupFile').click();
+  document.getElementById('uploadBackupFile').onchange = (e) => {
+    const file = e.target.files[0];
+    // Same no-event trap as the save import: without clearing, re-picking the same backup file
+    // does nothing and reads as "restore is broken".
+    e.target.value = '';
+    if (!file) return;
+    file.text().then((t) => { document.getElementById('restoreCodeInput').value = t.trim(); });
+  };
+  document.getElementById('quickFixBtn').onclick = () => {
+    saveStore();
+    document.getElementById('quickFixResult').textContent = 'Storage re-saved.';
+  };
+  document.getElementById('clearCacheBtn').onclick = () => {
+    HunterSim.clearCache();
+    document.getElementById('clearCacheResult').textContent = 'Cache cleared.';
+  };
+
+  // Storage usage, so "am I near the limit?" is answerable before data loss rather than after.
+  // navigator.storage.estimate() is the only real measurement available; where it is missing we
+  // say so instead of showing a made-up quota next to a real usage number.
+  (async () => {
+    const el = document.getElementById('storageUsage');
+    if (!el) return;
+    const bytes = (localStorage.getItem(STORAGE_KEY) || '').length;
+    const mb = (n) => `${(n / (1024 * 1024)).toFixed(2)} MB`;
+    if (navigator.storage && navigator.storage.estimate) {
+      try {
+        const { usage, quota } = await navigator.storage.estimate();
+        el.textContent = `${mb(usage)} / ${mb(quota)} (this profile: ${mb(bytes)})`;
+        return;
+      } catch { /* fall through to the profile-only figure */ }
+    }
+    el.textContent = `${mb(bytes)} for this profile (browser quota unavailable)`;
+  })();
+
+  const toggleBtn = (id, on, onLabel, offLabel, onClick) => {
+    const b = document.getElementById(id);
+    b.textContent = on ? onLabel : offLabel;
+    b.className = `flex-shrink-0 px-3 py-1.5 rounded-md text-sm ${on ? 'bg-sky-700 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`;
+    b.onclick = onClick;
+  };
+
+  toggleBtn('sidebarToggleBtn', store.settings.ui.upgradesSidebar, 'Enabled', 'Disabled', () => {
+    store.settings.ui.upgradesSidebar = !store.settings.ui.upgradesSidebar;
+    saveStore();
+    applyInterfacePrefs();
+    renderSettingsPage(root);
+  });
+
+  toggleBtn('highIterationsBtn', store.settings.ui.highIterations, 'Enabled', 'Disabled', () => {
+    const turningOff = store.settings.ui.highIterations;
+    store.settings.ui.highIterations = !turningOff;
+    // Turning the ceiling DOWN must bring any hunter that was above it back into range, or the
+    // store would validate as broken and the evaluator would be asked for a count the UI no
+    // longer offers. Clamping here (rather than at read time only) keeps the persisted value
+    // and the displayed value the same thing.
+    if (turningOff) {
+      StoreSchema.HUNTERS.forEach((h) => {
+        store[h].iterations = StoreSchema.clampIterations(store[h].iterations, store);
+      });
+    }
+    saveStore();
+    renderSettingsPage(root);
+  });
+
+  document.getElementById('resetAllDataBtn').onclick = () => {
+    // Two-step, and the second step hands back a backup first. There is no server and no undo:
+    // localStorage plus IndexedDB is the only copy of this data, so a single mis-click here is
+    // unrecoverable. The original tool offers the same action; it is the irreversibility that
+    // earns the extra prompt, not a difference of opinion about the feature.
+    if (!confirm('Reset ALL data: every hunter, build, upgrade and setting.\n\nThis cannot be undone. Continue?')) return;
+    const backup = btoa(unescape(encodeURIComponent(JSON.stringify(store))));
+    const box = document.getElementById('backupCodeOut');
+    if (box) { box.classList.remove('hidden'); box.querySelector('textarea').value = backup; }
+    if (!confirm('A backup code has been written into the "Create a Backup" box above.\n\nCopy it somewhere safe now if you might want this data back — it is the only copy.\n\nReset now?')) return;
+    resetAllData();
+  };
+
+  const grid = document.getElementById('advancedTalentsGrid');
+  ['borge', 'ozzy', 'knox'].forEach((h) => {
+    const highestLevel = Math.max(0, ...store[h].builds.map((b) => b.level || 0));
+    const hasAdvancedTalent = window.HUNTER_DEFS[h].talents.some((t) => t.advanced);
+    const shown = shouldShowAdvancedTalents(h);
+    const card = document.createElement('div');
+    card.className = 'bg-gray-900/50 border border-gray-700 rounded-lg p-3';
+    card.innerHTML = `
+      <div class="flex items-center gap-2 mb-1"><span class="font-semibold text-white capitalize">${h}</span></div>
+      <div class="text-xs text-gray-400 mb-2">Highest Level: ${highestLevel}</div>
+      ${hasAdvancedTalent
+        ? `<button data-toggle class="w-full px-3 py-1.5 rounded-md text-sm ${shown ? 'bg-purple-700 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}">${shown ? 'Hide Advanced' : 'Show Advanced'}</button>`
+        : `<div class="text-xs text-gray-600">No advanced talents for this hunter.</div>`}`;
+    if (hasAdvancedTalent) {
+      card.querySelector('[data-toggle]').onclick = () => {
+        // store.settings.advancedTalents is guaranteed present by the schema (storeSchema.js);
+        // no lazy `|| {}` init needed, and none should be added back.
+        store.settings.advancedTalents[h] = !shown;
+        saveStore();
+        renderSettingsPage(root);
+      };
+    }
+    grid.appendChild(card);
+  });
+}
+
+// Matches the real "Borge/Ozzy/Knox Stats" modal (opened from the banner button) --
+// same chevron-stepper cards as everything else, confirmed exact for Borge's stat labels
+// against the live site; Ozzy/Knox use the corresponding param names from their own
+// EVAL_PARAMS lists with best-match display labels since those two accounts weren't
+// available to verify pixel-for-pixel.
+const STAT_LABELS = {
+  hp: 'MAX HP', atk: 'ATK Power', regen: 'HP Regen', dr: 'DMG Reduction', evade: 'Evade Chance',
+  effect: 'Effect Chance', critchance: 'Crit Chance', critpower: 'Crit Power', atkspeed: 'ATK Speed',
+  multichance: 'Multistrike Chance', multipower: 'Multistrike Power',
+  block: 'Block Chance', charge: 'Charge', chargeGain: 'Charge Gain', reload: 'Reload', proj: 'Projectiles Per Salvo',
+  stage: 'Highest Stage Reached',
+};
+const STAT_BAR_MAX = { hp: 1000, atk: 1000, regen: 100, critpower: 100, stage: 500 };
+
+// Verbatim port of the live "Hunter Stats" modal's card (captured via outerHTML): unlike
+// the Build Creator's card (single chevron each side, no mobile variant here), this one has
+// a min/dec/bar/inc/max quad-chevron row and no responsive md:hidden alternate layout.
+// Wires a double-chevron button to step by 10 on a normal click, but jump straight to the
+// true min/max on a press-and-hold (~450ms) instead -- single clicks used to jump straight to
+// the absolute min/max here (unlike every other double-chevron stepper in the app, which
+// steps by 10; see renderUpgradeInput's ctrl-btn row), which made it too easy to overshoot a
+// stat by accident. Hold-to-jump keeps that "snap to max/min" capability available without
+// losing it, just off the accidental single-click path.
+const HOLD_TO_JUMP_MS = 450;
+function wireStepOrHoldButton(button, stepFn, jumpFn) {
+  let firedByHold = false;
+  let timer = null;
+  const clearTimer = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  button.addEventListener('pointerdown', (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    firedByHold = false;
+    clearTimer();
+    timer = setTimeout(() => { firedByHold = true; jumpFn(); }, HOLD_TO_JUMP_MS);
+  });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach((evt) => button.addEventListener(evt, clearTimer));
+  button.addEventListener('click', () => {
+    if (firedByHold) { firedByHold = false; return; }
+    stepFn();
+  });
+}
+
+function renderQuadStepperCard({ label, level, maxLevel, accentColor, canDec, onInc, onDec, onMax, onMin, onJumpMax, onJumpMin, softMax }) {
+  const uncapped = maxLevel === Infinity;
+  const barMax = uncapped ? (softMax || 1000) : maxLevel;
+  const pct = Math.min(100, (level / barMax) * 100);
+  const div = document.createElement('div');
+  div.className = 'bg-gray-700 rounded-lg p-2.5 border border-gray-600 hover:border-gray-500 transition-colors shadow-md';
+  div.innerHTML = `
+    <div class="flex justify-between items-center mb-2">
+      <span class="text-sm font-medium text-white">${label}</span>
+      <div class="flex items-center"><span class="text-base font-bold text-${accentColor}-400">${level}</span>${uncapped ? '' : `<span class="text-xs text-gray-500 ml-1"> /${maxLevel}</span>`}</div>
+    </div>
+    <div class="flex items-center justify-between mt-2">
+      <button data-min class="flex justify-center items-center bg-gray-800 hover:bg-gray-700 rounded transition-colors ${canDec ? '' : 'opacity-20 cursor-not-allowed hover:bg-gray-900'} p-2" ${canDec ? '' : 'disabled'} style="min-width:2.5rem;"><div class="flex">${iconSvg('chevron-left', 18)}${iconSvg('chevron-left', 18, '-ml-2')}</div></button>
+      <button data-dec class="flex justify-center items-center bg-gray-800 hover:bg-gray-700 rounded transition-colors ml-1 ${canDec ? '' : 'opacity-20 cursor-not-allowed hover:bg-gray-900'} p-2" ${canDec ? '' : 'disabled'} style="min-width:2.5rem;">${iconSvg('chevron-left', 18)}</button>
+      <div class="w-full rounded-full overflow-hidden relative h-2 border border-${accentColor}-500/20 flex-1 mx-1.5 h-5">
+        <div class="absolute inset-0 bg-gray-800/90 rounded-full"></div>
+        <div class="h-full relative rounded-full transition-all duration-300 overflow-hidden bg-gradient-to-r from-${accentColor}-700 via-${accentColor}-500 to-${accentColor}-400" style="width:${pct}%"></div>
+      </div>
+      <button data-inc class="flex justify-center items-center bg-gray-800 hover:bg-gray-700 rounded transition-colors mr-1 p-2" style="min-width:2.5rem;">${iconSvg('chevron-right', 18)}</button>
+      <button data-max class="flex justify-center items-center bg-gray-800 hover:bg-gray-700 rounded transition-colors p-2" style="min-width:2.5rem;">${iconSvg('chevron-right', 18)}${iconSvg('chevron-right', 18, '-ml-2')}</button>
+    </div>`;
+  div.querySelector('[data-inc]').onclick = onInc;
+  wireStepOrHoldButton(div.querySelector('[data-max]'), onMax, onJumpMax || onMax);
+  if (canDec) {
+    div.querySelector('[data-dec]').onclick = onDec;
+    wireStepOrHoldButton(div.querySelector('[data-min]'), onMin, onJumpMin || onMin);
+  }
+  return div;
+}
+
+function openStatsModal() {
+  const modal = document.getElementById('statsModal');
+  document.getElementById('statsModalTitle').textContent = HUNTER_TITLES[currentHunter].replace(' Simulator', '');
+  document.getElementById('statsModalTitle').className = `text-${HUNTER_ACCENTS[currentHunter]}-500`;
+  const iconWrap = document.getElementById('statsModalIconWrap');
+  if (!iconWrap.querySelector('svg')) iconWrap.insertAdjacentHTML('afterbegin', iconSvg('chart-arrows-vertical', 20, `mr-2 text-${HUNTER_ACCENTS[currentHunter]}-400`));
+  else iconWrap.querySelector('svg').setAttribute('class', `tabler-icon mr-2 text-${HUNTER_ACCENTS[currentHunter]}-400`);
+  renderStatsModalBody();
+  modal.classList.remove('hidden');
+}
+function renderStatsModalBody() {
+  const grid = document.getElementById('statsModalGrid');
+  grid.innerHTML = '';
+  const d = defs();
+  d.baseStatKeys.forEach((key) => {
+    const cap = d.statCaps[key];
+    const level = store[currentHunter].hunterStats[key] || 0;
+    const card = renderQuadStepperCard({
+      label: STAT_LABELS[key] || key, level, maxLevel: cap !== Infinity ? cap : Infinity,
+      accentColor: HUNTER_ACCENTS[currentHunter], canDec: level > 0, softMax: STAT_BAR_MAX[key],
+      onInc: () => { store[currentHunter].hunterStats[key] = level + 1; saveStore(); renderStatsModalBody(); },
+      onDec: () => { store[currentHunter].hunterStats[key] = level - 1; saveStore(); renderStatsModalBody(); },
+      onMax: () => { store[currentHunter].hunterStats[key] = cap !== Infinity ? Math.min(cap, level + 10) : level + 10; saveStore(); renderStatsModalBody(); },
+      onMin: () => { store[currentHunter].hunterStats[key] = Math.max(0, level - 10); saveStore(); renderStatsModalBody(); },
+      onJumpMax: () => { store[currentHunter].hunterStats[key] = cap !== Infinity ? cap : level + 10; saveStore(); renderStatsModalBody(); },
+      onJumpMin: () => { store[currentHunter].hunterStats[key] = 0; saveStore(); renderStatsModalBody(); },
+    });
+    grid.appendChild(card);
+  });
+}
+document.getElementById('closeStatsModalBtn').onclick = () => document.getElementById('statsModal').classList.add('hidden');
+
+// ==================== GEMS PAGE ====================
+// Structure/styling below matches the live Gems.vue markup: a two-line info banner with the
+// "Show only Sim relevant" toggle (persisted the same way, to localStorage), then cards split
+// into a bordered "gem-header" (dot + name + level badge, both using the tree's real gradient)
+// and a body of node buttons (flex row, not a fixed 6-col grid) + upgrade-field rows with a
+// left accent bar in each field's real color.
+
+function renderGemsPage(root) {
+  let hideNonSimRelevant = true;
+  try { hideNonSimRelevant = JSON.parse(localStorage.getItem('gems_showOnlySimRelevant') || 'true'); } catch { /* ignore */ }
+  root.innerHTML = `<h2 class="text-2xl font-bold mb-4 text-center text-white">Gems</h2>
+    <div class="bg-blue-900/30 border border-blue-800 rounded-lg p-3 mb-6 flex items-center justify-between gap-3 flex-wrap">
+      <p class="text-blue-200 text-sm">Configure your current Gem levels, Gem nodes and upgrades here. These values will be used across all tools on this site.</p>
+      <label class="flex items-center gap-2 shrink-0 cursor-pointer">
+        <span class="text-blue-200 text-sm font-medium whitespace-nowrap">Show only Sim relevant:</span>
+        <span data-sim-toggle class="relative inline-flex h-6 w-12 items-center rounded-full transition-colors ${hideNonSimRelevant ? 'bg-green-600' : 'bg-blue-600'}">
+          <span class="inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${hideNonSimRelevant ? 'translate-x-6' : 'translate-x-1'}"></span>
+        </span>
+      </label>
+    </div>
+    <div id="gemTreesGrid" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-1.5"></div>`;
+  // Toggling this OFF reveals each tree's non-sim-relevant fields (GEM_TREES.*.nonSimKeys --
+  // Cells/Shards Bonus, MP Bonus (LMs/Ticks), Studies per Study, Mech Bonus Cap), matching
+  // the live site's own "Show only Sim relevant" behavior exactly; these values are pure
+  // account bookkeeping and never feed HunterSim.evaluate.
+  root.querySelector('[data-sim-toggle]').onclick = () => {
+    hideNonSimRelevant = !hideNonSimRelevant;
+    localStorage.setItem('gems_showOnlySimRelevant', JSON.stringify(hideNonSimRelevant));
+    renderGemsPage(root);
+  };
+  const grid = document.getElementById('gemTreesGrid');
+  Object.entries(window.GEM_TREES).forEach(([key, tree]) => {
+    const state = store.gems[key];
+    const card = document.createElement('div');
+    card.className = 'bg-gray-900/80 border border-gray-700/50 rounded-xl hover:border-gray-500/50 transition-all duration-300 ease-in-out';
+    card.innerHTML = `
+      <div class="gem-header border-b border-gray-600/50 rounded-t-xl p-2 transition-all duration-300 ease-in-out">
+        <div class="flex items-center justify-between mb-1">
+          <div class="flex items-center gap-2">
+            <div class="w-4 h-4 rounded-full border border-gray-500" style="background:${tree.gradient}"></div>
+            <h3 class="text-sm font-semibold text-white truncate">${tree.label}</h3>
+          </div>
+          <span class="text-xs text-white px-1.5 py-0.5 rounded-full font-mono border border-gray-500/50" style="background:${tree.gradient}">${state.level}/${tree.maxLevel}</span>
+        </div>
+        <div class="flex items-center gap-1">
+          <button data-lvl-dec class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded-l-md">${iconSvg('chevron-left', 14)}</button>
+          <span class="flex-1 text-center text-white font-medium bg-gray-800 h-6 flex items-center justify-center border-y border-gray-600" data-lvl-val>${state.level}</span>
+          <button data-lvl-inc class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded-r-md">${iconSvg('chevron-right', 14)}</button>
+        </div>
+      </div>
+      <div class="p-1 space-y-1">
+        <div class="flex gap-1 mt-2 px-1" data-nodes></div>
+        <div class="space-y-1" data-upgrades></div>
+      </div>`;
+
+    const setLevel = (v) => {
+      const newLevel = Math.max(0, Math.min(tree.maxLevel, v));
+      // Confirmed real: dropping a tree's level below a named field's unlock threshold
+      // resets that field back to 0 (it's about to disappear from view).
+      if (newLevel < state.level) {
+        tree.upgradeKeys.forEach((upKey) => {
+          if (newLevel < ((tree.unlocks && tree.unlocks[upKey]) || 1)) state.upgrades[upKey] = 0;
+        });
+        (tree.nonSimKeys || []).forEach((upKey) => {
+          if (newLevel < ((tree.nonSimUnlocks && tree.nonSimUnlocks[upKey]) || 0)) state.upgrades[upKey] = 0;
+        });
+      }
+      state.level = newLevel;
+      // Confirmed real: dropping Exodus below 5 auto-untoggles any tier-2 (exodus-5-gated)
+      // nodes across every OTHER tree, since they're about to become invisible/inaccessible
+      // again. Exodus's OWN nodes are handled separately below since Exodus gates all 6 of
+      // its own nodes on its own level (0 visible until maxed), not just nodes 4-6.
+      if (key === 'exodus' && state.level < window.GEM_TREES.exodus.maxLevel) {
+        Object.entries(store.gems).forEach(([gemKey, s]) => {
+          if (gemKey === 'exodus') { s.nodes.fill(false); return; }
+          for (let i = 3; i < s.nodes.length; i++) s.nodes[i] = false;
+        });
+      }
+      saveStore();
+      renderGemsPage(root);
+    };
+    card.querySelector('[data-lvl-dec]').onclick = () => setLevel(state.level - 1);
+    card.querySelector('[data-lvl-inc]').onclick = () => setLevel(state.level + 1);
+
+    const nodesWrap = card.querySelector('[data-nodes]');
+    // Corrected against a real account (2026-07): the previous comment here ("nodes 4-6 of
+    // every tree, including Exodus's own, unlock at Exodus level 5") was an unverified
+    // assumption and wrong for Exodus specifically. Confirmed directly by maxing a real
+    // account's Exodus tree: Exodus shows ZERO node buttons at any level below its own max,
+    // then all 6 at once the instant it hits 5/5 -- it is NOT "3 always visible, 3 more once
+    // Exodus is maxed" like every OTHER tree. Every other tree (Temporal/Innovation/Power/
+    // Attraction/Creation/Evolution) does follow that shared "3, then 6 once Exodus is maxed"
+    // rule -- only Exodus itself is self-gated on its own level instead.
+    const exodusMaxed = store.gems.exodus.level >= window.GEM_TREES.exodus.maxLevel;
+    const visibleNodeCount = key === 'exodus'
+      ? (exodusMaxed ? tree.nodeCount : 0)
+      : (exodusMaxed ? tree.nodeCount : Math.min(3, tree.nodeCount));
+    const nodesClickable = state.level >= 1;
+    for (let i = 0; i < visibleNodeCount; i++) {
+      const btn = document.createElement('button');
+      btn.textContent = String(i + 1);
+      btn.className = `flex-1 py-1 text-xs rounded font-mono border border-gray-500 hover:scale-105 transition-all duration-200 ease-in-out ${state.nodes[i] ? 'text-white shadow-lg' : 'bg-gray-600/60 text-gray-300 hover:bg-gray-500/60'} ${nodesClickable ? '' : 'opacity-30 cursor-not-allowed'}`;
+      if (state.nodes[i]) btn.style.background = tree.gradient;
+      if (nodesClickable) btn.onclick = () => { state.nodes[i] = !state.nodes[i]; saveStore(); renderGemsPage(root); };
+      else btn.disabled = true;
+      nodesWrap.appendChild(btn);
+    }
+
+    const upgradesWrap = card.querySelector('[data-upgrades]');
+    // Confirmed real: each named upgrade field only appears once this tree's own level
+    // reaches its "unlock" threshold (e.g. Attraction's Knox Loot Bonus needs level 4) --
+    // matches the live bundle's W()/getUpgrades() filter (`s>=e.unlock`) exactly.
+    tree.upgradeKeys.filter((upKey) => state.level >= ((tree.unlocks && tree.unlocks[upKey]) || 1)).forEach((upKey) => {
+      const label = (tree.labels && tree.labels[upKey]) || upKey;
+      const color = (tree.fieldColors && tree.fieldColors[upKey]) || '#6b7280';
+      const val = state.upgrades[upKey] || 0;
+      const wrap = document.createElement('div');
+      wrap.className = 'bg-gray-800/60 rounded-sm p-2 pt-1.5 hover:bg-gray-700/60 transition-colors border-l-3';
+      wrap.style.borderLeftColor = color;
+      wrap.innerHTML = `<div class="flex items-center justify-between mb-1"><span class="text-xs font-medium text-white truncate">${label}</span></div>
+        <div class="flex items-center gap-1">
+          <button data-dec class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded-l-md">${iconSvg('chevron-left', 14)}</button>
+          <span class="flex-1 text-center text-white text-sm font-medium bg-gray-800 h-6 flex items-center justify-center border-y border-gray-600" data-val>${val}</span>
+          <button data-inc class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded-r-md">${iconSvg('chevron-right', 14)}</button>
+        </div>`;
+      const setVal = (v) => { state.upgrades[upKey] = Math.max(0, v); saveStore(); renderGemsPage(root); };
+      wrap.querySelector('[data-dec]').onclick = () => setVal(val - 1);
+      wrap.querySelector('[data-inc]').onclick = () => setVal(val + 1);
+      upgradesWrap.appendChild(wrap);
+    });
+
+    if (!hideNonSimRelevant) {
+      // nonSimUnlocks mirrors upgradeKeys' own unlock-threshold gating (e.g. Exodus's 5 extra
+      // bonus fields only appear once Exodus's own level is maxed) -- previously ungated,
+      // showing every nonSimKey unconditionally regardless of whether the account could
+      // actually see it yet.
+      (tree.nonSimKeys || []).filter((upKey) => state.level >= ((tree.nonSimUnlocks && tree.nonSimUnlocks[upKey]) || 0)).forEach((upKey) => {
+        const label = (tree.nonSimLabels && tree.nonSimLabels[upKey]) || upKey;
+        const cap = (tree.nonSimCaps && tree.nonSimCaps[upKey]) ?? null;
+        const val = state.upgrades[upKey] || 0;
+        const wrap = document.createElement('div');
+        wrap.className = 'bg-gray-800/60 rounded-sm p-2 pt-1.5 hover:bg-gray-700/60 transition-colors border-l-3';
+        wrap.style.borderLeftColor = (tree.nonSimFieldColors && tree.nonSimFieldColors[upKey]) || '#6b7280';
+        wrap.innerHTML = `<div class="flex items-center justify-between mb-1"><span class="text-xs font-medium text-white truncate">${label}</span>${cap !== null ? `<span class="text-[10px] text-gray-500">${cap}</span>` : ''}</div>
+          <div class="flex items-center gap-1">
+            <button data-dec class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded-l-md">${iconSvg('chevron-left', 14)}</button>
+            <span class="flex-1 text-center text-white text-sm font-medium bg-gray-800 h-6 flex items-center justify-center border-y border-gray-600" data-val>${val}</span>
+            <button data-inc class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded-r-md">${iconSvg('chevron-right', 14)}</button>
+          </div>`;
+        const setVal = (v) => { state.upgrades[upKey] = Math.max(0, cap !== null ? Math.min(cap, v) : v); saveStore(); renderGemsPage(root); };
+        wrap.querySelector('[data-dec]').onclick = () => setVal(val - 1);
+        wrap.querySelector('[data-inc]').onclick = () => setVal(val + 1);
+        upgradesWrap.appendChild(wrap);
+      });
+    }
+    grid.appendChild(card);
+  });
+}
+
+// ==================== BUILD CREATOR MODAL ====================
+
+function openBuildModal(build) {
+  editingBuild = JSON.parse(JSON.stringify(build));
+  if (!editingBuild.categoryId) editingBuild.categoryId = 'active';
+  const nameEl = document.getElementById('modalHunterName');
+  nameEl.textContent = currentHunter[0].toUpperCase() + currentHunter.slice(1);
+  nameEl.className = `text-${HUNTER_ACCENTS[currentHunter]}-400`;
+  document.getElementById('buildNameInput').value = editingBuild.name;
+  document.getElementById('levelInput').value = editingBuild.level;
+  renderBudgetHeader();
+  renderTalents();
+  renderAttributes();
+
+  // "Load Scanned Values" prefills level + talents from the most recently imported save file
+  // for this hunter (independent of any "<Hunter> Build (Scanned)" card) -- lets you pull
+  // real values into ANY build you're editing, not just the auto-managed scanned one.
+  const scan = window.__lastScan?.[currentHunter];
+  const loadScannedBtn = document.getElementById('loadScannedBtn');
+  loadScannedBtn.classList.toggle('hidden', !scan);
+  loadScannedBtn.onclick = () => {
+    if (!scan) return;
+    if (scan.level !== undefined) editingBuild.level = scan.level;
+    Object.entries(scan.talents || {}).forEach(([id, level]) => { editingBuild.talents[id] = level; });
+    Object.entries(scan.attributes || {}).forEach(([id, level]) => { editingBuild.attributes[id] = level; });
+    document.getElementById('levelInput').value = editingBuild.level;
+    onBuildChanged();
+  };
+
+  document.getElementById('modalOverridesBtn').onclick = () => {
+    openOverridesModal(editingBuild, (overrides) => { editingBuild.overrides = overrides; });
+  };
+
+  document.getElementById('buildModal').classList.remove('hidden');
+}
+function closeBuildModal() { document.getElementById('buildModal').classList.add('hidden'); editingBuild = null; }
+
+function renderBudgetHeader() {
+  const { talentBudget, attributeBudget } = budgetsForLevel(editingBuild.level);
+  const talentSpent = defs().talents.reduce((s, t) => s + (editingBuild.talents[t.id] || 0), 0);
+  const attrSpent = defs().attributes.reduce((s, a) => s + (editingBuild.attributes[a.id] || 0) * (a.cost || 1), 0);
+  document.getElementById('levelInput').value = editingBuild.level;
+  document.getElementById('talentBudgetDisplay').textContent = `${talentSpent}/${talentBudget}`;
+  document.getElementById('attrBudgetDisplay').textContent = `${attrSpent}/${attributeBudget}`;
+}
+
+// Verbatim port of the live Build Creator's per-item card, captured via outerHTML from
+// cifi-tools.com (see conversation history): a single chevron-left / progress-bar /
+// chevron-right row (NOT a min/dec/inc/max quad -- the live site has no "jump to max/min"
+// buttons), duplicated as a "hidden md:block" desktop layout and a "md:hidden" mobile
+// layout, matching the real DOM's two parallel copies exactly (classes copied 1:1).
+function renderStepperCard({ label, subLabel, level, maxLevel, accentColor, canInc, canDec, onInc, onDec }) {
+  const maxed = maxLevel !== Infinity && level >= maxLevel;
+  const pct = maxLevel === Infinity ? 0 : (level / maxLevel) * 100;
+  const disabledAttrs = (enabled) => enabled ? '' : 'disabled style="opacity:.2;cursor:not-allowed"';
+  const div = document.createElement('div');
+  div.className = 'bg-gray-700 rounded-lg p-2 border border-gray-600 hover:border-gray-500 transition-colors';
+  div.innerHTML = `
+    <div class="hidden md:block">
+      <div class="flex justify-between items-center mb-2">
+        <div class="flex flex-col">
+          <span class="text-xs sm:text-sm font-medium text-white">${label}</span>
+          ${subLabel ? `<span class="text-xs text-gray-400">${subLabel}</span>` : ''}
+        </div>
+        <div class="flex items-center"><span class="text-base font-bold text-${accentColor}-400">${level}</span><span class="text-xs text-gray-500 ml-1"> /${maxLevel === Infinity ? '∞' : maxLevel}</span></div>
+      </div>
+      <div class="flex items-center justify-between mt-2">
+        <button data-dec class="flex justify-center items-center bg-gray-800 hover:bg-gray-700 rounded transition-colors ml-1 ${canDec ? '' : 'opacity-20 cursor-not-allowed hover:bg-gray-900'} p-2" ${disabledAttrs(canDec)} style="min-width:2.5rem;">${iconSvg('chevron-left', 18)}</button>
+        <div class="w-full rounded-full overflow-hidden relative h-2 border border-${accentColor}-500/20 ${maxed ? 'progress-bar--maxed' : ''} flex-1 mx-1.5 h-5">
+          <div class="absolute inset-0 bg-gray-800/90 rounded-full"></div>
+          <div class="h-full relative rounded-full transition-all duration-300 overflow-hidden bg-gradient-to-r from-${accentColor}-700 via-${accentColor}-500 to-${accentColor}-400 ${maxed ? 'progress-fill--maxed' : ''}" style="width:${pct}%"></div>
+        </div>
+        <button data-inc class="flex justify-center items-center bg-gray-800 hover:bg-gray-700 rounded transition-colors mr-1 ${canInc ? '' : 'opacity-20 cursor-not-allowed hover:bg-gray-900'} p-2" ${disabledAttrs(canInc)} style="min-width:2.5rem;">${iconSvg('chevron-right', 18)}</button>
+      </div>
+    </div>
+    <div class="md:hidden">
+      <div class="flex flex-col mb-1">
+        <span class="text-xs font-medium text-white">${label}</span>
+        ${subLabel ? `<span class="text-xs text-gray-400">${subLabel}</span>` : ''}
+      </div>
+      <div class="flex items-center justify-between mt-2">
+        <button data-dec-m class="flex justify-center items-center bg-gray-800 hover:bg-gray-700 rounded transition-colors ml-1 ${canDec ? '' : 'opacity-20 cursor-not-allowed hover:bg-gray-900'} p-1.5" ${disabledAttrs(canDec)} style="min-width:2rem;">${iconSvg('chevron-left', 16)}</button>
+        <div class="flex items-center justify-center"><span class="text-base font-bold text-${accentColor}-400 pr-1">${level}</span><span class="text-xs text-gray-500"> /${maxLevel === Infinity ? '∞' : maxLevel}</span></div>
+        <button data-inc-m class="flex justify-center items-center bg-gray-800 hover:bg-gray-700 rounded transition-colors mr-1 ${canInc ? '' : 'opacity-20 cursor-not-allowed hover:bg-gray-900'} p-1.5" ${disabledAttrs(canInc)} style="min-width:2rem;">${iconSvg('chevron-right', 16)}</button>
+      </div>
+    </div>`;
+  if (canInc) { div.querySelector('[data-inc]').onclick = onInc; div.querySelector('[data-inc-m]').onclick = onInc; }
+  if (canDec) { div.querySelector('[data-dec]').onclick = onDec; div.querySelector('[data-dec-m]').onclick = onDec; }
+  return div;
+}
+
+// "Call Me Lucky Loot"'s cap is NOT static -- confirmed straight from the live bundle's own
+// talent table (`getMaxValue`): it's 10 normally but 12 once the Attraction gem tree's 2nd
+// node is unlocked (or the equivalent gem-node override is set on the build). Every other
+// talent's cap is static.
+// talentMaxLevel() used to live here: a hardcoded `if (t.id === 'll')` special case consulted by
+// exactly two render paths. The optimizer never called it, so the search believed Lucky Loot
+// capped at 10 while the editor let you take it to 12 -- and the search then rejected a legal
+// imported build as illegal. The rule now lives once, as `dynamicMaxLevel` on the node itself in
+// hunterDefs.js, and every consumer gets it by resolving defs through cappedDefs()/cfgFor().
+
+// Verbatim port of the live site's advanced-talent visibility rule: a manual per-hunter
+// "Show Advanced" toggle (store.settings.advancedTalents[hunter], set from the Settings
+// page), which auto-flips true the moment ANY build for that hunter already has points in
+// an advanced talent (confirmed directly in the live bundle's own store-init logic) -- so a
+// build imported/scanned with real Ultima points immediately reveals the talent instead of
+// silently hiding data the account actually has.
+function shouldShowAdvancedTalents(hunter) {
+  if (store.settings.advancedTalents[hunter]) return true;
+  const d = window.HUNTER_DEFS[hunter];
+  const advancedIds = d.talents.filter((t) => t.advanced).map((t) => t.id);
+  const hasPoints = store[hunter].builds.some((b) => advancedIds.some((id) => (b.talents?.[id] || 0) > 0));
+  if (hasPoints) { store.settings.advancedTalents[hunter] = true; saveStore(); }
+  return hasPoints;
+}
+
+function renderTalents() {
+  const grid = document.getElementById('talentsGrid');
+  grid.innerHTML = '';
+  const { talentBudget } = budgetsForLevel(editingBuild.level);
+  const showAdvanced = shouldShowAdvancedTalents(currentHunter);
+  const talentDefs = cappedDefs(currentHunter, editingBuild).talents;
+  talentDefs.filter((t) => !t.advanced || showAdvanced || (editingBuild.talents[t.id] || 0) > 0).forEach((t) => {
+    const level = editingBuild.talents[t.id] || 0;
+    const spent = talentDefs.reduce((s, tt) => s + (editingBuild.talents[tt.id] || 0), 0);
+    const maxLevel = t.maxLevel;
+    const canInc = level < maxLevel && spent < talentBudget;
+    const canDec = level > 0;
+    const card = renderStepperCard({
+      label: t.label, level, maxLevel, accentColor: HUNTER_ACCENTS[currentHunter], canInc, canDec,
+      onInc: () => { editingBuild.talents[t.id] = level + 1; onBuildChanged(); },
+      onDec: () => { editingBuild.talents[t.id] = level - 1; onBuildChanged(); },
+    });
+    grid.appendChild(card);
+  });
+}
+
+function renderAttributes() {
+  const grid = document.getElementById('attributesGrid');
+  grid.innerHTML = '';
+  const d = defs();
+  const deps = d.attributeDependencies; const minVal = d.attributeMinValue;
+  d.attributes.forEach((a) => {
+    const level = editingBuild.attributes[a.id] || 0;
+    const canInc = AllocSpace.isEligible(a, d.attributes, deps, minVal, editingBuild.attributes)
+      && AllocSpace.costOf(d.attributes, editingBuild.attributes) + (a.cost || 1) <= budgetsForLevel(editingBuild.level).attributeBudget;
+    const canDec = level > 0;
+    const card = renderStepperCard({
+      label: a.label, subLabel: `(Cost: ${a.cost || 1} point${(a.cost || 1) > 1 ? 's' : ''})`,
+      level, maxLevel: a.maxLevel, accentColor: HUNTER_ACCENTS[currentHunter], canInc, canDec,
+      onInc: () => { editingBuild.attributes[a.id] = level + 1; onBuildChanged(); },
+      onDec: () => {
+        editingBuild.attributes[a.id] = level - 1;
+        AllocSpace.clearInvalidDescendants(d.attributes, deps, minVal, editingBuild.attributes);
+        onBuildChanged();
+      },
+    });
+    grid.appendChild(card);
+  });
+}
+
+// Dropping a build's level shrinks its talent/attribute point budget, but nothing removed the
+// points already spent under the OLD, larger budget -- the editor's own header just displayed
+// an over-budget "spent/budget" pair (e.g. 46/45) without ever fixing it. Optimize then used
+// that still-over-budget allocation as its "current build" seed/baseline, and since the wasm
+// sim just evaluates whatever raw levels it's given (it has no concept of "budget" itself),
+// the illegal extra point(s) made that stale allocation score artificially high and kept
+// winning every comparison -- which is why lowering the level and re-running Optimize kept
+// acting like the build was still at its old, higher level. Refund points (starting from
+// whichever talent/attribute currently holds the most, then repairing any dependency chain a
+// removal stranded) until the allocation actually fits the new budget, same as the real game
+// would refund on a level-down.
+function trimAllocationToBudget(hunter, level) {
+  const d = window.HUNTER_DEFS[hunter];
+  const { talentBudget, attributeBudget } = budgetsForLevel(level);
+  // CAPS MUST BE THE ACCOUNT'S, NOT THE STATIC ONES, AND READING THE STATIC ONES HERE SILENTLY
+  // DELETED POINTS.
+  //
+  // trimToBudget ends in clearInvalidDescendants, and `isHeld` treats a node above its cap as
+  // invalid -- which does not clamp it, it sets it to ZERO. Borge's Call Me Lucky Loot caps at 10
+  // statically and at 12 once Attraction gem node 2 is owned, so on an account that owns that node
+  // this ran on every single build change and threw away all 12 points.
+  //
+  // Observed end to end: the optimizer returned a legal 60/60 build containing ll:12, this trim
+  // then zeroed ll, and the build landed at 48/60 with the dominant loot talent at zero -- roughly
+  // half the loot score, reported as "the optimizer leaves talent points on the table". The search
+  // was never at fault; its own Stage 3 assertion had already proved the winner spent its budget.
+  //
+  // cappedDefs() resolves against this build's account context, the same defs the optimizer and
+  // the build card use.
+  const capped = cappedDefs(hunter, editingBuild);
+  AllocSpace.trimToBudget(capped.talents, {}, {}, talentBudget, editingBuild.talents);
+  AllocSpace.trimToBudget(capped.attributes, d.attributeDependencies, d.attributeMinValue, attributeBudget, editingBuild.attributes);
+}
+
+function onBuildChanged() {
+  trimAllocationToBudget(currentHunter, editingBuild.level);
+  renderBudgetHeader(); renderTalents(); renderAttributes();
+}
+
+// AN EMPTY FIELD MEANS "MID-EDIT", NOT "LEVEL 1".
+//
+// This used to run `Number('') || 1` on every keystroke, so clearing the box instantly became 1 --
+// and onBuildChanged() re-renders, writing that 1 straight back under the cursor. The box could
+// therefore never be emptied: to type 60 you had to type it AROUND the 1 and then delete the 1,
+// and typing into a field that already reads "1" silently produces 160 or 601. That is a build at
+// the wrong level, which changes both budgets and re-trims the allocation.
+//
+// While the field is empty the model is left alone; blur settles it back to the last good value.
+const levelInputEl = document.getElementById('levelInput');
+levelInputEl.addEventListener('input', (e) => {
+  const raw = String(e.target.value).trim();
+  if (raw === '') return;   // still typing -- do not clamp, do not re-render
+  const next = Math.max(1, Math.floor(Number(raw) || 1));
+  if (next === editingBuild.level) return;   // no-op keystrokes must not re-render the field
+  editingBuild.level = next;
+  onBuildChanged();
+});
+levelInputEl.addEventListener('blur', () => {
+  // Commit: an empty or unparseable field falls back to the level the build still has.
+  levelInputEl.value = editingBuild.level;
+});
+document.getElementById('levelDecBtn').innerHTML = iconSvg('chevron-left', 14);
+document.getElementById('levelIncBtn').innerHTML = iconSvg('chevron-right', 14);
+document.getElementById('levelDecBtn').onclick = () => {
+  editingBuild.level = Math.max(1, editingBuild.level - 1);
+  document.getElementById('levelInput').value = editingBuild.level;
+  onBuildChanged();
+};
+document.getElementById('levelIncBtn').onclick = () => {
+  editingBuild.level = editingBuild.level + 1;
+  document.getElementById('levelInput').value = editingBuild.level;
+  onBuildChanged();
+};
+
+document.getElementById('updateBuildBtn').onclick = () => {
+  editingBuild.name = document.getElementById('buildNameInput').value.trim() || 'Unnamed';
+  if (!editingBuild.id) editingBuild.id = genBuildId();
+  const builds = store[currentHunter].builds;
+  const idx = builds.findIndex((b) => b.id === editingBuild.id);
+  if (idx >= 0) builds[idx] = editingBuild; else builds.push(editingBuild);
+  saveStore();
+  closeBuildModal();
+  renderCategoryTabs();
+  renderBuildList();
+};
+document.getElementById('closeModalBtn').onclick = closeBuildModal;
+
+// ==================== IMPORT / EXPORT ====================
+// Build-sharing codes (see buildCode.js) -- byte-compatible with the real cifi-tools.com
+// format, so a code generated here imports on the live site and vice versa.
+
+// Verbatim port of the live "Share Build" modal (captured via outerHTML from
+// cifi-tools.com) -- window.prompt() is unreliable/silently blocked inside sandboxed
+// preview iframes, which is why the share button previously appeared to do nothing. The
+// real site never uses prompt() at all: it's a proper modal with a Raw Code / Discord
+// format toggle (Discord wraps the code in a ```-fenced block preceded by a
+// "**Hunter** • Level N • 🔥 X Loot Score" line) and a separate shareable-link row.
+const HUNTER_DISCORD_EMOJI = { borge: ':CIFI_EXPHuntBorge:', ozzy: ':CIFI_EXPHuntOzzy:', knox: ':CIFI_EXPHuntKnox:' };
+
+// THE HUNTER TRAVELS WITH THE BUILD, it is not read from a global at encode time.
+//
+// This used to take only `build` and encode against `currentHunter`. A build object does not
+// carry its own hunter, so the two could disagree -- and when they did, the export produced a
+// perfectly valid share code for the WRONG hunter, with nothing to indicate it. Callers now pass
+// the hunter the card was rendered for, captured at render time, so the code always describes the
+// build the user clicked.
+async function exportBuildCode(build, hunter = currentHunter) {
+  try {
+    const code = await window.generateBuildCode(hunter, build, store[hunter].hunterStats, store.globalUpgrades, store.gems);
+    const iterations = currentIterations();
+    let lootScore = 0;
+    try {
+      const r = await HunterSim.evaluate(currentHunter, evalStateFor(build, iterations));
+      lootScore = r.lootPerMin;
+    } catch { /* share still works without a loot score line */ }
+    openShareModal(build, code, lootScore);
+  } catch (e) {
+    alert('Failed to generate build code: ' + e.message);
+  }
+}
+
+function openShareModal(build, code, lootScore) {
+  const existing = document.getElementById('shareBuildModal');
+  if (existing) existing.remove();
+  const hunterName = currentHunter[0].toUpperCase() + currentHunter.slice(1);
+  const discordText = `**${hunterName}**  •  ${HUNTER_DISCORD_EMOJI[currentHunter] || ''} Level ${build.level}  •  🔥 ${fmt(lootScore)} Loot Score\n\`\`\`\n${code}\n\`\`\``;
+  // A QUERY ON THE APP ROOT, NOT A PATH SEGMENT.
+  //
+  // This used to build `<root>/ozzy?code=XXXX`, copying the original site's path format. The
+  // original is served by something that can route; this app is static files on GitHub Pages,
+  // where `/ozzy` is simply not a file -- so EVERY share link this button produced returned a 404
+  // page. It had never worked in production, and could not be noticed by whoever generated one,
+  // only by whoever clicked it.
+  //
+  // `<root>/?hunter=ozzy&code=XXXX` requests the app root, which is a real file everywhere, and
+  // carries the same information. 404.html still rewrites the old path form for links already
+  // pasted into Discord.
+  const shareRoot = `${location.origin}${location.pathname.replace(/[^/]*$/, '')}`;
+  const link = `${shareRoot}?hunter=${encodeURIComponent(currentHunter)}`
+    + `&code=${encodeURIComponent(code)}`;
+  const overlay = document.createElement('div');
+  overlay.id = 'shareBuildModal';
+  overlay.className = 'fixed inset-0 z-50 overflow-y-auto bg-gray-900/80 flex items-center justify-center p-4';
+  overlay.innerHTML = `
+    <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in border border-gray-700">
+      <div class="bg-gradient-to-r from-gray-700 to-gray-800 p-4 border-b border-gray-600 flex justify-between items-center">
+        <h2 class="text-xl font-bold text-white flex items-center">${iconSvg('share', 20, 'mr-2 text-blue-400')} Share Build </h2>
+        <button data-close class="p-1.5 rounded-full hover:bg-gray-700 transition-colors text-gray-300 hover:text-white">${iconSvg('x', 18)}</button>
+      </div>
+      <div class="p-5">
+        <p class="text-sm text-gray-300 mb-4"> Choose your sharing format: </p>
+        <div class="mb-4"><textarea data-preview readonly class="w-full bg-gray-700 border border-gray-600 rounded-md p-3 text-white text-sm h-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none font-mono"></textarea></div>
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          <button data-fmt="raw" class="p-2 rounded-md transition-colors flex flex-col justify-center items-center gap-1 text-white">
+            <div class="flex items-center gap-1">${iconSvg('copy', 16)}<span class="text-xs font-medium">Raw Code</span></div>
+            <span class="text-[10px] text-gray-300">Direct import</span>
+          </button>
+          <button data-fmt="discord" class="p-2 rounded-md transition-colors flex flex-col justify-center items-center gap-1 text-white">
+            <div class="flex items-center gap-1">${iconSvg('share', 16)}<span class="text-xs font-medium">Discord</span></div>
+            <span class="text-[10px] text-gray-300">Share formatted</span>
+          </button>
+        </div>
+        <div class="p-3 bg-blue-900/20 border border-blue-500/30 rounded-md mb-4">
+          <p class="text-xs text-blue-300 mb-1"><strong data-fmt-label></strong></p>
+          <p class="text-xs text-gray-400" data-fmt-desc></p>
+        </div>
+        <div class="border-t border-gray-600 pt-4">
+          <p class="text-sm text-gray-300 mb-3"> Or share this link: </p>
+          <div class="flex">
+            <input readonly class="flex-grow bg-gray-700 border border-gray-600 rounded-l-md p-2 text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" value="${escapeHtml(link)}">
+            <button data-copy-link class="bg-blue-600 hover:bg-blue-700 px-3 rounded-r-md transition-colors text-white">${iconSvg('copy', 18)}</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const preview = overlay.querySelector('[data-preview]');
+  const rawBtn = overlay.querySelector('[data-fmt="raw"]');
+  const discordBtn = overlay.querySelector('[data-fmt="discord"]');
+  const setFmt = (fmt) => {
+    const active = 'bg-blue-600 hover:bg-blue-700 ring-2 ring-blue-400';
+    const inactive = 'bg-gray-600 hover:bg-gray-700';
+    rawBtn.className = `p-2 rounded-md transition-colors flex flex-col justify-center items-center gap-1 text-white ${fmt === 'raw' ? active : inactive}`;
+    discordBtn.className = `p-2 rounded-md transition-colors flex flex-col justify-center items-center gap-1 text-white ${fmt === 'discord' ? active : inactive}`;
+    preview.value = fmt === 'discord' ? discordText : code;
+    overlay.querySelector('[data-fmt-label]').textContent = fmt === 'discord' ? 'Discord Format:' : 'Raw Format:';
+    overlay.querySelector('[data-fmt-desc]').textContent = fmt === 'discord'
+      ? 'Includes build info and Discord code block formatting for easy sharing.'
+      : 'Pure build code for direct import into the application.';
+  };
+  rawBtn.onclick = () => setFmt('raw');
+  discordBtn.onclick = () => setFmt('discord');
+  setFmt('raw');
+  overlay.querySelector('[data-copy-link]').onclick = () => navigator.clipboard?.writeText(link).catch(() => {});
+  overlay.querySelector('[data-close]').onclick = () => overlay.remove();
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+}
+document.getElementById('exportBuildBtn').onclick = () => exportBuildCode(editingBuild);
+
+document.getElementById('cancelImportBtn').onclick = () => resetImportModal();
+function resetImportModal() {
+  document.getElementById('importModal').classList.add('hidden');
+  document.getElementById('importCodeInput').value = '';
+  document.getElementById('importPreview').classList.add('hidden');
+  window.__pendingImportPayload = null;
+}
+
+// Matches the live site's actual import flow (confirmed live: paste a code, it shows a
+// "<Hunter> Build" preview, then two buttons -- "Import Build Only" (talents/attributes
+// only) and "Import with Upgrades" (everything else too, except pure-loot upgrades since
+// the live UI's own tooltip says those "don't affect loot score") -- rather than a single
+// blind "Import" button with no choice.
+document.getElementById('importCodeInput').addEventListener('input', async (e) => {
+  const code = e.target.value.trim();
+  const preview = document.getElementById('importPreview');
+  if (!code) { preview.classList.add('hidden'); window.__pendingImportPayload = null; return; }
+  try {
+    const payload = await window.parseBuildCode(code);
+    if (!payload) throw new Error('unrecognized');
+    window.__pendingImportPayload = payload;
+    document.getElementById('importPreviewName').textContent = `${payload.hunter[0].toUpperCase()}${payload.hunter.slice(1)} Build`;
+    preview.classList.remove('hidden');
+  } catch (err) {
+    window.__pendingImportPayload = null;
+    preview.classList.add('hidden');
+  }
+});
+
+function applyImportedBuild(payload, includeUpgrades) {
+  // THE BUILD IS FILED UNDER THE CODE'S OWN HUNTER, EXPLICITLY.
+  //
+  // This used to call switchHunter() and then push into `store[currentHunter]`, i.e. it depended
+  // on a SIDE EFFECT of that call having already mutated a global. Observed on the deployed site:
+  // importing an Ozzy code while viewing Borge filed the build under BORGE -- three of them --
+  // and the store validator caught it as `borge.builds[0].attributes.timeless = 5 is not legal`,
+  // because an Ozzy allocation is illegal in Borge's attribute tree.
+  //
+  // A build under the wrong hunter is evaluated with the wrong hunter's parameter vector, which is
+  // the failure this project has already paid for once: a Knox build scored with Ozzy's stats
+  // returned a perfectly plausible number and sent an entire investigation the wrong way.
+  //
+  // `targetHunter` is derived from the payload and used for every write below, so the destination
+  // no longer depends on whether a UI navigation happened to succeed first. switchHunter is still
+  // called -- the user should end up looking at the build they just imported -- but nothing
+  // depends on it having worked.
+  const targetHunter = (payload.hunter && store[payload.hunter]) ? payload.hunter : currentHunter;
+  if (targetHunter !== currentHunter) switchHunter(targetHunter);
+  const build = newDraftBuild();
+  // Must assign a real id before pushing directly into the store -- leaving it null and
+  // relying on the "Save Build" handler to assign one later only works for drafts opened
+  // via the modal (which aren't in the array yet). A null-id build already in the array
+  // gets a DIFFERENT id assigned the first time it's edited and saved, so the update
+  // handler's id-match lookup fails to find the original and pushes a second copy instead
+  // of overwriting it -- this was the "editing creates a duplicate" bug.
+  build.id = genBuildId();
+  build.name = payload.name || 'Imported';
+  build.level = payload.level || 1;
+  Object.assign(build.talents, payload.talents || {});
+  Object.assign(build.attributes, payload.attributes || {});
+  if (includeUpgrades) {
+    Object.assign(build.overrides, payload.overrides || {});
+    Object.entries(payload.upgradeOverrides || {}).forEach(([key, val]) => {
+      if (!window.isPureLootOverrideKey(key)) build.overrides[key] = val;
+    });
+    // Base-stat overrides (hp/atk/regen/etc.) and global-upgrade overrides (relics,
+    // inscryptions, gadgets, diamond specials/cards, gem nodes) both encode real account-wide
+    // values captured at import time, but were only ever written onto THIS one build's
+    // overrides object -- any OTHER build for the same hunter (most of all a brand new blank
+    // one) never saw them and fell back to the all-zero fresh-install baseline, so hitting
+    // Optimize on a from-scratch build scored as if the account had no relics/stats at all.
+    // Propagate them into the actual global stores (store[hunter].hunterStats /
+    // store.globalUpgrades / store.gems) so every build -- including ones that don't exist
+    // yet -- inherits the real current account state through the normal fallback path,
+    // instead of needing its own copy of every override.
+    const baseKeys = new Set(window.HUNTER_DEFS[targetHunter]?.baseStatKeys || []);
+    const applyGlobal = (key, val) => {
+      if (baseKeys.has(key)) { store[targetHunter].hunterStats[key] = val; return; }
+      const m = /^upgrades\.gems_nodes\.(.+)$/.exec(key);
+      if (m) { /* gem node state has its own dedicated store shape; skip rather than guess */ return; }
+      const u = /^upgrades\.(.+)$/.exec(key);
+      if (u) { store.globalUpgrades[u[1]] = val; return; }
+      if (key in store[targetHunter].hunterStats) store[targetHunter].hunterStats[key] = val;
+    };
+    Object.entries(payload.overrides || {}).forEach(([key, val]) => applyGlobal(key, val));
+    Object.entries(payload.upgradeOverrides || {}).forEach(([key, val]) => {
+      if (!window.isPureLootOverrideKey(key)) applyGlobal(key, val);
+    });
+  }
+  store[targetHunter].builds.push(build);
+  saveStore();
+  resetImportModal();
+  renderCategoryTabs(); renderBuildList();
+}
+document.getElementById('importBuildOnlyBtn').onclick = () => {
+  if (window.__pendingImportPayload) applyImportedBuild(window.__pendingImportPayload, false);
+};
+document.getElementById('importWithUpgradesBtn').onclick = () => {
+  if (window.__pendingImportPayload) applyImportedBuild(window.__pendingImportPayload, true);
+};
+
+// ==================== IMPORT SAVE FILE ====================
+// Decodes the actual CIFI DATA.text/CifiBackup.text save (see saveImport.js for the fully
+// reverse-engineered AES scheme) and maps confirmed fields onto the store. Two input paths:
+// the local CIFI Bridge (ADB, auto-detected) or a directly dropped/selected file -- both feed
+// the same decode+map+apply pipeline, so there's no server involved either way.
+
+function getImportPrefs() {
+  if (!store.importPrefs) store.importPrefs = defaultImportPrefs();
+  return store.importPrefs;
+}
+
+function wireImportChecklist() {
+  const prefs = getImportPrefs();
+  const checkboxes = document.querySelectorAll('#importSaveModal [data-import-cat]');
+  checkboxes.forEach((cb) => {
+    cb.checked = prefs.categories[cb.dataset.importCat] !== false;
+    cb.onchange = () => { prefs.categories[cb.dataset.importCat] = cb.checked; saveStore(); };
+  });
+  const setAll = (checked) => {
+    checkboxes.forEach((cb) => { cb.checked = checked; prefs.categories[cb.dataset.importCat] = checked; });
+    saveStore();
+  };
+  document.getElementById('importSelectAllBtn').onclick = () => setAll(true);
+  document.getElementById('importDeselectAllBtn').onclick = () => setAll(false);
+  const pollToggle = document.getElementById('importAutoPollToggle');
+  pollToggle.checked = !!prefs.autoPoll;
+  pollToggle.onchange = () => { prefs.autoPoll = pollToggle.checked; saveStore(); scheduleAutoPollSave(); };
+  const quietToggle = document.getElementById('importAutoPollQuietToggle');
+  quietToggle.checked = !!prefs.quiet;
+  quietToggle.onchange = () => { prefs.quiet = quietToggle.checked; saveStore(); };
+  renderAutoPollStatus();
+
+  const body = document.getElementById('importChecklistBody');
+  const chevron = document.getElementById('importChecklistChevron');
+  const applyCollapsed = () => {
+    body.classList.toggle('hidden', prefs.checklistCollapsed);
+    chevron.style.transform = prefs.checklistCollapsed ? 'rotate(-90deg)' : '';
+  };
+  applyCollapsed();
+  document.getElementById('importChecklistToggleBtn').onclick = () => {
+    prefs.checklistCollapsed = !prefs.checklistCollapsed;
+    saveStore();
+    applyCollapsed();
+  };
+}
+
+function openImportSaveModal() {
+  document.getElementById('importSaveModal').classList.remove('hidden');
+  document.getElementById('importSaveResult').innerHTML = '';
+  wireImportChecklist();
+  const statusText = document.getElementById('importSaveBridgeText');
+  const pullBtn = document.getElementById('importSaveBridgePullBtn');
+  pullBtn.classList.add('hidden');
+  statusText.textContent = 'Checking for local CIFI Bridge…';
+  window.tryConnectCifiBridge().then((ws) => {
+    if (ws) {
+      statusText.textContent = 'CIFI Bridge detected — pull the save directly from your device.';
+      window.checkCifiBridgeAdbStatus(ws).then((status) => {
+        const desc = describeAdbDeviceStatus(status);
+        if (desc) statusText.textContent = `CIFI Bridge detected (${desc}) — pull the save directly from your device.`;
+      });
+      pullBtn.classList.remove('hidden');
+      pullBtn.onclick = async () => {
+        pullBtn.disabled = true;
+        statusText.textContent = 'Pulling save from device…';
+        try {
+          const rawText = await window.pullCifiSaveViaBridge(ws);
+          await processImportedSaveText(rawText);
+        } catch (e) {
+          renderImportSaveResult(`Bridge pull failed: ${e.message}`, true);
+        } finally {
+          pullBtn.disabled = false;
+          statusText.textContent = 'CIFI Bridge detected — pull the save directly from your device.';
+        }
+      };
+    } else {
+      statusText.textContent = 'No local CIFI Bridge detected — drop a save file below instead.';
+    }
+  });
+}
+document.getElementById('closeImportSaveBtn').onclick = () => document.getElementById('importSaveModal').classList.add('hidden');
+
+function renderImportSaveResult(message, isError) {
+  const el = document.getElementById('importSaveResult');
+  el.innerHTML = `<div class="${isError ? 'text-red-400' : 'text-green-400'}">${message}</div>`;
+}
+
+async function processImportedSaveText(rawText, silent) {
+  if (!silent) renderImportSaveResult('Decoding save…');
+  let save;
+  try {
+    save = await window.decodeCifiSaveText(rawText);
+  } catch (e) {
+    if (!silent) renderImportSaveResult(`Could not decode this file (${e.message}). Make sure it's an unmodified DATA.text or CifiBackup.text.`, true);
+    return { applied: [], error: e.message };
+  }
+  const prefs = getImportPrefs();
+  // A CATEGORY THE USER HAS NEVER SEEN DEFAULTS TO ON, AND THE TWO PLACES THAT DECIDE THAT MUST
+  // AGREE. The checklist renders a box as checked when the pref is `!== false`, so a category
+  // added after the user last saved their prefs shows ticked -- but this path read plain
+  // truthiness, where `undefined` is FALSE. So a newly added category appeared enabled and was
+  // silently skipped. That is exactly what happened to `matsExchange`: the mapping existed, the
+  // box was ticked, and nothing was imported.
+  const cats = new Proxy(prefs.categories, {
+    get: (target, key) => target[key] !== false,
+  });
+  const mapped = window.mapCifiSaveToStore(save);
+  const applied = []; // categories that were checked AND actually changed something
+
+  // Snapshots a store slice before mutating it, then reports whether anything in it actually
+  // differs afterward -- an idle game's raw save changes almost every single pull (currency,
+  // timers, tick counters all drift constantly), so "was this category checked" is NOT the same
+  // question as "did applying it actually change anything the user would care about." Silent
+  // auto-poll imports use this to decide whether to notify at all; even the manual modal result
+  // now reports real changes instead of just echoing back whichever boxes were checked.
+  const diffApply = (label, getSlice, apply) => {
+    const before = JSON.stringify(getSlice());
+    apply();
+    const after = JSON.stringify(getSlice());
+    if (before !== after) applied.push(label);
+  };
+
+  // Ship-related pieces used to be one all-or-nothing call -- now each is its own checklist
+  // item, so applyImportedShipData takes exactly which ones to apply.
+  const shipCats = {
+    shipRanks: !!cats.shipRanks, shipGear: !!cats.shipGear, unlockedGens: !!cats.unlockedGens,
+    gearSets: !!cats.gearSets, fleetBadges: !!cats.fleetBadges, fleetResearch: !!cats.fleetResearch,
+  };
+  if (Object.values(shipCats).some(Boolean)) {
+    diffApply('ship data', () => ({
+      ships: store.ships, researchUnits: store.researchUnits, shipInputs: store.shipInputs,
+      shipGear: store.shipGear, unlockedGens: store.unlockedGens, gearSets: store.gearSets,
+      fleetBadges: store.fleetBadges, fleetResearch: store.fleetResearch,
+    }), () => {
+      window.applyImportedShipData(save, shipCats);
+      if (shipCats.shipRanks) autofillShipInputFromSave();
+    });
+  }
+
+  // globalUpgrades keys are prefixed by category ("relics.x", "inscryptions.iN",
+  // "diamondcards.x", "shardmilestones.m0") -- split by prefix so each can be its own toggle.
+  const applyUpgradesByPrefix = (prefix, label, catOn) => {
+    if (!catOn) return;
+    diffApply(label, () => {
+      const slice = {};
+      Object.keys(store.globalUpgrades).forEach((k) => { if (k.startsWith(prefix)) slice[k] = store.globalUpgrades[k]; });
+      return slice;
+    }, () => {
+      Object.entries(mapped.globalUpgrades).forEach(([key, val]) => {
+        if (key.startsWith(prefix)) store.globalUpgrades[key] = val;
+      });
+    });
+  };
+  applyUpgradesByPrefix('relics.', 'relics', cats.relics);
+  applyUpgradesByPrefix('inscryptions.', 'inscryptions', cats.inscriptions);
+  applyUpgradesByPrefix('diamondcards.', 'diamond cards', cats.diamondCards);
+  applyUpgradesByPrefix('shardmilestones.', 'milestone #0', cats.milestone);
+  applyUpgradesByPrefix('researches.', 'researches', cats.researches);
+  applyUpgradesByPrefix('ultima.', 'diamond ultima', cats.diamondUltima);
+  applyUpgradesByPrefix('diamondspecials.', 'diamond specials', cats.diamondSpecials);
+  applyUpgradesByPrefix('cms.', 'construction milestones', cats.cms);
+  applyUpgradesByPrefix('gadgets.', 'gadgets', cats.gadgets);
+  applyUpgradesByPrefix('loopmods.', 'loop mods', cats.loopmods);
+  applyUpgradesByPrefix('trinkets.', 'trinkets', cats.trinkets);
+  applyUpgradesByPrefix('iap.', 'iap', cats.iap);
+  applyUpgradesByPrefix('mats_exchange.', 'mats exchange', cats.matsExchange);
+
+  // EVERY PREFIX THE IMPORTER PRODUCES MUST BE APPLIED BY ONE OF THE LINES ABOVE.
+  //
+  // This list is hand-maintained and the importer's key set is not, so the two drift -- silently,
+  // because an unapplied prefix just leaves an input blank rather than failing. `mats_exchange.`
+  // was mapped by saveImport and dropped here for exactly that reason, and it is the THIRD time
+  // this shape of gap has appeared in the import path (the others were hardcoded id lists inside
+  // saveImport itself, which now derive from HUNTER_DEFS). Turn the silent case into a loud one.
+  const appliedPrefixes = [
+    'relics.', 'inscryptions.', 'diamondcards.', 'shardmilestones.', 'researches.', 'ultima.',
+    'diamondspecials.', 'cms.', 'gadgets.', 'loopmods.', 'trinkets.', 'iap.', 'mats_exchange.',
+  ];
+  const unapplied = [...new Set(Object.keys(mapped.globalUpgrades || {})
+    .map((k) => `${k.split('.')[0]}.`))].filter((p) => !appliedPrefixes.includes(p));
+  if (unapplied.length) {
+    throw new Error(`Save import maps ${unapplied.join(', ')} but nothing applies it -- add an `
+      + 'applyUpgradesByPrefix line and an import checkbox for it.');
+  }
+
+  if (cats.gems) {
+    diffApply('gems', () => store.gems, () => {
+      Object.entries(mapped.gems).forEach(([treeKey, treeState]) => {
+        if (!store.gems[treeKey]) return;
+        store.gems[treeKey].level = treeState.level;
+        treeState.nodes.forEach((on, i) => { store.gems[treeKey].nodes[i] = on; });
+        // Named "GU" upgrades (Attraction only, so far -- see saveImport.js) were being
+        // computed by mapCifiSaveToStore and then silently dropped here: this loop only ever
+        // copied .level/.nodes, never .upgrades, so any account's real Attraction loot-bonus
+        // investment never reached the evaluator even after a correct import.
+        if (treeState.upgrades) {
+          Object.entries(treeState.upgrades).forEach(([key, val]) => {
+            if (key in store.gems[treeKey].upgrades) store.gems[treeKey].upgrades[key] = val;
+          });
+        }
+      });
+    });
+  }
+
+  // Fragments: the save knows the BALANCE, never the earn rate. Fill the balance and stamp it so
+  // the accrual clock restarts from a real number; leave perDay alone, because overwriting a rate
+  // the user told us with one we invented would be worse than not filling it.
+  if (mapped.fragments) {
+    diffApply('fragments', () => store.fragments, () => {
+      store.fragments.current = mapped.fragments.current;
+      store.fragments.currentAt = mapped.fragments.currentAt;
+    });
+  }
+
+  // Hunter base stats. These are UPGRADE LEVELS, which is exactly what the sim wants -- the wasm
+  // derives the actual stat from the level itself. Gated on the same checklist entry as the rest
+  // of the hunter import.
+  if (cats.hunterBuilds) {
+    diffApply('hunter base stats', () => ['borge', 'ozzy', 'knox'].map((h) => store[h].hunterStats), () => {
+      for (const [hunter, data] of Object.entries(mapped.perHunter || {})) {
+        if (!data || !data.hunterStats || !store[hunter]) continue;
+        for (const [key, level] of Object.entries(data.hunterStats)) {
+          // Only stats this hunter actually has. 'stage' is never in here -- it is the account's
+          // highest stage, applied separately, not a purchasable upgrade.
+          if (key in store[hunter].hunterStats || window.HUNTER_DEFS[hunter].baseStatKeys.includes(key)) {
+            store[hunter].hunterStats[key] = level;
+          }
+        }
+      }
+    });
+  }
+
+  if (cats.hunterBuilds) {
+    // Maintains one dedicated "<Hunter> Build (Scanned)" card per hunter that always reflects
+    // the most recently scanned save -- rather than silently overwriting whatever build
+    // happened to be first in the list. Only touches it (creating or updating) when the
+    // scanned level/talents actually differ from what's already there, so re-importing the
+    // same save repeatedly doesn't keep bumping it or spamming re-renders. Also caches the
+    // raw scanned level/talents per hunter (window.__lastScan, persisted) so the build editor
+    // can offer "load scanned values" independently of this auto-managed card.
+    window.__lastScan = window.__lastScan || {};
+    let anyHunterChanged = false;
+    Object.entries(mapped.perHunter).forEach(([hunterKey, info]) => {
+      if (!store[hunterKey]) return;
+      window.__lastScan[hunterKey] = { level: info.level, talents: { ...(info.talents || {}) }, attributes: { ...(info.attributes || {}) } };
+      const scanName = `${hunterKey[0].toUpperCase()}${hunterKey.slice(1)} Build (Scanned)`;
+      const builds = store[hunterKey].builds;
+      const existing = builds.find((b) => b.name === scanName);
+      const sameKeys = (a, b) => Object.keys({ ...a, ...b }).every((k) => (a[k] || 0) === (b[k] || 0));
+      const unchanged = existing && sameKeys(existing.talents, info.talents || {}) && sameKeys(existing.attributes, info.attributes || {})
+        && existing.level === (info.level ?? existing.level);
+      if (unchanged) return;
+      anyHunterChanged = true;
+      if (existing) {
+        if (info.level !== undefined) existing.level = info.level;
+        Object.entries(info.talents || {}).forEach(([talentId, level]) => { existing.talents[talentId] = level; });
+        Object.entries(info.attributes || {}).forEach(([attrId, level]) => { existing.attributes[attrId] = level; });
+      } else {
+        const build = newDraftBuild();
+        build.id = genBuildId();
+        build.name = scanName;
+        if (info.level !== undefined) build.level = info.level;
+        Object.entries(info.talents || {}).forEach(([talentId, level]) => { build.talents[talentId] = level; });
+        Object.entries(info.attributes || {}).forEach(([attrId, level]) => { build.attributes[attrId] = level; });
+        builds.push(build);
+      }
+    });
+    localStorage.setItem('huntersim_last_scan', JSON.stringify(window.__lastScan));
+    if (anyHunterChanged) applied.push('hunter level/talents/attributes');
+  }
+
+  if (applied.length) {
+    saveStore();
+    render();
+  }
+
+  if (silent) {
+    if (applied.length && !prefs.quiet) showImportToast(`Save update detected -- re-imported ${applied.join(', ')}.`);
+    // else: nothing actually changed (or nothing's checked, or the quiet toggle is on) -- stay silent.
+  } else {
+    const skipped = mapped.unmapped.length
+      ? `<div class="text-gray-400 text-xs mt-1">Not yet mapped (left unchanged): ${mapped.unmapped.join(', ')}</div>`
+      : '';
+    const summary = applied.length
+      ? `Imported ${applied.join(', ')}.`
+      : (Object.values(cats).some(Boolean) ? 'Save decoded -- no changes from what\'s already stored.' : 'Nothing is checked in the list above -- check at least one category to import.');
+    renderImportSaveResult(`${summary}${skipped}`);
+  }
+  return { applied };
+}
+
+// Small transient toast for auto-poll imports -- the import modal isn't necessarily open when
+// this fires, so it can't just write into importSaveResult.
+let importToastTimer = null;
+function showImportToast(message) {
+  let el = document.getElementById('importToast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'importToast';
+    el.className = 'fixed bottom-4 right-4 z-[60] max-w-xs px-4 py-3 rounded-lg bg-gray-800 border border-green-700 text-green-300 text-sm shadow-2xl transition-opacity duration-300';
+    document.body.appendChild(el);
+  }
+  el.textContent = message;
+  el.style.opacity = '1';
+  clearTimeout(importToastTimer);
+  importToastTimer = setTimeout(() => { el.style.opacity = '0'; }, 5000);
+}
+
+const importSaveDropZone = document.getElementById('importSaveDropZone');
+const importSaveFileInput = document.getElementById('importSaveFileInput');
+importSaveDropZone.onclick = () => importSaveFileInput.click();
+importSaveDropZone.ondragover = (e) => { e.preventDefault(); importSaveDropZone.classList.add('border-blue-500'); };
+importSaveDropZone.ondragleave = () => importSaveDropZone.classList.remove('border-blue-500');
+importSaveDropZone.ondrop = (e) => {
+  e.preventDefault();
+  importSaveDropZone.classList.remove('border-blue-500');
+  const file = e.dataTransfer.files?.[0];
+  // Drops do not go through the input, but clear it anyway: dropping a file and then PICKING the
+  // same one through the dialog would otherwise hit the same no-event trap.
+  importSaveFileInput.value = '';
+  if (file) readImportSaveFile(file);
+};
+importSaveFileInput.onchange = () => {
+  const file = importSaveFileInput.files?.[0];
+  // CLEAR THE SELECTION AFTER READING, or picking the SAME file again does nothing at all.
+  //
+  // A file input fires `change` only when the selected file DIFFERS from what it already holds.
+  // Re-importing the same save -- the normal thing to do after pulling a fresh copy to the same
+  // path, or simply retrying -- selected an identical value, fired no event, and looked like the
+  // import had silently refused to overwrite anything. The only way out was reloading the page,
+  // which is exactly what was reported.
+  //
+  // Cleared BEFORE the async read starts, so the input is ready again immediately and a fast
+  // second pick is not swallowed. `file` is already captured, so clearing cannot lose it.
+  importSaveFileInput.value = '';
+  if (file) readImportSaveFile(file);
+};
+// Paste path -- same decode/apply pipeline as a dropped file, just a different way of getting
+// the bytes here. Exists for setups with no local device for the ADB bridge and no practical way
+// to download a file (cloud emulators being the common case); the save is plain ASCII, so the
+// clipboard is a perfectly good transport.
+const importSavePasteInput = document.getElementById('importSavePasteInput');
+const importSavePasteInfo = document.getElementById('importSavePasteInfo');
+importSavePasteInput.addEventListener('input', () => {
+  const n = importSavePasteInput.value.trim().length;
+  // A real save is ~190KB of base64. Showing the length turns "nothing happened" into
+  // "you pasted 400 characters", which is the actual problem when a paste gets truncated.
+  importSavePasteInfo.textContent = n ? `${n.toLocaleString()} characters pasted` : '';
+});
+document.getElementById('importSavePasteBtn').onclick = async () => {
+  const raw = importSavePasteInput.value.trim();
+  if (!raw) { renderImportSaveResult('Paste the contents of DATA.text or CifiBackup.text first.', true); return; }
+  const result = await processImportedSaveText(raw);
+  // Only clear on success: leaving a failed paste in place means the user can fix it rather than
+  // paste the whole thing again.
+  if (!result.error) importSavePasteInput.value = '';
+  importSavePasteInput.dispatchEvent(new Event('input'));
+};
+
+function readImportSaveFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => processImportedSaveText(String(reader.result));
+  reader.onerror = () => renderImportSaveResult('Could not read that file.', true);
+  reader.readAsText(file);
+}
+
+// ==================== OPTIMIZE FLOW ====================
+
+// The mode list is generated from the optimizer's own MODES table rather than hardcoded in the
+// markup, so adding a mode is a one-file change and the dropdown can never offer something the
+// optimizer does not implement (or omit something it does).
+function renderOptimizeModes() {
+  const select = document.getElementById('optimizeMode');
+  const help = document.getElementById('optimizeModeHelp');
+  // PER HUNTER, because `bossTimeless` pins an attribute Knox does not have and selecting it there
+  // threw out of applyPins. The dropdown used to be built from the full MODES table for everyone.
+  const defs = HUNTER_DEFS[currentHunter];
+  if (!defs) throw new Error(`renderOptimizeModes: no defs for hunter "${currentHunter}"`);
+  const MODES = window.OptimizerObjective.modesForAttributes(defs.attributes);
+  const keys = Object.keys(MODES);
+  if (!keys.length) throw new Error(`renderOptimizeModes: no modes available for ${currentHunter}`);
+  const previous = select.value;
+  select.innerHTML = Object.entries(MODES)
+    .map(([key, spec]) => `<option value="${key}">${escapeHtml(spec.label)}</option>`)
+    .join('');
+  // A selection can become invalid by switching hunter -- exactly the shape of the unknown-route
+  // bug, where a stale value survived into code that assumed it was valid. Fall back explicitly.
+  select.value = keys.includes(previous) ? previous : keys[0];
+  // Label AND explanation both come from the mode table, so a new mode cannot ship with a
+  // dropdown entry and no description (or a description left behind by a renamed mode).
+  const showHelp = () => { help.textContent = MODES[select.value].help; };
+  select.onchange = showHelp;
+  showHelp();
+}
+renderOptimizeModes();
+
+// Search effort, rendered from the optimizer's own EFFORT_LEVELS for the same reason the mode
+// list is: the dropdown cannot offer a level the search does not implement, and a level cannot
+// ship without a label and an explanation.
+function renderOptimizeEffort() {
+  const select = document.getElementById('optimizeEffort');
+  const help = document.getElementById('optimizeEffortHelp');
+  if (!select || !help) return;
+  const LEVELS = window.HunterOptimizer.EFFORT_LEVELS;
+  select.innerHTML = Object.entries(LEVELS)
+    .map(([key, spec]) => `<option value="${key}">${escapeHtml(spec.label)}</option>`)
+    .join('');
+  const stored = store.optimizeEffort;
+  select.value = LEVELS[stored] ? stored : window.HunterOptimizer.DEFAULT_EFFORT;
+  // SELF-HEAL A LEVEL THAT NO LONGER EXISTS. `exhaustive` was a shipped option and is now removed,
+  // so a returning user's store still names it. The select already falls back, and the only
+  // consumer reads the select rather than the store -- verified -- so nothing throws. But leaving
+  // a dead value in the store means the next person to read it finds a level that is not in
+  // EFFORT_LEVELS and has to work out whether that is a bug. Write the resolved value back.
+  if (stored !== select.value) {
+    store.optimizeEffort = select.value;
+    saveStore();
+  }
+  const showHelp = () => { help.textContent = LEVELS[select.value].help; };
+  select.onchange = () => {
+    showHelp();
+    // Remembered, because effort is a standing preference about how long the user is willing to
+    // wait, not a per-run decision.
+    store.optimizeEffort = select.value;
+    saveStore();
+  };
+  showHelp();
+
+  // THE RUN TIME LIMIT. It existed inside optimize() as a 600s default and was rendered nowhere
+  // and set by nobody, so it was invisible and untestable from the app -- the same shape as the
+  // three "honest reporting" functions that were written, exported and never called.
+  const mins = document.getElementById('optimizeMaxMinutes');
+  if (mins) {
+    mins.value = String(StoreSchema.clampOptimizeMinutes(store.optimizeMaxMinutes));
+    mins.onchange = () => {
+      const v = StoreSchema.clampOptimizeMinutes(mins.value);
+      mins.value = String(v);
+      store.optimizeMaxMinutes = v;
+      saveStore();
+    };
+  }
+}
+renderOptimizeEffort();
+
+document.getElementById('optimizeBtn').onclick = () => document.getElementById('optimizeSetupModal').classList.remove('hidden');
+document.getElementById('cancelOptimizeSetup').onclick = () => document.getElementById('optimizeSetupModal').classList.add('hidden');
+
+let cancelRequested = false;
+
+// The optimizer's real phases (optimizer/search.js), each with the slice of the progress bar
+// it owns and the label shown while it runs. Spans are proportional to each phase's measured
+// share of the work, so the bar advances monotonically -- no resets, no stalls at a fixed
+// number, and no phase the UI doesn't have a name for.
+// Spans are each phase's MEASURED share of the runtime, so the bar tracks real progress instead
+// of racing through cheap stages and crawling through expensive ones.
+//
+// Measured on a level-60 Borge (the phase profile printed by the optimizer itself):
+//     enumerate 0.3s | screen 1.2s | survey ~22s | refine ~35s | final (full-fidelity polish) ~26s
+// The previous spans gave screening 18% of the bar for one second of work and the final polish 4%
+// for twenty-six seconds -- so the bar leapt to a fifth immediately and then appeared to stall at
+// 95% for nearly half a minute, which is precisely the "not moving steadily" complaint.
+const OPTIMIZE_PHASES = {
+  enumerate: { span: [0, 1], label: 'Mapping legal combinations' },
+  screen: { span: [1, 3], label: 'Ranking' },
+  survey: { span: [3, 30], label: 'Tuning' },
+  refine: { span: [30, 70], label: 'Refining' },
+
+  final: { span: [70, 99], label: `Confirming winner at ${window.HunterOptimizer ? window.HunterOptimizer.FINAL_ITERATIONS : 1000} iterations` },
+  done: { span: [99, 100], label: 'Done' },
+};
+
+document.getElementById('startOptimizeBtn').onclick = async () => {
+  const mode = document.getElementById('optimizeMode').value;
+  const effort = document.getElementById('optimizeEffort').value;
+  document.getElementById('optimizeSetupModal').classList.add('hidden');
+  document.getElementById('optimizeProgressModal').classList.remove('hidden');
+  cancelRequested = false;
+
+  const cfg = cfgFor(currentHunter, editingBuild);
+
+  const startedAt = Date.now();
+
+  // THE CLOCK RUNS ON A CLOCK, NOT ON PROGRESS EVENTS.
+  //
+  // Elapsed time used to be repainted only inside onProgress, so it advanced when the SEARCH
+  // happened to emit an event rather than when time passed. A single scoring batch is one event
+  // covering dozens of evaluations, so the display sat frozen for a second or more and then
+  // jumped -- which reads as "stuck", exactly what a progress dialog exists to disprove.
+  //
+  // The bar is eased toward its target on the same interval for the same reason: the search
+  // reports genuine step changes, and interpolating between them keeps the motion continuous
+  // without ever inventing progress that has not happened (it approaches the reported target and
+  // stops there).
+  let targetPct = 0;
+  let shownPct = 0;
+  const barEl = document.getElementById('progressBar');
+  const pctEl = document.getElementById('progressPercent');
+  const elapsedEl = document.getElementById('progressElapsed');
+  const ticker = setInterval(() => {
+    elapsedEl.textContent = `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
+    if (shownPct < targetPct) {
+      shownPct = Math.min(targetPct, shownPct + Math.max(0.1, (targetPct - shownPct) * 0.18));
+      barEl.style.width = `${shownPct}%`;
+      pctEl.textContent = `${Math.round(shownPct)}%`;
+    }
+  }, 100);
+
+  try {
+    const result = await runOptimizer(cfg, {
+      mode,
+      effort,
+      // The user's stated ceiling, in seconds. Read from the store rather than the DOM so a run
+      // started from anywhere honours it.
+      maxSeconds: StoreSchema.clampOptimizeMinutes(store.optimizeMaxMinutes) * 60,
+      shouldCancel: () => cancelRequested,
+      onProgress: ({ phase, done, total }) => {
+        const entry = OPTIMIZE_PHASES[phase];
+        if (!entry) throw new Error(`Optimizer reported an unknown phase "${phase}"`);
+        const [from, to] = entry.span;
+        const pct = Math.min(100, from + (to - from) * (total ? Math.min(1, done / total) : 0));
+        targetPct = Math.max(targetPct, pct);   // monotone: the bar never goes backwards
+        // NO RUNNING SCORE IS SHOWN, DELIBERATELY.
+        //
+        // A "best so far" was tried here and removed: mid-search candidates are scored at
+        // SCREEN_ITERATIONS (100) and are only partially tuned, while the number the user sees at
+        // the end is the fully refined winner at FINAL_ITERATIONS (1000). The two are different
+        // builds measured at different fidelities, so the dialog reported a figure far below the
+        // result -- which reads as the optimizer being wrong rather than as a progress estimate.
+        //
+        // Showing a number that disagrees with the answer is worse than showing no number. The
+        // count and the phase are honest; a provisional score is not.
+        const shown = Math.min(Math.floor(done) + 1, Math.ceil(total));
+        document.getElementById('progressPhase').textContent = total > 1
+          ? `${entry.label} ${shown}/${Math.ceil(total)}` : entry.label;
+      },
+    });
+
+    if (result.cancelled || !result.best) return;
+
+    // The winner's score needs no re-check here. It is the search's own final-stage number,
+    // computed at the same fidelity the build card displays (optimizer/search.js's
+    // FINAL_ITERATIONS), with the incumbent build competing in that same comparison. A second
+    // measurement at this point is exactly what used to produce "the dialog said better but
+    // your build didn't change": the search maximized a 100-iteration estimate and a different
+    // 1000-iteration re-scoring then overruled it.
+    //
+    // Compare by VALUE, not JSON.stringify -- key order differs between an allocation built by
+    // the search and one loaded from storage, so stringify reports two identical allocations as
+    // different and would claim an improvement that isn't there.
+    const d = window.HUNTER_DEFS[currentHunter];
+    const unchanged = AllocSpace.sameAlloc(d.talents, result.best.talentAlloc, editingBuild.talents)
+      && AllocSpace.sameAlloc(d.attributes, result.best.attrAlloc, editingBuild.attributes);
+    if (unchanged) {
+      alert(`Your build is already the best allocation found. Every legal attribute combination was enumerated (${result.diag.stages.enumerate.realizable} of ${result.diag.stages.enumerate.supports} are reachable at this budget) and none beat what you have.`);
+      return;
+    }
+
+    editingBuild.talents = result.best.talentAlloc;
+    editingBuild.attributes = result.best.attrAlloc;
+    // Only fill in a name when the field is actually blank -- this used to always stomp
+    // whatever name the user (or a prior save) already had, discarding it every time.
+    if (!editingBuild.name.trim()) {
+      editingBuild.name = 'Optimized';
+      document.getElementById('buildNameInput').value = editingBuild.name;
+    }
+    onBuildChanged();
+  } catch (err) {
+    console.error('Optimizer failed', err);
+    alert(`Optimizer failed to run: ${err.message || err}`);
+  } finally {
+    clearInterval(ticker);
+    document.getElementById('optimizeProgressModal').classList.add('hidden');
+  }
+};
+document.getElementById('cancelOptimizeRunBtn').onclick = () => { cancelRequested = true; };
+
+// ==================== STALE SHELL RECOVERY ====================
+
+// GitHub Pages serves index.html with `Cache-Control: max-age=600`, and mobile browsers
+// routinely hold it far longer than that. A cached index.html keeps requesting the asset URLs it
+// was built with -- so after a release that renames or removes a file, the browser loads an old
+// page whose scripts 404. That is not a hypothetical: it shipped as
+// "Optimizer failed to run: Optimizer worker failed to initialize: worker failed to load",
+// because the stale shell was still asking for the deleted beamWorker.js.
+//
+// The check compares the version token of the RUNNING page against the one in the live
+// index.html, fetched with `cache: 'no-store'`. Deriving both from the same `?v=` that already
+// cache-busts every asset means there is no second source of truth to keep in sync -- bumping
+// `?v=` (which a release does anyway) is the whole contract.
+//
+// Reloads at most once per version per tab, so a genuinely broken deploy degrades to "old page"
+// rather than an infinite reload loop.
+const APP_VERSION = (() => {
+  const tag = document.querySelector('script[src*="app.js"]');
+  const m = tag && tag.getAttribute('src').match(/[?&]v=([^&]+)/);
+  return m ? m[1] : null;
+})();
+
+async function reloadIfShellIsStale() {
+  if (!APP_VERSION) return;
+  try {
+    const res = await fetch(`index.html?_=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) return;
+    const html = await res.text();
+    const live = html.match(/app\.js\?v=([^"']+)/);
+    if (!live || live[1] === APP_VERSION) return;
+
+    const key = `huntersim_reloaded_for_${live[1]}`;
+    if (sessionStorage.getItem(key)) {
+      console.warn(`[shell] still on ${APP_VERSION} after reloading for ${live[1]} -- not retrying`);
+      return;
+    }
+    sessionStorage.setItem(key, '1');
+    console.warn(`[shell] cached page is ${APP_VERSION}, live is ${live[1]} -- reloading`);
+
+    // NOT location.reload(): a reload is allowed to re-serve the same cached index.html, which is
+    // exactly the thing that is stale, and mobile browsers frequently do. Navigating to a URL the
+    // browser has never seen cannot hit that cache. Routing is hash-based, so a query string is
+    // inert here; the hash is preserved so the reload lands on the same page.
+    location.replace(`${location.pathname}?v=${encodeURIComponent(live[1])}${location.hash}`);
+  } catch { /* offline or blocked: keep running the page we have */ }
+}
+
+// ==================== INIT ====================
+
+// Embedded, the COMPANION decides when to draw and into what. render() would draw the website's
+// whole shell, and reloadIfShellIsStale() fetches index.html -- on cifi-tools.com that is THEIR
+// page, and a version mismatch would RELOAD IT under the user.
+if (!EMBEDDED) {
+  render();
+  reloadIfShellIsStale();
+}
+
+// A SHARED BUILD ARRIVING BY URL. Nothing read this before, so even a link that RESOLVED would
+// have shown the normal start page and silently dropped the build -- the share feature was broken
+// at both ends, and neither end could be noticed by the person who generated the link.
+//
+// It goes through the SAME parseBuildCode + applyImportedBuild the paste-a-code dialog uses, so a
+// link and a pasted code cannot diverge in what they produce. The hunter comes from the CODE's own
+// header rather than the `hunter=` query param -- the param exists only so 404.html can preserve
+// the old path form, and trusting it over the code would let a hand-edited URL open a build under
+// the wrong hunter.
+//
+// `includeUpgrades: false` deliberately: a shared build carries the sender's account-wide upgrade
+// levels, and applying those to the recipient would silently overwrite their own gems and
+// upgrades with a stranger's. The dialog offers that as an explicit second choice; a link must not
+// make it for you.
+async function consumeSharedBuildFromUrl() {
+  let code = null;
+  try { code = new URLSearchParams(location.search).get('code'); } catch { return; }
+  if (!code) return;
+  // Strip the query BEFORE importing: importing re-renders, and a refresh mid-import would
+  // otherwise import the same build a second time.
+  try { history.replaceState(null, '', location.pathname); } catch { /* file:// */ }
+  try {
+    const payload = await window.parseBuildCode(code.trim());
+    if (!payload) throw new Error('the code was not recognised');
+    applyImportedBuild(payload, false);
+  } catch (e) {
+    alert(`That shared build could not be opened: ${e.message}`);
+  }
+}
+// Would strip the query string off THEIR URL via replaceState.
+if (!EMBEDDED) consumeSharedBuildFromUrl();
+// The header account button lives OUTSIDE the routed view, so it is drawn once at startup rather
+// than from render() -- a per-render call would rebuild it (and close its dropdown) on every
+// navigation. It re-renders itself after each sync action.
+// Embedded this is skipped entirely: it needs cloudSync.js, which the extension omits along with
+// the whole account system -- there the user is already signed in to their own cifi-tools account.
+if (!EMBEDDED) renderCloudAccountButton();

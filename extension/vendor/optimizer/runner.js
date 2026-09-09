@@ -35,11 +35,7 @@
       this.readyPromises = [];
 
       for (let i = 0; i < size; i++) {
-        // A RELATIVE WORKER URL RESOLVES AGAINST THE PAGE, WHICH IS NOT ALWAYS OURS. Embedded in
-        // cifi-tools.com this would ask THEIR server for `/optimizer/worker.js` and 404. The
-        // embedder supplies a chrome-extension:// URL instead (worker.js ships as a
-        // web_accessible_resource). Unset on the website, where the relative path is correct.
-        const worker = new Worker(window.HUNTERSIM_WORKER_URL || `optimizer/worker.js?v=${WORKER_VERSION}`);
+        const worker = new Worker(`optimizer/worker.js?v=${WORKER_VERSION}`);
         const ready = new Promise((resolve) => {
           worker.onmessage = (e) => {
             if (e.data.type !== 'ready') return;
