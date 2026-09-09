@@ -2940,7 +2940,23 @@ function openLoadoutDetail(shipId, levels, mode, clicks) {
   // THE CONTROL LIVES IN THE MODAL FOOTER, OUTSIDE THE SCROLLING BODY. Inside it, changing how many
   // steps are shown meant scrolling past every step to reach the control that shortens the list --
   // the one thing you cannot reach when the list is too long is the fix for the list being too long.
-  const footer = document.getElementById('loadoutDetailFooter');
+  // THE FOOTER MAY NOT EXIST, AND ASSUMING IT DID TOOK THE LIVE SITE DOWN.
+  //
+  // This site has no build step and no bundle: index.html and the JS files are cached
+  // INDEPENDENTLY by the browser, and a `?v=` query is only a cache-buster -- the server returns
+  // the current file whatever the query says. So a visitor holding a cached index.html can fetch
+  // the NEW shipsPage.js under an OLD url, and any element this file expects that only the new
+  // shell provides is simply absent. Here that threw on `.classList` of null and killed every
+  // Install Order and Effective Path button.
+  //
+  // `reloadIfShellIsStale()` exists for this and did fire -- and still lost, logging "still on
+  // 20260907u-bignum after reloading for 20260908h-embedded -- not retrying", because the reload
+  // was served the same cached shell. It reduces the window; it cannot close it.
+  //
+  // So new markup is treated as OPTIONAL and the control falls back into the body. Degraded (it
+  // scrolls with the list) but working, which is the whole difference that matters.
+  const footer = document.getElementById('loadoutDetailFooter')
+    || body.appendChild(Object.assign(document.createElement('div'), { className: 'mt-3 pt-3 border-t border-gray-700' }));
   const wantsControl = mode === 'order' && lines.length > 1;
   footer.classList.toggle('hidden', !wantsControl);
   footer.innerHTML = wantsControl ? `
