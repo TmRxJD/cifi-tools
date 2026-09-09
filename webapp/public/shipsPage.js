@@ -2899,11 +2899,13 @@ function openLoadoutDetail(shipId, levels, mode, clicks) {
   const showLast = mode === 'order' ? clampShowLast(window.store.installOrderShowLast) : 0;
   const collapsing = showLast > 0 && lines.length > showLast;
   const cut = collapsing ? lines.length - showLast : 0;
-  let prefixSummary = [];
+  // The prefix is shown as THE SHIP'S OWN HEX GRID, the same component and options the fleet card
+  // uses -- not a bespoke list. It is the layout the player already reads levels off, so the
+  // bulk-buy target is recognisable at a glance instead of needing to be re-learned, and it shows
+  // untouched nodes as 0 rather than silently omitting them.
+  const prefixLevels = {};
   if (collapsing) {
-    const bySlot = new Map();
-    for (const l of lines.slice(0, cut)) bySlot.set(l.slot, l);   // later step wins = final level
-    prefixSummary = [...bySlot.values()].sort((a, b) => b.level - a.level || String(a.name).localeCompare(b.name));
+    for (const slot of lines.slice(0, cut)) prefixLevels[slot.slot] = (prefixLevels[slot.slot] || 0) + 1;
   }
   const shown = collapsing ? lines.slice(cut) : lines;
 
@@ -2916,17 +2918,7 @@ function openLoadoutDetail(shipId, levels, mode, clicks) {
           <span class="text-xs font-semibold text-gray-300">Buy these first, in any order</span>
           <span class="text-xs text-gray-500">${cut} step${cut === 1 ? '' : 's'} collapsed</span>
         </div>
-        <!-- TWO COLUMNS AT MOST. Three fitted the modal but truncated four of six node names to
-             "Mito..." / "Mole...", and a bulk-buy list you cannot read the names in is useless for
-             the one thing it exists to do. Density is not the goal here; legibility is. -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-          ${prefixSummary.map((n) => `
-            <div class="flex items-center gap-2 text-xs bg-gray-700/40 rounded px-2 py-1.5">
-              ${n.icon ? `<img src="${n.icon}" class="w-5 h-5 flex-shrink-0" onerror="this.remove()" />` : ''}
-              <span class="text-gray-300 truncate" title="${escapeHtml(n.name)}">${escapeHtml(n.name)}</span>
-              <span class="ml-auto text-white font-medium whitespace-nowrap">${n.level}<span class="text-gray-500">/${n.max}</span></span>
-            </div>`).join('')}
-        </div>
+        <div data-prefix-hexgrid class="flex justify-center"></div>
         <p class="text-[11px] text-gray-500 mt-2">Levels to reach before the ordered steps below. Order within this block does not matter.</p>
       </div>` : ''}
     <ol class="space-y-1.5">
@@ -2938,15 +2930,27 @@ function openLoadoutDetail(shipId, levels, mode, clicks) {
             ${mode === 'path' ? `<button data-confirm-up-to="${i}" class="hidden w-6 h-6 flex-shrink-0 rounded-full bg-green-600 hover:bg-green-500 text-white items-center justify-center text-xs" title="I've installed up to here -- update my real installs">✓</button>` : ''}
           </span>
         </li>`; }).join('') : '<li class="text-xs text-gray-500">No points to allocate.</li>'}
-    </ol>
-    ${mode === 'order' && lines.length > 1 ? `
-      <div class="mt-3 pt-3 border-t border-gray-700 flex items-center gap-2 text-xs">
-        <label for="installOrderShowLast" class="text-gray-400">Show last</label>
-        <input id="installOrderShowLast" type="number" min="0" max="${lines.length}" step="1"
-               value="${showLast || ''}" placeholder="all"
-               class="w-20 bg-gray-700 border border-gray-600 rounded-md px-2 py-1 text-white" />
-        <span class="text-gray-500">of ${lines.length} steps${collapsing ? '' : ' — 0 or blank shows all'}</span>
-      </div>` : ''}`;
+    </ol>`;
+
+  // The prefix grid is rendered, not templated -- renderHexGrid owns the node layout, and a second
+  // copy of it here would be the parallel implementation this project keeps deleting.
+  const gridHost = body.querySelector('[data-prefix-hexgrid]');
+  if (gridHost) renderHexGrid(gridHost, catalog, prefixLevels, { readOnly: true, small: true, shipId });
+
+  // THE CONTROL LIVES IN THE MODAL FOOTER, OUTSIDE THE SCROLLING BODY. Inside it, changing how many
+  // steps are shown meant scrolling past every step to reach the control that shortens the list --
+  // the one thing you cannot reach when the list is too long is the fix for the list being too long.
+  const footer = document.getElementById('loadoutDetailFooter');
+  const wantsControl = mode === 'order' && lines.length > 1;
+  footer.classList.toggle('hidden', !wantsControl);
+  footer.innerHTML = wantsControl ? `
+    <div class="flex items-center gap-2 text-xs">
+      <label for="installOrderShowLast" class="text-gray-400">Show last</label>
+      <input id="installOrderShowLast" type="number" min="0" max="${lines.length}" step="1"
+             value="${showLast || ''}" placeholder="all"
+             class="w-20 bg-gray-700 border border-gray-600 rounded-md px-2 py-1 text-white" />
+      <span class="text-gray-500">of ${lines.length} steps${collapsing ? '' : ' — 0 or blank shows all'}</span>
+    </div>` : '';
 
   // Bound to `change`, not `input`: retyping "150" passes through 1 and 15, and re-rendering the
   // whole list on each keystroke both churns and moves the field out from under the cursor.
