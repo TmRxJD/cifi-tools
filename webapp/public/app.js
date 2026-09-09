@@ -38,7 +38,12 @@ function genBuildId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-const STORAGE_KEY = 'huntersim_clone_v2';
+// EMBEDDED MODE: this file is also loaded by the companion EXTENSION, inside cifi-tools.com.
+// There it must not own the page -- their app does -- and it must not write unnamespaced keys into
+// their origin's localStorage, which already holds ~1,430 of theirs. Both are configured by the
+// embedder BEFORE this file runs; on the website neither is set and everything below is unchanged.
+const EMBEDDED = !!window.HUNTERSIM_EMBEDDED;
+const STORAGE_KEY = window.HUNTERSIM_STORAGE_KEY || 'huntersim_clone_v2';
 
 // Both of these are the schema (storeSchema.js), not separate shape declarations. Adding a
 // store field is a one-line change there and needs no edit here.
@@ -116,7 +121,7 @@ function loadStore() {
 // every save is mirrored there too (fire-and-forget, never blocks the UI), and on startup -- if
 // localStorage came back empty -- we fall back to whatever IndexedDB still has before giving up
 // and seeding fresh defaults.
-const IDB_NAME = 'huntersim_backup';
+const IDB_NAME = window.HUNTERSIM_IDB_NAME || 'huntersim_backup';
 const IDB_STORE = 'kv';
 function idbOpen() {
   return new Promise((resolve, reject) => {
@@ -494,7 +499,9 @@ function render() {
   if (route.startsWith('upgrades/')) { renderUpgradesPage(root, route.slice('upgrades/'.length)); return; }
   renderSimPage(root);
 }
-window.addEventListener('hashchange', render);
+// The website routes on the hash. Embedded, the COMPANION owns routing (cifi-tools uses paths,
+// not hashes) and calls render() itself, so this listener would fight it.
+if (!EMBEDDED) window.addEventListener('hashchange', render);
 
 // MOBILE NAVIGATION -- A FIXED BOTTOM BAR OVER A SLIDE-UP SHEET.
 //
@@ -2020,8 +2027,9 @@ async function pollBridgeStatus() {
   bridgePollDelay = connected ? BRIDGE_POLL_MIN_MS : Math.min(bridgePollDelay * 2, BRIDGE_POLL_MAX_MS);
   scheduleBridgePoll(bridgePollDelay);
 }
-updateBridgeStatusIndicator();
-scheduleBridgePoll(bridgePollDelay);
+// The adb bridge indicator lives in the website's sidebar; embedded there is nothing to update and
+// no reason to poll localhost on someone else's site.
+if (!EMBEDDED) { updateBridgeStatusIndicator(); scheduleBridgePoll(bridgePollDelay); }
 // Redetect immediately when the tab regains focus/visibility -- covers "I started the bridge
 // while this tab was in the background" without waiting out the current backoff delay.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleBridgePoll(0); });
@@ -2080,7 +2088,7 @@ function scheduleAutoPollSave() {
   if (!getImportPrefs().autoPoll) return;
   autoPollSaveTimer = setTimeout(autoPollSaveTick, AUTO_POLL_SAVE_INTERVAL_MS);
 }
-scheduleAutoPollSave();
+if (!EMBEDDED) scheduleAutoPollSave();
 
 // ==================== MANAGE CATEGORIES ====================
 
@@ -4230,8 +4238,13 @@ async function reloadIfShellIsStale() {
 
 // ==================== INIT ====================
 
-render();
-reloadIfShellIsStale();
+// Embedded, the COMPANION decides when to draw and into what. render() would draw the website's
+// whole shell, and reloadIfShellIsStale() fetches index.html -- on cifi-tools.com that is THEIR
+// page, and a version mismatch would RELOAD IT under the user.
+if (!EMBEDDED) {
+  render();
+  reloadIfShellIsStale();
+}
 
 // A SHARED BUILD ARRIVING BY URL. Nothing read this before, so even a link that RESOLVED would
 // have shown the normal start page and silently dropped the build -- the share feature was broken
@@ -4262,8 +4275,11 @@ async function consumeSharedBuildFromUrl() {
     alert(`That shared build could not be opened: ${e.message}`);
   }
 }
-consumeSharedBuildFromUrl();
+// Would strip the query string off THEIR URL via replaceState.
+if (!EMBEDDED) consumeSharedBuildFromUrl();
 // The header account button lives OUTSIDE the routed view, so it is drawn once at startup rather
 // than from render() -- a per-render call would rebuild it (and close its dropdown) on every
 // navigation. It re-renders itself after each sync action.
-renderCloudAccountButton();
+// Embedded this is skipped entirely: it needs cloudSync.js, which the extension omits along with
+// the whole account system -- there the user is already signed in to their own cifi-tools account.
+if (!EMBEDDED) renderCloudAccountButton();
