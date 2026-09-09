@@ -2923,7 +2923,7 @@ function openLoadoutDetail(shipId, levels, mode, clicks) {
       </div>` : ''}
     <ol class="space-y-1.5">
       ${shown.length ? shown.map((l, k) => { const i = (collapsing ? cut : 0) + k; return `
-        <li data-path-item="${i}" class="flex items-center justify-between text-sm bg-gray-700/50 rounded px-3 py-1.5 ${mode === 'path' ? 'cursor-pointer hover:bg-gray-700' : ''}">
+        <li data-path-item="${i}" class="flex items-center justify-between text-sm bg-gray-700/50 rounded px-3 py-1.5 ${mode === 'path' || mode === 'order' ? 'cursor-pointer hover:bg-gray-700' : ''}" ${mode === 'order' ? `title="I've bought up to here -- fold it into the bulk-buy grid above"` : ''}>
           <span class="flex items-center gap-2 text-gray-300">${i + 1}. ${l.icon ? `<img src="${l.icon}" class="w-5 h-5" />` : ''}${escapeHtml(l.name)}</span>
           <span class="flex items-center gap-2">
             <span class="text-white font-medium">${l.level}<span class="text-gray-500">/${l.max}</span></span>
@@ -2951,6 +2951,28 @@ function openLoadoutDetail(shipId, levels, mode, clicks) {
              class="w-20 bg-gray-700 border border-gray-600 rounded-md px-2 py-1 text-white" />
       <span class="text-gray-500">of ${lines.length} steps${collapsing ? '' : ' — 0 or blank shows all'}</span>
     </div>` : '';
+
+  // CLICKING A STEP FOLDS EVERYTHING THROUGH IT INTO THE BULK-BUY GRID. It is the same gesture as
+  // Effective Path's "I've installed up to here", but it changes only what is DISPLAYED -- it never
+  // touches the player's real installs, because Install Order is a plan being read, not progress
+  // being recorded.
+  //
+  // Clicking row i leaves N-(i+1) steps in the tail, and that is written to the same `showLast` the
+  // footer edits, so the two controls cannot disagree.
+  //
+  // FLOORED AT 1, because 0 is the "show everything" sentinel: clicking the LAST step would
+  // otherwise compute a tail of 0 and expand the whole list back out -- the exact opposite of the
+  // gesture. The last step therefore stays visible.
+  if (mode === 'order' && lines.length > 1) {
+    body.querySelectorAll('[data-path-item]').forEach((li) => {
+      li.onclick = () => {
+        const i = Number(li.dataset.pathItem);
+        window.store.installOrderShowLast = Math.max(1, lines.length - (i + 1));
+        window.saveStore();
+        openLoadoutDetail(shipId, levels, mode, clicks);
+      };
+    });
+  }
 
   // Bound to `change`, not `input`: retyping "150" passes through 1 and 15, and re-rendering the
   // whole list on each keystroke both churns and moves the field out from under the cursor.
