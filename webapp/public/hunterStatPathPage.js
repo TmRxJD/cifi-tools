@@ -293,6 +293,36 @@
     });
   }
 
+  // REOPENING AN UNCHANGED PATH IS INSTANT. A path is ~10-20s of full-fidelity evaluation and is a
+  // pure function of its inputs, so a repeat view with nothing changed is served from memory. The
+  // key is EVERYTHING the result depends on: the account state and baseline build (both inside
+  // cfg), the candidate pool, the objective, the planning horizon and the fragment rate. Any edit
+  // -- including confirming a recommended purchase, which writes the store -- changes the key, so a
+  // stale path cannot be shown. In memory only: a reload recomputes, never trusts an old answer.
+  // Entries are cloned both ways so a render that mutates its columns cannot corrupt the cache.
+  const pathCache = new Map();
+  const PATH_CACHE_LIMIT = 12;
+  async function cachedPath(overlay, baseline, includeAccountUpgrades, mode, signal) {
+    const cfg = statPathCfgFor(currentHunter, baseline);
+    const key = JSON.stringify({
+      hunter: currentHunter, includeAccountUpgrades, mode, steps: TARGET_STEPS,
+      horizon: currentHorizonDays(), fragsPerDay: store.fragments.perDay, real: baseline.real, cfg,
+    });
+    const hit = pathCache.get(key);
+    if (hit) return structuredClone(hit);
+    // SEQUENTIAL, not Promise.all: the ranking needs the income rates (time-to-afford), so they
+    // must exist before the walk starts. They cost ~150ms against a walk of seconds.
+    const rates = baseline.real ? pathRates(await IncomeModel.currentRates(currentHunter, store, baseline, 1000, signal)) : null;
+    const result = await greedyPurchasePath(currentHunter, cfg, TARGET_STEPS, includeAccountUpgrades, mode,
+      (resource, done, total) => updateProgress(overlay, resource, done, total), signal, timingFor(rates));
+    if (!signal.aborted) {
+      pathCache.delete(key);
+      pathCache.set(key, structuredClone({ result, rates }));
+      if (pathCache.size > PATH_CACHE_LIMIT) pathCache.delete(pathCache.keys().next().value);
+    }
+    return { result, rates };
+  }
+
   async function openHunterStatPathModal() {
     const resources = window.resourcesFor(currentHunter, false, store.gems);
     const overlay = titledModal('chart-arrows-vertical', 'Effective Path', renderProgressPanel(resources), 'hunterStatPathModal');
@@ -307,12 +337,7 @@
       let result; let rates;
       const baseline = getBaselineBuild(currentHunter);
       try {
-        const cfg = statPathCfgFor(currentHunter, baseline);
-        // SEQUENTIAL, not Promise.all: the ranking now needs the income rates (time-to-afford),
-        // so they must exist before the walk starts. They cost ~150ms against a walk of seconds.
-        rates = baseline.real ? pathRates(await IncomeModel.currentRates(currentHunter, store, baseline, 1000, signal)) : null;
-        result = await greedyPurchasePath(currentHunter, cfg, TARGET_STEPS, false, mode,
-          (resource, done, total) => updateProgress(overlay, resource, done, total), signal, timingFor(rates));
+        ({ result, rates } = await cachedPath(overlay, baseline, false, mode, signal));
       } catch (err) {
         // A SUPERSEDED RUN MUST NOT PAINT. Aborting terminates the worker pool, which rejects
         // in-flight batches with an `AbortError` -- not HunterSim's ABORTED name, so isAbort()
@@ -350,11 +375,7 @@
       bindProgressLabels(overlay, currentHunter, resources);
       let result; let rates;
       try {
-        const cfg = statPathCfgFor(currentHunter, baseline);
-        // Sequential for the same reason as openHunterStatPathModal: ranking needs the rates.
-        rates = baseline.real ? pathRates(await IncomeModel.currentRates(currentHunter, store, baseline, 1000, signal)) : null;
-        result = await greedyPurchasePath(currentHunter, cfg, TARGET_STEPS, true, mode,
-          (resource, done, total) => updateProgress(overlay, resource, done, total), signal, timingFor(rates));
+        ({ result, rates } = await cachedPath(overlay, baseline, true, mode, signal));
       } catch (err) {
         // A SUPERSEDED RUN MUST NOT PAINT. Aborting terminates the worker pool, which rejects
         // in-flight batches with an `AbortError` -- not HunterSim's ABORTED name, so isAbort()

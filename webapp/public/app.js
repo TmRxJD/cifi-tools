@@ -847,8 +847,11 @@ function renderSimPage(root) {
       <div id="hunterBanner" class="bg-gradient-to-r ${HUNTER_BANNER_GRADIENT[h]} to-gray-800 px-5 py-5 sm:py-0.5 border-b border-gray-600">
         <div class="flex flex-wrap items-center justify-between gap-4">
           <div class="flex items-center gap-4">
-            <div class="hidden sm:flex items-center justify-center">
-              <img id="hunterPortrait" src="${hunterPortraitAsset(h)}" alt="${escapeHtml(HUNTER_TITLES[h].replace(' Simulator', ''))}" class="object-contain rounded-lg select-none w-16 h-16" draggable="false" style="filter: drop-shadow(rgba(0,0,0,0.5) 0px 0px 4px);" />
+            <!-- ALWAYS SHOWN, and sized inline. It was 'hidden sm:flex', which hid it below 640px on
+                 the site and ALWAYS in the extension, whose page is styled by cifi-tools' own Tailwind
+                 build -- a class that build never uses (sm:flex) simply does not exist there. -->
+            <div class="flex items-center justify-center" style="flex-shrink:0">
+              <img id="hunterPortrait" src="${hunterPortraitAsset(h)}" alt="${escapeHtml(HUNTER_TITLES[h].replace(' Simulator', ''))}" class="object-contain select-none" draggable="false" style="width:4.5rem;height:4.5rem;filter: drop-shadow(rgba(0,0,0,0.5) 0px 0px 4px);" />
             </div>
             <div>
               <h1 id="hunterTitle" class="text-2xl font-bold mb-1">${escapeHtml(HUNTER_TITLES[h])}</h1>
