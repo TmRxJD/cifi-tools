@@ -862,13 +862,14 @@ function renderSimPage(root) {
           <label class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors cursor-pointer"
                  title="Higher iterations give more accurate results but take longer to compute. Set per hunter; raise the ceiling in Settings → Enthusiast Mode.">
             ${iconSvg('repeat', 14, 'text-blue-400')}
-            <input id="baseIterations" type="number" class="w-20 bg-transparent text-white focus:outline-none" />
+            <input id="baseIterations" type="number" class="fit-number bg-transparent text-white focus:outline-none" />
             <span>iterations</span>
           </label>
           <button id="lootFilterBtn" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors" title="Choose which loot should be displayed in the build cards">${iconSvg('filter', 14, 'text-emerald-400')}<span>Filter</span></button>
+          <button id="compareBuildsBtn" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors" title="Compare builds side by side">${iconSvg('git-compare', 14, 'text-amber-400')}<span>Compare</span></button>
           <label class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors cursor-pointer" title="Fragments are account-wide and aren't produced by the simulation — they come from campaign/boss content. Enter your rate to get relic costs in time as well as fragments.">
             ${iconSvg('sparkles', 14, 'text-purple-400')}
-            <input id="fragsPerDay" type="number" min="0" step="1" class="w-20 bg-transparent text-white focus:outline-none" placeholder="0" />
+            <input id="fragsPerDay" type="number" min="0" step="1" class="fit-number bg-transparent text-white focus:outline-none" placeholder="0" />
             <span>frags/day</span>
           </label>
           <button id="manageCategoriesBtn" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors">${iconSvg('folder', 14, 'text-blue-400')}<span>Manage Categories</span></button>
@@ -879,7 +880,7 @@ function renderSimPage(root) {
       </div>
       <div class="flex items-stretch bg-gray-900 border-b border-gray-700 overflow-x-auto" id="categoryTabs"></div>
     </div>
-    <div id="buildList" class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));"></div>`;
+    <div id="buildList" class="grid gap-4" style="grid-template-columns: ${BUILD_GRID_COLUMNS};"></div>`;
 
   wireHunterTabs();
   switchHunter(currentHunter, true);
@@ -898,20 +899,27 @@ function renderSimPage(root) {
   iterInput.step = IT.step;
   iterInput.max = StoreSchema.iterationCeiling(store);
   iterInput.value = currentIterations();
+  fitNumberInput(iterInput);
+  iterInput.addEventListener('input', () => fitNumberInput(iterInput));
   iterInput.addEventListener('change', () => {
     const clamped = StoreSchema.clampIterations(iterInput.value, store);
     iterInput.value = clamped;               // show the user what actually took effect
+    fitNumberInput(iterInput);
     store[currentHunter].iterations = clamped;
     saveStore();
     renderBuildList();
   });
   document.getElementById('lootFilterBtn').onclick = openLootFilterModal;
+  document.getElementById('compareBuildsBtn').onclick = openCompareBuildsModal;
   // Fragments per day is ACCOUNT-wide (relics are bought once for the account, not per hunter),
   // so it is read from and written to the top-level store, never store[hunter].
   const fragsInput = document.getElementById('fragsPerDay');
   fragsInput.value = store.fragments.perDay || '';
+  fitNumberInput(fragsInput);
+  fragsInput.addEventListener('input', () => fitNumberInput(fragsInput));
   fragsInput.addEventListener('change', () => {
     store.fragments.perDay = Math.max(0, Number(fragsInput.value) || 0);
+    fitNumberInput(fragsInput);
     saveStore();
     renderBuildList();
   });
@@ -996,9 +1004,16 @@ const ACTION_BUTTONS = [
   { act: 'buildStats', icon: 'chart-bar', title: 'Show Build Statistics' },
   { act: 'effectivePath', icon: 'chart-arrows-vertical', title: 'Effective Path (recommended stat/inscription upgrades)' },
   { act: 'export', icon: 'share', title: 'Share build code' },
+  { act: 'color', icon: 'palette', title: 'Card color' },
   { act: 'archive', icon: 'archive', title: 'Archive build' },
   { act: 'delete', icon: 'trash', title: 'Delete build', extra: 'hover:text-red-400' },
 ];
+// ONE column rule for the build grid, used by the page template and by renderBuildList alike.
+// 420px is what the toolbar needs to hold all ten actions on one row (ten 34px buttons, nine gaps
+// and the bar's padding measure 400px, plus the card's border). `min(420px, 100%)` keeps a phone
+// from overflowing sideways; there the toolbar's container query folds it into two rows of five.
+const BUILD_GRID_COLUMNS = 'repeat(auto-fill, minmax(min(420px, 100%), 1fr))';
+
 const SECOND_ROW_BUTTONS = [
   { act: 'screenshot', icon: 'camera', title: 'Screenshot to clipboard' },
 ];
@@ -1745,10 +1760,10 @@ async function renderBuildList() {
   const builds = store[currentHunter].builds.filter((b) => (b.categoryId || 'active') === showCategoryId);
   // Auto-fill by available width instead of a fixed column count -- fixed 3-up columns were
   // squeezing each card narrower than its own content (stat labels like "Runs per Day"
-  // wrapping/cutting) whenever the viewport had room to spare. minmax(340px, 1fr) lets cards
-  // grow to fill the canvas and only wraps to a new row once space actually runs out.
+  // wrapping/cutting) whenever the viewport had room to spare. The minmax lets cards grow to fill
+  // the canvas and only wraps to a new row once space actually runs out; see BUILD_GRID_COLUMNS.
   list.className = 'grid gap-4';
-  list.style.gridTemplateColumns = store.viewMode === 'horizontal' ? '1fr' : 'repeat(auto-fill, minmax(340px, 1fr))';
+  list.style.gridTemplateColumns = store.viewMode === 'horizontal' ? '1fr' : BUILD_GRID_COLUMNS;
   list.innerHTML = '';
   if (!builds.length) {
     // An empty state is the first thing a new user sees, so it says what to do
@@ -1823,6 +1838,9 @@ async function renderBuildList() {
     const isReferenceBuild = buildIdx === 0;
     card.className = `result-card border-l-4 bg-gray-800 rounded-lg shadow-xl overflow-hidden transition-all duration-200 hover:shadow-2xl border-${isReferenceBuild ? 'yellow' : accent}-500`;
     if (isReferenceBuild) card.setAttribute('is-reference-build', 'true');
+    card.dataset.buildId = String(build.id);
+    // A chosen stripe overrides the default (hunter accent, or yellow on the reference build).
+    if (build.stripeColor) card.style.borderLeftColor = build.stripeColor;
     card.innerHTML = `
       <div class="header-wrapper relative">
         <div class="absolute top-1.5 right-[34px] z-10 bg-gray-700/80 text-gray-200 rounded-lg px-1 py-1 shadow-lg text-xs font-medium text-center leading-tight w-9 h-12" title="Build Level">
@@ -1907,6 +1925,7 @@ async function renderBuildList() {
     card.querySelector('[data-act=buildStats]').onclick = () => openBuildStatsModal(build);
     card.querySelector('[data-act=effectivePath]').onclick = () => openBuildEffectivePathModal(build);
     card.querySelector('[data-act=screenshot]').onclick = () => screenshotCard(card, build);
+    card.querySelector('[data-act=color]').onclick = () => openStripeColorPicker(build, card);
     wrapper.appendChild(card);
     list.appendChild(wrapper);
 
@@ -2014,7 +2033,7 @@ function switchHunter(h, skipNav) {
   // showing the previous hunter's number while the evaluator uses this one's -- a displayed
   // value that quietly disagrees with the value in effect.
   const iterInput = document.getElementById('baseIterations');
-  if (iterInput) iterInput.value = currentIterations();
+  if (iterInput) { iterInput.value = currentIterations(); fitNumberInput(iterInput); }
   // WHICH OPTIMIZE MODES EXIST IS PER HUNTER, so the dropdown has to follow the hunter too.
   // renderOptimizeModes() ran exactly once at module load, so a page opened on Borge kept offering
   // "Boss kill with Timeless maxed" after switching to Knox -- which has no `timeless` attribute
@@ -2335,6 +2354,169 @@ function openLootFilterModal() {
       renderBuildList();
     });
   });
+}
+
+// NUMBER PILLS SIZE TO THEIR CONTENT. A fixed w-20 left "1000" in an 80px box, so the value and
+// its label ("iterations", "frags/day") read as two separate things with dead space between.
+function fitNumberInput(el) {
+  const text = String(el.value || el.placeholder || '0');
+  el.style.width = `${Math.max(text.length, 1) + 0.5}ch`;
+}
+
+function rgbToHex(rgb) {
+  const parts = String(rgb).match(/\d+/g);
+  if (!parts || parts.length < 3) throw new Error(`rgbToHex: cannot parse "${rgb}"`);
+  return `#${parts.slice(0, 3).map((n) => Number(n).toString(16).padStart(2, '0')).join('')}`;
+}
+
+// STRIPE COLOUR for one build card. The choice lives on the build (`stripeColor`); favourites and
+// recents are account-wide (`store.cardColors`). Limits come from StoreSchema so the picker can
+// never write a list the validator would then report as corrupt.
+function openStripeColorPicker(build, card) {
+  const hunter = currentHunter;
+  const { favorites: FAV_MAX, recent: RECENT_MAX } = StoreSchema.CARD_COLOR_LIMITS;
+  // Resolved per action rather than captured: embedded mode re-reads the store from the host
+  // between renders, which replaces the objects a closure would otherwise be holding.
+  const target = () => {
+    const b = store[hunter].builds.find((x) => x.id === build.id);
+    if (!b) throw new Error(`Build ${build.id} is no longer in ${hunter}'s list`);
+    return b;
+  };
+  const liveCard = () => document.querySelector(`[data-build-id="${CSS.escape(String(build.id))}"]`);
+  let current = build.stripeColor || rgbToHex(getComputedStyle(card).borderLeftColor);
+
+  const overlay = titledModal('palette', 'Card Color', '', 'stripeColorModal');
+  // titledModal is sized for the big statistics dialogs; a palette needs a fraction of that.
+  overlay.firstElementChild.classList.replace('max-w-5xl', 'max-w-sm');
+  const body = overlay.querySelector('.p-5');
+  const swatch = (c, attrs) => `<button type="button" ${attrs} class="w-7 h-7 rounded-md border border-gray-600 hover:scale-110 transition-transform" style="background:${c}" title="${c}"></button>`;
+
+  const commit = (after) => { saveStore(); renderBuildList(); after(); paint(); };
+  const apply = (value) => {
+    const hex = String(value).toLowerCase();
+    if (!StoreSchema.HEX_COLOR.test(hex)) throw new Error(`Not a #rrggbb colour: ${value}`);
+    target().stripeColor = hex;
+    current = hex;
+    const pal = store.cardColors;
+    pal.recent = [hex, ...pal.recent.filter((x) => x !== hex)].slice(0, RECENT_MAX);
+    commit(() => {});
+  };
+
+  function paint() {
+    const pal = store.cardColors;
+    const slots = Array.from({ length: FAV_MAX }, (_, i) => {
+      const c = pal.favorites[i];
+      return c
+        ? `<div class="relative group">${swatch(c, `data-apply="${c}"`)}<button type="button" data-unfav="${c}" class="hidden group-hover:flex absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-gray-900 border border-gray-600 text-gray-300 text-[10px] items-center justify-center" title="Remove">&times;</button></div>`
+        : '<div class="w-7 h-7 rounded-md border border-dashed border-gray-600"></div>';
+    }).join('');
+    const canFav = pal.favorites.length < FAV_MAX && !pal.favorites.includes(current);
+    body.innerHTML = `
+      <div class="flex items-center gap-3 mb-4">
+        <input type="color" data-picker value="${current}" class="w-12 h-10 bg-transparent border border-gray-600 rounded cursor-pointer" />
+        <button type="button" data-fav ${canFav ? '' : 'disabled'} class="px-3 py-1.5 rounded-md text-sm ${canFav ? 'bg-gray-700 hover:bg-gray-600 text-white' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}">&#9733; Favorite</button>
+        <button type="button" data-reset class="ml-auto px-3 py-1.5 rounded-md text-sm bg-gray-700 hover:bg-gray-600 text-gray-300">Reset</button>
+      </div>
+      <div class="text-xs text-gray-400 mb-1.5">Favorites</div>
+      <div class="flex gap-2 mb-4">${slots}</div>
+      ${pal.recent.length ? `<div class="text-xs text-gray-400 mb-1.5">Recent</div>
+      <div class="flex flex-wrap gap-2">${pal.recent.map((c) => swatch(c, `data-apply="${c}"`)).join('')}</div>` : ''}`;
+
+    const picker = body.querySelector('[data-picker]');
+    // Dragging fires `input` continuously: preview it on the card, but commit (and record a
+    // recent) only on `change`, or one drag would fill the recent list with near-duplicates.
+    picker.addEventListener('input', () => { const el = liveCard(); if (el) el.style.borderLeftColor = picker.value; });
+    picker.addEventListener('change', () => apply(picker.value));
+    body.querySelectorAll('[data-apply]').forEach((b) => { b.onclick = () => apply(b.dataset.apply); });
+    body.querySelectorAll('[data-unfav]').forEach((b) => {
+      b.onclick = (e) => {
+        e.stopPropagation();
+        store.cardColors.favorites = store.cardColors.favorites.filter((c) => c !== b.dataset.unfav);
+        commit(() => {});
+      };
+    });
+    const favBtn = body.querySelector('[data-fav]');
+    if (canFav) favBtn.onclick = () => { store.cardColors.favorites.push(current); commit(() => {}); };
+    body.querySelector('[data-reset]').onclick = () => {
+      delete target().stripeColor;
+      commit(() => { const el = liveCard(); if (el) current = rgbToHex(getComputedStyle(el).borderLeftColor); });
+    };
+  }
+  paint();
+}
+
+// COMPARE BUILDS: tick two or more of this hunter's builds and see only the rows where they
+// differ -- level, each talent, each attribute, each override. Identical rows are hidden, because
+// the question being asked is "what is different", and a table of mostly-equal numbers buries it.
+function openCompareBuildsModal() {
+  const hunter = currentHunter;
+  const d = window.HUNTER_DEFS[hunter];
+  const builds = store[hunter].builds;
+  const selected = new Set();
+  const overlay = titledModal('git-compare', 'Compare Builds', '', 'compareBuildsModal');
+  const body = overlay.querySelector('.p-5');
+  const show = (v) => (v === undefined ? '&mdash;' : escapeHtml(typeof v === 'object' ? JSON.stringify(v) : String(v)));
+
+  const diffRows = (picked) => {
+    const sections = [];
+    const section = (name, entries) => {
+      const rows = entries.filter(({ values }) => new Set(values.map((v) => JSON.stringify(v ?? null))).size > 1);
+      if (rows.length) sections.push({ name, rows });
+    };
+    section('Build', [{ label: 'Level', values: picked.map((b) => b.level) }]);
+    // HUNTER_DEFS names these `label`, not `name` -- reading `name` rendered every row unlabelled.
+    section('Talents', d.talents.map((t) => ({ label: t.label, values: picked.map((b) => b.talents?.[t.id] || 0) })));
+    section('Attributes', d.attributes.map((a) => ({ label: a.label, values: picked.map((b) => b.attributes?.[a.id] || 0) })));
+    const overrideKeys = [...new Set(picked.flatMap((b) => Object.keys(b.overrides || {})))].sort();
+    section('Overrides', overrideKeys.map((k) => ({ label: k.replace(/^upgrades\./, ''), values: picked.map((b) => b.overrides?.[k]) })));
+    return sections;
+  };
+
+  const table = (picked, sections) => `
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead><tr>
+          <th></th>
+          ${picked.map((b) => `<th class="text-right text-gray-200 font-semibold py-1.5 px-2 whitespace-nowrap">${escapeHtml(b.name || 'Unnamed')}</th>`).join('')}
+        </tr></thead>
+        <tbody>${sections.map(({ name, rows }) => `
+          <tr><td colspan="${picked.length + 1}" class="pt-3 pb-1 text-xs uppercase tracking-wider text-gray-500">${name}</td></tr>
+          ${rows.map(({ label, values }) => {
+            const nums = values.filter((v) => typeof v === 'number');
+            const best = nums.length === values.length ? Math.max(...nums) : null;
+            return `<tr class="border-t border-gray-700/50">
+              <td class="py-1 pr-3 text-gray-300 whitespace-nowrap">${escapeHtml(label)}</td>
+              ${values.map((v) => `<td class="py-1 px-2 text-right tabular-nums ${best !== null && v === best ? 'text-green-300 font-semibold' : 'text-gray-300'}">${show(v)}</td>`).join('')}
+            </tr>`;
+          }).join('')}`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+
+  function paint() {
+    const picked = builds.filter((b) => selected.has(b.id));
+    const list = builds.map((b, i) => `
+      <label class="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-700/50 cursor-pointer text-sm">
+        <input type="checkbox" data-pick="${i}" ${selected.has(b.id) ? 'checked' : ''} class="w-4 h-4 accent-amber-500" />
+        <span class="text-gray-200 truncate">${escapeHtml(b.name || 'Unnamed')}</span>
+        <span class="ml-auto text-xs text-gray-500 flex-shrink-0">Lvl ${b.level}</span>
+      </label>`).join('');
+    let result = '';
+    if (builds.length < 2) result = '<div class="text-sm text-gray-400">Needs at least two builds.</div>';
+    else if (picked.length >= 2) {
+      const sections = diffRows(picked);
+      result = sections.length ? table(picked, sections) : '<div class="text-sm text-gray-400">No differences.</div>';
+    }
+    body.innerHTML = `<div class="grid gap-0.5 mb-4 max-h-48 overflow-y-auto">${list}</div>${result}`;
+    body.querySelectorAll('[data-pick]').forEach((cb) => {
+      cb.onchange = () => {
+        const id = builds[Number(cb.dataset.pick)].id;
+        if (cb.checked) selected.add(id); else selected.delete(id);
+        paint();
+      };
+    });
+  }
+  paint();
 }
 
 function openCategoriesModal() {

@@ -74,6 +74,12 @@
   // means "recurse into this object and fill missing sub-keys too" -- used for the settings
   // objects that gain new keys over time. Plain maps (ships, gearSets, ...) are user data:
   // present-or-default, never merged key-by-key.
+  // Build-card stripe colours. ONE definition of the limits and the colour format, exported so the
+  // picker (app.js) trims to the same numbers validateStore() enforces -- two copies of a limit is
+  // how a UI ends up writing a state the validator then reports as corrupt.
+  const CARD_COLOR_LIMITS = { favorites: 5, recent: 10 };
+  const HEX_COLOR = /^#[0-9a-f]{6}$/;
+
   const SCHEMA = {
     globalUpgrades: { make: () => ({}) },
     gems: { make: () => global.defaultGemState() },
@@ -123,6 +129,10 @@
     // localStorage key even in extension mode, which made the native Pinia store only a partial
     // account state. Keeping it here makes one persisted store own the whole companion state.
     lastScan: { make: () => ({}) },
+    // Build-card stripe colour palette, account-wide (a colour means the same thing on every
+    // hunter's cards). `favorites` are pinned by the user; `recent` is maintained automatically,
+    // most-recent first. The per-card choice lives on the build itself as `stripeColor`.
+    cardColors: { deep: true, make: () => ({ favorites: [], recent: [] }) },
     // How much search effort the user is willing to pay for. A standing preference about time,
     // validated against the optimizer's own EFFORT_LEVELS at render time so a stale or renamed
     // level falls back to the default instead of reaching a search that cannot honour it.
@@ -374,7 +384,22 @@
         if (!isPlainObject(b.talents)) note(`${where}.talents is not an object`);
         if (!isPlainObject(b.attributes)) note(`${where}.attributes is not an object`);
         problems.push(...validateAllocation(h, b, where, store.gems));
+        // Optional: absent means "use the default stripe" (hunter accent, yellow for the reference
+        // build). Present, it is written straight into a style attribute, so it must be a colour.
+        if (b.stripeColor !== undefined && !HEX_COLOR.test(b.stripeColor)) {
+          note(`${where}.stripeColor is "${b.stripeColor}", expected a #rrggbb colour`);
+        }
       });
+    }
+
+    const cc = store.cardColors;
+    if (cc) {
+      for (const [list, limit] of Object.entries(CARD_COLOR_LIMITS)) {
+        if (!Array.isArray(cc[list])) { note(`cardColors.${list} is not an array`); continue; }
+        if (cc[list].length > limit) note(`cardColors.${list} holds ${cc[list].length}, limit is ${limit}`);
+        cc[list].forEach((c, i) => { if (!HEX_COLOR.test(c)) note(`cardColors.${list}[${i}] is "${c}", expected #rrggbb`); });
+        if (new Set(cc[list]).size !== cc[list].length) note(`cardColors.${list} contains duplicates`);
+      }
     }
 
     const catIds = new Set();
@@ -464,6 +489,8 @@
     freshStore,
     migrateStore,
     validateStore,
+    CARD_COLOR_LIMITS,
+    HEX_COLOR,
     validateAllocation,
     ITERATIONS,
     iterationCeiling,

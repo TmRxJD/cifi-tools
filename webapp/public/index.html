@@ -100,7 +100,7 @@ tailwind.config = {
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" />
-<link rel="stylesheet" href="tokens.css?v=20260912a-fixlist" />
+<link rel="stylesheet" href="tokens.css?v=20260912c-cards" />
 <style>
   body { background: var(--surface-900); color: var(--surface-200); }
   .stepper-btn { @apply w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed text-white; }
@@ -715,7 +715,7 @@ tailwind.config = {
   </div>
 </div>
 
-<script src="icons.js?v=20260810p"></script>
+<script src="icons.js?v=20260912c-cards"></script>
 <script src="assetUrl.js?v=20260909a"></script>
 <script src="hunterDefs.js?v=20260903a"></script>
 <script src="shipSchema.js?v=20260907x-meltdown1"></script>
@@ -726,7 +726,7 @@ tailwind.config = {
 <script src="optimizer/space.js?v=20260907q-guards"></script>
 <script src="optimizer/objective.js?v=20260907t-bosstarget"></script>
 <!-- storeSchema depends on HUNTER_DEFS (hunterDefs.js) and AllocSpace (optimizer/space.js). -->
-<script src="storeSchema.js?v=20260910a-native-store"></script>
+<script src="storeSchema.js?v=20260912c-cards"></script>
 <!-- Real community build codes used as optimizer seeds, and the gate-aware refit that
      scales one to a different budget. Both must load BEFORE search.js, which consumes them.
      Measured: rule-based construction lands at kill 0.0 and -45% to -88% on the hard builds;
@@ -749,7 +749,7 @@ tailwind.config = {
      CDN-blocked user still gets the whole tool minus cloud saves. -->
 <script src="https://cdn.jsdelivr.net/npm/appwrite@27.0.0/dist/iife/sdk.js"></script>
 <script src="cloudSync.js?v=20260907c-stamps"></script>
-<script src="app.js?v=20260912b-review"></script>
+<script src="app.js?v=20260912c-cards"></script>
 <script>
   // Custom (non-Tabler) sidebar icons: real game-asset SVG paths copied verbatim from the
   // live site's rendered DOM (Relics/Loop Mods/Milestones use bespoke icons, not Tabler's).

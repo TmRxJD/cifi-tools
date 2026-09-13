@@ -384,7 +384,11 @@
   gap: .375rem;
   width: 100%;
 }
-@container (max-width: 360px) {
+
+/* 399px because ten 34px buttons plus nine gaps measure 392px, and the bar adds 8px of padding:
+   below 400 they cannot share a row. The build grid's column minimum (app.js) is sized so a card
+   normally clears this, leaving the two-row layout for genuinely narrow screens. */
+@container (max-width: 399px) {
   .cifi-companion .action-buttons-grid { grid-template-columns: repeat(var(--half, 5), minmax(0, auto)); }
 }
 
@@ -403,6 +407,13 @@
 }
 .cifi-companion .toggle-switch > input:checked + .toggle-track { background: #16a34a; }
 .cifi-companion .toggle-switch > input:checked + .toggle-track .toggle-thumb { transform: translateX(1.25rem); }
+
+
+/* Number pills sized to their content (see fitNumberInput in app.js). The browser's spin buttons
+   are hidden because they reserve width inside the field -- that reserve, plus a fixed w-20, is
+   what put a gap between "1000" and "iterations". Typing and arrow keys still work. */
+.cifi-companion .fit-number { appearance: textfield; -moz-appearance: textfield; }
+.cifi-companion .fit-number::-webkit-outer-spin-button, .cifi-companion .fit-number::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
 .cifi-companion .ctrl-btn {
   display: flex;

@@ -49,7 +49,12 @@ const gemTree = z.object({
 // would duplicate hunterDefs.js and drift from it) and closed on VALUE -- a level arriving as a
 // string is the failure worth catching. `overrides` is genuinely heterogeneous per upgrade family,
 // so it is open-valued and says so rather than being left off.
+// Lower-case #rrggbb only: it is written straight into a style attribute, and one canonical form
+// keeps favourites/recents de-duplicable by string equality.
+const hexColor = z.string().regex(/^#[0-9a-f]{6}$/);
+
 const savedBuild = z.object({
+  stripeColor: hexColor.optional(),
   // `newDraftBuild()` creates it as null and it stays null until saved, so null is a real state.
   id: z.union([z.number(), z.string(), z.null()]).optional(),
   name: z.string(),
@@ -157,6 +162,10 @@ const storeSchema = z.object({
   // that relationship; duplicating it here would be a second source for one fact.
   lastHunter: z.enum(['borge', 'ozzy', 'knox']),
   lastScan: freeFormMap,
+  cardColors: z.object({
+    favorites: z.array(hexColor).max(5),
+    recent: z.array(hexColor).max(10),
+  }).strict(),
   optimizeEffort: z.string().min(1),
   // 0 means show the complete install order; positive values keep only that trailing detail.
   installOrderShowLast: z.number().int().nonnegative(),
