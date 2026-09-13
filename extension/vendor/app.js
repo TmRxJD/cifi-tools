@@ -1813,6 +1813,9 @@ async function renderBuildList() {
   // Stage / a red "+18%" Ø Time, all relative to card 1) -- not against a user-chosen
   // baseline. Lower-is-better for Ø Time only; every other stat is higher-is-better.
   let comparisonBaseline = null;
+  // Latest result and repaint function per card, so one card can be re-evaluated in place.
+  const cardResults = [];
+  const cardPainters = [];
   const deltaBadge = (current, base, invert) => {
     if (!base || current === undefined || current === null) return '';
     const pct = ((current - base) / Math.abs(base)) * 100;
@@ -1946,7 +1949,6 @@ async function renderBuildList() {
       store[currentHunter].builds = store[currentHunter].builds.filter((b) => b.id !== build.id);
       saveStore(); renderCategoryTabs(); renderBuildList();
     };
-    card.querySelector('[data-act=reEvaluate]').onclick = () => renderBuildList();
     card.querySelector('[data-act=overrideCosts]').onclick = () => openOverrideCostsModal(build);
     card.querySelector('[data-act=compareEfficiency]').onclick = () => openCompareEfficiencyModal(build);
     card.querySelector('[data-act=buildStats]').onclick = () => openBuildStatsModal(build);
@@ -1965,8 +1967,7 @@ async function renderBuildList() {
       // would append stale duplicates on top of them. Stop immediately.
       if (myToken !== renderBuildListToken) return;
     }
-    evalPromise.then((r) => {
-      if (myToken !== renderBuildListToken) return;
+    const paint = (r) => {
       const runsPerDay = r.avgTime ? 1440 / r.avgTime : 0;
       const base = buildIdx > 0 ? comparisonBaseline : null;
       const baseRunsPerDay = base?.avgTime ? 1440 / base.avgTime : 0;
@@ -2023,7 +2024,38 @@ async function renderBuildList() {
             <div class="boss-progress"><div class="boss-progress-bg"></div><div class="boss-progress-fill bg-emerald-500" style="width:${Math.min(100, killPct)}%"></div></div>
           </div>`;
       }
+    };
+    cardPainters[buildIdx] = paint;
+    evalPromise.then((r) => {
+      if (myToken !== renderBuildListToken) return;
+      cardResults[buildIdx] = r;
+      paint(r);
     });
+
+    // Re-evaluates THIS card in place, as the original site does. It used to call renderBuildList(),
+    // which tore down and re-evaluated every card -- the whole page visibly reloaded for one build.
+    // Card 0 is every other card's comparison baseline, so refreshing it repaints their deltas from
+    // their stored results rather than re-running them.
+    const reEvalBtn = card.querySelector('[data-act=reEvaluate]');
+    reEvalBtn.onclick = async () => {
+      if (reEvalBtn.disabled) return;
+      reEvalBtn.disabled = true;
+      reEvalBtn.querySelector('svg')?.classList.add('animate-spin');
+      try {
+        const r = await HunterSim.evaluate(currentHunter, evalStateFor(build, currentIterations()));
+        if (myToken !== renderBuildListToken) return;
+        cardResults[buildIdx] = r;
+        if (buildIdx === 0) {
+          comparisonBaseline = r;
+          cardPainters.forEach((p, i) => { if (cardResults[i]) p(cardResults[i]); });
+        } else {
+          paint(r);
+        }
+      } finally {
+        reEvalBtn.disabled = false;
+        reEvalBtn.querySelector('svg')?.classList.remove('animate-spin');
+      }
+    };
   }
 }
 

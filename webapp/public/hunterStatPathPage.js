@@ -324,7 +324,7 @@
   }
 
   async function openHunterStatPathModal() {
-    const resources = window.resourcesFor(currentHunter, false, store.gems);
+    const resources = window.resourcesFor(currentHunter, true, store.gems);
     const overlay = titledModal('chart-arrows-vertical', 'Effective Path', renderProgressPanel(resources), 'hunterStatPathModal');
     widenModal(overlay);
     bindProgressLabels(overlay, currentHunter, resources);
@@ -337,7 +337,7 @@
       let result; let rates;
       const baseline = getBaselineBuild(currentHunter);
       try {
-        ({ result, rates } = await cachedPath(overlay, baseline, false, mode, signal));
+        ({ result, rates } = await cachedPath(overlay, baseline, true, mode, signal));
       } catch (err) {
         // A SUPERSEDED RUN MUST NOT PAINT. Aborting terminates the worker pool, which rejects
         // in-flight batches with an `AbortError` -- not HunterSim's ABORTED name, so isAbort()

@@ -54,22 +54,12 @@
   // The local fallback exists for DEVELOPMENT, where the file sits next to this one. It is also
   // what the hosted site currently uses; removing it is a separate decision recorded in
   // THIRD-PARTY.md, and this loader is the one place that has to change when it is made.
-  // WHICH SOURCE ACTUALLY SERVED THE ENGINE, recorded and announced.
-  //
-  // Until now a working bridge and a missing one looked IDENTICAL from the outside: the bridge
-  // logs nothing on success, so "no console output" meant either "it worked" or "the content
-  // script never ran". That is unfalsifiable from the user's side, and it is the exact question
-  // anyone installing the extension needs answered.
-  //
-  // `HunterSim.engineSource()` is the machine-readable form; the console line is for a human who
-  // just installed the extension and wants to know whether it took.
+  // WHICH SOURCE ACTUALLY SERVED THE ENGINE, recorded -- not announced. `HunterSim.engineSource()`
+  // answers "did the extension take" on demand; a console line on every load was noise in
+  // production, where the console should only ever carry something meaningful.
   let engineSource = 'not loaded yet';
-  function setEngineSource(src, detail) {
+  function setEngineSource(src) {
     engineSource = src;
-    const msg = src === 'native'
-      ? `[cifi] evaluating through cifi-tools.com's own worker (${detail}) -- the companion loads no engine of its own`
-      : `[cifi] engine loaded from this site's own copy (${detail})`;
-    try { console.info(msg); } catch { /* console may be unavailable in a worker */ }
   }
 
   // EMBEDDED MODE NEVER LOADS AN ENGINE. It used to fetch cifi-tools' own release.wasm and compile

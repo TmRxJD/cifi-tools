@@ -229,9 +229,10 @@
     return [...new Set(candidates.map((c) => c.resource))];
   }
 
-  // Inscriptions and relics are both account-wide purchases in their own currencies, and both
-  // belong to the build-card path but not the bare stats page. One list so the two entry points
-  // cannot disagree about what the path considers.
+  // Inscriptions and relics are both account-wide purchases in their own currencies. Both entry
+  // points (the stats page and the build card) include them since 2026-09-13 -- the stats page
+  // used to exclude them, so Borge/Ozzy showed no Fragments column there. One list so the two
+  // entry points cannot disagree about what the path considers.
   function accountUpgradeCandidates(hunter, def, CF, include) {
     if (!include) return [];
     return buildInscryptionCandidates(hunter, def, CF).concat(buildRelicCandidates(hunter, def, CF));
