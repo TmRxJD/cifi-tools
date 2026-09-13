@@ -72,15 +72,6 @@
     // route-local instances. Both boot orders now run exactly the same native implementation.
     const mountBridgeStatus = (aside) => {
       if (!(aside instanceof HTMLElement) || aside.querySelector('#bridgeStatusSidebar')) return;
-      // The standalone app's own sidebar carries a fork-credit line (index.html); this component
-      // renders the native site's OWN sidebar instead (see the class comment above), so that
-      // markup never reaches cifi-tools.com. Same text, appended the same way as the bridge
-      // status box below, so the extension itself is credited somewhere a user actually sees it.
-      const credit = document.createElement('div');
-      credit.id = 'companionCredit';
-      credit.className = 'px-3 pb-2 text-[11px] leading-relaxed text-gray-500';
-      credit.textContent = 'Fleet and Optimizer Extension by TmRxJD.';
-      aside.append(credit);
       const status = document.createElement('div');
       status.id = 'bridgeStatusSidebar';
       status.className = 'hidden sticky bottom-0 mt-auto mx-3 mb-3 px-2.5 py-2 rounded-lg bg-gray-800 border border-gray-700/50 text-xs flex items-center gap-2 cursor-pointer z-10';
@@ -234,6 +225,36 @@
       requestAnimationFrame(() => {queued=false;mountHeader();});
     };
     new MutationObserver(scheduleHeader).observe(document.querySelector('header'),{childList:true,subtree:true});
+
+    // Appends to the SITE'S OWN credit line ("CIFI Tools by Vash • Built upon Kylenator's Hunter
+    // Simulator • Made in collaboration with Octocube Games") rather than adding a separate credit
+    // element -- the project owner asked for it in that exact line, not somewhere new. Located by
+    // the Octocube Games link, which is the one part of that sentence stable enough to key off.
+    function mountFooterCredit() {
+      const footer = document.querySelector('footer');
+      if (!footer || footer.querySelector('[data-cifi-companion-credit]')) return false;
+      const octocubeLink = [...footer.querySelectorAll('a')]
+        .find((a) => a.textContent.trim() === 'Octocube Games');
+      const line = octocubeLink?.closest('p');
+      if (!line) return false;
+      const credit = document.createElement('span');
+      credit.dataset.cifiCompanionCredit = '';
+      credit.append(' • Fleet and Optimizer Extension by ');
+      const author = document.createElement('span');
+      author.className = 'text-green-400';
+      author.textContent = 'TmRxJD';
+      credit.append(author, '.');
+      line.append(credit);
+      return true;
+    }
+    // The footer is outside every RouterView (it's part of the root layout, not a routed page), so
+    // it exists once and this never needs to reattach -- unlike the header nav clone, which Vue can
+    // discard on re-render. One-shot: retry on body mutations only until it succeeds, then stop
+    // watching, rather than an unbounded subtree observer running for the rest of the session.
+    if (!mountFooterCredit()) {
+      const footerObserver = new MutationObserver(() => { if (mountFooterCredit()) footerObserver.disconnect(); });
+      footerObserver.observe(document.body,{childList:true,subtree:true});
+    }
     router.afterEach(() => {
       // The persistent sidebar is enabled only for companion routes. The native root does not
       // otherwise depend on route state, so Vue has no reason to re-run this injected render
