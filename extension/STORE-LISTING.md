@@ -5,11 +5,9 @@ Not part of the package (the zip excludes `*.md`).
 
 ## Package
 
-Build, then zip `extension/` without the docs:
-
-```bash
-node tools/build-companion.js --check
-```
+Upload `cifi-companion.zip` — the contents of `extension/` (manifest at the zip root), built with
+`node tools/build-companion.js` and zipped without the `*.md` docs. Each update needs a higher
+`version` in `manifest.json` than the one already on the store.
 
 ## Store listing tab
 
