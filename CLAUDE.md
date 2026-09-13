@@ -234,13 +234,17 @@ instead of every time:
 
 | Skill | Covers |
 |---|---|
-| `hunter-game-mechanics` | Game mechanics, relics, gear, ships, save-import field mappings, gem gates -- the "Validated invariants" empirical log |
-| `optimizer-search-design` | The optimizer's search algorithm, MAP-Elites/corpus-donor history, effort tuning, known open defects |
+| `hunter-sim-mechanics` | Per-hunter (Borge/Ozzy/Knox) sim, relics, save-import field mappings, gem gates, talent/attribute optimizer bugs |
+| `fleet-ship-mechanics` | Ships/fleet: crew/rank/evolution, install-node math, gear, badges, the fleet allocator |
+| `optimizer-search-design` | The build optimizer's search algorithm, MAP-Elites/corpus-donor history, effort tuning, known open defects |
 | `validation-gates` | Which bench/gate command to run and what it checks; TypeScript readiness |
 
-Each loads automatically when its `description` matches, or invoke directly:
-`/hunter-game-mechanics`, `/optimizer-search-design`, `/validation-gates`. When in doubt, load the
-skill before calling a game-mechanics fact new or touching the optimizer search.
+`hunter-sim-mechanics` and `fleet-ship-mechanics` were split out of one `hunter-game-mechanics`
+skill (2026-09-13) because a single dispatch touching only ships still paid for hunter-side relic
+history, and vice versa. Each loads automatically when its `description` matches, or invoke
+directly: `/hunter-sim-mechanics`, `/fleet-ship-mechanics`, `/optimizer-search-design`,
+`/validation-gates`. When in doubt, load the skill before calling a game-mechanics fact new or
+touching the optimizer search.
 
 ---
 
