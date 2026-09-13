@@ -236,23 +236,6 @@
     };
   }
 
-  // Upgrades excluded because the account has not unlocked them yet. Shown rather than silently
-  // dropped: "nothing worth buying here" and "everything here is still locked behind a gem
-  // level" are very different answers, and only one of them tells you what to go do.
-  function lockedNoticeHtml(locked) {
-    if (!locked || !locked.length) return '';
-    const byReq = new Map();
-    for (const l of locked) {
-      if (!byReq.has(l.requires)) byReq.set(l.requires, []);
-      byReq.get(l.requires).push(l.label || l.key);
-    }
-    const lines = [...byReq.entries()]
-      .map(([req, names]) => `<li>${escapeHtml(req)} &mdash; ${escapeHtml(names.join(', '))}</li>`).join('');
-    return `<div class="text-xs text-amber-400/90 bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-2 mb-3">
-      <div class="font-semibold mb-1">Not shown &mdash; locked on this account:</div>
-      <ul class="list-disc list-inside space-y-0.5">${lines}</ul></div>`;
-  }
-
   function renderColumnsModal(overlay, columns, rates, rowLabel, hunter, subtitle, modeSelected, locked) {
     widenModal(overlay);
     const body = overlay.querySelector('.p-5');
@@ -260,7 +243,6 @@
     body.innerHTML = `
       ${modeSelected ? modePickerHtml(modeSelected) : ''}
       ${subtitle ? `<div class="text-xs text-gray-500 mb-3">${subtitle}</div>` : ''}
-      ${lockedNoticeHtml(locked)}
       <div class="grid grid-cols-1 md:grid-cols-${Math.min(resources.length, 4)} gap-3">
         ${resources.map((r) => `<div data-col="${r}" class="bg-gray-900/40 rounded-lg p-2 max-h-[60vh] overflow-y-auto"></div>`).join('')}
       </div>`;

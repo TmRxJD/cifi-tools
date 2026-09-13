@@ -37,12 +37,11 @@ See `../THIRD-PARTY.md` (route 4) for what this resolves and what it does not.
 3. **Load unpacked** → select this `extension/` directory.
 4. Open **https://cifi-tools.com** and reload the page.
 
-You should see **Fleet · Ships · Gear · Research · Badges** appear in their nav, and this in the
-console:
-
-```
-[cifi-companion] active on https://cifi-tools.com
-```
+The header has one **Hunters** destination and one **Fleet** destination. Hunters is the standalone
+application's complete Hunter surface: Borge/Ozzy/Knox tabs, build cards and every card action,
+Build Creator, Effective Path, import, overrides, filtering, categories and optimizer. Ship Setup,
+Gear Sets, Research and Academy Badges are added to the site's own sidebar categories. Gems remains
+the site's native `/upgrades/gems` page.
 
 There is no popup and the toolbar icon does nothing — it works passively on the page.
 
@@ -52,9 +51,13 @@ There is no popup and the toolbar icon does nothing — it works passively on th
 
 | Path | What it is |
 |---|---|
-| `manifest.json` | MV3. One content script, `storage` permission, no host permissions and no background worker — none are needed on their origin. |
-| `companion.js` | Nav injection, router hook, and mounting our pages. |
-| `companionStore.js` | `window.store` / `window.saveStore`, namespaced and mirrored. |
+| `manifest.json` | MV3. MAIN-world host adapters and isolated-world tool scripts, with `storage` permission. |
+| `routes.js` | The single registry of genuinely added pages; contains no native route replacements. |
+| `hostRouting.js` | Adds the six companion records to native Vue Router and integrates the original native sidebar component. |
+| `companion.js` | Renders added tool contents only, in containers mounted/unmounted by Vue. |
+| `hostStoreBridge.js` | Applies imported native fields to the site's actual Pinia stores. |
+| `config.js` | Embedded runtime configuration; app.js owns private tool state. |
+| `integration.css` | Minimal layout integration; native link/icon/gate styling stays native. |
 | `shell.js` | **Generated** from `index.html`: the five modals `shipsPage.js` binds at load time. Must load before it. |
 | `companion.css` | **Generated** from `webapp/public/tokens.css`, every selector scoped. |
 | `vendor/` | **Generated** copies of `webapp/public/` files. Do not edit. |
@@ -75,7 +78,7 @@ There is no popup and the toolbar icon does nothing — it works passively on th
 
 - **The stylesheet must stay scoped.** A content script's CSS applies to the whole document.
   `tokens.css` styles `body` and `:root`, so loading it unscoped would restyle *their* site. The
-  generator re-roots every selector at `#cifi-companion-root` and verifies its own output — it has
+  generator re-roots every selector at `.cifi-companion` and verifies its own output — it has
   had two bugs that produced valid-looking CSS with rules silently deleted.
 
 - **Every storage key is namespaced `cifi-companion:`.** We share their origin and therefore their
@@ -89,9 +92,43 @@ There is no popup and the toolbar icon does nothing — it works passively on th
   theirs and what keeps them that way. For the same reason, Vue discarding our nodes on re-render
   is expected: a `MutationObserver` reinstates them.
 
+## Routing contract and verification
+
+The site's Vue Router is the only history owner. Native routes, redirects, lazy components and
+store subscriptions remain native. The extension does not replace Gems, intercept native links,
+write history directly, or move/hide native RouterView DOM children. Its complete six-page surface
+mounts through Vue route records under `/companion/` (no hash router). The site's three individual
+Hunter links are hidden from the header in favor of the one companion Hunters destination.
+
+The persistent sidebar uses the site's **actual UpgradesSidebar component**, not a copied menu.
+Its native Pinia subscriptions own progression filtering, icons and active-link state. The native
+Settings sidebar toggle controls visibility. Route-local instances are suppressed so there is
+exactly one sidebar, independent of the previously visited page.
+
+This adapter depends on the production Vue app instance, exported native components and the root
+layout shape. Those contracts are validated at startup and fail with an integration error if the
+site changes; no replacement native-page renderer is used as a fallback.
+
+Run `node tools/bench/all.js` for local gates. For routing release verification, install Playwright
+and its Chromium runtime, then run `node tools/bench/companion-browser-check.js`. This launches the
+actual unpacked extension against cifi-tools.com in a disposable profile and checks native Gems,
+all six additions, the complete standalone Hunter feature contract, optimizer cancellation, reload,
+back/forward, imported progression gates and the native sidebar toggle.
+`--negative-control` deliberately hides native content and **must exit nonzero**. Browser tests
+require network access; they are not replaced by the source/dependency checks in the local suite.
+
+Also run `node tools/bench/companion-gems-browser-check.js`: it uses the actual save mapper's
+populated, partial gem states. This reproduced the live blank Gems bug that an empty-account
+routing test missed. The host-store boundary must merge this partial projection into a complete
+native `{level,nodes,upgrades}` state, preserving GU values the importer does not model.
+Version 2.3.1 repairs older states missing `upgrades`, retaining the original payload under
+`cifi-companion:gem-store-before-upgrades-repair` before changing it.
+
 ---
 
 ## Status
 
-Fleet, Ships, Gear, Research and Badges are mounted. The **hunter optimizer is not yet ported** —
-it needs its Web Worker pool, which requires `web_accessible_resources` in the manifest.
+Hunters, Fleet, Ships, Gear, Research, and Badges are mounted as added pages. The Hunter surface is
+generated directly from the standalone app's canonical renderer. Its scoring adapter talks directly to the native same-origin
+evaluation worker already published by cifi-tools.com; the extension does not package, proxy,
+cache, or fall back to a copy of their engine or worker.

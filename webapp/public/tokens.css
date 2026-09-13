@@ -216,19 +216,18 @@ h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -.
   gap: .25rem;
 }
 
-/* The shared panel treatment. Previously each of .stat-card / .resource-card /
-   .boss-stat-card independently declared the same translucent background with
-   no border; they are one thing and are now defined as one. */
+/* The live hunter cards use translucent score areas without outlined sub-cards. Keep that
+   treatment here: adding a generic panel border makes the companion look like a redesign even
+   though its surrounding card markup was lifted from the original site. */
 .stat-card, .resource-card, .boss-stat-card {
-  background-color: color-mix(in srgb, var(--surface-800) 55%, transparent);
-  border: 1px solid var(--line-soft);
+  background-color: transparent;
+  border: 0;
   border-radius: var(--radius-md);
   height: 100%;
-  transition: border-color .15s ease, background-color .15s ease;
+  transition: background-color .15s ease;
 }
 .stat-card:hover, .resource-card:hover, .boss-stat-card:hover {
-  border-color: var(--line);
-  background-color: color-mix(in srgb, var(--surface-800) 75%, transparent);
+  background-color: transparent;
 }
 
 .stat-card { padding: .45rem; }
@@ -246,7 +245,16 @@ h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -.
   padding: .75rem;
   gap: .75rem;
   border-left-width: 2px;   /* hue set per-resource by the caller */
+  border-left-style: solid;
+  border-radius: var(--radius) 0 0 var(--radius);
 }
+/* These are structural brackets, not filled output panels. Own their colors here instead of
+   relying on dynamically constructed Tailwind classes, which are absent from a host bundle when
+   the host's own templates do not contain the exact opacity variant. */
+.resource-grid .resource-card:nth-child(1) { border-left-color: rgb(220 38 38 / .45); }
+.resource-grid .resource-card:nth-child(2) { border-left-color: rgb(234 88 12 / .45); }
+.resource-grid .resource-card:nth-child(3) { border-left-color: rgb(217 119 6 / .45); }
+.resource-grid .resource-card:nth-child(4) { border-left-color: rgb(37 99 235 / .45); }
 .resource-icon {
   display: flex;
   align-items: center;
@@ -318,6 +326,15 @@ h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -.
   border-radius: var(--radius) var(--radius) 0 0;
   overflow: hidden;
 }
+.header-wrapper > [title="Build Level"] {
+  /* `right-[34px]` is an arbitrary Tailwind utility used by the original markup. The standalone
+     Tailwind runtime generates it, but an extension can only inherit utilities present in the
+     host's current compiled build. Own the load-bearing offset so the level badge never falls
+     back over the left-side drag handle after a host CSS rebuild. */
+  position: absolute;
+  top: .375rem;
+  right: 34px;
+}
 .header-main { background: linear-gradient(to right, color-mix(in srgb, var(--surface-800) 95%, transparent), color-mix(in srgb, var(--surface-900) 95%, transparent)); }
 
 /* ============================================================================
@@ -339,6 +356,32 @@ h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -.
   border-color: var(--line);
   color: #fff;
 }
+
+.action-buttons-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, auto));
+  justify-content: center;
+  gap: .375rem;
+  width: 100%;
+}
+@media (max-width: 420px) {
+  .action-buttons-grid { grid-template-columns: repeat(4, minmax(0, auto)); }
+}
+
+/* Explicit switch state keeps the thumb functional in the extension too. Tailwind's generated
+   peer utilities belong to the host build and cannot be assumed to exist on cifi-tools.com. */
+.toggle-switch { display: inline-flex; align-items: center; cursor: pointer; user-select: none; }
+.toggle-switch > input { position: absolute; opacity: 0; pointer-events: none; }
+.toggle-track {
+  display: inline-block; position: relative; width: 2.5rem; height: 1.25rem;
+  border-radius: 9999px; background: var(--surface-700); transition: background-color .15s ease;
+}
+.toggle-thumb {
+  position: absolute; top: .125rem; left: .125rem; width: 1rem; height: 1rem;
+  border-radius: 9999px; background: #fff; transition: transform .15s ease;
+}
+.toggle-switch > input:checked + .toggle-track { background: #16a34a; }
+.toggle-switch > input:checked + .toggle-track .toggle-thumb { transform: translateX(1.25rem); }
 
 .ctrl-btn {
   display: flex;

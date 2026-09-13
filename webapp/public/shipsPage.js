@@ -544,7 +544,7 @@ function gearIconImg(name, px) {
   const slug = gearIconSlug(name);
   if (!slug) return '';
   const size = px || 22;
-  return `<img src="assets/gear/${slug}.png" alt="" aria-hidden="true" `
+  return `<img src="${assetUrl(`assets/gear/${slug}.png`)}" alt="" aria-hidden="true" `
     + `style="width:${size}px;height:${size}px" class="object-contain flex-shrink-0" `
     + `onerror="this.remove()" />`;
 }
@@ -565,7 +565,7 @@ function shipPortraitPath(shipId, evoLevel) {
   const portrait = SHIP_PORTRAITS[shipId];
   if (!portrait) return null;
   const max = SHIP_MAX_EVO[shipId];
-  if (max === undefined) return `assets/ships/${portrait}.png`;
+  if (max === undefined) return assetUrl(`assets/ships/${portrait}.png`);
   // CLAMPED, NOT TRUSTED. `evo` is a free-text field the user types, so it can be blank, negative,
   // or above the real ceiling; clamping keeps a typo showing a real ship rather than a broken
   // image. Above the cap the ship is at its final form, which is what the game shows too.
@@ -574,7 +574,7 @@ function shipPortraitPath(shipId, evoLevel) {
   // ship-evo-art-check.js on its first run, which is why that bench asserts the FILE exists
   // rather than merely that the number is in range.
   const stage = Math.max(0, Math.min(max, Math.floor(Number(evoLevel) || 0)));
-  return `assets/ships/${portrait}-evo${stage}.png`;
+  return assetUrl(`assets/ships/${portrait}-evo${stage}.png`);
 }
 // What each ship actually ranks up by, per cifi.fandom.com's ship pages -- drives the Ship
 // Setup page's "progress toward next rank" field label.
@@ -597,7 +597,7 @@ const SHIP_CODE_PREFIX = { 1: 'CRA', 2: 'AUX', 3: 'ZAG', 4: 'HEP', 5: 'DEM', 6: 
 // so it returns null here and the <img onerror> falls back to a plain tile.
 function nodeIconPath(shipId, code) {
   const prefix = SHIP_CODE_PREFIX[shipId];
-  return prefix ? `assets/nodes/${prefix}${code}.png` : null;
+  return prefix ? assetUrl(`assets/nodes/${prefix}${code}.png`) : null;
 }
 
 // Which global RU registry category (see shipSchema.js) each ship's install grid reads from.
@@ -836,6 +836,7 @@ function nodeOwnBonusPct(shipId, slot, level, allLevels) {
 function computeResourceBonuses(shipId, levels) {
   const catalog = SHIP_NODE_CATALOG[shipId] || {};
   const mults = {};
+  const logs = {};
   Object.entries(levels || {}).forEach(([slot, lvl]) => {
     if (!lvl) return;
     const meta = catalog[slot];
@@ -848,12 +849,18 @@ function computeResourceBonuses(shipId, levels) {
     // skipped here to avoid a redundant separate "All Gens" total that would double-count
     // against each tier's own total (and would collapse the per-tier Meltdown melt into one
     // combined figure instead of each tier's own).
-    effectResources(meta.effect).forEach((res) => { if (res === 'allGens') return; mults[res] = (mults[res] || 1) * factor; });
+    effectResources(meta.effect).forEach((res) => {
+      if (res === 'allGens') return;
+      mults[res] = (mults[res] || 1) * factor;
+      logs[res] = (logs[res] || 0) + Math.log10(factor);
+    });
   });
   // Fleet Boost items with a pctEffect (Rank Benefits / Crew Motivation Modules, Rule of the
   // Cradle) grant a flat % to one specific resource, independent of install levels -- each
   // item's own factor multiplies into the same per-resource totals as the nodes above.
-  mergeResourceTotals(mults, computeFleetPctBonuses(shipId));
+  const fleetPct = computeFleetPctBonuses(shipId);
+  mergeResourceTotals(mults, fleetPct);
+  Object.entries(fleetPct).forEach(([res, factor]) => { logs[res] = (logs[res] || 0) + Math.log10(factor); });
   // Ship EVOLUTION multiplies the ship's generator output directly -- it is a plain factor in the
   // game's MK1Production/MK2Production chain (see shipEvolutionMultiplier). It applies to the
   // GENERATOR tiers, not to direct Cells/Shards/RP, which is why it is merged per gen-like tag
@@ -862,7 +869,7 @@ function computeResourceBonuses(shipId, levels) {
   // on the reference account's Cradle alone.
   const evo = shipEvolutionMultiplier(shipId);
   if (evo !== 1) {
-    GEN_TIERS.forEach((n) => { const k = `mk${n}`; if (mults[k]) mults[k] *= evo; });
+    GEN_TIERS.forEach((n) => { const k = `mk${n}`; if (mults[k]) { mults[k] *= evo; logs[k] += Math.log10(evo); } });
   }
   // TECH POOLS take AUXESIA's evolution, not this ship's. The game's `TotalSoftwareMult` /
   // `TotalHardwareMult` chains each multiply in `FleetManager.AuxesiaEvolutionBonus` exactly once,
@@ -876,12 +883,13 @@ function computeResourceBonuses(shipId, levels) {
   const techBadge = computeTechPoolBadgeMultiplier();
   const techFactor = techEvo * techBadge;
   if (techFactor !== 1) {
-    TECH_UPGRADE_TAGS.forEach((t) => { if (mults[t]) mults[t] *= techFactor; });
+    TECH_UPGRADE_TAGS.forEach((t) => { if (mults[t]) { mults[t] *= techFactor; logs[t] += Math.log10(techFactor); } });
   }
   // Gear Set piece-owned flat multipliers (x25 Shards etc, see computeGearSetBonusMultipliers)
   // are a multiplier on the FINAL resource total across the whole fleet, not a per-ship
   // contribution -- applied once at the Fleet page's grand-total display instead of per-ship
   // here, same as before.
+  Object.defineProperty(mults, '__logs', { value: logs, enumerable: false });
   return mults;
 }
 
@@ -1205,6 +1213,20 @@ function getGearSets() {
   });
   return window.store.gearSets;
 }
+function formatLogMultiplier(log10) {
+  if (!Number.isFinite(log10)) return log10 === -Infinity ? '0' : 'unknown';
+  if (log10 < Math.log10(1000)) return formatMult(Math.pow(10, log10));
+  const mag = Math.floor(log10 / 3);
+  const suffixes = ['', 'k', 'm', 'b', 't', 'qa', 'qu', 'sx', 'sp', 'oc', 'n', 'd'];
+  const scaled = Math.pow(10, log10 - (mag * 3));
+  return mag < suffixes.length ? `${scaled.toFixed(2)}${suffixes[mag]}` : `${Math.pow(10, log10 - Math.floor(log10)).toFixed(2)}e${Math.floor(log10)}`;
+}
+// The crafting menu removes entire colour groups until their Gem Of Power quality gate opens.
+// Only White is currently modelled beyond the five base colours; its authored gate is quality 2.
+function gearColorUnlocked(color) {
+  if (color !== 'White') return true;
+  return Number(window.store?.gems?.power?.level || 0) >= 2;
+}
 // A gear piece's own level buffs its 2 target installs MULTIPLICATIVELY (x1.01/level for
 // install1, x1.02/level for install2) -- this multiplies that ONE node's own contribution
 // before it's added into the resource totals, not the resource total as a whole. Returns the
@@ -1212,7 +1234,7 @@ function getGearSets() {
 function computeGearNodeMultiplier(shipId, slot) {
   const gearSets = getGearSets();
   let mult = 1;
-  gearSets.pieces.forEach((p) => {
+  gearSets.pieces.filter((p) => gearColorUnlocked(p.color)).forEach((p) => {
     if (!p.level) return;
     const i1 = parseInstallCode(p.install1);
     const i2 = parseInstallCode(p.install2);
@@ -1233,7 +1255,7 @@ function computeGearNodeMultiplier(shipId, slot) {
 function computeGearSetBonusMultipliers() {
   const gearSets = getGearSets();
   const byColor = {};
-  gearSets.pieces.forEach((p) => { (byColor[p.color] = byColor[p.color] || []).push(p); });
+  gearSets.pieces.filter((p) => gearColorUnlocked(p.color)).forEach((p) => { (byColor[p.color] = byColor[p.color] || []).push(p); });
   const mults = {};
   Object.values(byColor).forEach((pieces) => {
     if (!pieces.every((p) => p.owned)) return; // whole color must be complete
@@ -1286,7 +1308,7 @@ function computeGearEffectivePath(rawValueFn, steps) {
   const levels = {};
   const picks = {};
   gearSets.pieces.forEach((p) => { levels[p.name] = p.level || 0; picks[p.name] = 0; });
-  const eligible = gearSets.pieces.filter((p) => p.owned && rawValueFn(p) > 0);
+  const eligible = gearSets.pieces.filter((p) => gearColorUnlocked(p.color) && p.owned && rawValueFn(p) > 0);
   const scoreFor = (p) => rawValueFn(p) / (picks[p.name] + 1);
   const path = [];
   let lastPicked = null;
@@ -1314,7 +1336,6 @@ function renderGearEffectivePathModal(title, path, reopen) {
   document.getElementById('loadoutDetailTitle').textContent = title;
   const body = document.getElementById('loadoutDetailBody');
   body.innerHTML = `
-    <p class="text-xs text-gray-500 mb-3">Ranked by raw bonus value (no cost weighting yet -- Academy Points cost data isn't confirmed, see this piece's row). Click a step once you've actually leveled it in-game to confirm your real gear levels up to that point.</p>
     <ol class="space-y-1.5">
       ${path.length ? path.map((step, i) => {
         const i1 = parseInstallCode(step.piece.install1);
@@ -1322,7 +1343,7 @@ function renderGearEffectivePathModal(title, path, reopen) {
         const icon1 = i1 ? nodeIconPath(i1.ship, i1.code) : null;
         const icon2 = i2 ? nodeIconPath(i2.ship, i2.code) : null;
         return `<li data-gear-path-item="${i}" class="flex items-center justify-between text-sm bg-gray-700/50 rounded px-3 py-1.5 cursor-pointer hover:bg-gray-700">
-          <span class="flex items-center gap-2 text-gray-300">${i + 1}. ${icon1 ? `<img src="${icon1}" class="w-5 h-5" onerror="this.remove()" />` : ''}${icon2 ? `<img src="${icon2}" class="w-5 h-5 -ml-1" onerror="this.remove()" />` : ''}${escapeHtml(step.piece.name)}</span>
+          <span class="flex items-center gap-2 text-gray-300">${i + 1}. ${gearIconImg(step.piece.name, 24)}${icon1 ? `<img src="${icon1}" class="w-5 h-5" onerror="this.remove()" />` : ''}${icon2 ? `<img src="${icon2}" class="w-5 h-5 -ml-1" onerror="this.remove()" />` : ''}${escapeHtml(step.piece.name)}</span>
           <span class="flex items-center gap-2">
             <span class="text-white font-medium">Lv ${step.level}</span>
             <button data-confirm-gear-up-to="${i}" class="hidden w-6 h-6 flex-shrink-0 rounded-full bg-green-600 hover:bg-green-500 text-white items-center justify-center text-xs" title="I've leveled up to here -- update my real gear levels">✓</button>
@@ -1474,7 +1495,7 @@ function renderShipSetupPage(root) {
   root.innerHTML = `
     <div class="mb-4 rounded-lg overflow-hidden shadow-lg">
       <div class="bg-gradient-to-r from-blue-900 to-gray-800 px-5 py-4 border-b border-gray-600 flex items-center justify-between">
-        <div><h1 class="text-xl font-bold">Ship Setup</h1><p class="text-xs text-gray-300 mt-0.5">Your fleet's current real state -- the Fleet optimizer starts planning from here. Check "Fleet / Ship Setup" in Import Save to autofill this from your save.</p></div>
+        <div class="flex items-center gap-3"><img src="${shipPortraitPath(1,0)}" class="w-14 h-14 object-contain" alt="Cradle" /><h1 class="text-xl font-bold">Ship Setup</h1></div>
       </div>
       <div class="bg-gray-800/70 px-5 py-2.5 flex items-center gap-2 flex-wrap">
         <span class="text-xs text-gray-400 flex-shrink-0">Unlocked Generator Tiers</span>
@@ -1510,24 +1531,6 @@ function renderShipSetupPage(root) {
     </label>`;
   }).join('');
 
-  // WHY THE REQUIREMENT IS STATED, not just enforced. A disabled checkbox with no explanation
-  // reads as a bug -- especially here, where the requirement is obscure enough that this repo
-  // could not name it for months. The note names what is missing for THIS account rather than
-  // restating the rule generically.
-  const gated = GEN_TIERS.map((n) => ({ n, req: genTierRequirement(n) }))
-    .filter(({ n, req }) => req && !req.met && !unlockedGens[n]);
-  if (gated.length) {
-    const anyReset = gated[0].req.reset;
-    const evo = gated[0].req.evo;
-    const note = document.createElement('p');
-    note.className = 'text-[11px] text-gray-500 mt-1 w-full';
-    note.textContent = anyReset
-      ? `MK${gated.map((g) => g.n).join(', MK')} need Gem Of Evolution quality `
-        + `${[...new Set(gated.map((g) => g.req.need))].sort().join(' / ')} (you have ${evo}).`
-      : `MK${gated.map((g) => g.n).join(', MK')} unlock after your first Ouroboros reset, `
-        + 'then at Gem Of Evolution quality 1 (MK9) and 2 (MK10-12).';
-    gensEl.parentElement.appendChild(note);
-  }
   gensEl.querySelectorAll('input[data-gen]').forEach((cb) => {
     cb.addEventListener('change', () => {
       setUnlockedGenTier(unlockedGens, Number(cb.dataset.gen), cb.checked);
@@ -1555,7 +1558,7 @@ function renderShipSetupPage(root) {
     card.className = `bg-gray-800 rounded-lg border border-gray-700 p-3 ${!rec ? 'opacity-50' : ''}`;
     card.innerHTML = `
       <div class="flex items-center gap-2 mb-2">
-        ${portrait ? `<img src="${shipPortraitPath(n, input.evo)}" class="w-14 h-14 object-contain flex-shrink-0" alt="${shipDisplayName(n)} evo ${input.evo}" onerror="this.src='assets/ships/${portrait}.png'" />` : ''}
+        ${portrait ? `<img src="${shipPortraitPath(n, input.evo)}" class="w-14 h-14 object-contain flex-shrink-0" alt="${shipDisplayName(n)} evo ${input.evo}" onerror="this.src='${assetUrl(`assets/ships/${portrait}.png`)}'" />` : ''}
         <span class="font-medium text-white text-sm">${shipDisplayName(n)}</span>
       </div>
       <div class="grid grid-cols-2 gap-1 text-xs text-gray-400 mb-2">
@@ -1816,7 +1819,7 @@ function renderGearSetsPage(root) {
 
   const container = document.getElementById('gearPiecesContainer');
   const byColor = {};
-  gearSets.pieces.forEach((p) => { (byColor[p.color] = byColor[p.color] || []).push(p); });
+  gearSets.pieces.filter((p) => gearColorUnlocked(p.color)).forEach((p) => { (byColor[p.color] = byColor[p.color] || []).push(p); });
 
   Object.entries(byColor).forEach(([color, pieces]) => {
     const ownedCount = pieces.filter((p) => p.owned).length;
@@ -1859,6 +1862,10 @@ function renderFleetPage(root) {
   const tabState = getLoadoutTabs();
   const loadout = getActiveLoadout();
   const totals = {};
+  // Display totals are accumulated in log space. Real fleet multipliers can exceed Number's
+  // 1e308 ceiling; multiplying them as JS numbers rendered Infinity even though every factor was
+  // valid. The optimizer already ranks in log space, so the readout now follows the same rule.
+  const totalLogs = {};
   // Per-resource, per-ship breakdown of the multiplier factors that feed each totals-row's
   // combined multiplier -- kept alongside `totals` (not derived from it) purely so the totals
   // row can show a hover breakdown of exactly which ships are contributing how much, without
@@ -1875,7 +1882,8 @@ function renderFleetPage(root) {
     mergeResourceTotals(totals, shipTotals);
     Object.entries(shipTotals).forEach(([res, mult]) => {
       if (!mult || mult === 1) return;
-      (breakdown[res] = breakdown[res] || []).push({ shipId: n, mult });
+      totalLogs[res] = (totalLogs[res] || 0) + (shipTotals.__logs?.[res] ?? Math.log10(mult));
+      (breakdown[res] = breakdown[res] || []).push({ shipId: n, mult, log: shipTotals.__logs?.[res] ?? Math.log10(mult) });
     });
   }
   const sortedTotals = sortResourceEntries(totals);
@@ -1884,7 +1892,7 @@ function renderFleetPage(root) {
   root.innerHTML = `
     <div class="mb-4 rounded-lg overflow-hidden shadow-lg">
       <div class="bg-gradient-to-r from-blue-900 to-gray-800 px-5 py-4 border-b border-gray-600 flex items-center justify-between gap-3 flex-wrap">
-        <div><h1 class="text-xl font-bold">Fleet Optimizer</h1><p class="text-xs text-gray-300 mt-0.5">Ships not touched by the active loadout show their current Ship Setup baseline.</p></div>
+        <div class="flex items-center gap-3"><img src="${shipPortraitPath(1,0)}" class="w-14 h-14 object-contain" alt="Cradle" /><h1 class="text-xl font-bold">Fleet Optimizer</h1></div>
         <div class="flex items-center gap-2 flex-shrink-0">
           <button id="fleetGearPathBtn" class="flex items-center space-x-1 px-3 py-2 rounded-full bg-gray-700 hover:bg-gray-600 text-white font-semibold shadow-lg text-xs sm:text-sm" title="Gear Effective Path weighted by the same Focus Weights used for Optimize Loadout, combining every resource into one list.">${iconSvg('settings', 16)}<span>Gear Path</span></button>
           <button id="newLoadoutBtn" class="flex items-center space-x-1 px-3 py-2 rounded-full bg-gradient-to-r from-purple-600 to-purple-800 hover:from-purple-700 hover:to-purple-900 text-white font-semibold shadow-lg text-xs sm:text-sm">${iconSvg('plus', 16)}<span>Optimize Loadout</span></button>
@@ -1894,8 +1902,8 @@ function renderFleetPage(root) {
       <div class="bg-gray-800 p-3 flex flex-wrap gap-2" id="fleetTotalsRow">
         ${sortedTotals.length ? sortedTotals.map(([res, mult]) => {
           const gearSetMult = gearSetMults[res] || 1;
-          const contributors = (breakdown[res] || []).slice().sort((a, b) => b.mult - a.mult)
-            .map(({ shipId, mult: m }) => `${shipDisplayName(shipId)}: x${formatMult(m)}`);
+          const contributors = (breakdown[res] || []).slice().sort((a, b) => b.log - a.log)
+            .map(({ shipId, log }) => `${shipDisplayName(shipId)}: x${formatLogMultiplier(log)}`);
           const titleLines = [
             `${RESOURCE_LABELS[res] || res} -- contributing factors (multiply together):`,
             ...contributors,
@@ -1904,7 +1912,7 @@ function renderFleetPage(root) {
           return `
           <div class="bg-gray-700/60 rounded-lg px-3 py-1.5 text-center cursor-help" title="${escapeHtml(titleLines.join('\n'))}">
             <div class="text-[10px] text-gray-400">${RESOURCE_LABELS[res] || res}</div>
-            <div class="text-sm font-semibold text-green-400">x${formatMult(mult * gearSetMult)}</div>
+            <div class="text-sm font-semibold text-green-400">x${formatLogMultiplier((totalLogs[res] || Math.log10(mult)) + Math.log10(gearSetMult))}</div>
           </div>`;
         }).join('') : '<div class="text-xs text-gray-500 py-1">No install data yet -- visit Ship Setup to autofill from your save.</div>'}
       </div>
@@ -2007,7 +2015,7 @@ function renderFleetPage(root) {
     card.innerHTML = `
       ${zaglagBadge}
       <div class="flex items-center gap-2 mb-2 self-start">
-        ${portrait ? `<img src="${shipPortraitPath(n, getShipInput(n).evo)}" class="w-11 h-11 object-contain" alt="${shipDisplayName(n)} evo ${getShipInput(n).evo}" onerror="this.src='assets/ships/${portrait}.png'" />` : ''}
+        ${portrait ? `<img src="${shipPortraitPath(n, getShipInput(n).evo)}" class="w-11 h-11 object-contain" alt="${shipDisplayName(n)} evo ${getShipInput(n).evo}" onerror="this.src='${assetUrl(`assets/ships/${portrait}.png`)}'" />` : ''}
         <span class="font-medium text-white text-sm">${shipDisplayName(n)}</span>
       </div>
       <div class="flex gap-3 text-[10px] text-gray-400 mb-2 self-start" title="Rank/Crew are your real Ship Setup values -- Installs is the total shown in the grid below (this loadout's plan, or your real current installs if this ship wasn't touched).">
@@ -2868,7 +2876,7 @@ function openLoadoutDetail(shipId, levels, mode, clicks) {
     lines = expandClicks(ordered, catalog, {}, shipId);
     note = derived
       ? `This ship isn't part of the active loadout, so there is no recorded plan. Showing the <strong>ideal</strong> order to spend your current ${lines.length} installs from scratch -- the same reference the Effective Path uses. The levels below are the optimizer's, not necessarily your current ones.`
-      : 'Every individual point-spend to build this card\'s levels from scratch, in the exact order the optimizer picked them -- interleaved across nodes, never bulk-bought into one node before touching another.';
+      : '';
   } else {
     // Effective Path answers "what should I buy next, right now" -- it finds where your REAL
     // current total install count sits along this same ideal sequence, then shows the next 30
@@ -2884,7 +2892,7 @@ function openLoadoutDetail(shipId, levels, mode, clicks) {
     const atRealTotal = optimizeShipInstalls(shipId, realTotal, gear.focusWeights, prepForLongRun, optSettings.runLength);
     nextClicks = full.clicks.slice(realTotal);
     lines = expandClicks(nextClicks, catalog, atRealTotal.levels, shipId);
-    note = 'Every individual point-spend for the next points beyond your current total (once you earn them), in order, following the ideal allocation path -- interleaved across nodes, never bulk-bought. Click an item once you\'ve actually installed it in-game to confirm your real installs up to that point.';
+    note = '';
   }
   // ---- "Show last N": collapse the bulk-buyable prefix ------------------------------------------
   // A late-game ship spends 500+ points and the ordered list is then unusable for its actual
@@ -2915,11 +2923,10 @@ function openLoadoutDetail(shipId, levels, mode, clicks) {
     ${collapsing ? `
       <div class="mb-3 rounded-lg bg-gray-800/70 border border-gray-700 p-3">
         <div class="flex items-baseline justify-between mb-2">
-          <span class="text-xs font-semibold text-gray-300">Buy these first, in any order</span>
+          <span class="text-xs font-semibold text-gray-300">Bulk Buy</span>
           <span class="text-xs text-gray-500">${cut} step${cut === 1 ? '' : 's'} collapsed</span>
         </div>
         <div data-prefix-hexgrid class="flex justify-center"></div>
-        <p class="text-[11px] text-gray-500 mt-2">Levels to reach before the ordered steps below. Order within this block does not matter.</p>
       </div>` : ''}
     <ol class="space-y-1.5">
       ${shown.length ? shown.map((l, k) => { const i = (collapsing ? cut : 0) + k; return `
@@ -3097,7 +3104,7 @@ function renderFleetBadgeCard(item, rerender) {
       <span class="text-xs font-semibold ${owned ? 'text-green-400' : 'text-gray-500'}">${owned ? 'Active' : 'Inactive'}</span>
     </div>
     ${effectBox([{ label: `${item.ships.map(shipDisplayName).join('/')} Install Power`, value: `x${item.mult}` }])}
-    <label class="flex items-center cursor-pointer mt-auto"><input type="checkbox" ${owned ? 'checked' : ''} class="sr-only peer" /><div class="w-10 h-5 bg-gray-700 peer-checked:bg-green-600 rounded-full transition-colors relative"><div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div></div></label>`;
+    <label class="toggle-switch mt-auto"><input type="checkbox" ${owned ? 'checked' : ''} /><span class="toggle-track"><span class="toggle-thumb"></span></span></label>`;
   card.querySelector('input').onchange = (e) => {
     badges.owned[item.key] = e.target.checked;
     window.saveStore();
@@ -3266,7 +3273,7 @@ function renderFleetResearchCard(item, rerender) {
         ${item.note ? `<p class="text-[11px] text-gray-500 mt-2 leading-snug">${escapeHtml(item.note)}</p>` : ''}
       </div>
       <label class="flex items-center gap-2 mt-auto pt-2 cursor-pointer select-none">
-        <input type="checkbox" data-toggle ${on ? 'checked' : ''} class="w-4 h-4 accent-green-500 cursor-pointer">
+        <span class="toggle-switch"><input type="checkbox" data-toggle ${on ? 'checked' : ''}><span class="toggle-track"><span class="toggle-thumb"></span></span></span>
         <span class="text-sm text-gray-300">${escapeHtml(item.tiers[0])}</span>
       </label>`;
     card.querySelector('[data-toggle]').onchange = (e) => {

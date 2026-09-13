@@ -1,27 +1,60 @@
 {
   "manifest_version": 3,
   "name": "CIFI Tools Companion",
-  "version": "2.2.0",
+  "version": "2.6.0",
   "description": "Adds save-file import and fleet/ship install optimization to cifi-tools.com, in your own browser.",
   "permissions": ["storage"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
   "content_scripts": [
     {
       "matches": ["https://cifi-tools.com/*"],
+      "js": ["routes.js", "hostStoreBridge.js", "hostRouting.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://cifi-tools.com/*"],
       "js": [
+        "config.js",
         "vendor/icons.js",
+        "vendor/assetUrl.js",
         "vendor/hunterDefs.js",
         "vendor/shipSchema.js",
+        "vendor/accountState.js",
         "shell.js",
         "vendor/shipsPage.js",
+        "vendor/upgradeEffects.js",
+        "vendor/hunterSimBrowser.js",
         "vendor/optimizer/space.js",
+        "vendor/optimizer/objective.js",
         "vendor/storeSchema.js",
+        "vendor/optimizer/refit.js",
+        "vendor/optimizer/corpus.js",
+        "vendor/optimizer/search.js",
+        "vendor/optimizer/runner.js",
+        "vendor/saveImport.js",
+        "vendor/buildCode.js",
         "vendor/costFormulas.js",
         "vendor/bigNumberInput.js",
-        "companionStore.js",
+        "vendor/incomeModel.js",
+        "vendor/hunterStatPath.js",
+        "vendor/hunterStatPathBrowser.js",
+        "vendor/hunterStatPathPage.js",
+        "vendor/app.js",
         "companion.js"
       ],
-      "css": ["companion.css"],
+      "css": ["companion.css", "integration.css"],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "vendor/params.json"
+      ],
+      "matches": ["https://cifi-tools.com/*"]
     }
   ]
 }

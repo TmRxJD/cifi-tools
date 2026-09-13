@@ -121,10 +121,14 @@
   // positive -- the point of this view is "here's the next N in ranked order for this
   // resource," not "here's how many are worth buying." It only stops early if literally
   // nothing is purchasable anymore (every candidate capped out or missing a cost formula).
-  async function greedyResourceColumn(hunter, cfg, evalFast, def, CF, candidates, currentStats, currentUpgrades, targetSteps, iterations, mode, onProgress, signal) {
+  async function greedyResourceColumn(hunter, cfg, scoreBatch, def, CF, candidates, currentStats, currentUpgrades, targetSteps, iterations, mode, onProgress, signal) {
     const stats = { ...currentStats };
     const upgrades = { ...currentUpgrades };
-    let baselineSim = await evalFast(cfg.talents, cfg.attributes, iterations, stats, upgrades);
+    const jobFor = (jobStats, jobUpgrades) => ({
+      talentAlloc: cfg.talents, attrAlloc: cfg.attributes,
+      hunterStats: jobStats, upgradeValues: jobUpgrades,
+    });
+    let baselineScore = (await scoreBatch([jobFor(stats, upgrades)], iterations))[0];
 
     const steps = [];
     for (let i = 0; i < targetSteps; i++) {
@@ -132,6 +136,7 @@
       throwIfAborted(signal);
       if (onProgress) onProgress(i, targetSteps);
       let best = null;
+      const sweep = [];
       for (const cand of candidates) {
         // Checked per candidate, not just per step: a step is the whole candidate sweep, so a
         // step-only check would keep burning evaluations long after the user closed the modal.
@@ -146,24 +151,25 @@
 
         const candStats = param ? stats : { ...stats, [cand.key]: nextLevel };
         const candUpgrades = param ? { ...upgrades, [param]: nextLevel } : upgrades;
-        const candidateSim = await evalFast(cfg.talents, cfg.attributes, iterations, candStats, candUpgrades);
-        const { delta } = window.HunterStatPath.marginalValue(baselineSim, candidateSim, mode);
-        const valuePerCost = delta / cost;
-
-        if (!best || valuePerCost > best.valuePerCost) best = { cand, nextLevel, cost, candStats, candUpgrades, candidateSim, valuePerCost };
+        sweep.push({ cand, nextLevel, cost, candStats, candUpgrades });
       }
+      const scores = await scoreBatch(sweep.map((entry) => jobFor(entry.candStats, entry.candUpgrades)), iterations);
+      sweep.forEach((entry, index) => {
+        const valuePerCost = (scores[index] - baselineScore) / entry.cost;
+        if (!best || valuePerCost > best.valuePerCost) best = { ...entry, score: scores[index], valuePerCost };
+      });
       if (!best) break; // every candidate capped out / no cost formula left -- nothing left to rank
 
       Object.assign(stats, best.candStats);
       Object.assign(upgrades, best.candUpgrades);
-      baselineSim = best.candidateSim;
+      baselineScore = best.score;
       steps.push({
         kind: best.cand.kind, key: best.cand.key, label: best.cand.label, level: best.nextLevel,
         cost: best.cost, resource: best.cand.resource,
       });
     }
     if (onProgress) onProgress(targetSteps, targetSteps);
-    return { steps, finalSim: baselineSim };
+    return { steps };
   }
 
   // Every resource here has an independent candidate pool, so the resource list -- and
@@ -221,11 +227,32 @@
     const lockedOut = allUpgradeCandidates.length - upgradeCandidates.length;
     const upgradeParams = upgradeCandidates.map(upgradeParamOf);
 
-    const evalFast = await HunterSim.compileEvaluator(hunter, {
+    const workerCfg = {
       ...cfg,
+      hunter,
       STAT_KEYS: statCandidates.map((c) => c.key),
       UPGRADE_PARAMS: upgradeParams,
-    });
+    };
+    let scorer;
+    if (window.createHunterPathScorer) {
+      scorer = await window.createHunterPathScorer(workerCfg, mode);
+    } else {
+      // Node contract benches intentionally load this module without browser Worker plumbing.
+      // Keep that environment on the same evaluator semantics; production always takes the pool.
+      const evalFast = await HunterSim.compileEvaluator(hunter, workerCfg);
+      scorer = {
+        score: async (items, iterations, scoreSignal) => {
+          const scores = [];
+          for (const item of items) {
+            throwIfAborted(scoreSignal);
+            const result = await evalFast(item.talentAlloc, item.attrAlloc, iterations, item.hunterStats, item.upgradeValues);
+            scores.push(window.OptimizerObjective.scoreFor(mode, result));
+          }
+          return scores;
+        },
+        terminate() {},
+      };
+    }
 
     const currentUpgrades = {};
     upgradeParams.forEach((p) => {
@@ -236,10 +263,19 @@
     // Resources are independent currencies, so their columns are computed in parallel -- this
     // also roughly halves/thirds wall-clock time vs. running them one after another.
     const entries = Object.entries(groupByResource([...statCandidates, ...upgradeCandidates]));
-    const results = await Promise.all(entries.map(([resource, group]) => greedyResourceColumn(
-      hunter, cfg, evalFast, def, CF, group, cfg.hunterStats, currentUpgrades, targetSteps, SEARCH_ITERATIONS, mode,
-      onProgress && ((done, total) => onProgress(resource, done, total)), signal,
-    )));
+    const scoreBatch = (items, iterations) => scorer.score(items, iterations, signal);
+    const abortPool = () => scorer.terminate();
+    signal?.addEventListener?.('abort', abortPool, { once: true });
+    let results;
+    try {
+      results = await Promise.all(entries.map(([resource, group]) => greedyResourceColumn(
+        hunter, cfg, scoreBatch, def, CF, group, cfg.hunterStats, currentUpgrades, targetSteps, SEARCH_ITERATIONS, mode,
+        onProgress && ((done, total) => onProgress(resource, done, total)), signal,
+      )));
+    } finally {
+      signal?.removeEventListener?.('abort', abortPool);
+      scorer.terminate();
+    }
     const columns = {};
     entries.forEach(([resource], i) => { columns[resource] = results[i]; });
     // Reported, not silently dropped -- "nothing to buy with fragments" and "everything you

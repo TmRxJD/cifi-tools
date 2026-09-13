@@ -43,7 +43,7 @@ function genBuildId() {
 // their origin's localStorage, which already holds ~1,430 of theirs. Both are configured by the
 // embedder BEFORE this file runs; on the website neither is set and everything below is unchanged.
 const EMBEDDED = !!window.HUNTERSIM_EMBEDDED;
-const STORAGE_KEY = window.HUNTERSIM_STORAGE_KEY || 'huntersim_clone_v2';
+const STORAGE_KEY = 'huntersim_clone_v2';
 
 // Both of these are the schema (storeSchema.js), not separate shape declarations. Adding a
 // store field is a one-line change there and needs no edit here.
@@ -77,6 +77,27 @@ function dedupeStoreIds(parsed) {
 }
 
 function loadStore() {
+  if (EMBEDDED) {
+    const raw=document.getElementById('cifi-companion-host-state')?.textContent;
+    if (!raw) throw new Error('Native cifi-tools store is unavailable; reload the page and retry.');
+    const canonical=JSON.parse(raw).canonicalStore;
+    if (!canonical) {
+      const host=JSON.parse(raw), initial=freshStore();
+      initial.globalUpgrades=host.globalUpgrades;
+      initial.gems=host.gems;
+      for (const hunter of ['borge','ozzy','knox']) {
+        initial[hunter].hunterStats=host.hunterStats?.[hunter] || initial[hunter].hunterStats;
+        initial[hunter].builds=host.hunterBuilds?.[hunter] || [];
+        initial[hunter].iterations=host.hunterIterations?.[hunter] ?? initial[hunter].iterations;
+      }
+      __storeWasFreshOnLoad = false;
+      return initial;
+    }
+    window.StoreSchema.migrateStore(canonical);
+    dedupeStoreIds(canonical);
+    __storeWasFreshOnLoad = false;
+    return canonical;
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
@@ -121,7 +142,7 @@ function loadStore() {
 // every save is mirrored there too (fire-and-forget, never blocks the UI), and on startup -- if
 // localStorage came back empty -- we fall back to whatever IndexedDB still has before giving up
 // and seeding fresh defaults.
-const IDB_NAME = window.HUNTERSIM_IDB_NAME || 'huntersim_backup';
+const IDB_NAME = 'huntersim_backup';
 const IDB_STORE = 'kv';
 function idbOpen() {
   return new Promise((resolve, reject) => {
@@ -158,10 +179,26 @@ async function idbGet(key) {
 let __storeWasFreshOnLoad = false;
 function saveStore() {
   const json = JSON.stringify(store);
+  if (EMBEDDED) {
+    let request=document.getElementById('cifi-companion-native-store-write');
+    if (!request) request=document.documentElement.appendChild(Object.assign(document.createElement('script'),{
+      id:'cifi-companion-native-store-write',type:'application/json',hidden:true,
+    }));
+    request.textContent=json;
+    document.dispatchEvent(new Event('cifi-companion:write-native-store'));
+    const result=document.getElementById('cifi-companion-native-store-result')?.dataset.value;
+    const parsed=result ? JSON.parse(result) : null;
+    if (!parsed?.ok) throw new Error(`Native cifi-tools store write failed: ${parsed?.error || 'no response from bridge'}`);
+    updateNavGating();
+    return;
+  }
   localStorage.setItem(STORAGE_KEY, json);
   idbSet(STORAGE_KEY, json);
   updateNavGating();
 }
+// Fleet pages and the companion are separate classic scripts. Make the one persistence method
+// explicit instead of relying on top-level declaration leakage between content-script files.
+window.saveStore = saveStore;
 
 // THE BACKUP FORMAT, IN ONE PLACE. These were inline in the Settings page's two click handlers
 // until cloud sync needed the same bytes. A second copy of a SERIALIZATION rule is the worst kind
@@ -222,6 +259,7 @@ function resetAllData() {
  * preference changes, so the two cannot drift apart.
  */
 function applyInterfacePrefs() {
+  if (EMBEDDED) return;
   const aside = document.querySelector('aside');
   if (!aside) return;
   // The sidebar is `hidden md:flex` by default; hiding it means suppressing the md: breakpoint
@@ -250,7 +288,9 @@ window.isGemUnlocked = isGemUnlocked;
 // (e.g. the user lowers a gem level back down), falls back to Borge / the sim page.
 function updateNavGating() {
   let activeHunterLocked = false;
-  document.querySelectorAll('[data-unlock-gem]').forEach((el) => {
+  const navRoot = EMBEDDED ? document.querySelector('[data-cifi-companion-page]') : document;
+  if (!navRoot) return;
+  navRoot.querySelectorAll('[data-unlock-gem]').forEach((el) => {
     const gem = el.dataset.unlockGem;
     const lvl = Number(el.dataset.unlockLvl);
     const node = el.dataset.unlockNode ? Number(el.dataset.unlockNode) : undefined;
@@ -272,7 +312,23 @@ window.store = store;
 let currentHunter = (['borge', 'ozzy', 'knox'].includes(store.lastHunter) ? store.lastHunter : 'borge');
 let editingBuild = null;
 let showCategoryId = 'active';
-try { window.__lastScan = JSON.parse(localStorage.getItem('huntersim_last_scan') || '{}'); } catch { window.__lastScan = {}; }
+window.__lastScan = store.lastScan;
+
+// Refresh the in-memory view from the native Pinia store before an embedded page is rendered.
+// This is a projection used by the vanilla renderers, not a second persisted store: every write
+// goes straight back through saveStore(), and route entry re-reads the native source of truth.
+window.refreshStoreFromNative = () => {
+  if (!EMBEDDED) return store;
+  document.dispatchEvent(new Event('cifi-companion:request-host-state'));
+  const raw=document.getElementById('cifi-companion-host-state')?.textContent;
+  const canonical=raw && JSON.parse(raw).canonicalStore;
+  if (!canonical) return store;
+  window.StoreSchema.migrateStore(canonical);
+  Object.keys(store).forEach((key)=>delete store[key]);
+  Object.assign(store,canonical);
+  window.__lastScan=store.lastScan;
+  return store;
+};
 
 // One-time startup recovery: localStorage came back empty (freshStore() defaults), so check
 // the IndexedDB mirror before the user ever sees the seeded defaults -- if it has real data,
@@ -343,6 +399,12 @@ function currentIterations() {
 }
 
 function accountStateFor(hunter, build) {
+  // The Hunter surface is the canonical standalone application in both hosting modes. Its visible
+  // controls write this store, so its evaluator must read this same store. A prior native-card
+  // experiment replaced these values with a hidden Pinia snapshot only when EMBEDDED; that made
+  // the card display one account while scoring another (commonly zero/incomplete stats), driving
+  // loot, stage and every resource down together. The host bridge may mirror imports into the
+  // native site, but it is never an evaluation source for the companion Hunter surface.
   return window.AccountState.build({
     hunter,
     build,
@@ -369,8 +431,14 @@ function evalStateFor(build, iterations) {
   return evalStateForHunter(currentHunter, build, iterations);
 }
 
-const MAT_LABELS = ['Obsidian', 'Behlium', 'Hellish-Biomatter'];
 const HUNTER_TITLES = { borge: 'Borge Simulator', ozzy: 'Ozzy Simulator', knox: 'Knox Simulator' };
+function hunterPortraitAsset(hunter) {
+  if (!EMBEDDED) return assetUrl(`assets/hunter_${hunter}.png`);
+  const raw=document.getElementById('cifi-companion-navigation')?.dataset.hunterAssets;
+  const image=raw && JSON.parse(raw)[hunter];
+  if (!image) throw new Error(`Native ${hunter} portrait is unavailable`);
+  return image;
+}
 // Knox is `sky`, not `blue`, and that is a palette decision rather than a change
 // of identity: `blue` is now the app's single primary-action colour (see the
 // aliases in index.html's tailwind.config), so leaving Knox on it would have made
@@ -455,13 +523,26 @@ const KNOWN_ROUTES = new Set([
 ]);
 
 function currentRoute() {
+  // The Companion owns the host page's hash so its route never enters cifi-tools.com's path
+  // router. Its current page is supplied explicitly rather than competing for location.hash.
+  if (typeof window !== 'undefined' && window.HUNTERSIM_EMBEDDED) {
+    const embeddedRoute = window.HUNTERSIM_ROUTE || 'sim';
+    if (KNOWN_ROUTES.has(embeddedRoute) || embeddedRoute.startsWith('upgrades/')) return embeddedRoute;
+    return 'sim';
+  }
   const hash = location.hash.replace(/^#\/?/, '');
   if (!hash) return 'sim';
   if (KNOWN_ROUTES.has(hash) || hash.startsWith('upgrades/')) return hash;
   return 'sim';
 }
 
-function navigate(route) { location.hash = `#/${route}`; }
+function navigate(route) {
+  if (typeof window !== 'undefined' && window.HUNTERSIM_EMBEDDED) {
+    window.navigateEmbeddedCompanion(route);
+    return;
+  }
+  location.hash = `#/${route}`;
+}
 
 // Top header nav: "Hunters" covers the whole sim route, "Fleet" covers only the literal Fleet
 // Optimizer page (route === 'fleet' -- Ship Setup/Gear Sets are sidebar-only pages, not this),
@@ -471,6 +552,8 @@ function navigate(route) { location.hash = `#/${route}`; }
 const DEDICATED_NAV_ROUTES = { sim: 'sim', fleet: 'fleet', settings: 'settings' };
 
 function render() {
+  // An async callback from a tool that has been left must never render into a native page.
+  if (EMBEDDED && !document.querySelector('[data-cifi-companion-page]')) return;
   const route = currentRoute();
   updateNavGating();
   applyInterfacePrefs();
@@ -499,6 +582,10 @@ function render() {
   if (route.startsWith('upgrades/')) { renderUpgradesPage(root, route.slice('upgrades/'.length)); return; }
   renderSimPage(root);
 }
+// The companion invokes the canonical renderer after supplying its own #pageRoot. Export this
+// deliberately instead of relying on classic-script top-level binding behaviour across content
+// scripts, which is an implicit load contract Chrome does not promise.
+window.render = render;
 // The website routes on the hash. Embedded, the COMPANION owns routing (cifi-tools uses paths,
 // not hashes) and calls render() itself, so this listener would fight it.
 if (!EMBEDDED) window.addEventListener('hashchange', render);
@@ -755,7 +842,7 @@ function renderSimPage(root) {
         <div class="flex flex-wrap items-center justify-between gap-4">
           <div class="flex items-center gap-4">
             <div class="hidden sm:flex items-center justify-center">
-              <img id="hunterPortrait" src="assets/hunter_${h}.png" alt="${escapeHtml(HUNTER_TITLES[h].replace(' Simulator', ''))}" class="object-contain rounded-lg select-none w-16 h-16" draggable="false" style="filter: drop-shadow(rgba(0,0,0,0.5) 0px 0px 4px);" />
+              <img id="hunterPortrait" src="${hunterPortraitAsset(h)}" alt="${escapeHtml(HUNTER_TITLES[h].replace(' Simulator', ''))}" class="object-contain rounded-lg select-none w-16 h-16" draggable="false" style="filter: drop-shadow(rgba(0,0,0,0.5) 0px 0px 4px);" />
             </div>
             <div>
               <h1 id="hunterTitle" class="text-2xl font-bold mb-1">${escapeHtml(HUNTER_TITLES[h])}</h1>
@@ -872,7 +959,15 @@ function renderCategoryTabs() {
   });
 }
 
-const MAT_ASSETS = ['assets/loot_mat1.png', 'assets/loot_mat2.png', 'assets/loot_mat3.png'];
+const LOCAL_MAT_ASSETS = ['loot_mat1.png', 'loot_mat2.png', 'loot_mat3.png'].map((name) => assetUrl(`assets/${name}`));
+function materialAsset(hunter,index) {
+  if (!EMBEDDED) return LOCAL_MAT_ASSETS[index];
+  const raw=document.getElementById('cifi-companion-navigation')?.dataset.resourceAssets;
+  const icons=raw && JSON.parse(raw)[hunter];
+  const asset=icons?.[`mat${index+1}`];
+  if (!asset) throw new Error(`Native ${hunter} material ${index+1} asset is unavailable`);
+  return asset;
+}
 const MAT_BORDER_COLORS = ['border-red-600/30', 'border-orange-600/30', 'border-amber-600/30', 'border-blue-600/30'];
 const MAT_TEXT_COLORS = ['text-red-300', 'text-orange-300', 'text-amber-300', 'text-blue-300'];
 
@@ -881,7 +976,7 @@ const MAT_TEXT_COLORS = ['text-red-300', 'text-orange-300', 'text-amber-300', 't
 // they never appear in the sim's own loot output, so they fall back to a generic icon).
 function matIcon(resKey) {
   const idx = { mat1: 0, mat2: 1, mat3: 2 }[resKey];
-  if (idx !== undefined) return `<img src="${MAT_ASSETS[idx]}" alt="${resKey}" class="w-4 h-4 inline-block" />`;
+  if (idx !== undefined) return `<img src="${materialAsset(currentHunter,idx)}" alt="${CostFormulas.resourceLabel(currentHunter,resKey)}" class="w-4 h-4 inline-block" />`;
   return iconSvg(resKey === 'frags' ? 'sparkles' : 'crown', 14, 'text-purple-300');
 }
 
@@ -1747,7 +1842,7 @@ async function renderBuildList() {
           </div>
         </div>
         <div class="action-bar py-2 px-1 flex justify-between items-center bg-gray-800/70 border-t border-b border-gray-700/50">
-          <div class="flex items-center gap-1.5 flex-1 justify-center">
+          <div class="action-buttons-grid">
             ${ACTION_BUTTONS.map((b) => `<button data-act="${b.act}" class="action-button-compact ${b.extra || ''}" title="${b.title}">${iconSvg(b.icon, 16)}</button>`).join('')}
           </div>
         </div>
@@ -1830,7 +1925,7 @@ async function renderBuildList() {
       const base = buildIdx > 0 ? comparisonBaseline : null;
       const baseRunsPerDay = base?.avgTime ? 1440 / base.avgTime : 0;
       card.querySelector('[data-mainstats]').innerHTML = `
-        <div class="stat-card"><div class="stat-header"><div class="flex items-center">${iconSvg('report-money', 16, 'text-amber-400')}<span class="stat-title">Loot Score</span></div></div>
+        <div class="stat-card"><div class="stat-header"><div class="flex items-center">${iconSvg('report-money', 16, 'text-amber-400')}<span class="stat-title">Loot Score</span>${buildIdx === 0 ? `<span class="ml-0.5 inline-flex text-gray-400 cursor-help" title="Overall Build Efficiency Rating that excludes pure loot bonuses (Ultima, etc). This allows for fair Build comparison, focusing only on the Build's core effectiveness.">${iconSvg('info-circle', 13)}</span>` : ''}</div></div>
           <div class="stat-value-row"><div class="stat-main-value">${fmt(r.lootPerMin)}</div>${base ? deltaBadge(r.lootPerMin, base.lootPerMin, false) : ''}</div></div>
         <div class="stat-card"><div class="stat-header"><div class="flex items-center">${iconSvg('clock', 16, 'text-blue-400')}<span class="stat-title">Ø Time</span></div></div>
           <div class="stat-value-row"><div class="stat-main-value">${fmtTime(r.avgTime)}</div>${base ? deltaBadge(r.avgTime, base.avgTime, true) : ''}</div></div>
@@ -1847,7 +1942,7 @@ async function renderBuildList() {
       const lootFilter = store[currentHunter].lootFilter;
       const lootCards = [0, 1, 2, 3].filter((i) => lootFilter[StoreSchema.LOOT_KEYS[i]] !== false).map((i) => `
         <div class="resource-card ${MAT_BORDER_COLORS[i]}">
-          <div class="resource-icon">${i < 3 ? `<img src="${MAT_ASSETS[i]}" alt="Material ${i + 1}" class="resource-image" />` : `<span class="text-lg">✦</span>`}</div>
+          <div class="resource-icon">${i < 3 ? `<img src="${materialAsset(currentHunter,i)}" alt="${CostFormulas.resourceLabel(currentHunter,`mat${i+1}`)}" class="resource-image" />` : `<span class="text-lg">✦</span>`}</div>
           <div class="resource-content"><div class="resource-values">
             <div class="flex flex-col items-center"><span class="value ${MAT_TEXT_COLORS[i]} font-semibold">${fmt(values[i])}</span>${(baseValues && deltaBadge(values[i], baseValues[i], false)) || '<span class="unit text-xs text-gray-500">per run</span>'}</div>
             <div class="flex flex-col items-center"><span class="value ${MAT_TEXT_COLORS[i]} font-semibold">${fmt(values[i] * runsPerDay)}</span>${(baseValues && deltaBadge(values[i] * runsPerDay, baseValues[i] * baseRunsPerDay, false)) || '<span class="unit text-xs text-gray-500">per day</span>'}</div>
@@ -1912,7 +2007,7 @@ function switchHunter(h, skipNav) {
   const portrait = document.getElementById('hunterPortrait');
   if (title) title.textContent = HUNTER_TITLES[h];
   if (banner) banner.className = `bg-gradient-to-r ${HUNTER_BANNER_GRADIENT[h]} to-gray-800 px-5 py-5 sm:py-0.5 border-b border-gray-600`;
-  if (portrait) { portrait.src = `assets/hunter_${h}.png`; portrait.alt = HUNTER_TITLES[h].replace(' Simulator', ''); }
+  if (portrait) { portrait.src = hunterPortraitAsset(h); portrait.alt = HUNTER_TITLES[h].replace(' Simulator', ''); }
   const statsLabel = document.getElementById('hunterStatsBtnLabel');
   if (statsLabel) statsLabel.textContent = `${HUNTER_TITLES[h].replace(' Simulator', '')} Stats`;
   // Iterations is per hunter, so the input has to follow the hunter. Without this it keeps
@@ -1939,17 +2034,30 @@ function wireHunterTabs() {
   document.querySelectorAll('[data-nav="knox"]').forEach((el) => { el.onclick = () => switchHunter('knox'); });
 }
 // Import Save applies globally (it can populate any/all hunters from one save file), so it
-// lives in the app header now instead of being duplicated per-hunter-page.
-document.getElementById('importSaveBtnIcon').innerHTML = iconSvg('download', 16);
-document.getElementById('copyBridgeCmdBtn').innerHTML = iconSvg('copy', 16);
-document.getElementById('copyBridgeCmdBtn').onclick = () => {
-  const cmd = document.getElementById('bridgeInstallCmd').textContent;
-  navigator.clipboard?.writeText(cmd).catch(() => {});
-  const btn = document.getElementById('copyBridgeCmdBtn');
-  btn.innerHTML = iconSvg('info-circle', 16, 'text-green-400');
-  setTimeout(() => { btn.innerHTML = iconSvg('copy', 16); }, 1200);
-};
-document.getElementById('importSaveBtn').onclick = openImportSaveModal;
+// lives in the app header now instead of being duplicated per-hunter-page. The companion owns
+// the host header, but it embeds this exact modal via shell.js; exporting the opener lets that
+// header use the same proven UI and the same decode/apply pipeline rather than growing a second
+// import implementation.
+function wireImportSaveModalChrome() {
+  // The website owns #importSaveBtn; shell.js intentionally supplies only the modal when
+  // embedded, so this host-only icon is optional while the modal controls are required.
+  const importIcon = document.getElementById('importSaveBtnIcon');
+  if (importIcon) importIcon.innerHTML = iconSvg('download', 16);
+  const copyButton = document.getElementById('copyBridgeCmdBtn');
+  if (!copyButton) throw new Error('Import Save modal is missing #copyBridgeCmdBtn.');
+  copyButton.innerHTML = iconSvg('copy', 16);
+  copyButton.onclick = () => {
+    const cmd = document.getElementById('bridgeInstallCmd').textContent;
+    navigator.clipboard?.writeText(cmd).catch(() => {});
+    const btn = document.getElementById('copyBridgeCmdBtn');
+    btn.innerHTML = iconSvg('info-circle', 16, 'text-green-400');
+    setTimeout(() => { btn.innerHTML = iconSvg('copy', 16); }, 1200);
+  };
+}
+wireImportSaveModalChrome();
+if (!EMBEDDED) {
+  document.getElementById('importSaveBtn').onclick = openImportSaveModal;
+}
 
 // Shows the local CIFI Bridge's connection state in the sidebar whenever it's reachable, so
 // you don't have to open the Import Save modal just to check. Polls rather than holding one
@@ -1960,21 +2068,67 @@ document.getElementById('importSaveBtn').onclick = openImportSaveModal;
 // physicalCount come from the bridge's adb devices probe (bridge/adb-status.mjs).
 function describeAdbDeviceStatus(status) {
   if (!status || status.serverRunning === false) return null;
-  const { emulatorCount = 0, physicalCount = 0 } = status;
-  if (emulatorCount > 0 && physicalCount > 0) return 'emulator + device detected';
-  if (emulatorCount > 1) return `${emulatorCount} emulators detected`;
-  if (emulatorCount === 1) return 'emulator detected';
-  if (physicalCount > 1) return `${physicalCount} devices detected`;
-  if (physicalCount === 1) return 'device detected';
+  const { emulatorCount, physicalCount, deviceCount = 0 } = status;
+  // `adb-bridge` now publishes the portable `deviceCount` field. The old, CIFI-only bridge
+  // additionally split it into physical/emulator counts; treating absent split fields as zero
+  // made a real current device render as "no device detected" until a save happened to be pulled.
+  if (!Number.isFinite(emulatorCount) || !Number.isFinite(physicalCount)) {
+    if (deviceCount > 0) return 'Device Connected';
+    return 'no device detected';
+  }
+  if (emulatorCount + physicalCount > 0) return 'Device Connected';
   return 'no device detected';
 }
 
 let bridgeStatusWs = null;
-async function refreshBridgeAdbStatusText(ws, text) {
+let bridgeStatusStarted = false;
+function bridgeStatusElements() {
+  const box = document.getElementById('bridgeStatusSidebar');
+  const dot = document.getElementById('bridgeStatusDot');
+  const text = document.getElementById('bridgeStatusText');
+  const connection = document.getElementById('bridgeStatusConnection');
+  const device = document.getElementById('bridgeStatusDevice');
+  // The Companion mounts this footer into a Vue-owned sidebar. Vue can remove that subtree between
+  // polls, so a missing footer is a lifecycle state, not permission to write through null.
+  return box && dot && text && connection && device ? { box, dot, text, connection, device } : null;
+}
+function setBridgeStatusText(elements, connection, device = '') {
+  elements.connection.textContent = connection;
+  elements.device.textContent = device;
+  elements.device.classList.toggle('hidden', !device);
+}
+function setBridgeIndicator(elements, state) {
+  const colors={device:'bg-green-500',bridge:'bg-yellow-400',offline:'bg-red-500'};
+  elements.dot.className=`w-2 h-2 rounded-full ${colors[state]} flex-shrink-0`;
+  elements.box.classList.remove('hidden');
+}
+async function localNetworkPermissionAccepted() {
+  try {
+    const permission=await navigator.permissions?.query({name:'local-network-access'});
+    return permission?.state==='granted';
+  } catch { return false; }
+}
+function bridgeModalStatus(status = null) {
+  const desc = describeAdbDeviceStatus(status);
+  return desc
+    ? `CIFI Bridge detected (${desc}) — pull the save directly from your device.`
+    : 'CIFI Bridge detected — pull the save directly from your device.';
+}
+async function refreshBridgeAdbStatusText(ws, elements) {
   const status = await window.checkCifiBridgeAdbStatus(ws);
   const desc = describeAdbDeviceStatus(status);
-  text.textContent = desc ? `CIFI Bridge connected — ${desc}` : 'CIFI Bridge connected';
+  setBridgeStatusText(elements, 'CIFI Bridge connected', desc || '');
+  setBridgeIndicator(elements, desc === 'Device Connected' ? 'device' : 'bridge');
+  return status;
 }
+function reportCifiBridgePull(result) {
+  const elements = bridgeStatusElements();
+  if (elements) {
+    setBridgeIndicator(elements, 'device');
+    setBridgeStatusText(elements, 'CIFI Bridge connected', 'Device Connected');
+  }
+}
+window.reportCifiBridgePull = reportCifiBridgePull;
 // Chromium throttles repeated WebSocket connection attempts to a host:port that keeps refusing
 // the connection -- after several failures in a row it silently delays the ACTUAL socket-level
 // connect attempt further and further (independent of our own JS-level timeout), a well-known
@@ -1993,47 +2147,76 @@ function scheduleBridgePoll(delay) {
   bridgePollTimer = setTimeout(pollBridgeStatus, delay);
 }
 async function updateBridgeStatusIndicator() {
-  const box = document.getElementById('bridgeStatusSidebar');
-  const dot = document.getElementById('bridgeStatusDot');
-  const text = document.getElementById('bridgeStatusText');
+  const elements = bridgeStatusElements();
+  if (!elements) return false;
+  const { box, dot, text } = elements;
   try {
     const ws = await window.tryConnectCifiBridge(1000);
     if (ws) {
       bridgeStatusWs = ws;
       bridgePollDelay = BRIDGE_POLL_MIN_MS; // connected -- reset backoff so a future drop recovers fast again
-      box.classList.remove('hidden');
-      dot.className = 'w-2 h-2 rounded-full bg-green-500 flex-shrink-0';
-      text.textContent = 'CIFI Bridge connected';
-      refreshBridgeAdbStatusText(ws, text);
+      setBridgeIndicator(elements, 'bridge');
+      setBridgeStatusText(elements, 'CIFI Bridge connected');
+      refreshBridgeAdbStatusText(ws, elements);
       ws.addEventListener('close', () => {
         bridgeStatusWs = null;
-        dot.className = 'w-2 h-2 rounded-full bg-gray-500 flex-shrink-0';
-        text.textContent = 'CIFI Bridge disconnected';
+        setBridgeIndicator(elements, 'offline');
+        setBridgeStatusText(elements, 'CIFI Bridge disconnected');
       });
       return true;
     }
-    box.classList.add('hidden');
+    if (await localNetworkPermissionAccepted()) {
+      setBridgeIndicator(elements,'offline');
+      setBridgeStatusText(elements,'CIFI Bridge disconnected');
+    } else box.classList.add('hidden');
     return false;
-  } catch { box.classList.add('hidden'); return false; }
+  } catch {
+    if (await localNetworkPermissionAccepted()) {
+      setBridgeIndicator(elements,'offline');
+      setBridgeStatusText(elements,'CIFI Bridge disconnected');
+    } else box.classList.add('hidden');
+    return false;
+  }
 }
 async function pollBridgeStatus() {
   let connected;
   if (!bridgeStatusWs || bridgeStatusWs.readyState !== WebSocket.OPEN) {
     connected = await updateBridgeStatusIndicator();
   } else {
-    await refreshBridgeAdbStatusText(bridgeStatusWs, document.getElementById('bridgeStatusText'));
-    connected = true;
+    const elements = bridgeStatusElements();
+    if (elements) {
+      await refreshBridgeAdbStatusText(bridgeStatusWs, elements);
+      connected = true;
+    } else {
+      connected = false;
+    }
   }
   bridgePollDelay = connected ? BRIDGE_POLL_MIN_MS : Math.min(bridgePollDelay * 2, BRIDGE_POLL_MAX_MS);
   scheduleBridgePoll(bridgePollDelay);
 }
 // The adb bridge indicator lives in the website's sidebar; embedded there is nothing to update and
 // no reason to poll localhost on someone else's site.
-if (!EMBEDDED) { updateBridgeStatusIndicator(); scheduleBridgePoll(bridgePollDelay); }
+function startBridgeStatusIndicator() {
+  const elements=bridgeStatusElements();
+  if (elements && !elements.box.dataset.dialogBound) {
+    elements.box.dataset.dialogBound='true';
+    elements.box.onclick=openImportSaveModal;
+    elements.box.onkeydown=(event)=>{if(event.key==='Enter' || event.key===' '){event.preventDefault();openImportSaveModal();}};
+  }
+  if (!bridgeStatusStarted) {
+    bridgeStatusStarted = true;
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleBridgePoll(0); });
+    window.addEventListener('focus', () => scheduleBridgePoll(0));
+  }
+  updateBridgeStatusIndicator();
+  scheduleBridgePoll(bridgePollDelay);
+}
+// The companion inserts the same footer later, after cifi-tools has mounted its Vue sidebar.
+// It calls this explicit entry point only once that markup exists.
+window.startCompanionBridgeStatus = startBridgeStatusIndicator;
+if (!EMBEDDED) startBridgeStatusIndicator();
 // Redetect immediately when the tab regains focus/visibility -- covers "I started the bridge
 // while this tab was in the background" without waiting out the current backoff delay.
-document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleBridgePoll(0); });
-window.addEventListener('focus', () => scheduleBridgePoll(0));
 
 // ==================== AUTO-POLL FOR SAVE UPDATES ====================
 // Opt-in (see importPrefs.autoPoll): periodically pulls the raw save text via the CIFI Bridge
@@ -2069,13 +2252,14 @@ async function autoPollSaveTick() {
     if (!ws) {
       setAutoPollStatus(false, 'CIFI Bridge not reachable');
     } else {
-      const rawText = await window.pullCifiSaveViaBridge(ws);
+      const pulled = await window.pullCifiSaveViaBridge(ws);
+      window.reportCifiBridgePull(pulled);
       // No hash short-circuit here -- an idle game's raw save differs on nearly every pull
       // (currency/timers/tick counters drift constantly) even when nothing meaningful changed,
       // so a raw-content hash can't tell "real update" from "background drift" anyway. The
       // real, semantic diff happens inside processImportedSaveText (see diffApply) -- that's
       // what actually decides whether a toast fires, so trust its result here instead.
-      const result = await processImportedSaveText(rawText, true);
+      const result = await processImportedSaveText(pulled.text, true);
       setAutoPollStatus(true, result.applied.length ? `update found (${result.applied.join(', ')})` : 'no changes');
     }
   } catch (e) {
@@ -2329,7 +2513,7 @@ function renderUpgradeInput(catKey, item) {
         <span class="text-xs font-semibold ${level ? 'text-green-400' : 'text-gray-500'}">${level ? 'Active' : 'Inactive'}</span>
       </div>
       ${effectBox(lines)}
-      <label class="flex items-center cursor-pointer mt-auto"><input type="checkbox" ${level ? 'checked' : ''} class="sr-only peer" /><div class="w-10 h-5 bg-gray-700 peer-checked:bg-green-600 rounded-full transition-colors relative"><div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div></div></label>`;
+      <label class="toggle-switch mt-auto"><input type="checkbox" ${level ? 'checked' : ''} /><span class="toggle-track"><span class="toggle-thumb"></span></span></label>`;
     card.querySelector('input').onchange = (e) => { store.globalUpgrades[fullKey] = e.target.checked ? 1 : 0; saveStore(); renderUpgradesPage(document.getElementById('pageRoot'), catKey); };
     return card;
   }
@@ -3669,23 +3853,24 @@ function openImportSaveModal() {
   statusText.textContent = 'Checking for local CIFI Bridge…';
   window.tryConnectCifiBridge().then((ws) => {
     if (ws) {
-      statusText.textContent = 'CIFI Bridge detected — pull the save directly from your device.';
+      statusText.textContent = bridgeModalStatus();
       window.checkCifiBridgeAdbStatus(ws).then((status) => {
-        const desc = describeAdbDeviceStatus(status);
-        if (desc) statusText.textContent = `CIFI Bridge detected (${desc}) — pull the save directly from your device.`;
+        statusText.textContent = bridgeModalStatus(status);
       });
       pullBtn.classList.remove('hidden');
       pullBtn.onclick = async () => {
         pullBtn.disabled = true;
         statusText.textContent = 'Pulling save from device…';
         try {
-          const rawText = await window.pullCifiSaveViaBridge(ws);
-          await processImportedSaveText(rawText);
+          const pulled = await window.pullCifiSaveViaBridge(ws);
+          window.reportCifiBridgePull(pulled);
+          statusText.textContent = bridgeModalStatus(await window.checkCifiBridgeAdbStatus(ws));
+          await processImportedSaveText(pulled.text);
         } catch (e) {
           renderImportSaveResult(`Bridge pull failed: ${e.message}`, true);
         } finally {
           pullBtn.disabled = false;
-          statusText.textContent = 'CIFI Bridge detected — pull the save directly from your device.';
+          statusText.textContent = bridgeModalStatus();
         }
       };
     } else {
@@ -3693,6 +3878,10 @@ function openImportSaveModal() {
     }
   });
 }
+// Content scripts do not share this file's lexical scope. The Companion reads this explicit
+// export after app.js has bound the modal, so a header click cannot depend on browser-specific
+// global-function leakage.
+window.openCompanionSaveImport = openImportSaveModal;
 document.getElementById('closeImportSaveBtn').onclick = () => document.getElementById('importSaveModal').classList.add('hidden');
 
 function renderImportSaveResult(message, isError) {
@@ -3766,6 +3955,9 @@ async function processImportedSaveText(rawText, silent) {
       });
     });
   };
+  // The companion Hunter surface IS the standalone application, so its canonical store must be
+  // populated in both hosting modes. The native store write above is a mirror for native pages,
+  // not a replacement for the state read by cards, Effective Path, and the optimizer.
   applyUpgradesByPrefix('relics.', 'relics', cats.relics);
   applyUpgradesByPrefix('inscryptions.', 'inscryptions', cats.inscriptions);
   applyUpgradesByPrefix('diamondcards.', 'diamond cards', cats.diamondCards);
@@ -3779,6 +3971,25 @@ async function processImportedSaveText(rawText, silent) {
   applyUpgradesByPrefix('trinkets.', 'trinkets', cats.trinkets);
   applyUpgradesByPrefix('iap.', 'iap', cats.iap);
   applyUpgradesByPrefix('mats_exchange.', 'mats exchange', cats.matsExchange);
+
+  // Prove the selected mapped values reached the one canonical store. The result message is a
+  // change summary, not a mapping audit, so it cannot be used to infer this; an empty extension
+  // must nevertheless receive every field the save supplied. If a future refactor routes a
+  // category into a detached object, stop instead of reporting a misleading partial import.
+  for (const [key, value] of Object.entries(mapped.globalUpgrades)) {
+    const prefix = `${key.split('.')[0]}.`;
+    const categoryEnabled = {
+      'relics.': cats.relics, 'inscryptions.': cats.inscriptions,
+      'diamondcards.': cats.diamondCards, 'shardmilestones.': cats.milestone,
+      'researches.': cats.researches, 'ultima.': cats.diamondUltima,
+      'diamondspecials.': cats.diamondSpecials, 'cms.': cats.cms,
+      'gadgets.': cats.gadgets, 'loopmods.': cats.loopmods, 'trinkets.': cats.trinkets,
+      'iap.': cats.iap, 'mats_exchange.': cats.matsExchange,
+    }[prefix];
+    if (categoryEnabled && store.globalUpgrades[key] !== value) {
+      throw new Error(`Import verification failed: ${key} was mapped but did not reach store.globalUpgrades.`);
+    }
+  }
 
   // EVERY PREFIX THE IMPORTER PRODUCES MUST BE APPLIED BY ONE OF THE LINES ABOVE.
   //
@@ -3880,13 +4091,17 @@ async function processImportedSaveText(rawText, silent) {
         builds.push(build);
       }
     });
-    localStorage.setItem('huntersim_last_scan', JSON.stringify(window.__lastScan));
+    store.lastScan = window.__lastScan;
     if (anyHunterChanged) applied.push('hunter level/talents/attributes');
   }
 
   if (applied.length) {
     saveStore();
-    render();
+    // `render()` owns the website's #pageRoot. The Companion owns its own routed panel instead,
+    // and calls back through this explicit hook so a save pull on Fleet/Ship Setup cannot write
+    // through the absent website root (`Cannot set properties of null (setting 'innerHTML')`).
+    if (EMBEDDED) window.refreshEmbeddedCompanionPage();
+    else render();
   }
 
   if (silent) {
@@ -4058,9 +4273,31 @@ function renderOptimizeEffort() {
 renderOptimizeEffort();
 
 document.getElementById('optimizeBtn').onclick = () => document.getElementById('optimizeSetupModal').classList.remove('hidden');
-document.getElementById('cancelOptimizeSetup').onclick = () => document.getElementById('optimizeSetupModal').classList.add('hidden');
+document.getElementById('cancelOptimizeSetup').onclick = () => {
+  document.getElementById('optimizeSetupModal').classList.add('hidden');
+  // A native-card run owns a one-shot commit callback. Closing its setup dialog must discard it;
+  // otherwise the next optimizer run could write an unrelated build into the previous card.
+  externalOptimizerApply = null;
+};
 
 let cancelRequested = false;
+let externalOptimizerApply = null;
+
+// The extension augments cifi-tools' native build card instead of rendering another Hunter UI.
+// This adapter supplies the native build to the canonical optimizer controller and gives the
+// caller one commit hook. The optimizer never reads or writes a parallel extension build store.
+function openOptimizerForExternalBuild(hunter, build, apply) {
+  if (!EMBEDDED) throw new Error('External build optimization is only available in embedded mode');
+  if (!window.HUNTER_DEFS[hunter]) throw new Error(`Unknown hunter: ${hunter}`);
+  if (!build?.id) throw new Error('External build is missing id');
+  if (typeof apply !== 'function') throw new Error('External build optimizer requires an apply callback');
+  currentHunter = hunter;
+  editingBuild = JSON.parse(JSON.stringify(build));
+  externalOptimizerApply = apply;
+  renderOptimizeModes();
+  document.getElementById('optimizeSetupModal').classList.remove('hidden');
+}
+window.openOptimizerForExternalBuild = openOptimizerForExternalBuild;
 
 // The optimizer's real phases (optimizer/search.js), each with the slice of the progress bar
 // it owns and the label shown while it runs. Spans are proportional to each phase's measured
@@ -4172,6 +4409,11 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
 
     editingBuild.talents = result.best.talentAlloc;
     editingBuild.attributes = result.best.attrAlloc;
+    if (externalOptimizerApply) {
+      await externalOptimizerApply(editingBuild);
+      externalOptimizerApply = null;
+      return;
+    }
     // Only fill in a name when the field is actually blank -- this used to always stomp
     // whatever name the user (or a prior save) already had, discarding it every time.
     if (!editingBuild.name.trim()) {
@@ -4183,11 +4425,19 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
     console.error('Optimizer failed', err);
     alert(`Optimizer failed to run: ${err.message || err}`);
   } finally {
+    // The callback belongs to this one run, including cancellation, failure and an unchanged
+    // result. Retaining it past any terminal outcome crosses native build boundaries.
+    externalOptimizerApply = null;
     clearInterval(ticker);
     document.getElementById('optimizeProgressModal').classList.add('hidden');
   }
 };
-document.getElementById('cancelOptimizeRunBtn').onclick = () => { cancelRequested = true; };
+document.getElementById('cancelOptimizeRunBtn').onclick = () => {
+  cancelRequested = true;
+  // `shouldCancel` is cooperative and is only consulted between search batches. Abort the active
+  // scorer too, so a worker that is inside a long WASM batch cannot hold the dialog hostage.
+  window.cancelOptimizerRun?.();
+};
 
 // ==================== STALE SHELL RECOVERY ====================
 

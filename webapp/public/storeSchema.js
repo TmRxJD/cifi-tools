@@ -119,6 +119,10 @@
     // hunter you were working on instead of snapping back to Borge -- the app's in-memory
     // `currentHunter` defaulted to 'borge' on every load, so the selection was lost with the page.
     lastHunter: { make: () => 'borge' },
+    // Raw values from the most recent bridge scan. This used to live in a second, unnamespaced
+    // localStorage key even in extension mode, which made the native Pinia store only a partial
+    // account state. Keeping it here makes one persisted store own the whole companion state.
+    lastScan: { make: () => ({}) },
     // How much search effort the user is willing to pay for. A standing preference about time,
     // validated against the optimizer's own EFFORT_LEVELS at render time so a stale or renamed
     // level falls back to the default instead of reaching a search that cannot honour it.

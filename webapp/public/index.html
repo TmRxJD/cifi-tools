@@ -100,7 +100,7 @@ tailwind.config = {
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" />
-<link rel="stylesheet" href="tokens.css?v=20260907p-portrait" />
+<link rel="stylesheet" href="tokens.css?v=20260910a-parity-controls" />
 <style>
   body { background: var(--surface-900); color: var(--surface-200); }
   .stepper-btn { @apply w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed text-white; }
@@ -233,12 +233,12 @@ tailwind.config = {
 
 <!-- Build Creator Modal -->
 <div id="buildModal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-gray-900/80 flex items-center justify-center p-4 pb-[70px] pt-[50px] sm:py-0">
-  <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto animate-fade-in">
-    <div class="bg-gradient-to-r from-gray-700 to-gray-800 p-4 border-b border-gray-600 flex justify-between items-center sticky top-0 z-10">
+  <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden animate-fade-in">
+    <div class="bg-gradient-to-r from-gray-700 to-gray-800 p-4 border-b border-gray-600 flex justify-between items-center flex-shrink-0 z-10">
       <h2 class="text-xl font-bold text-white flex items-center"><span id="modalHunterName" class="text-red-500">Borge</span><span class="ml-1">Build Creator</span></h2>
       <button id="closeModalBtn" class="p-1.5 rounded-full hover:bg-gray-700 transition-colors text-gray-400 hover:text-white text-xl leading-none">&times;</button>
     </div>
-    <div class="p-4">
+    <div class="p-4 overflow-y-auto flex-1">
       <div class="mb-5 bg-gray-700 rounded-lg p-4 border border-gray-600">
         <label for="buildNameInput" class="block text-xs font-medium text-gray-300 mb-2">Build Name</label>
         <div class="flex flex-col gap-3 md:flex-row md:gap-2">
@@ -283,9 +283,9 @@ tailwind.config = {
         <div id="attributesGrid" class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-3 mt-3"></div>
       </div>
 
-      <div class="flex gap-2 pt-3 border-t border-gray-700">
-        <button id="optimizeBtn" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-md text-white">⚡ Optimize within this budget</button>
-      </div>
+    </div>
+    <div class="flex gap-2 p-3 border-t border-gray-700 bg-gray-800 flex-shrink-0">
+      <button id="optimizeBtn" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-md text-white">⚡ Optimize within this budget</button>
     </div>
   </div>
 </div>
@@ -466,6 +466,7 @@ tailwind.config = {
       <span id="importSaveBridgeText" class="text-gray-400">Checking for local CIFI Bridge…</span>
       <button id="importSaveBridgePullBtn" class="hidden px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-sm whitespace-nowrap">Pull from Device</button>
     </div>
+    <div id="importSaveResult" class="text-sm space-y-1 mb-3"></div>
     <div id="importSaveBridgeSetup" class="rounded-lg border border-gray-700 bg-gray-900/50 p-3 mb-3 text-xs text-gray-400 space-y-2">
       <p><strong class="text-gray-200">Don't have the bridge running?</strong> <a href="https://github.com/TmRxJD/adb-bridge" target="_blank" rel="noopener" class="text-blue-400 hover:text-blue-300 underline">ADB Bridge</a> is a small local helper that reads your save file over ADB (emulator or USB) so you don't have to find/copy it by hand. It handles CIFI and other games from one install. The installer includes Node.js; the terminal command needs it already installed.</p>
       <div class="flex flex-wrap items-center gap-2">
@@ -585,7 +586,6 @@ tailwind.config = {
         </label>
       </div>
     </div>
-    <div id="importSaveResult" class="text-sm space-y-1"></div>
   </div>
 </div>
 
@@ -706,16 +706,17 @@ tailwind.config = {
 </div>
 
 <script src="icons.js?v=20260810p"></script>
+<script src="assetUrl.js?v=20260909a"></script>
 <script src="hunterDefs.js?v=20260903a"></script>
 <script src="shipSchema.js?v=20260907x-meltdown1"></script>
-<script src="accountState.js?v=20260907g-levelguard"></script>
-<script src="shipsPage.js?v=20260908i-stalefooter"></script>
+<script src="accountState.js?v=20260910a-path-worker"></script>
+<script src="shipsPage.js?v=20260910a-fleet-parity"></script>
 <script src="upgradeEffects.js?v=20260810p"></script>
 <script src="hunterSimBrowser.js?v=20260908b-source"></script>
 <script src="optimizer/space.js?v=20260907q-guards"></script>
 <script src="optimizer/objective.js?v=20260907t-bosstarget"></script>
 <!-- storeSchema depends on HUNTER_DEFS (hunterDefs.js) and AllocSpace (optimizer/space.js). -->
-<script src="storeSchema.js?v=20260908d-showlast"></script>
+<script src="storeSchema.js?v=20260910a-native-store"></script>
 <!-- Real community build codes used as optimizer seeds, and the gate-aware refit that
      scales one to a different budget. Both must load BEFORE search.js, which consumes them.
      Measured: rule-based construction lands at kill 0.0 and -45% to -88% on the hard builds;
@@ -723,22 +724,22 @@ tailwind.config = {
 <script src="optimizer/refit.js?v=20260907a-corpus"></script>
 <script src="optimizer/corpus.js?v=20260907s-modes"></script>
 <script src="optimizer/search.js?v=20260907zd-notrim"></script>
-<script src="optimizer/runner.js?v=20260908b-source"></script>
-<script src="saveImport.js?v=20260907e-ultima-on"></script>
+<script src="optimizer/runner.js?v=20260910b-path-pool"></script>
+<script src="saveImport.js?v=20260909a-bridge-metadata"></script>
 <script src="buildCode.js?v=20260810p"></script>
 <script src="costFormulas.js?v=20260907u-bignum"></script>
 <script src="bigNumberInput.js?v=20260908c-extract"></script>
 <script src="incomeModel.js?v=20260810r"></script>
 <script src="hunterStatPath.js?v=20260810p"></script>
-<script src="hunterStatPathBrowser.js?v=20260810r"></script>
-<script src="hunterStatPathPage.js?v=20260810r"></script>
+<script src="hunterStatPathBrowser.js?v=20260910a-worker-batches"></script>
+<script src="hunterStatPathPage.js?v=20260910a-gates"></script>
 <!-- Appwrite web SDK, from a CDN as a plain script: this project deliberately has no build
      step, and the IIFE build exposes window.Appwrite. cloudSync.js degrades to
      "unavailable" rather than throwing if this fails to load, so an offline or
      CDN-blocked user still gets the whole tool minus cloud saves. -->
 <script src="https://cdn.jsdelivr.net/npm/appwrite@27.0.0/dist/iife/sdk.js"></script>
 <script src="cloudSync.js?v=20260907c-stamps"></script>
-<script src="app.js?v=20260908h-embedded"></script>
+<script src="app.js?v=20260910a-parity-controls"></script>
 <script>
   // Custom (non-Tabler) sidebar icons: real game-asset SVG paths copied verbatim from the
   // live site's rendered DOM (Relics/Loop Mods/Milestones use bespoke icons, not Tabler's).

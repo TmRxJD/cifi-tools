@@ -154,6 +154,7 @@ const COPY = [
   // system is dropped entirely (embedded, the user is already signed in to their own cifi-tools
   // account) and a remote SDK script is forbidden by MV3 anyway.
   'icons.js',
+  'assetUrl.js',
   'hunterDefs.js',
   'shipSchema.js',
   'accountState.js',
@@ -178,7 +179,6 @@ const COPY = [
   'app.js',
   // NOT content scripts -- loaded by the worker and by fetch at runtime, so they ship as
   // web_accessible_resources instead. params.json is fetched relative to HUNTERSIM_ASSET_BASE.
-  'optimizer/worker.js',
   'params.json',
 ];
 

@@ -156,7 +156,10 @@ const storeSchema = z.object({
   // asserted in schema-test ("the shipped optimize effort is declared exactly once"), which owns
   // that relationship; duplicating it here would be a second source for one fact.
   lastHunter: z.enum(['borge', 'ozzy', 'knox']),
+  lastScan: freeFormMap,
   optimizeEffort: z.string().min(1),
+  // 0 means show the complete install order; positive values keep only that trailing detail.
+  installOrderShowLast: z.number().int().nonnegative(),
   // The run time limit in MINUTES, clamped 1..120 by StoreSchema.clampOptimizeMinutes. Bounded
   // here as well as there because a value outside that range reaches optimize() as a cap that
   // either fires instantly or never -- and a 1-minute cap looks identical to a slow machine.

@@ -1,0 +1,25 @@
+/* Layout integration only. Native page, link, icon and gate styles remain site-owned. */
+.cifi-native-layout { display: flex; flex: 1; min-width: 0; }
+.cifi-native-layout > main { min-width: 0; }
+.cifi-native-sidebar {
+  display: none; flex: 0 0 13rem; height: calc(100vh - 64px); position: sticky; top: 64px;
+  overflow-y: auto; flex-direction: column;
+}
+@media (min-width: 768px) { .cifi-native-sidebar { display: flex; } }
+.cifi-native-sidebar[hidden] { display: none; }
+/* Hunters is one extension-owned surface, matching the standalone application. The host's three
+   separate Hunter destinations are removed from the header only; their routes and data stores are
+   left intact for the site's own internals. */
+header nav a[href="/borge"],
+header nav a[href="/ozzy"],
+header nav a[href="/knox"] { display: none !important; }
+.cifi-companion [hidden], .cifi-companion .hidden { display: none !important; }
+@media (min-width: 768px) { .cifi-companion .hidden.md\:flex { display: flex !important; } }
+/* The hunter editor renders a desktop (`hidden md:block`) and mobile (`md:hidden`) copy of every
+   control, matching the native site. Tailwind only emits utilities present in the host bundle;
+   extension markup cannot rely on those selectors surviving a host rebuild. Without md:block
+   BOTH copies stay hidden and every talent/attribute card is an empty rounded skeleton. */
+@media (min-width: 768px) {
+  .cifi-companion .hidden.md\:block { display: block !important; }
+  .cifi-companion .md\:hidden { display: none !important; }
+}

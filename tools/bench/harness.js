@@ -33,6 +33,9 @@ function browserSandbox() {
     // in a real page). Under Node there is no location, so name the base explicitly; the fetch
     // shim below maps it back to webapp/public on disk.
     HUNTERSIM_ASSET_BASE: 'https://huntersim.local/',
+    // assetUrl.js uses the same URL base under the harness that standalone index.html uses in a
+    // browser. This keeps visual-path tests exercising the canonical resolver, not a fake stub.
+    CIFI_ASSET_BASE: 'https://huntersim.local/',
     // Serves exactly the two assets the browser modules request, straight off disk.
     fetch: async (url) => {
       const name = String(url).replace('https://huntersim.local/', '').split('?')[0];
@@ -90,7 +93,7 @@ function browserSandbox() {
   sb.self = sb;
   sb.globalThis = sb;
   vm.createContext(sb);
-  for (const f of ['hunterDefs.js', 'shipSchema.js', 'shipsPage.js', 'buildCode.js', 'costFormulas.js', 'hunterSimBrowser.js', 'accountState.js', 'optimizer/space.js', 'optimizer/objective.js', 'optimizer/refit.js', 'optimizer/corpus.js', 'optimizer/search.js', 'storeSchema.js', 'saveImport.js']) {
+  for (const f of ['assetUrl.js', 'hunterDefs.js', 'shipSchema.js', 'shipsPage.js', 'buildCode.js', 'costFormulas.js', 'hunterSimBrowser.js', 'accountState.js', 'optimizer/space.js', 'optimizer/objective.js', 'optimizer/refit.js', 'optimizer/corpus.js', 'optimizer/search.js', 'storeSchema.js', 'saveImport.js']) {
     vm.runInContext(fs.readFileSync(path.join(PUBLIC, f), 'utf8'), sb, { filename: f });
   }
   sandbox = sb;

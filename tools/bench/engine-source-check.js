@@ -51,7 +51,7 @@ function scenario({ engineUrl, failFetch }) {
       if (failFetch) return { ok: false, status: 503 };
       if (u === THEIR_URL) {
         return { ok: true, status: 200,
-          arrayBuffer: async () => THEIR_BYTES.buffer.slice(0, THEIR_BYTES.length) };
+          arrayBuffer: async () => THEIR_BYTES.buffer.slice(THEIR_BYTES.byteOffset, THEIR_BYTES.byteOffset + THEIR_BYTES.byteLength) };
       }
       const name = u.replace('https://huntersim.local/', '').split('?')[0];
       const file = path.join(PUBLIC, name);

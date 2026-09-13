@@ -206,6 +206,10 @@
       }
       out[f] = cfg[f];
     }
+    // Purchase-path workers opt additional per-call dimensions into compileEvaluator. They are
+    // optional for the ordinary optimizer, whose workers vary only talents and attributes.
+    if (cfg.STAT_KEYS !== undefined) out.STAT_KEYS = cfg.STAT_KEYS;
+    if (cfg.UPGRADE_PARAMS !== undefined) out.UPGRADE_PARAMS = cfg.UPGRADE_PARAMS;
     return out;
   }
 

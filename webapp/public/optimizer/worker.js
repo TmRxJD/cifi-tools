@@ -9,8 +9,13 @@ self.window = self;
 // This worker lives one directory below the site root, so relative fetch() inside
 // hunterSimBrowser.js would resolve params.json/release.wasm against optimizer/ and 404.
 // Pin the asset base to the root before importing it.
-self.HUNTERSIM_ASSET_BASE = new URL('..', location.href).href;
-importScripts('../hunterDefs.js', '../hunterSimBrowser.js', 'objective.js');
+self.HUNTERSIM_ASSET_BASE = self.HUNTERSIM_ASSET_BASE || new URL('..', location.href).href;
+const WORKER_ASSET_BASE = self.HUNTERSIM_ASSET_BASE;
+importScripts(
+  new URL('hunterDefs.js', WORKER_ASSET_BASE).href,
+  new URL('hunterSimBrowser.js', WORKER_ASSET_BASE).href,
+  new URL('optimizer/objective.js', WORKER_ASSET_BASE).href,
+);
 
 let evalFast = null;
 let scoreMode = 'loot';
@@ -48,7 +53,7 @@ async function evaluateWithGcRetry(item, iterations) {
   let lastError = null;
   for (const delay of GC_RETRY_DELAYS) {
     try {
-      return await evalFast(item.talentAlloc, item.attrAlloc, iterations);
+      return await evalFast(item.talentAlloc, item.attrAlloc, iterations, item.hunterStats, item.upgradeValues);
     } catch (err) {
       const message = String((err && err.message) || err);
       if (!/out of memory|cannot allocate/i.test(message)) throw err;
@@ -74,7 +79,14 @@ self.onmessage = async (e) => {
   // message is processed while it waits -- the ordering is safe by construction, not by luck.
   if (msg.type === 'engine') {
     if (msg.error) HunterSim.failWasmModule(msg.error);
-    else HunterSim.setWasmModule(msg.module);
+    else {
+      try {
+        const module = msg.module || await WebAssembly.compile(msg.bytes);
+        HunterSim.setWasmModule(module);
+      } catch (error) {
+        HunterSim.failWasmModule(String((error && error.message) || error));
+      }
+    }
     return;
   }
 
@@ -107,7 +119,7 @@ self.onmessage = async (e) => {
     // shapes in play while still ranking on the caller's objective.
     const boss = [];
     try {
-      let sinceYield = 0;
+      let evaluationsSinceYield = 0;
       for (const item of batch) {
         const r = await evaluateWithGcRetry(item, iterations);
         scores.push(OptimizerObjective.scoreFor(scoreMode, r, scoreCtx));
@@ -120,8 +132,8 @@ self.onmessage = async (e) => {
         // "Cannot allocate Wasm memory for new instance" partway through a search. Yielding to
         // the macrotask queue periodically gives the collector a chance to run. This costs a
         // few milliseconds per batch and does not change any score.
-        if (++sinceYield >= YIELD_EVERY) {
-          sinceYield = 0;
+        if (++evaluationsSinceYield >= YIELD_EVERY) {
+          evaluationsSinceYield = 0;
           await new Promise((resolve) => setTimeout(resolve, 0));
         }
       }

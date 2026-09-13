@@ -12,7 +12,7 @@
   // Bump alongside the ?v= on the <script> tags in index.html. A Worker URL is cached
   // independently of the page, so without this a worker.js change silently keeps running the
   // previous version after a reload.
-  const WORKER_VERSION = '20260908b-source';
+  const WORKER_VERSION = '20260910b-path-pool';
 
   // Each worker compiles and holds its OWN copy of the WASM module and churns a fresh instance
   // per evaluation (required for determinism -- the evaluator's RNG state lives in mutable wasm
@@ -25,6 +25,124 @@
   // The live pool, reused across runs. Module-scoped rather than per-call, which is the whole
   // point: rebuilding it every run is what exhausted wasm memory.
   let cachedPool = null;
+  let activePool = null;
+
+  function abortError() {
+    const error = new Error('Optimizer cancelled');
+    error.name = 'AbortError';
+    return error;
+  }
+
+  // cifi-tools already owns a same-origin evaluation worker. Embedded mode uses that exact worker
+  // rather than moving the search into a hidden extension document, which Chrome deprioritizes.
+  // This adapter presents the small Worker-shaped protocol ScoringPool already consumes while the
+  // underlying request is the site's Comlink wire format and evaluator.
+  class NativeEvaluationWorker {
+    constructor() {
+      const registry = document.getElementById('cifi-companion-navigation');
+      const url = registry?.dataset.evaluationWorkerUrl;
+      if (!url) throw new Error('cifi-tools evaluation worker URL is unavailable');
+      this.worker = new Worker(url, { type: 'module' });
+      this.onmessage = null;
+      this.onerror = null;
+      this.cfg = null;
+      this.mode = null;
+      this.scoreCtxOverride = null;
+      this.pending = new Map();
+      this.nextId = 0;
+      this.worker.onerror = event => {
+        const error=new Error(event?.message || 'Native evaluation worker failed');
+        this.pending.forEach(({reject,timer})=>{ clearTimeout(timer); reject(error); });
+        this.pending.clear();
+        this.onerror?.(event);
+      };
+      this.worker.onmessage = event => {
+        const entry = this.pending.get(event.data?.id);
+        if (!entry) return;
+        this.pending.delete(event.data.id);
+        clearTimeout(entry.timer);
+        if (event.data.type === 'RAW') entry.resolve(event.data.value);
+        else entry.reject(new Error(event.data.value?.message || 'Native evaluation worker failed'));
+      };
+    }
+
+    rpc(method, args) {
+      const id = `cifi-${++this.nextId}`;
+      return new Promise((resolve, reject) => {
+        // A worker process can disappear without dispatching an ErrorEvent (observed as the UI
+        // sitting forever at one tuning percentage). Bound every native RPC so that failure is
+        // reported and the optimizer modal can close/cancel instead of awaiting a lost reply.
+        const timer=setTimeout(()=>{
+          if (!this.pending.delete(id)) return;
+          reject(new Error(`Native evaluation worker timed out after 60s (${id})`));
+        },60000);
+        this.pending.set(id, { resolve, reject, timer });
+        this.worker.postMessage({
+          id, type: 'APPLY', path: [method],
+          argumentList: args.map(value => ({ type: 'RAW', value })),
+        });
+      });
+    }
+
+    postMessage(message) {
+      if (message.type === 'engine') return; // the native worker loads its own same-origin engine
+      if (message.type === 'init') {
+        this.cfg = message.cfg;
+        this.mode = message.mode;
+        this.scoreCtxOverride = message.scoreCtxOverride;
+        queueMicrotask(() => this.onmessage?.({ data: { type: 'ready' } }));
+        return;
+      }
+      if (message.type !== 'score') return;
+      (async () => {
+        try {
+          const scores = [];
+          const boss = [];
+          const ctx = { ...global.OptimizerObjective.contextFor(this.cfg), ...(this.scoreCtxOverride || {}) };
+          for (const item of message.batch) {
+            const upgrades = JSON.parse(JSON.stringify(this.cfg.globalUpgrades || {}));
+            Object.entries(item.upgradeValues || {}).forEach(([param, value]) => {
+              const [, category, id] = param.split('.');
+              if (!upgrades[category]) upgrades[category] = {};
+              upgrades[category][id] = value;
+            });
+            const build = {
+              level: this.cfg.level,
+              talents: item.talentAlloc,
+              attributes: item.attrAlloc,
+              overrides: { ...(this.cfg.baseOverrides || {}), ...(item.upgradeValues || {}) },
+            };
+            const storeData = {
+              hunterStats: { [this.cfg.hunter]: item.hunterStats || this.cfg.hunterStats },
+              upgrades,
+              hunterIterations: { [this.cfg.hunter]: message.iterations },
+              hunterSeedSettings: {},
+              gemPlannerStore: this.cfg.gemPlannerStore,
+            };
+            const result = await this.rpc('evaluate', [this.cfg.hunter, build, storeData]);
+            scores.push(global.OptimizerObjective.scoreFor(this.mode, result, ctx));
+            boss.push({ kill: result.bossKillRate, hp: result.bossHpPercent, maxStage: result.maxStage });
+          }
+          this.onmessage?.({ data: { type: 'scored', requestId: message.requestId, scores, boss } });
+        } catch (error) {
+          this.onmessage?.({ data: { type: 'scored', requestId: message.requestId, error: String(error?.message || error) } });
+        }
+      })();
+    }
+
+    terminate() {
+      const error = abortError();
+      this.pending.forEach(({ reject,timer }) => { clearTimeout(timer); reject(error); });
+      this.pending.clear();
+      this.worker.terminate();
+    }
+  }
+
+  function scoringWorker() {
+    return global.HUNTERSIM_EMBEDDED
+      ? new NativeEvaluationWorker()
+      : new Worker(global.HUNTERSIM_WORKER_URL || `optimizer/worker.js?v=${WORKER_VERSION}`);
+  }
 
   class ScoringPool {
     constructor(cfg, mode, size, scoreCtxOverride) {
@@ -35,7 +153,9 @@
       this.readyPromises = [];
 
       for (let i = 0; i < size; i++) {
-        const worker = new Worker(`optimizer/worker.js?v=${WORKER_VERSION}`);
+        // Standalone uses our shipped worker. Embedded mode uses cifi-tools' own same-origin
+        // evaluation worker through NativeEvaluationWorker above.
+        const worker = scoringWorker();
         const ready = new Promise((resolve) => {
           worker.onmessage = (e) => {
             if (e.data.type !== 'ready') return;
@@ -60,8 +180,15 @@
       // module, so without this every one of them would wait forever and ready() would never
       // settle -- the hang that the onerror handler above exists to prevent for the other
       // failure mode.
-      this.enginePromise = HunterSim.loadWasmModule().then((mod) => {
-        this.workers.forEach((w) => w.postMessage({ type: 'engine', module: mod }));
+      this.enginePromise = (global.HUNTERSIM_EMBEDDED
+        ? Promise.resolve({})
+        : HunterSim.loadWasmModule().then((module) => ({ module })))
+        .then((engine) => {
+        // A compiled WebAssembly.Module does not survive the page-origin -> extension-origin
+        // MessageChannel relay in Chromium. Embedded mode passes the bytes fetched directly from
+        // cifi-tools.com's own origin and each extension worker compiles them locally. Nothing is
+        // hosted, persisted or fetched by the extension origin.
+        this.workers.forEach((w) => w.postMessage({ type: 'engine', ...engine }));
         return null;
       }).catch((err) => {
         const error = String((err && err.message) || err);
@@ -84,7 +211,11 @@
     async ready() {
       // The engine is awaited alongside the workers, so a pool is never reported ready while its
       // evaluator is still unresolved -- scoring may only start once both are settled.
-      const [engineError, errors] = await Promise.all([this.enginePromise, Promise.all(this.readyPromises)]);
+      const workerReadiness = Promise.race([
+        Promise.all(this.readyPromises),
+        new Promise((resolve) => setTimeout(() => resolve(['worker initialization timed out']), 20000)),
+      ]);
+      const [engineError, errors] = await Promise.all([this.enginePromise, workerReadiness]);
       return engineError || errors.find((e) => e) || null;
     }
 
@@ -122,6 +253,9 @@
       // worker keeps its memory alive. Three optimize runs in one page session were enough to hit
       // "Cannot allocate Wasm memory for new instance" -- a user pressing Optimize a third time
       // without reloading, which is entirely ordinary.
+      const error = abortError();
+      this.pending.forEach(({ reject }) => reject(error));
+      this.pending.clear();
       this.workers.forEach((w) => {
         w.onmessage = null;
         w.onerror = null;
@@ -129,7 +263,6 @@
       });
       this.workers.length = 0;
       this.readyPromises.length = 0;
-      this.pending.clear();
     }
   }
 
@@ -170,6 +303,7 @@
       cachedPool = { key: poolKey, pool: new ScoringPool(cfg, mode, size) };
     }
     const pool = cachedPool.pool;
+    activePool = pool;
     try {
       const initError = await pool.ready();
       if (initError) {
@@ -196,7 +330,14 @@
         onProgress,
         shouldCancel,
       });
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        if (cachedPool?.pool === pool) cachedPool = null;
+        return { best: null, ranked: [], cancelled: true };
+      }
+      throw error;
     } finally {
+      if (activePool === pool) activePool = null;
       // The pool is REUSED by the next run with the same account and mode -- rebuilding six WASM
       // instances per run is what exhausted memory after two consecutive level-62 Ozzy optimizes.
       // It is released when that key changes, or by releaseScoringPools().
@@ -211,6 +352,30 @@
     cachedPool = null;
   }
 
+  function cancelOptimizerRun() {
+    if (!activePool) return;
+    const pool = activePool;
+    activePool = null;
+    if (cachedPool?.pool === pool) cachedPool = null;
+    pool.terminate();
+  }
+
+  // Purchase paths vary base stats/upgrades instead of talent/attribute allocations, but they use
+  // the same evaluator and need the same bounded parallelism. Expose a narrowly-scoped scorer so
+  // hunterStatPathBrowser.js can batch a whole candidate sweep across this canonical worker pool.
+  async function createHunterPathScorer(cfg, mode) {
+    const size = Math.max(2, Math.min(MAX_POOL_SIZE, (navigator.hardwareConcurrency || 4) - 1));
+    const pool = new ScoringPool(cfg, mode, size);
+    const error = await pool.ready();
+    if (error) { pool.terminate(); throw new Error(`Effective Path worker failed to initialize: ${error}`); }
+    return {
+      score: (items, iterations) => pool.score(items, iterations),
+      terminate: () => pool.terminate(),
+    };
+  }
+
   global.runOptimizer = runOptimizer;
   global.releaseScoringPools = releaseScoringPools;
+  global.cancelOptimizerRun = cancelOptimizerRun;
+  global.createHunterPathScorer = createHunterPathScorer;
 })(window);

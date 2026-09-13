@@ -730,7 +730,15 @@ function pullSaveViaBridge(ws, timeoutMs = 60000) {
       if (msg.type === 'SUCCESS') {
         clearTimeout(timer);
         const bin = atob(msg.data);
-        resolve(bin);
+        // A successful PULL_SAVE is stronger evidence than a separate CHECK_ADB probe: the
+        // bridge has just read this exact save from this exact device. Preserve its metadata so
+        // the sidebar can say what happened instead of immediately showing a stale "no device".
+        resolve({
+          text: bin,
+          deviceSerial: msg.deviceSerial || null,
+          deviceLabel: msg.deviceLabel || null,
+          remotePath: msg.remotePath || null,
+        });
       } else if (msg.type === 'ERROR') {
         clearTimeout(timer);
         reject(new Error(msg.message || 'Bridge pull failed.'));

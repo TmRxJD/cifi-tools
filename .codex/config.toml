@@ -1,0 +1,3 @@
+[mcp_servers.cifi-compare]
+command = "node"
+args = ["compare-mcp/server.mjs"]

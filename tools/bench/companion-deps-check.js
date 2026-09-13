@@ -28,17 +28,32 @@ const check = (label, ok, detail) => {
 
 const EXT = path.join(__dirname, '..', '..', 'extension');
 const manifest = JSON.parse(fs.readFileSync(path.join(EXT, 'manifest.json'), 'utf8'));
-const scripts = manifest.content_scripts[0].js;
+// The host-store bridge is deliberately a separate MAIN-world content script. Select the
+// isolated-world application entry by the file that makes it an application (`companion.js`), not
+// by its array position: assuming index zero made this gate reject the correct two-world setup.
+const appContentScript = manifest.content_scripts.find((entry) => entry.js?.includes('companion.js'));
+const scripts = appContentScript?.js || [];
+const hostStoreBridge = manifest.content_scripts.find((entry) => entry.js?.includes('hostStoreBridge.js'));
+const hostStoreSource = fs.readFileSync(path.join(EXT, 'hostStoreBridge.js'), 'utf8');
+check('host-store bridge runs in the site main world', hostStoreBridge?.world === 'MAIN',
+  'native cifi-tools Pinia state is not visible to an isolated content script');
+const webResources = manifest.web_accessible_resources?.flatMap((entry) => entry.resources || []) || [];
+check('runtime params are web-accessible', webResources.includes('vendor/params.json'),
+  'hunterSimBrowser fetches this extension resource at runtime');
+check('extension does not publish a replacement evaluator host', !webResources.includes('workerHost.html'),
+  'embedded optimization must use cifi-tools own same-origin worker');
 
 // Globals the BROWSER provides, or that a content script legitimately reads from the host page.
 // Listed explicitly rather than pattern-matched: a typo'd builtin should fail, not be waved through.
 const BUILTIN = new Set([
-  'store', 'saveStore',                       // provided by companionStore.js at runtime
-  'location', 'document', 'navigator', 'console', 'prompt', 'alert', 'confirm',
+  'location', 'document', 'navigator', 'console', 'prompt', 'alert', 'confirm', 'dispatchEvent',
   'localStorage', 'sessionStorage', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
   'requestAnimationFrame', 'addEventListener', 'removeEventListener', 'getComputedStyle',
   'innerWidth', 'innerHeight', 'matchMedia', 'fetch', 'crypto', 'performance', 'Worker', 'URL',
-  'devicePixelRatio', 'scrollTo', 'open', 'history', 'chrome',
+  'devicePixelRatio', 'scrollTo', 'open', 'history', 'chrome', 'indexedDB',
+  // app.js checks these optional integrations before use. The companion deliberately omits the
+  // Appwrite account layer, while cifi-tools may provide html2canvas on the shared page.
+  'CloudSync', 'html2canvas',
 ]);
 
 const sources = new Map();
@@ -48,6 +63,16 @@ for (const rel of scripts) {
   sources.set(rel, fs.readFileSync(file, 'utf8'));
 }
 check('every file the manifest declares is present', sources.size === scripts.length);
+
+// The import modal is generated into shell.js because app.js binds it at top level. A previous
+// shell drift omitted an import target, so a successful bridge pull reached the import pipeline
+// and then failed trying to set `innerHTML` on null. Keep the contract at the generated boundary:
+// these IDs must be present in the exact DOM the extension ships, not merely in index.html.
+const shell = sources.get('shell.js') || '';
+for (const id of ['importSaveModal', 'importSaveResult', 'importSaveBridgeText', 'importSaveBridgePullBtn']) {
+  check(`generated modal shell includes #${id}`,
+    shell.includes(`id=\\"${id}\\"`), 'run tools/build-companion.js to regenerate shell.js');
+}
 
 // ---- what each file PROVIDES -----------------------------------------------------------------
 // `window.X =` and `window.X = function X`. Also plain `function X()` at top level does NOT count:
@@ -120,9 +145,10 @@ check('vendored files follow index.html load order', orderProblems === 0, `${ord
 // Order constraints for files that exist only in the extension, so index.html cannot arbitrate.
 const at = (frag) => scripts.findIndex((s) => s.endsWith(frag));
 for (const [before, after, why] of [
+  ['config.js', 'icons.js', 'embedded configuration must exist before any vendored file runs'],
+  ['assetUrl.js', 'shipsPage.js', 'every visual asset must resolve before Fleet pages render'],
   ['shell.js', 'shipsPage.js', 'shipsPage binds five modals at top level'],
-  ['storeSchema.js', 'companionStore.js', 'init() calls StoreSchema.freshStore'],
-  ['companionStore.js', 'companion.js', 'boot() awaits CompanionStore.init'],
+  ['app.js', 'companion.js', 'companion routes invoke app.js render()'],
 ]) {
   const i = at(before), j = at(after);
   check(`${before} loads before ${after}`, i !== -1 && j !== -1 && i < j, why);
@@ -132,11 +158,50 @@ for (const [before, after, why] of [
 // companion.js resolves these by NAME at navigation time, so a rename in shipsPage.js would surface
 // as a broken page rather than a load error.
 const companion = sources.get('companion.js') || '';
-const named = [...companion.matchAll(/render:\s*'([A-Za-z_$][\w$]*)'/g)].map((m) => m[1]);
-check('companion.js declares page renderers', named.length > 0, 'none found');
-for (const fn of named) {
-  check(`renderer ${fn}() is provided`, provided.has(fn), 'not assigned to window by any loaded file');
+const runner = sources.get('vendor/optimizer/runner.js') || '';
+const appSource = sources.get('vendor/app.js') || '';
+check('embedded optimizer uses cifi-tools native parallel evaluator',
+  runner.includes('class NativeEvaluationWorker')
+    && runner.includes("this.rpc('evaluate'")
+    && !runner.includes('HUNTERSIM_WORKER_HOST_URL')
+    && !fs.existsSync(path.join(EXT, 'workerHost.html')),
+  'do not recreate the native evaluator behind a throttled extension iframe');
+// Routing behavior is exercised against the real site by companion-browser-check.js.
+// This gate checks dependency contracts only; source spellings cannot prove Vue navigation.
+check('host router adapter is declared in the MAIN world',
+  manifest.content_scripts.some(entry => entry.world === 'MAIN' && entry.js.includes('hostRouting.js')));
+check('native page content is not rendered by the companion client',
+  !companion.includes('renderGemsPage') && !companion.includes('renderUpgradesPage'));
+check('embedded Hunter evaluation reads the same canonical store as its visible controls',
+  appSource.includes('hunterStats: store[hunter].hunterStats')
+    && appSource.includes('globalUpgrades: store.globalUpgrades')
+    && appSource.includes('gems: store.gems'),
+  'do not revive the native-Pinia substitution that made embedded card scores diverge');
+check('embedded mode persists through the expanded native Pinia store only',
+  appSource.includes("new Event('cifi-companion:write-native-store')")
+    && hostStoreSource.includes('hunter.$patch({cifiCompanion:extra})')
+    && hostStoreSource.includes('hunter.$persist()')
+    && !(sources.get('config.js') || '').includes('HUNTERSIM_STORAGE_KEY')
+    && !(sources.get('config.js') || '').includes('HUNTERSIM_IDB_NAME'),
+  'the extension must not configure a parallel companion persistence store');
+check('embedded save import populates canonical Hunter calculation inputs',
+  !appSource.includes("if (!EMBEDDED) applyUpgradesByPrefix")
+    && !appSource.includes('if (cats.gems && !EMBEDDED)')
+    && !appSource.includes('if (cats.hunterBuilds && !EMBEDDED)'),
+  'embedded imports must not update only the native mirror while companion evaluation stays stale');
+const routeContext = {window:{}};
+require('vm').runInNewContext(fs.readFileSync(path.join(EXT,'routes.js'),'utf8'),routeContext);
+const named = routeContext.window.CifiCompanionRoutes.map(page=>page.renderer);
+check('companion declares the complete six-page surface, including Hunters', named.length === 6
+  && named.includes('render'), 'the standalone Hunter renderer is part of the product contract');
+for (const fn of named) check(`renderer ${fn}() is provided`,provided.has(fn));
+for (const entry of manifest.content_scripts) {
+  for (const rel of [...entry.js,...(entry.css || [])]) check(`declared asset exists: ${rel}`,fs.existsSync(path.join(EXT,rel)));
 }
+check('embedded import redraw is provided by the Companion',
+  /window\.refreshEmbeddedCompanionPage\s*=/.test(companion)
+    && /window\.refreshEmbeddedCompanionPage\(\)/.test(sources.get('vendor/app.js') || ''),
+  'embedded save imports must redraw through Companion routing, not app.js\'s website-only #pageRoot');
 
 // ---- the build output is current ---------------------------------------------------------------
 // A stale vendor/ copy is the same defect wearing a different hat: the manifest loads a file that no

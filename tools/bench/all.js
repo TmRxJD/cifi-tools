@@ -66,7 +66,7 @@ const LOCAL = [
   'node-coefficient-check', 'node-counter-check', 'node-name-check', 'node-effect-probe',
   'node-resource-check', 'node-factor-check', 'fleet-formula-check',
   'ship-node-gate-check', 'badge-check', 'uniform-term-check', 'crew-rank-check',
-  'engine-bridge-check', 'big-number-io-check', 'gear-icon-check', 'ship-evo-art-check', 'meltdown-allocation-check', 'gen-tier-gate-check', 'growth-counter-check', 'allocator-check', 'ship-test',
+  'engine-source-check', 'big-number-io-check', 'gear-icon-check', 'ship-evo-art-check', 'meltdown-allocation-check', 'gen-tier-gate-check', 'growth-counter-check', 'allocator-check', 'ship-test',
   'attribute-tree-check', 'cap-raise-check',
   'gem-coverage-test', 'gem-tree-test',
   'param-plumbing-check', 'override-liveness-check', 'wasm-arity-check',
@@ -79,7 +79,11 @@ const LOCAL = [
   // moves out of that subset breaks it silently -- not at load, but as "undefined is not a
   // function" inside a click handler, after shipping. It also vendors copies of webapp/public files
   // that go stale the moment either side is edited. Both are checked here.
-  'companion-deps-check',
+  'companion-deps-check', 'companion-route-lifecycle-check', 'companion-gem-store-check',
+  'optimizer-worker-liveness-check',
+  // An unpacked extension does not refresh its content script until it is reloaded. Every change
+  // that can ship into it must advance manifest.json so the loaded build is identifiable.
+  'extension-version-check',
   // SEARCH-SIDE INVARIANTS. These were written for the borge@73 investigation and each one caught
   // a real defect while being written, which is the argument for running them every time:
   //   describe-run-check  -- describeRun labelled a stage-303 run "boss at 400", contradicting the

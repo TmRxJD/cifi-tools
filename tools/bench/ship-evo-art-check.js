@@ -81,7 +81,7 @@ for (const [name, id] of Object.entries(shipIds)) {
 // Ouroboros has no per-stage art and must fall back rather than 404.
 const ouro = pick(8, 3);
 check('ouroboros falls back to its static portrait',
-  ouro === 'assets/ships/ouroboros.png' && fs.existsSync(path.join(ART, 'ouroboros.png')), `${ouro}`);
+  path.basename(String(ouro)) === 'ouroboros.png' && fs.existsSync(path.join(ART, 'ouroboros.png')), `${ouro}`);
 
 // An unknown ship id returns null rather than a broken path.
 check('an unknown ship id returns null', pick(99, 0) === null, `${pick(99, 0)}`);

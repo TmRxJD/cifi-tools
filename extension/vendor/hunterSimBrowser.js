@@ -56,7 +56,6 @@
   // The local fallback exists for DEVELOPMENT, where the file sits next to this one. It is also
   // what the hosted site currently uses; removing it is a separate decision recorded in
   // THIRD-PARTY.md, and this loader is the one place that has to change when it is made.
-  const BRIDGE_TIMEOUT_MS = 15000;
   // WHICH SOURCE ACTUALLY SERVED THE ENGINE, recorded and announced.
   //
   // Until now a working bridge and a missing one looked IDENTICAL from the outside: the bridge
@@ -69,69 +68,40 @@
   let engineSource = 'not loaded yet';
   function setEngineSource(src, detail) {
     engineSource = src;
-    const msg = src === 'extension'
-      ? `[cifi] engine loaded via the COMPANION EXTENSION from cifi-tools.com (${detail}) -- nothing is served from this site`
-      : `[cifi] engine loaded from THIS SITE's own copy (${detail}). The companion extension is not active; see extension/README.md`;
+    const msg = src === 'origin'
+      ? `[cifi] engine loaded from cifi-tools.com's own copy (${detail}) -- nothing is served or stored by the companion`
+      : `[cifi] engine loaded from this site's own copy (${detail})`;
     try { console.info(msg); } catch { /* console may be unavailable in a worker */ }
   }
-  // Where cifi-tools serves its evaluator today. Changing this needs only a deploy of this file;
-  // the extension validates the origin, not the exact path, precisely so that stays true.
-  const ENGINE_PATH = '/wasm/release.wasm';
 
-  function engineFromExtension() {
-    // Detected from a data attribute the content script sets at document_start. A `window`
-    // property would NOT work: a content script runs in an isolated world, so anything it assigns
-    // to `window` is invisible here.
-    if (typeof document === 'undefined'
-      || document.documentElement?.dataset?.cifiCompanionBridge !== '1') {
-      return Promise.resolve(null);   // not installed -- caller falls back
-    }
-    return new Promise((resolve) => {
-      const id = `eng-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      let done = false;
-      const finish = (value) => {
-        if (done) return;
-        done = true;
-        window.removeEventListener('message', onMessage);
-        clearTimeout(timer);
-        resolve(value);
-      };
-      // A TIMEOUT IS NOT OPTIONAL. If the extension is installed but its service worker is asleep,
-      // disabled mid-session, or its host permission was revoked, the reply simply never arrives
-      // and the app would hang at startup with no error -- the worst failure shape available.
-      const timer = setTimeout(() => finish(null), BRIDGE_TIMEOUT_MS);
-      const onMessage = (event) => {
-        if (event.source !== window) return;
-        const d = event.data;
-        if (!d || d.type !== 'cifi-companion:engine' || d.id !== id) return;
-        if (!d.ok) { console.warn(`[cifi] companion bridge could not load the engine: ${d.error}`); finish(null); return; }
-        const bin = atob(d.base64);
-        const bytes = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-        setEngineSource('extension', `${bytes.length} bytes`);
-        finish(bytes.buffer);
-      };
-      window.addEventListener('message', onMessage);
-      // The path is sent by the PAGE so that if cifi-tools ever renames or moves the engine, this
-      // is a one-line site deploy rather than an extension update and a store review. The
-      // extension pins the ORIGIN; we choose the file within it.
-      window.postMessage({ type: 'cifi-companion:get-engine', id, path: ENGINE_PATH }, window.location.origin);
-    });
+  // WHERE THE ENGINE COMES FROM IS THE EMBEDDER'S CHOICE, AND THE SUBSTITUTE FOR REDISTRIBUTING IT.
+  //
+  // On the website this is our own `release.wasm`. Embedded in cifi-tools.com the companion sets
+  // `HUNTERSIM_ENGINE_URL` to THEIR copy, which is SAME-ORIGIN there -- so their page loads their
+  // engine from their server and no copy of it is hosted, cached or transmitted by us.
+  //
+  // THIS REPLACES A postMessage BRIDGE, and the deletion is the point rather than a tidy-up. That
+  // version had a content script on OUR origin relay their wasm across origins to defeat CORS,
+  // with a base64 round-trip, a service worker and a mandatory timeout. CORS was only ever in the
+  // way because we were on the wrong origin; from theirs a plain fetch works and all of it -- the
+  // relay, the worker, the timeout, the marker attribute, `bridgeStatus()` -- is unnecessary.
+  function engineUrl() {
+    return global.HUNTERSIM_ENGINE_URL || assetUrl('release.wasm');
   }
 
   let wasmModulePromise = null;
   function loadWasmModule() {
     if (!wasmModulePromise) {
-      wasmModulePromise = engineFromExtension()
-        .then((buf) => buf || fetch(assetUrl('release.wasm')).then((r) => {
-          if (!r.ok) {
-            throw new Error('The simulation engine is unavailable. Install the CIFI Tools '
-              + 'Companion Bridge extension (see extension/README.md), which loads it from '
-              + 'cifi-tools.com in your own browser.');
-          }
-          return r.arrayBuffer().then((b) => { setEngineSource('local', `${b.byteLength} bytes`); return b; });
-        }))
-        .then((buf) => WebAssembly.compile(buf));
+      const url = engineUrl();
+      wasmModulePromise = fetch(url)
+        .then((r) => {
+          if (!r.ok) throw new Error(`The simulation engine could not be loaded from ${url} (HTTP ${r.status}).`);
+          return r.arrayBuffer();
+        })
+        .then((b) => {
+          setEngineSource(global.HUNTERSIM_ENGINE_URL ? 'origin' : 'local', `${b.byteLength} bytes`);
+          return WebAssembly.compile(b);
+        });
     }
     return wasmModulePromise;
   }
@@ -544,24 +514,8 @@
   }
   function isAbort(err) { return !!err && err.name === ABORTED; }
 
-    // A user-facing diagnostic, because "did the extension take?" is otherwise unanswerable without
-  // reading the network panel. Reports what the page can see BEFORE any engine load, so it
-  // distinguishes "content script never ran" from "bridge ran and failed".
-  function bridgeStatus() {
-    const marked = typeof document !== 'undefined'
-      && document.documentElement?.dataset?.cifiCompanionBridge === '1';
-    return {
-      contentScriptDetected: marked,
-      engineSource,
-      verdict: marked
-        ? (engineSource === 'extension' ? 'OK -- engine came from the extension'
-          : engineSource === 'local' ? 'extension present but the engine came from THIS SITE (bridge failed -- check the console for the reason)'
-            : 'extension present, engine not loaded yet')
-        : 'extension NOT detected on this page -- check the URL matches the manifest, and reload the page AFTER loading the extension',
-    };
-  }
 
-global.HunterSim = { engineSource: () => engineSource, bridgeStatus, expectInjectedWasm, setWasmModule, failWasmModule, loadWasmModule,
+global.HunterSim = { engineSource: () => engineSource, expectInjectedWasm, setWasmModule, failWasmModule, loadWasmModule,
     evaluate, evaluateDetailed, buildArgs, resolveParam, compileEvaluator, loadParams, loadWasm,
     clearCache, throwIfAborted, isAbort, ABORTED,
     // Exposed so a liveness check can tell "changes no wasm argument" apart from "does nothing":
