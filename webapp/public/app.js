@@ -2407,7 +2407,7 @@ function openStripeColorPicker(build, card) {
   // titledModal is sized for the big statistics dialogs; a palette needs a fraction of that.
   overlay.firstElementChild.classList.replace('max-w-5xl', 'max-w-sm');
   const body = overlay.querySelector('.p-5');
-  const swatch = (c, attrs) => `<button type="button" ${attrs} class="w-7 h-7 rounded-md border border-gray-600 hover:scale-110 transition-transform" style="background:${c}" title="${c}"></button>`;
+  const swatch = (c, attrs) => `<button type="button" ${attrs} class="color-swatch w-7 h-7 rounded-md border border-gray-600 hover:scale-110 transition-transform" style="background:${c}" title="${c}"></button>`;
 
   const commit = (after) => { saveStore(); renderBuildList(); after(); paint(); };
   const apply = (value) => {
@@ -2426,7 +2426,7 @@ function openStripeColorPicker(build, card) {
       const c = pal.favorites[i];
       return c
         ? `<div class="relative group">${swatch(c, `data-apply="${c}"`)}<button type="button" data-unfav="${c}" class="hidden group-hover:flex absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-gray-900 border border-gray-600 text-gray-300 text-[10px] items-center justify-center" title="Remove">&times;</button></div>`
-        : '<div class="w-7 h-7 rounded-md border border-dashed border-gray-600"></div>';
+        : '<div class="color-swatch w-7 h-7 rounded-md border border-dashed border-gray-600"></div>';
     }).join('');
     const canFav = pal.favorites.length < FAV_MAX && !pal.favorites.includes(current);
     body.innerHTML = `

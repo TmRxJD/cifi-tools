@@ -106,6 +106,9 @@ tailwind.config = {
   .stepper-btn { @apply w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed text-white; }
   @media (max-width: 767px) {
     .stepper-btn { width: 2.75rem; height: 2.75rem; }
+    /* !important: overrides the w-7/h-7 Tailwind utility classes still present on these
+       buttons (unlike .stepper-btn, which replaced its utility classes outright). */
+    .color-swatch { width: 2.75rem !important; height: 2.75rem !important; }
   }
 </style>
 </head>
@@ -752,7 +755,7 @@ tailwind.config = {
      CDN-blocked user still gets the whole tool minus cloud saves. -->
 <script src="https://cdn.jsdelivr.net/npm/appwrite@27.0.0/dist/iife/sdk.js"></script>
 <script src="cloudSync.js?v=20260907c-stamps"></script>
-<script src="app.js?v=20260913a-stepper"></script>
+<script src="app.js?v=20260913b-swatch"></script>
 <script>
   // Custom (non-Tabler) sidebar icons: real game-asset SVG paths copied verbatim from the
   // live site's rendered DOM (Relics/Loop Mods/Milestones use bespoke icons, not Tabler's).
