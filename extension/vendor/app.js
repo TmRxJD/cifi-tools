@@ -663,17 +663,19 @@ if (!EMBEDDED) window.addEventListener('hashchange', render);
       icon: 'sword',
       tabs: [{
         name: 'Hunters',
-        cards: () => Array.from(document.querySelectorAll('#hunterBorgeBtn, #hunterOzzyBtn, #hunterKnoxBtn'))
-          .map((btn) => {
-            // Hunter tabs are BUTTONS that switch hunter without changing the route, so these are
-            // built as buttons too rather than as links to a route that would not change.
-            const c = card('#/sim', (btn.textContent || '').trim(), 'sword');
-            c.addEventListener('click', (e) => { e.preventDefault(); btn.click(); });
-            for (const k of ['unlockGem', 'unlockLvl', 'unlockNode']) {
-              if (btn.dataset[k] !== undefined) c.dataset[k] = btn.dataset[k];
-            }
-            return c;
-          }),
+        // NOT cloned from the sim page's hunter pills: those exist only while the sim page is
+        // rendered, so on every other page this sheet came up EMPTY. switchHunter() navigates to
+        // the sim page itself, so a card just calls it. The gates are the pills' own (Ozzy Exodus 2,
+        // Knox Exodus 4); updateNavGating() hides a locked card the same way it hides a pill.
+        cards: () => [
+          ['borge', 'Borge', null],
+          ['ozzy', 'Ozzy', { 'data-unlock-gem': 'exodus', 'data-unlock-lvl': '2' }],
+          ['knox', 'Knox', { 'data-unlock-gem': 'exodus', 'data-unlock-lvl': '4' }],
+        ].map(([hunter, label, gate]) => {
+          const c = card('#/sim', label, 'sword', gate);
+          c.addEventListener('click', (e) => { e.preventDefault(); switchHunter(hunter); });
+          return c;
+        }),
       }],
     },
     {
@@ -717,10 +719,9 @@ if (!EMBEDDED) window.addEventListener('hashchange', render);
       icon: 'folder',
       tabs: [{
         name: 'More',
-        cards: () => [
-          card('#/settings', 'Settings', 'settings'),
-          card('#/badges', 'Academy Badges', 'crown'),
-        ],
+        // Academy Badges used to be listed here too; it already lives under Upgrades > Utility (its
+        // sidebar group), so the copy here was a second home for one page.
+        cards: () => [card('#/settings', 'Settings', 'settings')],
       }],
     },
   ];
@@ -812,9 +813,14 @@ if (!EMBEDDED) window.addEventListener('hashchange', render);
   sheet.addEventListener('click', (e) => { if (e.target.closest('a')) setOpen(null); });
   window.addEventListener('hashchange', () => setOpen(null));
   // Tapping the page behind the sheet dismisses it, which is what a sheet is expected to do.
+  // composedPath(), not contains(e.target): a tab button REBUILDS the tab row in its own click
+  // handler, so by the time this listener runs the clicked button is detached and contains() says
+  // "outside" -- which closed the sheet on every Core/Utility/Premium switch. The path is captured
+  // at dispatch, before the repaint.
   document.addEventListener('click', (e) => {
     if (!openId) return;
-    if (sheet.contains(e.target) || bar.contains(e.target)) return;
+    const path = e.composedPath();
+    if (path.includes(sheet) || path.includes(bar)) return;
     setOpen(null);
   });
 })();

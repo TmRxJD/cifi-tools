@@ -151,6 +151,9 @@
       this.pending = new Map();
       this.nextRequestId = 0;
       this.readyPromises = [];
+      // Shared work queue -- see score(). `busy[w]` is true while worker w has a chunk in flight.
+      this.queue = [];
+      this.busy = new Array(size).fill(false);
 
       for (let i = 0; i < size; i++) {
         // Standalone uses our shipped worker. Embedded mode uses cifi-tools' own same-origin
@@ -203,8 +206,36 @@
       const entry = this.pending.get(msg.requestId);
       if (!entry) return;
       this.pending.delete(msg.requestId);
-      if (msg.error) entry.reject(new Error(msg.error));
-      else entry.resolve({ scores: msg.scores, boss: msg.boss || [] });
+      this.busy[entry.w] = false;
+      const { job, start } = entry;
+      if (msg.error) {
+        // One failed chunk fails the whole batch; its unsent chunks are skipped, not run.
+        job.next = job.pairs.length;
+        job.reject(new Error(msg.error));
+      } else if (!job.settled) {
+        msg.scores.forEach((s, i) => { job.out[start + i] = s; });
+        (msg.boss || []).forEach((b, i) => { job.out.boss[start + i] = b; });
+        job.remaining -= msg.scores.length;
+        if (job.remaining === 0) job.resolve(job.out);
+      }
+      this._dispatch();
+    }
+
+    // Hand the next chunk of the oldest unfinished batch to every idle worker.
+    _dispatch() {
+      for (let w = 0; w < this.workers.length; w++) {
+        if (this.busy[w]) continue;
+        while (this.queue.length && this.queue[0].next >= this.queue[0].pairs.length) this.queue.shift();
+        if (!this.queue.length) return;
+        const job = this.queue[0];
+        const start = job.next;
+        const batch = job.pairs.slice(start, start + job.chunk);
+        job.next += batch.length;
+        const requestId = this.nextRequestId++;
+        this.busy[w] = true;
+        this.pending.set(requestId, { job, start, w, reject: job.reject });
+        this.workers[w].postMessage({ type: 'score', requestId, iterations: job.iterations, batch });
+      }
     }
 
     /** First init error, or null if every worker came up clean. */
@@ -219,32 +250,31 @@
       return engineError || errors.find((e) => e) || null;
     }
 
-    /** Score a batch, split evenly across workers, preserving input order. */
-    async score(pairs, iterations) {
-      if (!pairs.length) return [];
-      const n = this.workers.length;
-      const chunks = Array.from({ length: n }, () => []);
-      const placement = pairs.map((pair, i) => {
-        const w = i % n;
-        const pos = chunks[w].length;
-        chunks[w].push(pair);
-        return { w, pos };
+    /**
+     * Score a batch through a SHARED QUEUE, preserving input order.
+     *
+     * This used to place item i on worker `i % n`, so EVERY batch started at worker 0. That is
+     * fine for the optimizer's one big batch at a time, and quietly serial for the Effective Path,
+     * which scores one small batch per currency column concurrently: five 3-item batches all
+     * landed on workers 0-2 while 3-5 sat idle, and a step cost as many evaluation latencies as
+     * worker 0's pile-up.
+     * Now each batch is cut into chunks of ceil(size / workers) -- so a big batch still splits
+     * evenly, exactly as before -- and an idle worker takes the next chunk of the OLDEST batch.
+     */
+    score(pairs, iterations) {
+      if (!pairs.length) return Promise.resolve([]);
+      return new Promise((resolve, reject) => {
+        const out = new Array(pairs.length);
+        out.boss = new Array(pairs.length); // boss progress rides alongside, as before
+        const job = {
+          pairs, iterations, out, next: 0, remaining: pairs.length, settled: false,
+          chunk: Math.ceil(pairs.length / this.workers.length),
+          resolve: (v) => { if (!job.settled) { job.settled = true; resolve(v); } },
+          reject: (e) => { if (!job.settled) { job.settled = true; reject(e); } },
+        };
+        this.queue.push(job);
+        this._dispatch();
       });
-
-      const chunkResults = await Promise.all(chunks.map((batch, w) => {
-        if (!batch.length) return Promise.resolve([]);
-        const requestId = this.nextRequestId++;
-        return new Promise((resolve, reject) => {
-          this.pending.set(requestId, { resolve, reject });
-          this.workers[w].postMessage({ type: 'score', requestId, iterations, batch });
-        });
-      }));
-
-      // Scores are returned as before. Boss progress rides alongside on `score.boss`, so callers
-      // that want it (screening) can read it and callers that do not are unaffected.
-      const out = placement.map(({ w, pos }) => chunkResults[w].scores[pos]);
-      out.boss = placement.map(({ w, pos }) => (chunkResults[w].boss || [])[pos]);
-      return out;
     }
 
     terminate() {
@@ -256,6 +286,8 @@
       const error = abortError();
       this.pending.forEach(({ reject }) => reject(error));
       this.pending.clear();
+      this.queue.forEach((job) => job.reject(error));
+      this.queue.length = 0;
       this.workers.forEach((w) => {
         w.onmessage = null;
         w.onerror = null;

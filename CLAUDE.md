@@ -241,7 +241,14 @@ think one is wrong, disprove it with a test.
   -1.56%, evade->37 -8.72%, dr->57 -2.94% (ALL negative); at 5000 all three are real gains, +1.96 /
   +1.38 / +0.65%. The path picked the least-bad noise -- a 233-day purchase -- over a 6.9-day one
   worth ~24x the gain per cost. It now decides at FINAL_ITERATIONS (`PATH_ITERATIONS`), at ~10x the
-  evaluation cost (357ms vs 36.5ms per eval on that account; a 30-step path ~30s). Time-to-afford
+  evaluation cost (357ms vs 36.5ms per eval on that account). **Most of the resulting slowness was
+  the worker pool, not the fidelity:** `ScoringPool.score` placed item i on worker `i % n`, so the
+  path's concurrent per-currency batches ALL started at worker 0 while the rest idled. A shared
+  queue took the level-63 Ozzy build-card path 40.9s -> 20.1s and the stats path 18.8s -> 11.4s,
+  identical order in every column. The stats path is now at its floor: 30 sequential steps x one
+  ~360ms evaluation. **Lazy (CELF-style) re-scoring was tried and REJECTED:** no faster (39.9s,
+  because the pile-up, not eval count, was the bound) and it changed the inscription order at
+  step 4 -- a candidate's gain can RISE after another purchase, so stale gains are not bounds. Time-to-afford
   is cost / income within one currency, so gain-per-cost ALREADY is gain-per-day: the horizon
   discount added alongside changed nothing at its 30-day default on that build. The fix was
   fidelity, not a formula.
