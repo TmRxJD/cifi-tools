@@ -100,7 +100,7 @@ tailwind.config = {
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" />
-<link rel="stylesheet" href="tokens.css?v=20260910a-parity-controls" />
+<link rel="stylesheet" href="tokens.css?v=20260912a-fixlist" />
 <style>
   body { background: var(--surface-900); color: var(--surface-200); }
   .stepper-btn { @apply w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed text-white; }
@@ -168,8 +168,11 @@ tailwind.config = {
        rendered here too, just hidden via data-unlock-* + updateNavGating() until earned,
        exactly like the real site's nav. Base-stat editing still has no sidebar page (that's
        the "Hunter Stats" banner button + modal instead, confirmed real). -->
-  <aside class="hidden md:flex flex-col w-52 flex-shrink-0 bg-gray-900/90 border-r border-gray-700/40 sticky top-0 h-[calc(100vh-64px)] overflow-y-auto">
-    <div class="py-4 px-3 space-y-5">
+  <!-- ONLY THE LINK LIST SCROLLS. The whole aside used to scroll, which carried the bridge status
+       and the credit up and out of view with it; they now sit below the scrolling region and stay
+       pinned to the bottom of the viewport. -->
+  <aside class="hidden md:flex flex-col w-52 flex-shrink-0 bg-gray-900/90 border-r border-gray-700/40 sticky top-0 h-[calc(100vh-64px)] overflow-hidden">
+    <div class="flex-1 min-h-0 overflow-y-auto py-4 px-3 space-y-5">
       <div>
         <h3 class="text-[12px] font-semibold uppercase tracking-wider text-gray-500 px-2.5 mb-1.5">Core Upgrades</h3>
         <div class="space-y-0.5">
@@ -208,16 +211,23 @@ tailwind.config = {
         </div>
       </div>
     </div>
-    <div id="bridgeStatusSidebar" class="hidden mt-auto mx-3 mb-3 px-2.5 py-2 rounded-lg bg-gray-800/80 border border-gray-700/50 flex items-center gap-2 text-xs">
+    <!-- THIS MARKUP WAS MISSING TWO ELEMENTS AND THE LIGHT NEVER APPEARED. bridgeStatusElements()
+         requires #bridgeStatusConnection and #bridgeStatusDevice and returns null without them --
+         deliberately, since the companion's Vue sidebar can drop them between polls -- so on this
+         site the indicator silently never rendered. Keep these ids in step with app.js and with
+         extension/hostRouting.js, which builds the same footer for the extension.
+         Clicking it opens the same Import Save dialog as the header button (bound in app.js). -->
+    <div id="bridgeStatusSidebar" class="hidden flex-shrink-0 mx-3 mt-2 mb-3 px-2.5 py-2 rounded-lg bg-gray-800/80 border border-gray-700/50 hover:bg-gray-800 flex items-center gap-2 text-xs cursor-pointer" role="button" tabindex="0" title="Import save from device">
       <span id="bridgeStatusDot" class="w-2 h-2 rounded-full bg-gray-500 flex-shrink-0"></span>
-      <span id="bridgeStatusText" class="text-gray-400 truncate">CIFI Bridge</span>
+      <span id="bridgeStatusText" class="flex flex-col min-w-0 text-gray-300">
+        <span id="bridgeStatusConnection" class="truncate">CIFI Bridge</span>
+        <span id="bridgeStatusDevice" class="truncate text-gray-400 hidden"></span>
+      </span>
     </div>
     <!-- Fork credit. This tool takes its layout, its category structure, its
          terminology and half its name from cifi-tools.com; saying so plainly in
-         the persistent chrome is what makes it a fork rather than a look-alike.
-         mt-auto keeps it pinned to the bottom of the sidebar whether or not the
-         bridge status block above is visible. -->
-    <div class="fork-credit mt-auto px-4 pb-4 pt-2 leading-relaxed border-t border-gray-700/30">
+         the persistent chrome is what makes it a fork rather than a look-alike. -->
+    <div class="fork-credit flex-shrink-0 px-4 pb-4 pt-2 leading-relaxed border-t border-gray-700/30">
       Hunter sim forked from
       <a href="https://cifi-tools.com" target="_blank" rel="noopener noreferrer">cifi-tools.com</a>.
       Adds fleet&nbsp;&amp; ship optimization and save import.
@@ -710,7 +720,7 @@ tailwind.config = {
 <script src="hunterDefs.js?v=20260903a"></script>
 <script src="shipSchema.js?v=20260907x-meltdown1"></script>
 <script src="accountState.js?v=20260910a-path-worker"></script>
-<script src="shipsPage.js?v=20260910a-fleet-parity"></script>
+<script src="shipsPage.js?v=20260912a-fixlist"></script>
 <script src="upgradeEffects.js?v=20260810p"></script>
 <script src="hunterSimBrowser.js?v=20260908b-source"></script>
 <script src="optimizer/space.js?v=20260907q-guards"></script>
@@ -724,14 +734,14 @@ tailwind.config = {
 <script src="optimizer/refit.js?v=20260907a-corpus"></script>
 <script src="optimizer/corpus.js?v=20260907s-modes"></script>
 <script src="optimizer/search.js?v=20260907zd-notrim"></script>
-<script src="optimizer/runner.js?v=20260910b-path-pool"></script>
+<script src="optimizer/runner.js?v=20260912a-fixlist"></script>
 <script src="saveImport.js?v=20260909a-bridge-metadata"></script>
 <script src="buildCode.js?v=20260810p"></script>
 <script src="costFormulas.js?v=20260907u-bignum"></script>
 <script src="bigNumberInput.js?v=20260908c-extract"></script>
 <script src="incomeModel.js?v=20260810r"></script>
 <script src="hunterStatPath.js?v=20260810p"></script>
-<script src="hunterStatPathBrowser.js?v=20260910a-worker-batches"></script>
+<script src="hunterStatPathBrowser.js?v=20260912a-fixlist"></script>
 <script src="hunterStatPathPage.js?v=20260910a-gates"></script>
 <!-- Appwrite web SDK, from a CDN as a plain script: this project deliberately has no build
      step, and the IIFE build exposes window.Appwrite. cloudSync.js degrades to
@@ -739,7 +749,7 @@ tailwind.config = {
      CDN-blocked user still gets the whole tool minus cloud saves. -->
 <script src="https://cdn.jsdelivr.net/npm/appwrite@27.0.0/dist/iife/sdk.js"></script>
 <script src="cloudSync.js?v=20260907c-stamps"></script>
-<script src="app.js?v=20260910a-parity-controls"></script>
+<script src="app.js?v=20260912a-fixlist"></script>
 <script>
   // Custom (non-Tabler) sidebar icons: real game-asset SVG paths copied verbatim from the
   // live site's rendered DOM (Relics/Loop Mods/Milestones use bespoke icons, not Tabler's).

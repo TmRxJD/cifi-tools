@@ -189,14 +189,20 @@
         }
         nav.insertBefore(group,template.parentElement);
       }
+      // THE HIGHLIGHT MUST USE THE CLASSES THAT ACTUALLY PAINT IT. This only toggled
+      // `router-link-active`, which on cifi-tools.com is a marker with no styling of its own: the
+      // native nav's active look comes from a Vue class binding, measured on the live site as
+      // `bg-gray-700 text-white shadow-sm` against `text-gray-300 hover:text-white` when inactive.
+      // So Hunters and Fleet never visibly lit up. Both sets are toggled explicitly -- the clone's
+      // template may itself have been the active link when it was copied.
+      // Matching the standalone site: Hunters for the hunter page, Fleet for the Fleet page only.
+      const ACTIVE = ['router-link-active','router-link-exact-active','bg-gray-700','text-white','shadow-sm'];
+      const INACTIVE = ['text-gray-300','hover:text-white'];
+      const path = router.currentRoute.value.path;
       for (const link of group.querySelectorAll('a')) {
-        const href=link.getAttribute('href');
-        const active = router.currentRoute.value.path === href
-          || (href==='/companion/hunters' && router.currentRoute.value.path.startsWith('/companion/hunters'))
-          || (href==='/companion/fleet' && router.currentRoute.value.path.startsWith('/companion/')
-            && router.currentRoute.value.path!=='/companion/hunters');
-        link.classList.toggle('router-link-active',active);
-        link.classList.toggle('router-link-exact-active',active);
+        const active = path === link.getAttribute('href');
+        ACTIVE.forEach((c) => link.classList.toggle(c, active));
+        INACTIVE.forEach((c) => link.classList.toggle(c, !active));
       }
       const signIn = [...document.querySelectorAll('header button')].find(b => b.textContent.trim() === 'Sign In');
       if (signIn && !document.getElementById('cifi-import-button')) {

@@ -1522,8 +1522,8 @@ function renderShipSetupPage(root) {
     // HIDDEN, NOT DISABLED -- which is what the game does. Below the gem requirement the game does
     // not render a greyed-out generator, it does not render the object at all
     // (CheckMK<n>Overlays sets the whole GameObject inactive), and a row of permanently dead
-    // checkboxes is clutter that tells the user nothing they can act on. The requirement is still
-    // stated below the row, so the tiers are not silently missing.
+    // checkboxes is clutter that tells the user nothing they can act on. Nothing is said about the
+    // hidden tiers either: the gate speaks for itself, as it does in game.
     if (locked) return '';
     return `
     <label class="flex items-center gap-1 px-2 py-0.5 rounded text-xs cursor-pointer bg-gray-700 text-gray-300">
@@ -1799,10 +1799,9 @@ function renderGearSetsPage(root) {
     <div class="mb-4 rounded-lg overflow-hidden shadow-lg">
       <div class="bg-gradient-to-r from-blue-900 to-gray-800 px-5 py-4 border-b border-gray-600">
         <h1 class="text-xl font-bold">Gear Sets</h1>
-        <p class="text-xs text-gray-300 mt-0.5">Crafted with Academy Points. Each piece's level buffs its two install nodes; a set bonus applies once you own the whole colour.</p>
       </div>
       <div class="bg-gray-800/70 px-4 py-3 border-t border-gray-700">
-        <h3 class="text-xs font-semibold text-gray-300 mb-2">Gear Effective Path -- what to buy next, by resource</h3>
+        <h3 class="text-xs font-semibold text-gray-300 mb-2">Gear Effective Path</h3>
         <div class="flex flex-wrap gap-2" id="gearEffectivePathBtns"></div>
       </div>
     </div>
@@ -2874,9 +2873,9 @@ function openLoadoutDetail(shipId, levels, mode, clicks) {
       }
     }
     lines = expandClicks(ordered, catalog, {}, shipId);
-    note = derived
-      ? `This ship isn't part of the active loadout, so there is no recorded plan. Showing the <strong>ideal</strong> order to spend your current ${lines.length} installs from scratch -- the same reference the Effective Path uses. The levels below are the optimizer's, not necessarily your current ones.`
-      : '';
+    // Kept to one line: the one thing worth saying is that this is an IDEAL order rather than a
+    // recorded plan, because the levels it reaches are the optimizer's, not the player's.
+    note = derived ? 'Ideal order for your current installs.' : '';
   } else {
     // Effective Path answers "what should I buy next, right now" -- it finds where your REAL
     // current total install count sits along this same ideal sequence, then shows the next 30
@@ -3184,8 +3183,8 @@ const FLEET_RESEARCH_ITEMS = [
     // effect, so the card no longer implies the tool tracks the rank-point tiers.
     key: 'fleetAnalysis1', name: 'Fleet Analysis 1 (Research #68)', max: 1, boolean: true,
     tiers: ['All Rank Installs Max LV x5'],
-    note: 'Tiers 2-6 grant Rank Points & LP, which you enter yourself on Ship Setup -- '
-      + 'counting them here would add them twice.',
+    // Tiers 2-6 grant Rank Points & LP, which the player enters on Ship Setup -- counting them
+    // here too would add them twice. A code fact, not something to show the player.
   },
   {
     key: 'fleetAnalysis2', name: 'Fleet Analysis 2 (Research #78)', max: 6,
@@ -3324,7 +3323,6 @@ function renderResearchPage(root) {
     <div class="mb-4 rounded-lg overflow-hidden shadow-lg">
       <div class="bg-gradient-to-r from-blue-900 to-gray-800 px-5 py-4 border-b border-gray-600">
         <h1 class="text-xl font-bold">Research</h1>
-        <p class="text-xs text-gray-300 mt-0.5">Ship-install-relevant Research Center entries.</p>
       </div>
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="researchList"></div>`;
@@ -3346,7 +3344,6 @@ function renderBadgesPage(root) {
     <div class="mb-4 rounded-lg overflow-hidden shadow-lg">
       <div class="bg-gradient-to-r from-blue-900 to-gray-800 px-5 py-4 border-b border-gray-600">
         <h1 class="text-xl font-bold">Academy Badges</h1>
-        <p class="text-xs text-gray-300 mt-0.5">Traded for Innovation/Dark Cores in the Space Academy.</p>
       </div>
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="badgeList"></div>`;

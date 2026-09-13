@@ -357,15 +357,22 @@ h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -.
   color: #fff;
 }
 
+/* BALANCED ROWS, NEVER A STRAGGLER. The card has 9 actions and this used to be a fixed 8-column
+   grid (4 on phones), so one button always wrapped alone -- 8+1, or 4+4+1. The column count now
+   comes from the markup (--cols = the button count, --half = ceil(count / 2)): one row when it
+   fits, two near-equal rows when it does not.
+   A CONTAINER query, not a media query: build cards sit in a responsive grid, so a card can be
+   narrow on a wide screen. Viewport width does not say how much room the toolbar has. */
+.action-bar { container-type: inline-size; }
 .action-buttons-grid {
   display: grid;
-  grid-template-columns: repeat(8, minmax(0, auto));
+  grid-template-columns: repeat(var(--cols, 9), minmax(0, auto));
   justify-content: center;
   gap: .375rem;
   width: 100%;
 }
-@media (max-width: 420px) {
-  .action-buttons-grid { grid-template-columns: repeat(4, minmax(0, auto)); }
+@container (max-width: 360px) {
+  .action-buttons-grid { grid-template-columns: repeat(var(--half, 5), minmax(0, auto)); }
 }
 
 /* Explicit switch state keeps the thumb functional in the extension too. Tailwind's generated

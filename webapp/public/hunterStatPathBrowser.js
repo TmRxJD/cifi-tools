@@ -250,7 +250,8 @@
           }
           return scores;
         },
-        terminate() {},
+        release() {},
+        abort() {},
       };
     }
 
@@ -264,7 +265,9 @@
     // also roughly halves/thirds wall-clock time vs. running them one after another.
     const entries = Object.entries(groupByResource([...statCandidates, ...upgradeCandidates]));
     const scoreBatch = (items, iterations) => scorer.score(items, iterations, signal);
-    const abortPool = () => scorer.terminate();
+    // Abort destroys the pool (the only way to stop a batch already in flight); a finished run only
+    // releases it, so the next path run -- or a mode switch -- reuses warm workers.
+    const abortPool = () => scorer.abort();
     signal?.addEventListener?.('abort', abortPool, { once: true });
     let results;
     try {
@@ -274,7 +277,7 @@
       )));
     } finally {
       signal?.removeEventListener?.('abort', abortPool);
-      scorer.terminate();
+      scorer.release();
     }
     const columns = {};
     entries.forEach(([resource], i) => { columns[resource] = results[i]; });

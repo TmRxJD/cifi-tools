@@ -294,15 +294,7 @@
     //
     // Keyed by the serialized cfg and mode, because that is exactly what a worker is initialised
     // with -- if either changes the old pool cannot answer for the new account and is replaced.
-    const poolKey = `${mode}|${JSON.stringify(serializeCfg(cfg))}`;
-    if (cachedPool && cachedPool.key !== poolKey) {
-      cachedPool.pool.terminate();
-      cachedPool = null;
-    }
-    if (!cachedPool) {
-      cachedPool = { key: poolKey, pool: new ScoringPool(cfg, mode, size) };
-    }
-    const pool = cachedPool.pool;
+    const pool = acquirePool(cfg, mode, size);
     activePool = pool;
     try {
       const initError = await pool.ready();
@@ -363,15 +355,44 @@
   // Purchase paths vary base stats/upgrades instead of talent/attribute allocations, but they use
   // the same evaluator and need the same bounded parallelism. Expose a narrowly-scoped scorer so
   // hunterStatPathBrowser.js can batch a whole candidate sweep across this canonical worker pool.
+  //
+  // THE PATH NOW REUSES ITS POOL EXACTLY AS THE SIM DOES. It used to build a new ScoringPool on
+  // every call and terminate it at the end -- so every Effective Path open, and every mode switch
+  // inside it, paid a full worker spin-up and a WASM compile per worker before scoring anything.
+  // That fixed cost is the "slow to generate" that the optimizer had long since stopped paying.
   async function createHunterPathScorer(cfg, mode) {
     const size = Math.max(2, Math.min(MAX_POOL_SIZE, (navigator.hardwareConcurrency || 4) - 1));
-    const pool = new ScoringPool(cfg, mode, size);
+    const pool = acquirePool(cfg, mode, size);
     const error = await pool.ready();
-    if (error) { pool.terminate(); throw new Error(`Effective Path worker failed to initialize: ${error}`); }
+    if (error) {
+      if (cachedPool?.pool === pool) cachedPool = null;
+      pool.terminate();
+      throw new Error(`Effective Path worker failed to initialize: ${error}`);
+    }
     return {
       score: (items, iterations) => pool.score(items, iterations),
-      terminate: () => pool.terminate(),
+      // Finishing a run RELEASES the pool for the next one; only an abort destroys it, because
+      // terminating is the one way to stop a batch already inside the workers.
+      release: () => {},
+      abort: () => {
+        if (cachedPool?.pool === pool) cachedPool = null;
+        pool.terminate();
+      },
     };
+  }
+
+  // ONE cache slot for every consumer, keyed by what a worker is initialised with. A second slot for
+  // the path would hold a second set of up to MAX_POOL_SIZE WASM instances beside the optimizer's --
+  // exactly the unbounded residency MAX_POOL_SIZE exists to prevent. Switching between the two
+  // costs a rebuild; memory stays bounded.
+  function acquirePool(cfg, mode, size) {
+    const key = `${mode}|${JSON.stringify(serializeCfg(cfg))}`;
+    if (cachedPool && cachedPool.key !== key) {
+      cachedPool.pool.terminate();
+      cachedPool = null;
+    }
+    if (!cachedPool) cachedPool = { key, pool: new ScoringPool(cfg, mode, size) };
+    return cachedPool.pool;
   }
 
   global.runOptimizer = runOptimizer;

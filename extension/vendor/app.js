@@ -1570,12 +1570,12 @@ async function openOverrideCostsModal(build) {
         </div>`).join('')}
     </div>` : '';
 
-  const unmodeledHtml = unmodeledKeys.length ? `<p class="text-xs text-gray-500 mt-3">Cost formula not yet extracted for: ${unmodeledKeys.map(escapeHtml).join(', ')}.</p>` : '';
-  const timeNoteHtml = `<p class="text-xs text-gray-500 mt-2">Collection Time is inferred from this build's own simulated loot rate for the 3 hunter-specific stat resources. Fragments come from campaign/boss content the sim doesn't model, so they use your ${
-    perDayRate.frags
-      ? `entered rate of ${CF.fmtBig(perDayRate.frags)} fragments/day`
-      : 'entered fragments/day rate &mdash; <span class="text-amber-400">not set yet</span>, so relic times show as unknown'
-  }. Hellish-Biomatter isn't modelled either way.</p>`;
+  const unmodeledHtml = unmodeledKeys.length ? `<p class="text-xs text-gray-500 mt-3">No cost data for: ${unmodeledKeys.map(escapeHtml).join(', ')}.</p>` : '';
+  // Only the ACTIONABLE half survives: an unset fragment rate is something the user can fix, and
+  // is why relic times read unknown. How collection time is derived was explanation, not action.
+  const timeNoteHtml = perDayRate.frags
+    ? ''
+    : '<p class="text-xs text-amber-400 mt-2">Set a fragments/day rate to see relic collection times.</p>';
 
   const body = Object.keys(overrides).length
     ? `<p class="text-sm text-gray-300 mb-4">This overview shows the cost differences between your global values and the override values used in this build.</p>${groupHtml}${footerHtml}${unmodeledHtml}${timeNoteHtml}`
@@ -1638,7 +1638,7 @@ async function openCompareEfficiencyModal(build) {
 
   overlay.querySelector('.p-5').innerHTML = `
     <div class="text-sm text-gray-300 mb-4">Compare different upgrade combinations to find the best cost-efficiency.</div>
-    <p class="text-xs text-gray-400 mb-3">Ranked by Loot Score gained per next available talent/attribute point (not currency-cost-normalized -- we don't have the game's price tables reverse-engineered yet, so resource/scenario picking isn't modeled here).</p>
+    <p class="text-xs text-gray-400 mb-3">Ranked by Loot Score gained per point.</p>
     ${rows}`;
 }
 
@@ -1681,7 +1681,7 @@ async function openBuildStatsModal(build) {
       </div>`).join('')}
   </div>`;
 
-  const notAvailableHtml = (what) => `<p class="text-sm text-gray-400">${what} isn't available yet -- it needs boss/death-tracking data the sim doesn't currently record.</p>`;
+  const notAvailableHtml = (what) => `<p class="text-sm text-gray-400">${what} isn't available yet.</p>`;
   const TABS = [
     { key: 'dist', label: 'Stage Distribution', icon: 'chart-bar', html: distHtml },
     { key: 'odds', label: 'Stage Odds', icon: 'scale', html: notAvailableHtml('Stage Odds') },
@@ -1842,7 +1842,7 @@ async function renderBuildList() {
           </div>
         </div>
         <div class="action-bar py-2 px-1 flex justify-between items-center bg-gray-800/70 border-t border-b border-gray-700/50">
-          <div class="action-buttons-grid">
+          <div class="action-buttons-grid" style="--cols:${ACTION_BUTTONS.length};--half:${Math.ceil(ACTION_BUTTONS.length / 2)}">
             ${ACTION_BUTTONS.map((b) => `<button data-act="${b.act}" class="action-button-compact ${b.extra || ''}" title="${b.title}">${iconSvg(b.icon, 16)}</button>`).join('')}
           </div>
         </div>

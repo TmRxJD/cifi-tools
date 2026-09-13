@@ -1,21 +1,31 @@
 {
   "manifest_version": 3,
   "name": "CIFI Tools Companion",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "description": "Adds save-file import and fleet/ship install optimization to cifi-tools.com, in your own browser.",
-  "permissions": ["storage"],
+  "permissions": [
+    "storage"
+  ],
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   },
   "content_scripts": [
     {
-      "matches": ["https://cifi-tools.com/*"],
-      "js": ["routes.js", "hostStoreBridge.js", "hostRouting.js"],
+      "matches": [
+        "https://cifi-tools.com/*"
+      ],
+      "js": [
+        "routes.js",
+        "hostStoreBridge.js",
+        "hostRouting.js"
+      ],
       "run_at": "document_idle",
       "world": "MAIN"
     },
     {
-      "matches": ["https://cifi-tools.com/*"],
+      "matches": [
+        "https://cifi-tools.com/*"
+      ],
       "js": [
         "config.js",
         "vendor/icons.js",
@@ -45,7 +55,10 @@
         "vendor/app.js",
         "companion.js"
       ],
-      "css": ["companion.css", "integration.css"],
+      "css": [
+        "companion.css",
+        "integration.css"
+      ],
       "run_at": "document_idle"
     }
   ],
@@ -54,7 +67,9 @@
       "resources": [
         "vendor/params.json"
       ],
-      "matches": ["https://cifi-tools.com/*"]
+      "matches": [
+        "https://cifi-tools.com/*"
+      ]
     }
   ]
 }
