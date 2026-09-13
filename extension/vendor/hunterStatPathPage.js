@@ -323,6 +323,10 @@
     return { result, rates };
   }
 
+  // One row label for both entry points: they plan the same purchase pool (stats, inscriptions,
+  // relics), so a stats-only labeler shows raw ids like "r4" for everything that is not a stat.
+  const pathRowLabel = (r) => (r.kind === 'stat' ? (STAT_LABELS[r.key] || r.key) : (r.label || r.key));
+
   async function openHunterStatPathModal() {
     const resources = window.resourcesFor(currentHunter, true, store.gems);
     const overlay = titledModal('chart-arrows-vertical', 'Effective Path', renderProgressPanel(resources), 'hunterStatPathModal');
@@ -351,7 +355,7 @@
       // being superseded. Rendering then would overwrite the newer run's progress panel.
       if (signal.aborted) return;
       const timingNote = baseline.real ? '' : ' Create a build to unlock timing estimates.';
-      renderColumnsModal(overlay, result.columns, rates, (r) => STAT_LABELS[r.key] || r.key, currentHunter,
+      renderColumnsModal(overlay, result.columns, rates, pathRowLabel, currentHunter,
         `${pathSubtitle(mode)}${timingNote}`, mode, !!rates);
       bindModePicker(overlay, run);
     };
@@ -389,8 +393,7 @@
       // run can still land here and would otherwise clobber the newer run's panel.
       if (signal.aborted) return;
       const timingNote = baseline.real ? '' : ' Allocate talent/attribute points on this build to unlock timing estimates.';
-      renderColumnsModal(overlay, result.columns, rates,
-        (r) => (r.kind === 'stat' ? (STAT_LABELS[r.key] || r.key) : (r.label || r.key)), currentHunter,
+      renderColumnsModal(overlay, result.columns, rates, pathRowLabel, currentHunter,
         `${pathSubtitle(mode)}${timingNote}`, mode, !!rates);
       bindModePicker(overlay, run);
     };
