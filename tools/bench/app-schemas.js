@@ -166,6 +166,7 @@ const storeSchema = z.object({
     favorites: z.array(hexColor).max(5),
     recent: z.array(hexColor).max(10),
   }).strict(),
+  effectivePathHorizonDays: z.number().int().nonnegative(),
   optimizeEffort: z.string().min(1),
   // 0 means show the complete install order; positive values keep only that trailing detail.
   installOrderShowLast: z.number().int().nonnegative(),

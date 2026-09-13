@@ -967,9 +967,16 @@ function renderCategoryTabs() {
   });
 }
 
-const LOCAL_MAT_ASSETS = ['loot_mat1.png', 'loot_mat2.png', 'loot_mat3.png'].map((name) => assetUrl(`assets/${name}`));
+// PER-HUNTER MATERIAL ICONS. The site used to ship only Borge's three (loot_mat1..3.png) and serve
+// them for every hunter, so Ozzy's and Knox's cards showed Obsidian/Behlium/Hellish-Biomatter.
+// All nine now come from the game's own `Hunt.<Material>` sprites, extracted by
+// tools/assets/extract-material-icons.py (which re-derives Borge's and checks them pixel-for-pixel
+// against the old files before writing anything). Embedded, the host supplies its own icons.
+const LOCAL_MAT_ASSETS = Object.fromEntries(['borge', 'ozzy', 'knox'].map((hunter) => [
+  hunter, [1, 2, 3].map((n) => assetUrl(`assets/materials/${hunter}_mat${n}.png`)),
+]));
 function materialAsset(hunter,index) {
-  if (!EMBEDDED) return LOCAL_MAT_ASSETS[index];
+  if (!EMBEDDED) return LOCAL_MAT_ASSETS[hunter]?.[index] ?? null;
   const raw=document.getElementById('cifi-companion-navigation')?.dataset.resourceAssets;
   const icons=raw && JSON.parse(raw)[hunter];
   const asset=icons?.[`mat${index+1}`];
@@ -984,7 +991,8 @@ const MAT_TEXT_COLORS = ['text-red-300', 'text-orange-300', 'text-amber-300', 't
 // they never appear in the sim's own loot output, so they fall back to a generic icon).
 function matIcon(resKey) {
   const idx = { mat1: 0, mat2: 1, mat3: 2 }[resKey];
-  if (idx !== undefined) return `<img src="${materialAsset(currentHunter,idx)}" alt="${CostFormulas.resourceLabel(currentHunter,resKey)}" class="w-4 h-4 inline-block" />`;
+  const src = idx !== undefined ? materialAsset(currentHunter, idx) : null;
+  if (src) return `<img src="${src}" alt="${CostFormulas.resourceLabel(currentHunter,resKey)}" class="w-4 h-4 inline-block" />`;
   return iconSvg(resKey === 'frags' ? 'sparkles' : 'crown', 14, 'text-purple-300');
 }
 
@@ -1009,10 +1017,11 @@ const ACTION_BUTTONS = [
   { act: 'delete', icon: 'trash', title: 'Delete build', extra: 'hover:text-red-400' },
 ];
 // ONE column rule for the build grid, used by the page template and by renderBuildList alike.
-// 420px is what the toolbar needs to hold all ten actions on one row (ten 34px buttons, nine gaps
-// and the bar's padding measure 400px, plus the card's border). `min(420px, 100%)` keeps a phone
-// from overflowing sideways; there the toolbar's container query folds it into two rows of five.
-const BUILD_GRID_COLUMNS = 'repeat(auto-fill, minmax(min(420px, 100%), 1fr))';
+// 360px is the narrowest card whose toolbar still holds all ten actions on one row (344px, see
+// tokens.css) after the 4px stripe. It was briefly 420px, which kept the toolbar on one row but
+// collapsed mid-size screens to a single over-wide card. `min(..., 100%)` stops a phone from
+// overflowing sideways; there the toolbar's container query folds it into two rows of five.
+const BUILD_GRID_COLUMNS = 'repeat(auto-fill, minmax(min(360px, 100%), 1fr))';
 
 const SECOND_ROW_BUTTONS = [
   { act: 'screenshot', icon: 'camera', title: 'Screenshot to clipboard' },
@@ -1961,7 +1970,7 @@ async function renderBuildList() {
       const lootFilter = store[currentHunter].lootFilter;
       const lootCards = [0, 1, 2, 3].filter((i) => lootFilter[StoreSchema.LOOT_KEYS[i]] !== false).map((i) => `
         <div class="resource-card ${MAT_BORDER_COLORS[i]}">
-          <div class="resource-icon">${i < 3 ? `<img src="${materialAsset(currentHunter,i)}" alt="${CostFormulas.resourceLabel(currentHunter,`mat${i+1}`)}" class="resource-image" />` : `<span class="text-lg">✦</span>`}</div>
+          <div class="resource-icon">${i < 3 && materialAsset(currentHunter, i) ? `<img src="${materialAsset(currentHunter,i)}" alt="${CostFormulas.resourceLabel(currentHunter,`mat${i+1}`)}" class="resource-image" />` : `<span class="text-lg">✦</span>`}</div>
           <div class="resource-content"><div class="resource-values">
             <div class="flex flex-col items-center"><span class="value ${MAT_TEXT_COLORS[i]} font-semibold">${fmt(values[i])}</span>${(baseValues && deltaBadge(values[i], baseValues[i], false)) || '<span class="unit text-xs text-gray-500">per run</span>'}</div>
             <div class="flex flex-col items-center"><span class="value ${MAT_TEXT_COLORS[i]} font-semibold">${fmt(values[i] * runsPerDay)}</span>${(baseValues && deltaBadge(values[i] * runsPerDay, baseValues[i] * baseRunsPerDay, false)) || '<span class="unit text-xs text-gray-500">per day</span>'}</div>

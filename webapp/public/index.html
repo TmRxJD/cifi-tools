@@ -100,7 +100,7 @@ tailwind.config = {
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" />
-<link rel="stylesheet" href="tokens.css?v=20260912c-cards" />
+<link rel="stylesheet" href="tokens.css?v=20260912d-roi" />
 <style>
   body { background: var(--surface-900); color: var(--surface-200); }
   .stepper-btn { @apply w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed text-white; }
@@ -726,7 +726,7 @@ tailwind.config = {
 <script src="optimizer/space.js?v=20260907q-guards"></script>
 <script src="optimizer/objective.js?v=20260907t-bosstarget"></script>
 <!-- storeSchema depends on HUNTER_DEFS (hunterDefs.js) and AllocSpace (optimizer/space.js). -->
-<script src="storeSchema.js?v=20260912c-cards"></script>
+<script src="storeSchema.js?v=20260912d-roi"></script>
 <!-- Real community build codes used as optimizer seeds, and the gate-aware refit that
      scales one to a different budget. Both must load BEFORE search.js, which consumes them.
      Measured: rule-based construction lands at kill 0.0 and -45% to -88% on the hard builds;
@@ -741,15 +741,15 @@ tailwind.config = {
 <script src="bigNumberInput.js?v=20260908c-extract"></script>
 <script src="incomeModel.js?v=20260810r"></script>
 <script src="hunterStatPath.js?v=20260810p"></script>
-<script src="hunterStatPathBrowser.js?v=20260912a-fixlist"></script>
-<script src="hunterStatPathPage.js?v=20260912b-review"></script>
+<script src="hunterStatPathBrowser.js?v=20260912f-single"></script>
+<script src="hunterStatPathPage.js?v=20260912d-roi"></script>
 <!-- Appwrite web SDK, from a CDN as a plain script: this project deliberately has no build
      step, and the IIFE build exposes window.Appwrite. cloudSync.js degrades to
      "unavailable" rather than throwing if this fails to load, so an offline or
      CDN-blocked user still gets the whole tool minus cloud saves. -->
 <script src="https://cdn.jsdelivr.net/npm/appwrite@27.0.0/dist/iife/sdk.js"></script>
 <script src="cloudSync.js?v=20260907c-stamps"></script>
-<script src="app.js?v=20260912c-cards"></script>
+<script src="app.js?v=20260912d-roi"></script>
 <script>
   // Custom (non-Tabler) sidebar icons: real game-asset SVG paths copied verbatim from the
   // live site's rendered DOM (Relics/Loop Mods/Milestones use bespoke icons, not Tabler's).

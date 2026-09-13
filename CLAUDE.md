@@ -120,13 +120,17 @@ or "fixing" it.
 **OPEN ITEM: this repo commits and serves third-party content -- cifi-tools' compiled
 `release.wasm` and ~17MB of artwork extracted from the game APK. See `THIRD-PARTY.md` for
 the full inventory, why hosting it elsewhere does not resolve it, and what happens on each
-answer. Pending the rights-holder's reply; do not add more third-party binaries or art.**
+answer. The WASM is pending Vash's reply; do not add more of cifi-tools' own code.**
 
 **The wasm half now has an implemented answer: `extension/` runs INSIDE cifi-tools.com, where their
 engine is same-origin, so nothing of theirs is copied or hosted. It does NOT clear the repo --
 `webapp/public/release.wasm` still ships for the website, which cannot run without it. The
-redistribution ends only if the website is retired in favour of the extension. The ARTWORK is
-untouched by any of this and remains fully open.**
+redistribution ends only if the website is retired in favour of the extension.**
+
+**The ARTWORK is a different question with a different owner: it is the GAME'S art, which
+cifi-tools also uses and does not own, so Vash's reply cannot settle it. The project owner decided
+on 2026-09-12 to keep shipping game art; extract it from the APK with `tools/assets/*.py` (never
+from cifi-tools' copies) and record new files in `THIRD-PARTY.md` item 2.**
 
 
 | Path | What it is |
@@ -231,6 +235,16 @@ think one is wrong, disprove it with a test.
   relies on this; it typically halves real evaluation count.
 - **Sampling the same allocation repeatedly is pointless.** Any code averaging N evaluations of
   one allocation is averaging N identical numbers. To reduce error, raise `iterations`.
+- **THE EFFECTIVE PATH DECIDED AT 100 ITERATIONS AND WAS RANKING NOISE -- the "recommends a 2-year
+  wait when a 2-day upgrade exists" report.** A path step compares candidates whose real gains are
+  ~0.5-2% of loot. On a real level-64 Ozzy at one mat2 decision: at 100 iterations effect->45
+  -1.56%, evade->37 -8.72%, dr->57 -2.94% (ALL negative); at 5000 all three are real gains, +1.96 /
+  +1.38 / +0.65%. The path picked the least-bad noise -- a 233-day purchase -- over a 6.9-day one
+  worth ~24x the gain per cost. It now decides at FINAL_ITERATIONS (`PATH_ITERATIONS`), at ~10x the
+  evaluation cost (357ms vs 36.5ms per eval on that account; a 30-step path ~30s). Time-to-afford
+  is cost / income within one currency, so gain-per-cost ALREADY is gain-per-day: the horizon
+  discount added alongside changed nothing at its 30-day default on that build. The fix was
+  fidelity, not a formula.
 - **100-iteration scores are a ranking surrogate, not a verdict.** ~0.9% mean deviation from
   1000-iteration scores, ~1.2% pairwise rank inversions. Fine for narrowing candidates, not for
   choosing the winner — which is why the search decides at `FINAL_ITERATIONS`.

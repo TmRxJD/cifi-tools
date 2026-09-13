@@ -215,14 +215,44 @@
     return `Next ${TARGET_STEPS} recommended purchases per currency, ${how}.`;
   }
 
-  function modePickerHtml(selected) {
+  function currentHorizonDays() {
+    const days = store.effectivePathHorizonDays;
+    if (!StoreSchema.PATH_HORIZON_DAYS.includes(days)) {
+      throw new Error(`effectivePathHorizonDays is ${days}, expected one of ${StoreSchema.PATH_HORIZON_DAYS.join(', ')}`);
+    }
+    return days;
+  }
+
+  // Rates for every currency the path can price. Materials come from the simulated run;
+  // fragments come from the player's own per-day entry (the sim does not produce them), so the
+  // relic column is timed only once that rate is set -- an unset rate stays unknown, never instant.
+  function pathRates(simRates) {
+    return { ...simRates, perHour: { ...simRates.perHour, frags: (store.fragments.perDay || 0) / 24 } };
+  }
+
+  // The time preference handed to greedyPurchasePath; null ranks by gain-per-cost alone, which is
+  // what "No limit" means and all that is possible without a real build's income.
+  function timingFor(rates) {
+    const days = currentHorizonDays();
+    return rates && days ? { perHour: rates.perHour, horizonHours: days * 24 } : null;
+  }
+
+  const horizonLabel = (d) => (d === 0 ? 'No limit' : d === 1 ? '1 day' : d === 365 ? '1 year' : `${d} days`);
+
+  function modePickerHtml(selected, timed) {
     const modes = window.OptimizerObjective.pathModes();
+    const days = currentHorizonDays();
     return `
-      <div class="flex items-center gap-2 mb-3">
+      <div class="flex flex-wrap items-center gap-2 mb-3">
         <span class="text-xs text-gray-400">Optimise for:</span>
         <select id="pathModeSelect" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white">
           ${Object.entries(modes).map(([key, spec]) => `<option value="${key}"${key === selected ? ' selected' : ''}>${escapeHtml(spec.label)}</option>`).join('')}
         </select>
+        ${timed ? `
+        <span class="text-xs text-gray-400 ml-2" title="Purchases that take much longer than this to afford are ranked down">Horizon:</span>
+        <select id="pathHorizonSelect" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white">
+          ${StoreSchema.PATH_HORIZON_DAYS.map((d) => `<option value="${d}"${d === days ? ' selected' : ''}>${horizonLabel(d)}</option>`).join('')}
+        </select>` : ''}
       </div>`;
   }
 
@@ -234,14 +264,22 @@
       saveStore();
       rerun(sel.value);
     };
+    const horizon = overlay.querySelector('#pathHorizonSelect');
+    if (horizon) {
+      horizon.onchange = () => {
+        store.effectivePathHorizonDays = Number(horizon.value);
+        saveStore();
+        rerun(sel.value);
+      };
+    }
   }
 
-  function renderColumnsModal(overlay, columns, rates, rowLabel, hunter, subtitle, modeSelected, locked) {
+  function renderColumnsModal(overlay, columns, rates, rowLabel, hunter, subtitle, modeSelected, timed) {
     widenModal(overlay);
     const body = overlay.querySelector('.p-5');
     const resources = Object.keys(columns);
     body.innerHTML = `
-      ${modeSelected ? modePickerHtml(modeSelected) : ''}
+      ${modeSelected ? modePickerHtml(modeSelected, timed) : ''}
       ${subtitle ? `<div class="text-xs text-gray-500 mb-3">${subtitle}</div>` : ''}
       <div class="grid grid-cols-1 md:grid-cols-${Math.min(resources.length, 4)} gap-3">
         ${resources.map((r) => `<div data-col="${r}" class="bg-gray-900/40 rounded-lg p-2 max-h-[60vh] overflow-y-auto"></div>`).join('')}
@@ -270,10 +308,11 @@
       const baseline = getBaselineBuild(currentHunter);
       try {
         const cfg = statPathCfgFor(currentHunter, baseline);
-        [result, rates] = await Promise.all([
-          greedyPurchasePath(currentHunter, cfg, TARGET_STEPS, false, mode, (resource, done, total) => updateProgress(overlay, resource, done, total), signal),
-          baseline.real ? IncomeModel.currentRates(currentHunter, store, baseline, 1000, signal) : null,
-        ]);
+        // SEQUENTIAL, not Promise.all: the ranking now needs the income rates (time-to-afford),
+        // so they must exist before the walk starts. They cost ~150ms against a walk of seconds.
+        rates = baseline.real ? pathRates(await IncomeModel.currentRates(currentHunter, store, baseline, 1000, signal)) : null;
+        result = await greedyPurchasePath(currentHunter, cfg, TARGET_STEPS, false, mode,
+          (resource, done, total) => updateProgress(overlay, resource, done, total), signal, timingFor(rates));
       } catch (err) {
         // A SUPERSEDED RUN MUST NOT PAINT. Aborting terminates the worker pool, which rejects
         // in-flight batches with an `AbortError` -- not HunterSim's ABORTED name, so isAbort()
@@ -288,7 +327,7 @@
       if (signal.aborted) return;
       const timingNote = baseline.real ? '' : ' Create a build to unlock timing estimates.';
       renderColumnsModal(overlay, result.columns, rates, (r) => STAT_LABELS[r.key] || r.key, currentHunter,
-        `${pathSubtitle(mode)}${timingNote}`, mode, result.locked);
+        `${pathSubtitle(mode)}${timingNote}`, mode, !!rates);
       bindModePicker(overlay, run);
     };
     run(currentPathMode());
@@ -312,10 +351,10 @@
       let result; let rates;
       try {
         const cfg = statPathCfgFor(currentHunter, baseline);
-        [result, rates] = await Promise.all([
-          greedyPurchasePath(currentHunter, cfg, TARGET_STEPS, true, mode, (resource, done, total) => updateProgress(overlay, resource, done, total), signal),
-          baseline.real ? IncomeModel.currentRates(currentHunter, store, baseline, 1000, signal) : null,
-        ]);
+        // Sequential for the same reason as openHunterStatPathModal: ranking needs the rates.
+        rates = baseline.real ? pathRates(await IncomeModel.currentRates(currentHunter, store, baseline, 1000, signal)) : null;
+        result = await greedyPurchasePath(currentHunter, cfg, TARGET_STEPS, true, mode,
+          (resource, done, total) => updateProgress(overlay, resource, done, total), signal, timingFor(rates));
       } catch (err) {
         // A SUPERSEDED RUN MUST NOT PAINT. Aborting terminates the worker pool, which rejects
         // in-flight batches with an `AbortError` -- not HunterSim's ABORTED name, so isAbort()
@@ -331,7 +370,7 @@
       const timingNote = baseline.real ? '' : ' Allocate talent/attribute points on this build to unlock timing estimates.';
       renderColumnsModal(overlay, result.columns, rates,
         (r) => (r.kind === 'stat' ? (STAT_LABELS[r.key] || r.key) : (r.label || r.key)), currentHunter,
-        `${pathSubtitle(mode)}${timingNote}`, mode, result.locked);
+        `${pathSubtitle(mode)}${timingNote}`, mode, !!rates);
       bindModePicker(overlay, run);
     };
     run(currentPathMode());

@@ -355,7 +355,11 @@
 .cifi-companion .action-button-compact {
   display: flex;
   align-items: center;
-  padding: .25rem .5rem;
+  justify-content: center;
+  /* .375rem, not .5rem: a 30px button lets all ten card actions share one row on a 360px card
+     (10 x 30 + 9 x 4px gaps + 8px bar padding = 344px), so two cards fit side by side far more
+     often. At .5rem the row needed 400px and pushed the grid to one very wide card. */
+  padding: .25rem .375rem;
   border-radius: var(--radius-sm);
   background-color: color-mix(in srgb, var(--surface-700) 40%, transparent);
   border: 1px solid transparent;
@@ -377,19 +381,21 @@
    A CONTAINER query, not a media query: build cards sit in a responsive grid, so a card can be
    narrow on a wide screen. Viewport width does not say how much room the toolbar has. */
 .cifi-companion .action-bar { container-type: inline-size; }
+
+/* Buttons STRETCH to share the bar (1fr columns), so the end buttons sit at the card's edges
+   instead of a centred cluster with dead space either side. */
 .cifi-companion .action-buttons-grid {
   display: grid;
-  grid-template-columns: repeat(var(--cols, 9), minmax(0, auto));
-  justify-content: center;
-  gap: .375rem;
+  grid-template-columns: repeat(var(--cols, 10), minmax(0, 1fr));
+  gap: .25rem;
   width: 100%;
 }
 
-/* 399px because ten 34px buttons plus nine gaps measure 392px, and the bar adds 8px of padding:
-   below 400 they cannot share a row. The build grid's column minimum (app.js) is sized so a card
-   normally clears this, leaving the two-row layout for genuinely narrow screens. */
-@container (max-width: 399px) {
-  .cifi-companion .action-buttons-grid { grid-template-columns: repeat(var(--half, 5), minmax(0, auto)); }
+/* 343px: ten 30px buttons plus nine 4px gaps measure 336px, plus the bar's 8px of padding. The
+   build grid's column minimum (BUILD_GRID_COLUMNS in app.js) sits just above this, so the
+   two-row fold is reserved for genuinely narrow screens. */
+@container (max-width: 343px) {
+  .cifi-companion .action-buttons-grid { grid-template-columns: repeat(var(--half, 5), minmax(0, 1fr)); }
 }
 
 

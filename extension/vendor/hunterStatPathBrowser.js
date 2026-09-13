@@ -6,12 +6,18 @@
 // its real marginal effect on lootPerMin (see hunterStatPath.js) -- there is no hardcoded
 // notion of "defensive" vs "offensive" stats or of game phases baked into the ranking itself.
 (function (global) {
-  // Coarse per-candidate fidelity, taken from the optimizer rather than chosen again here.
-  // This file previously carried TWO different values (150 for the stat-only path, 100 for the
-  // build-card path) for the same kind of screening, so the same candidate could rank
-  // differently depending on which entry point you came through. There is one coarse fidelity
-  // in this app and optimizer/search.js defines it.
-  const SEARCH_ITERATIONS = global.HunterOptimizer.SCREEN_ITERATIONS;
+  // EVERY PATH STEP IS DECIDED AT FULL FIDELITY, and deciding at screening fidelity was the whole
+  // "recommends a 2-year wait when a 2-day upgrade exists" bug. A step compares candidates whose
+  // real gains are ~0.5-2% of loot, and at SCREEN_ITERATIONS the evaluator's sampling noise is
+  // larger than that. Measured on a real level-64 Ozzy at one mat2 decision (dr 56 / effect 44 /
+  // evade 36):
+  //     100 iterations    effect->45 -1.56%   evade->37 -8.72%   dr->57 -2.94%   (all NEGATIVE)
+  //     5000 iterations   effect->45 +1.96%   evade->37 +1.38%   dr->57 +0.65%   (all real gains)
+  // At 100 the path picked the least-bad NOISE -- effect, a 233-day wait -- while evade, 6.9 days
+  // away, is ~24x the gain per cost. CLAUDE.md already records the rule this broke: 100-iteration
+  // scores are a ranking surrogate, never a verdict. Still taken from the optimizer rather than
+  // chosen here, so there is one full fidelity in the app and optimizer/search.js defines it.
+  const PATH_ITERATIONS = global.HunterOptimizer.FINAL_ITERATIONS;
 
   function buildStatCandidates(hunter, def, CF) {
     return def.baseStatKeys
@@ -121,9 +127,25 @@
   // positive -- the point of this view is "here's the next N in ranked order for this
   // resource," not "here's how many are worth buying." It only stops early if literally
   // nothing is purchasable anymore (every candidate capped out or missing a cost formula).
-  async function greedyResourceColumn(hunter, cfg, scoreBatch, def, CF, candidates, currentStats, currentUpgrades, targetSteps, iterations, mode, onProgress, signal) {
+  // TIME PREFERENCE. Within one currency, time-to-afford is cost / income, so gain-per-cost alone
+  // is time-optimal only over an UNLIMITED horizon (Smith's rule) -- which is exactly why it would
+  // pick a 2-year purchase whose ratio edges out a 2-day one. A player plans over a horizon H, so a
+  // gain that lands T hours from now is discounted by H / (H + T): ~1 while T << H, halved at
+  // T = H, vanishing for waits far beyond it. T is CUMULATIVE within the column, because each
+  // purchase waits behind the ones already recommended.
+  // Unknown income (no rate for this currency) leaves the ratio untouched rather than inventing a
+  // time -- the same rule that makes an unset fragment rate render as unknown, never instant.
+  function horizonWeight(timing, spentHours, cost, resource) {
+    if (!timing) return 1;
+    const hours = window.IncomeModel.hoursToAfford(cost, timing.perHour, resource);
+    if (!Number.isFinite(hours)) return 1;
+    return timing.horizonHours / (timing.horizonHours + spentHours + hours);
+  }
+
+  async function greedyResourceColumn(hunter, cfg, scoreBatch, def, CF, candidates, currentStats, currentUpgrades, targetSteps, iterations, mode, onProgress, signal, timing) {
     const stats = { ...currentStats };
     const upgrades = { ...currentUpgrades };
+    let spentHours = 0;
     const jobFor = (jobStats, jobUpgrades) => ({
       talentAlloc: cfg.talents, attrAlloc: cfg.attributes,
       hunterStats: jobStats, upgradeValues: jobUpgrades,
@@ -153,12 +175,32 @@
         const candUpgrades = param ? { ...upgrades, [param]: nextLevel } : upgrades;
         sweep.push({ cand, nextLevel, cost, candStats, candUpgrades });
       }
-      const scores = await scoreBatch(sweep.map((entry) => jobFor(entry.candStats, entry.candUpgrades)), iterations);
+      // ONE PURCHASABLE CANDIDATE IS NOT A DECISION. Scoring it at full fidelity -- the whole cost
+      // of a step -- would buy nothing: it is chosen regardless. A single-stat currency (Ozzy's
+      // mat3 is Attack Speed alone) was spending 30 full-fidelity evaluations choosing between one
+      // option. Candidates only ever leave the sweep (capped / no cost), so once a column is down
+      // to one it stays there, and its baseline score is never compared against again.
+      if (sweep.length === 1) {
+        best = { ...sweep[0], score: NaN, valuePerCost: 0 };
+        sweep.length = 0;
+      }
+      const scores = sweep.length
+        ? await scoreBatch(sweep.map((entry) => jobFor(entry.candStats, entry.candUpgrades)), iterations)
+        : [];
       sweep.forEach((entry, index) => {
-        const valuePerCost = (scores[index] - baselineScore) / entry.cost;
+        const gainPerCost = (scores[index] - baselineScore) / entry.cost;
+        // Discount only GAINS. Scaling a loss toward zero would make a long wait for a harmful
+        // purchase look less bad than a short one.
+        const valuePerCost = gainPerCost > 0
+          ? gainPerCost * horizonWeight(timing, spentHours, entry.cost, entry.cand.resource)
+          : gainPerCost;
         if (!best || valuePerCost > best.valuePerCost) best = { ...entry, score: scores[index], valuePerCost };
       });
       if (!best) break; // every candidate capped out / no cost formula left -- nothing left to rank
+      if (timing) {
+        const hours = window.IncomeModel.hoursToAfford(best.cost, timing.perHour, best.cand.resource);
+        if (Number.isFinite(hours)) spentHours += hours;
+      }
 
       Object.assign(stats, best.candStats);
       Object.assign(upgrades, best.candUpgrades);
@@ -211,7 +253,12 @@
    *        gemPlannerStore, TALENTS, ATTRIBUTES }
    * onProgress(resource, done, total) fires as each resource's column advances.
    */
-  async function greedyPurchasePath(hunter, cfg, targetSteps, includeAccountUpgrades, mode = 'loot', onProgress, signal) {
+  async function greedyPurchasePath(hunter, cfg, targetSteps, includeAccountUpgrades, mode = 'loot', onProgress, signal, timing = null) {
+    // `timing` = { perHour: {resource: rate}, horizonHours } turns on the time preference above.
+    // null means rank by gain-per-cost alone -- what Node benches and "No limit" ask for.
+    if (timing !== null && (!timing.perHour || !(timing.horizonHours > 0))) {
+      throw new Error('greedyPurchasePath: timing must be null or { perHour, horizonHours > 0 }');
+    }
     // Fail loudly on an unknown or path-inapplicable mode. A mode with pinnedAttrs (bossTimeless)
     // cannot behave differently here -- the path never reallocates attributes -- so accepting it
     // would show the user a choice that silently does nothing.
@@ -272,8 +319,8 @@
     let results;
     try {
       results = await Promise.all(entries.map(([resource, group]) => greedyResourceColumn(
-        hunter, cfg, scoreBatch, def, CF, group, cfg.hunterStats, currentUpgrades, targetSteps, SEARCH_ITERATIONS, mode,
-        onProgress && ((done, total) => onProgress(resource, done, total)), signal,
+        hunter, cfg, scoreBatch, def, CF, group, cfg.hunterStats, currentUpgrades, targetSteps, PATH_ITERATIONS, mode,
+        onProgress && ((done, total) => onProgress(resource, done, total)), signal, timing,
       )));
     } finally {
       signal?.removeEventListener?.('abort', abortPool);

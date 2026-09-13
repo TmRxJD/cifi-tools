@@ -79,6 +79,9 @@
   // how a UI ends up writing a state the validator then reports as corrupt.
   const CARD_COLOR_LIMITS = { favorites: 5, recent: 10 };
   const HEX_COLOR = /^#[0-9a-f]{6}$/;
+  // Effective Path planning horizon, in days; 0 = no limit (pure gain-per-cost). One list, read by
+  // the picker and enforced by validateStore().
+  const PATH_HORIZON_DAYS = [1, 7, 30, 90, 365, 0];
 
   const SCHEMA = {
     globalUpgrades: { make: () => ({}) },
@@ -112,6 +115,11 @@
     // call site, and validated against the optimizer's own path-applicable mode table so a
     // stale/renamed mode cannot persist into a screen that then throws.
     effectivePathMode: { make: () => 'loot' },
+    // How far ahead the Effective Path plans. Within one currency, time-to-afford is cost / income,
+    // so ranking by gain-per-cost is already time-optimal over an UNLIMITED horizon -- which is
+    // exactly why it would happily recommend a 2-year wait. A horizon is the missing ingredient,
+    // and it is a player's preference, not a fact the tool can derive; 30 days is the default.
+    effectivePathHorizonDays: { make: () => 30 },
     // How many trailing steps the Install Order list shows in full. A late-game ship can spend
     // 500+ points, and a 500-row list is unusable for the thing it is for: knowing what to click
     // next. Everything BEFORE the tail is bulk-buyable in any order -- the sequence only matters
@@ -392,6 +400,10 @@
       });
     }
 
+    if (store.effectivePathHorizonDays !== undefined && !PATH_HORIZON_DAYS.includes(store.effectivePathHorizonDays)) {
+      note(`effectivePathHorizonDays is ${store.effectivePathHorizonDays}, expected one of ${PATH_HORIZON_DAYS.join(', ')}`);
+    }
+
     const cc = store.cardColors;
     if (cc) {
       for (const [list, limit] of Object.entries(CARD_COLOR_LIMITS)) {
@@ -491,6 +503,7 @@
     validateStore,
     CARD_COLOR_LIMITS,
     HEX_COLOR,
+    PATH_HORIZON_DAYS,
     validateAllocation,
     ITERATIONS,
     iterationCeiling,

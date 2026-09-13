@@ -1,8 +1,8 @@
 # Third-party content in this repo — OPEN ITEM, pending permission
 
-**Status: item 1 (the wasm) has a resolution IN PROGRESS — see route 4 below. Item 2 (game
-artwork) is unchanged and still unresolved. Still awaiting a reply from the cifi-tools author
-(Vash).**
+**Status: item 1 (the wasm) has a resolution IN PROGRESS — see route 4 below, still awaiting a
+reply from the cifi-tools author (Vash). Item 2 (game artwork) is a SEPARATE question with a
+different rights-holder, and the project owner has decided to keep shipping it — see item 2.**
 
 **What changed:** `extension/` is now a companion that runs INSIDE cifi-tools.com rather than a
 bridge into our own site. On their origin their engine is same-origin, so it is fetched from the
@@ -89,12 +89,20 @@ Considered and rejected, recorded so it is not revisited as though it were new:
 
 The game developers' copyrighted assets, extracted from the APK and committed.
 
+**THIS IS NOT VASH'S TO GRANT, and an earlier version of this file wrongly bundled it into the
+"awaiting Vash" question.** cifi-tools uses the very same game assets; it owns none of them. So a
+reply from Vash settles the wasm (item 1) and nothing here. The rights-holder is the game's
+developer. On 2026-09-12 the project owner decided to keep shipping the game art as cifi-tools
+does, which is why new icons have been added since — recorded here so the decision is visible
+rather than implied.
+
 | path | files | size | added |
 |---|---|---|---|
 | `webapp/public/assets/nodes/` | 77 | 2.0 MB | `44ac3fb` (2026-09-08) |
 | `webapp/public/assets/ships/` | 48 | 13 MB | `76d5a97` (2026-09-08) |
 | `webapp/public/assets/gear/` | 37 | 1.7 MB | `99b76b5` (2026-09-08) |
-| `webapp/public/assets/hunter_*.png`, `loot_mat*.png` | 6 | — | earlier |
+| `webapp/public/assets/materials/` | 9 | — | 2026-09-12 (replaces Borge-only `loot_mat*.png`) |
+| `webapp/public/assets/hunter_*.png` | 3 | — | earlier |
 
 **This is PURELY COSMETIC and can be removed at any time with no functional loss.** Every consumer
 already falls back: gear `<img>` removes itself on error, ship portraits fall back to the static
@@ -107,6 +115,7 @@ All of it regenerates from an APK you supply yourself:
 CIFI_APK=apk-0.7.3.61 python tools/assets/extract-node-sprites.py --write
 CIFI_APK=apk-0.7.3.61 python tools/assets/extract-ship-evo-sprites.py --write
 CIFI_APK=apk-0.7.3.61 python tools/assets/extract-gear-icons.py --write
+CIFI_APK=apk-0.7.3.61 python tools/assets/extract-material-icons.py --write
 ```
 
 Note the dates: 161 of these were committed on **2026-09-08**, in this project's own sweep to
