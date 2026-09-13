@@ -28,6 +28,10 @@ extension. It is deleted, not disabled.
 
 See `../THIRD-PARTY.md` (route 4) for what this resolves and what it does not.
 
+See `PRIVACY.md` for the Chrome Web Store-required privacy policy (local-storage-only usage, no
+telemetry, no backend). It needs to be hosted at a public URL (e.g. GitHub Pages) before
+submission — the listing form requires a link, not just a repo file.
+
 ---
 
 ## Install (unpacked)
