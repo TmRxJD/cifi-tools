@@ -40,22 +40,34 @@
 <h2>Summary</h2>
 <p>CIFI Tools Companion is a browser extension that adds hunter and fleet build optimization,
 Effective Path planning, and save-file import to cifi-tools.com, running entirely in your own
-browser. It does not have a server, does not
-collect analytics or telemetry, and does not transmit your account data anywhere.</p>
+browser. It has no server, collects no analytics or telemetry, and never sends your data to us or
+anyone else.</p>
 
 <h2>What the extension does</h2>
 <ul>
-  <li>Runs a content script on <code>https://cifi-tools.com/*</code> only. It does not run on,
-    read from, or modify any other site.</li>
+  <li>Runs only on <code>https://cifi-tools.com/*</code>. It does not run on, read from, or modify
+    any other site.</li>
   <li>Adds pages (Hunters, Fleet, Ship Setup, Gear Sets, Research, Academy Badges) to
     cifi-tools.com's own navigation, rendered inside that page.</li>
-  <li>Reads game-progression data already present in your browser (cifi-tools.com's own local
-    storage and application state) so the added pages can show your current build/fleet — the
-    same data the site itself already uses to render its pages.</li>
-  <li>Uses <code>chrome.storage.local</code> to save your own settings and build configurations
-    for the added pages (e.g. saved optimizer builds, filter/category preferences). Every key it
-    writes is namespaced <code>cifi-companion:</code> so it cannot be confused with or overwrite
-    cifi-tools.com's own storage.</li>
+  <li>Reads game-progression data cifi-tools.com already keeps in your browser, so the added pages
+    can show your builds and fleet.</li>
+  <li>Saves your settings and builds in your browser's storage for cifi-tools.com — the same local
+    storage the site itself uses. When you import a save, it can also write your imported gem
+    progress into cifi-tools.com's own Gem Planner storage, so the site's native pages reflect
+    it.</li>
+  <li>Runs build evaluations through cifi-tools.com's own simulation worker, on cifi-tools.com. All
+    of the extension's own code ships inside the extension; it does not download or run code from
+    anywhere else.</li>
+</ul>
+
+<h2>Save import and the optional local bridge</h2>
+<ul>
+  <li>You can import a save by choosing a save file. It is read in your browser and never
+    uploaded.</li>
+  <li>If you choose to run the separate CIFI Bridge (adb-bridge) app on your own computer, the
+    extension connects to it at <code>127.0.0.1</code> (your own machine, port 43791) to pull your
+    save from your own device. That connection never leaves your computer. If you don't run the
+    bridge, nothing connects.</li>
 </ul>
 
 <h2>What it does NOT do</h2>
@@ -63,22 +75,21 @@ collect analytics or telemetry, and does not transmit your account data anywhere
   <li>No account system, no sign-in, no user identifiers of any kind.</li>
   <li>No analytics, telemetry, crash reporting, or usage tracking.</li>
   <li>No data is sent to any server operated by this project. There is no backend.</li>
-  <li>No data collected by the extension is sold, shared, or transmitted to any third party.</li>
-  <li>The extension does not read or modify any site other than cifi-tools.com.</li>
+  <li>No data is sold, shared, or transmitted to any third party.</li>
+  <li>It does not read or modify any site other than cifi-tools.com.</li>
 </ul>
 
 <h2>External resources</h2>
-<p>The extension fetches static game-art images (ship/gear icons) from a public GitHub Pages host
-(<code>tmrxjd.github.io</code>) at runtime, the same way a web page loads its own images. These
-are static image files with no tracking parameters, cookies, or identifying information attached
-to the request beyond what any standard HTTP image request sends (the requesting browser's normal
-headers). No data about you or your account is included in these requests.</p>
+<p>The extension loads static game-art images (ship and gear icons) from a public GitHub Pages host
+(<code>tmrxjd.github.io</code>), the same way a web page loads its own images. These requests carry
+no tracking parameters or cookies — only what any standard image request sends — and no data about
+you or your account.</p>
 
 <h2>Data retention and deletion</h2>
-<p>All data the extension stores (<code>chrome.storage.local</code>, namespaced
-<code>cifi-companion:</code>) stays on your own device. Uninstalling the extension removes it.
-Clearing the extension's storage from Chrome's extension management page also removes it without
-affecting cifi-tools.com's own site data.</p>
+<p>Everything the extension saves stays in your browser's storage for cifi-tools.com, on your own
+device. Uninstalling the extension stops it from running but does not erase what it saved there; to
+remove that data, clear cifi-tools.com's site data in your browser's settings. Note that this also
+clears cifi-tools.com's own saved data for that site.</p>
 
 <h2>Changes to this policy</h2>
 <p>If this policy changes, the updated version will be published here with a new "Last updated"

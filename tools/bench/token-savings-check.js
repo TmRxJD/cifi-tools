@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// THIS IS A REPORT, NOT A GATE: it prints measurements and always exits 0.
+//
 // Measures the token-savings claims made for the 2026-09-13 context-efficiency changes:
 //   1. CLAUDE.md -> skills split (subagent dispatch overhead)
 //   2. .claude/hooks/filter-bench-output.js (bench-suite output volume)

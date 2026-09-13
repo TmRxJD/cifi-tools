@@ -10,15 +10,20 @@ const path = require('node:path');
 const ROOT = path.join(__dirname, '..', '..');
 const runner = fs.readFileSync(path.join(ROOT, 'webapp/public/optimizer/runner.js'), 'utf8');
 const worker = fs.readFileSync(path.join(ROOT, 'webapp/public/optimizer/worker.js'), 'utf8');
+// The site's wire format (worker creation, RPC, timeout) lives in ONE place since 2026-09-13,
+// HunterSim.createNativeEvaluator, shared by the optimizer pool and single build-card evaluations.
+const sim = fs.readFileSync(path.join(ROOT, 'webapp/public/hunterSimBrowser.js'), 'utf8');
 const routing = fs.readFileSync(path.join(ROOT, 'extension/hostRouting.js'), 'utf8');
 const manifest = fs.readFileSync(path.join(ROOT, 'extension/manifest.json'), 'utf8');
 
 try {
 
-function acceptsNativeWorker(source, hostSource, manifestSource) {
+function acceptsNativeWorker(source, simSource, hostSource, manifestSource) {
   return source.includes('class NativeEvaluationWorker')
-    && source.includes("new Worker(url, { type: 'module' })")
-    && source.includes("this.rpc('evaluate'")
+    && source.includes('HunterSim.createNativeEvaluator(')
+    && source.includes('this.native.evaluate(')
+    && simSource.includes("new Worker(url, { type: 'module' })")
+    && simSource.includes("path: ['evaluate']")
     && hostSource.includes('evaluationWorker-')
     && hostSource.includes('dataset.evaluationWorkerUrl')
     && !source.includes('HUNTERSIM_WORKER_HOST_URL')
@@ -29,10 +34,10 @@ function acceptsCancel(source) {
     && source.includes('pending.forEach(({ reject }) => reject(error))')
     && source.includes('global.cancelOptimizerRun = cancelOptimizerRun');
 }
-function boundsLostNativeReplies(source) {
-  return source.includes('Native evaluation worker timed out after 60s')
-    && source.includes('this.pending.delete(id)')
-    && source.includes('this.pending.forEach(({reject,timer})');
+function boundsLostNativeReplies(simSource) {
+  return simSource.includes('Native evaluation worker timed out after 60s')
+    && simSource.includes('pending.delete(id)')
+    && simSource.includes('pending.forEach(({ reject, timer })');
 }
 function avoidsThrottledYield(source) {
   const score = source.indexOf("if (msg.type === 'score')");
@@ -40,19 +45,21 @@ function avoidsThrottledYield(source) {
   return score >= 0 && counter > score && counter - score < 1000;
 }
 
-assert(acceptsNativeWorker(runner, routing, manifest), 'embedded mode must use the native evaluation worker directly');
+assert(acceptsNativeWorker(runner, sim, routing, manifest), 'embedded mode must use the native evaluation worker directly');
 assert(acceptsCancel(runner), 'runner must expose pool-level cancellation');
-assert(boundsLostNativeReplies(runner), 'native worker death must reject pending evaluation RPCs');
+assert(boundsLostNativeReplies(sim), 'native worker death must reject pending evaluation RPCs');
 assert(avoidsThrottledYield(worker), 'standalone worker yield counter must reset per batch');
 
 // Known-bad replays: prove each structural regression is rejected.
-assert(!acceptsNativeWorker(runner.replace('class NativeEvaluationWorker', 'class ReimplementedWorker'), routing, manifest),
+assert(!acceptsNativeWorker(runner.replace('class NativeEvaluationWorker', 'class ReimplementedWorker'), sim, routing, manifest),
   'negative control: missing native adapter was accepted');
-assert(!acceptsNativeWorker(runner, routing.replace('dataset.evaluationWorkerUrl', 'dataset.otherUrl'), manifest),
+assert(!acceptsNativeWorker(runner.replace('HunterSim.createNativeEvaluator(', 'makeOwnWorker('), sim, routing, manifest),
+  'negative control: a second copy of the wire format was accepted');
+assert(!acceptsNativeWorker(runner, sim, routing.replace('dataset.evaluationWorkerUrl', 'dataset.otherUrl'), manifest),
   'negative control: missing native worker discovery was accepted');
 assert(!acceptsCancel(runner.replace('global.cancelOptimizerRun = cancelOptimizerRun;', '')),
   'negative control: missing cancel export was accepted');
-assert(!boundsLostNativeReplies(runner.replace('Native evaluation worker timed out after 60s','unbounded native request')),
+assert(!boundsLostNativeReplies(sim.replace('Native evaluation worker timed out after 60s','unbounded native request')),
   'negative control: an unbounded native worker request was accepted');
 assert(!avoidsThrottledYield(worker.replace("if (msg.type === 'score') {", "if (msg.type === 'score') {\n".repeat(80))),
   'negative control: counter outside the batch boundary was accepted');

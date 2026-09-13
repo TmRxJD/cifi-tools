@@ -38,8 +38,11 @@ const hostStoreSource = fs.readFileSync(path.join(EXT, 'hostStoreBridge.js'), 'u
 check('host-store bridge runs in the site main world', hostStoreBridge?.world === 'MAIN',
   'native cifi-tools Pinia state is not visible to an isolated content script');
 const webResources = manifest.web_accessible_resources?.flatMap((entry) => entry.resources || []) || [];
-check('runtime params are web-accessible', webResources.includes('vendor/params.json'),
-  'hunterSimBrowser fetches this extension resource at runtime');
+// Inverted 2026-09-13: embedded evaluation runs on cifi-tools' own worker with its own argument
+// list, so our params.json is neither shipped nor exposed to the page (HunterSim.loadParams refuses).
+check('params.json is not shipped or exposed to the page',
+  !webResources.includes('vendor/params.json') && !fs.existsSync(path.join(EXT, 'vendor', 'params.json')),
+  'nothing embedded reads it; exposing it widens the web-accessible surface for no purpose');
 check('extension does not publish a replacement evaluator host', !webResources.includes('workerHost.html'),
   'embedded optimization must use cifi-tools own same-origin worker');
 
@@ -159,13 +162,24 @@ for (const [before, after, why] of [
 // as a broken page rather than a load error.
 const companion = sources.get('companion.js') || '';
 const runner = sources.get('vendor/optimizer/runner.js') || '';
+const sim = sources.get('vendor/hunterSimBrowser.js') || '';
+const config = sources.get('config.js') || '';
 const appSource = sources.get('vendor/app.js') || '';
 check('embedded optimizer uses cifi-tools native parallel evaluator',
   runner.includes('class NativeEvaluationWorker')
-    && runner.includes("this.rpc('evaluate'")
+    && runner.includes('HunterSim.createNativeEvaluator(')
     && !runner.includes('HUNTERSIM_WORKER_HOST_URL')
     && !fs.existsSync(path.join(EXT, 'workerHost.html')),
   'do not recreate the native evaluator behind a throttled extension iframe');
+// Chrome Web Store policy counts remotely loaded wasm as remote code, and the site's live engine
+// takes a different argument list than our params.json. Embedded evaluation must route to the
+// site's own worker and never fetch or compile an engine itself.
+check('embedded evaluation never loads an engine of its own',
+  sim.includes('if (EMBEDDED) return nativeResult(hunter, state, false);')
+    && sim.includes('if (EMBEDDED) return nativeResult(hunter, state, true);')
+    && sim.includes('if (EMBEDDED) throw new Error(')
+    && !config.includes('HUNTERSIM_ENGINE_URL'),
+  'the extension would fetch and compile cifi-tools\' wasm itself');
 // Routing behavior is exercised against the real site by companion-browser-check.js.
 // This gate checks dependency contracts only; source spellings cannot prove Vue navigation.
 check('host router adapter is declared in the MAIN world',

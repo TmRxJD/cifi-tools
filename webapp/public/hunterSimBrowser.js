@@ -37,21 +37,19 @@
 
   let paramsPromise = null;
   function loadParams() {
+    // Embedded evaluation never builds an argument list (the site's worker uses its own), so
+    // nothing there should ask for ours -- and the extension no longer configures an asset base.
+    if (EMBEDDED) throw new Error('HunterSim.loadParams: the embedded companion does not use our params.json');
     if (!paramsPromise) paramsPromise = fetch(assetUrl('params.json')).then((r) => r.json());
     return paramsPromise;
   }
 
   // WHERE THE SIMULATION ENGINE COMES FROM, and why there are two answers.
   //
-  // `release.wasm` is cifi-tools.com's compiled evaluator. It is THEIRS. Serving a copy of it from
-  // our own site is redistribution, so the preferred source is the COMPANION EXTENSION
-  // (see extension/), which fetches it into the user's own browser from the origin that owns it.
-  // Nothing is copied and nothing is cached on a server of ours.
-  //
-  // The extension is required because cifi-tools.com sends no Access-Control-Allow-Origin header
-  // on any path -- measured on GET and OPTIONS -- so page JavaScript cannot fetch it cross-origin
-  // at all. That is a browser rule, not a policy choice, and no amount of page-side code works
-  // around it.
+  // `release.wasm` is cifi-tools.com's compiled evaluator. It is THEIRS. The website serves a copy
+  // (see THIRD-PARTY.md). The companion EXTENSION runs inside cifi-tools.com and never touches the
+  // engine at all: it evaluates through the site's own worker (createNativeEvaluator below), so
+  // nothing is copied, fetched, compiled or cached by us there.
   //
   // The local fallback exists for DEVELOPMENT, where the file sits next to this one. It is also
   // what the hosted site currently uses; removing it is a separate decision recorded in
@@ -68,38 +66,32 @@
   let engineSource = 'not loaded yet';
   function setEngineSource(src, detail) {
     engineSource = src;
-    const msg = src === 'origin'
-      ? `[cifi] engine loaded from cifi-tools.com's own copy (${detail}) -- nothing is served or stored by the companion`
+    const msg = src === 'native'
+      ? `[cifi] evaluating through cifi-tools.com's own worker (${detail}) -- the companion loads no engine of its own`
       : `[cifi] engine loaded from this site's own copy (${detail})`;
     try { console.info(msg); } catch { /* console may be unavailable in a worker */ }
   }
 
-  // WHERE THE ENGINE COMES FROM IS THE EMBEDDER'S CHOICE, AND THE SUBSTITUTE FOR REDISTRIBUTING IT.
-  //
-  // On the website this is our own `release.wasm`. Embedded in cifi-tools.com the companion sets
-  // `HUNTERSIM_ENGINE_URL` to THEIR copy, which is SAME-ORIGIN there -- so their page loads their
-  // engine from their server and no copy of it is hosted, cached or transmitted by us.
-  //
-  // THIS REPLACES A postMessage BRIDGE, and the deletion is the point rather than a tidy-up. That
-  // version had a content script on OUR origin relay their wasm across origins to defeat CORS,
-  // with a base64 round-trip, a service worker and a mandatory timeout. CORS was only ever in the
-  // way because we were on the wrong origin; from theirs a plain fetch works and all of it -- the
-  // relay, the worker, the timeout, the marker attribute, `bridgeStatus()` -- is unnecessary.
-  function engineUrl() {
-    return global.HUNTERSIM_ENGINE_URL || assetUrl('release.wasm');
-  }
+  // EMBEDDED MODE NEVER LOADS AN ENGINE. It used to fetch cifi-tools' own release.wasm and compile
+  // it in the content script. Two measured problems (2026-09-13) ended that: the Chrome Web Store
+  // counts remotely loaded wasm as remote code, and the site's live engine takes 106/94/99
+  // arguments against our params.json's 101/89/91, so every argument past the first difference was
+  // landing in the wrong slot. Embedded evaluations go through createNativeEvaluator() instead,
+  // which uses the site's own parameters for its own engine. Reaching this loader there is a bug.
+  const EMBEDDED = !!global.HUNTERSIM_EMBEDDED;
 
   let wasmModulePromise = null;
   function loadWasmModule() {
+    if (EMBEDDED) throw new Error('HunterSim: the embedded companion must evaluate through cifi-tools\' own worker, never a locally compiled engine');
     if (!wasmModulePromise) {
-      const url = engineUrl();
+      const url = assetUrl('release.wasm');
       wasmModulePromise = fetch(url)
         .then((r) => {
           if (!r.ok) throw new Error(`The simulation engine could not be loaded from ${url} (HTTP ${r.status}).`);
           return r.arrayBuffer();
         })
         .then((b) => {
-          setEngineSource(global.HUNTERSIM_ENGINE_URL ? 'origin' : 'local', `${b.byteLength} bytes`);
+          setEngineSource('local', `${b.byteLength} bytes`);
           return WebAssembly.compile(b);
         });
     }
@@ -391,7 +383,98 @@
     return out.sort((a, b) => a.stage - b.stage);
   }
 
+  // EMBEDDED EVALUATION: cifi-tools' own worker, in the site's Comlink wire format.
+  //
+  // One implementation, shared with the optimizer's pool (optimizer/runner.js). The worker already
+  // applies the site's post-sim multipliers (measured: roe 20000 moves XP x7.46), so its result is
+  // used as-is -- applyPostSimMultipliers here would count them twice. Its `stats` field is the
+  // final combat stats as a comma list, in the same getter order as FINAL_STAT_NAMES (read out of
+  // the worker's own source). Unlike the local engine it is NOT repeatable call to call: the site
+  // seeds each run itself, so two identical evaluations differ by a fraction of a percent.
+  function createNativeEvaluator({ onerror } = {}) {
+    const url = global.document?.getElementById('cifi-companion-navigation')?.dataset.evaluationWorkerUrl;
+    if (!url) throw new Error('cifi-tools evaluation worker URL is unavailable');
+    const worker = new Worker(url, { type: 'module' });
+    const pending = new Map();
+    let nextId = 0;
+    const failAll = (error) => {
+      pending.forEach(({ reject, timer }) => { clearTimeout(timer); reject(error); });
+      pending.clear();
+    };
+    worker.onerror = (event) => {
+      failAll(new Error(event?.message || 'Native evaluation worker failed'));
+      if (onerror) onerror(event);
+    };
+    worker.onmessage = (event) => {
+      const entry = pending.get(event.data?.id);
+      if (!entry) return;
+      pending.delete(event.data.id);
+      clearTimeout(entry.timer);
+      if (event.data.type === 'RAW') entry.resolve(event.data.value);
+      else entry.reject(new Error(event.data.value?.message || 'Native evaluation worker failed'));
+    };
+    if (engineSource !== 'native') setEngineSource('native', url);
+    return {
+      evaluate(hunter, build, storeData) {
+        const id = `cifi-${++nextId}`;
+        return new Promise((resolve, reject) => {
+          // A worker process can disappear without dispatching an ErrorEvent (observed as the UI
+          // sitting forever at one tuning percentage), so every call is bounded.
+          const timer = setTimeout(() => {
+            if (pending.delete(id)) reject(new Error(`Native evaluation worker timed out after 60s (${id})`));
+          }, 60000);
+          pending.set(id, { resolve, reject, timer });
+          worker.postMessage({ id, type: 'APPLY', path: ['evaluate'],
+            argumentList: [hunter, build, storeData].map((value) => ({ type: 'RAW', value })) });
+        });
+      },
+      inFlight: () => pending.size,
+      terminate(error) { failAll(error); worker.terminate(); },
+    };
+  }
+
+  // The build list evaluates every card at once (app.js renderBuildList); through one worker they
+  // would still run one after another. A small pool lets them overlap. Three bounds the extra
+  // engine instances; each call goes to the least-loaded worker and the pool grows only when every
+  // worker is busy. A worker that errors is dropped and replaced on the next call.
+  const NATIVE_POOL_MAX = 3;
+  const nativePool = [];
+  function pooledNativeEvaluator() {
+    let best = null;
+    for (const ev of nativePool) if (!best || ev.inFlight() < best.inFlight()) best = ev;
+    if (best && (best.inFlight() === 0 || nativePool.length >= NATIVE_POOL_MAX)) return best;
+    const ev = createNativeEvaluator({ onerror: () => { const i = nativePool.indexOf(ev); if (i >= 0) nativePool.splice(i, 1); } });
+    nativePool.push(ev);
+    return ev;
+  }
+
+  async function nativeResult(hunter, state, detailed) {
+    if (!Number.isFinite(state.iterations)) throw new Error('HunterSim.evaluate: state.iterations is required');
+    const r = await pooledNativeEvaluator().evaluate(hunter,
+      { level: state.level, talents: state.talents, attributes: state.attributes, overrides: state.overrides },
+      { hunterStats: { [hunter]: state.hunterStats }, upgrades: state.upgrades,
+        hunterIterations: { [hunter]: state.iterations }, hunterSeedSettings: {},
+        gemPlannerStore: state.gemPlannerStore });
+    const out = {
+      lootPerMin: r.lootPerMin, avgStage: r.avgStage, avgTime: r.avgTime, minStage: r.minStage,
+      maxStage: r.maxStage, bossHpPercent: r.bossHpPercent, bossKillRate: r.bossKillRate,
+      mat1: r.mat1, mat2: r.mat2, mat3: r.mat3, xp: r.xp,
+    };
+    if (!detailed) return out;
+    const names = FINAL_STAT_NAMES[hunter];
+    const values = String(r.stats).split(',').map(Number);
+    if (values.length !== names.length) {
+      throw new Error(`cifi-tools returned ${values.length} final stats for ${hunter}, expected ${names.length} (${names.join(', ')})`);
+    }
+    return {
+      ...out,
+      finalStats: Object.fromEntries(names.map((name, i) => [name, values[i]])),
+      stageDistribution: r.stageDistribution.map(({ stage, count }) => ({ stage, count })),
+    };
+  }
+
   async function evaluate(hunter, state) {
+    if (EMBEDDED) return nativeResult(hunter, state, false);
     const ex = await loadWasm();
     const fn = ex[WASM_EXPORT[hunter]];
     if (!fn) throw new Error(`Missing wasm export for ${hunter}`);
@@ -404,6 +487,7 @@
   // per-stage hit histogram -- used by the Build Statistics modal (Build Stats / Stage
   // Distribution tabs) so it doesn't need its own copy of the wasm-loading/arg-building code.
   async function evaluateDetailed(hunter, state) {
+    if (EMBEDDED) return nativeResult(hunter, state, true);
     const ex = await loadWasm();
     const fn = ex[WASM_EXPORT[hunter]];
     if (!fn) throw new Error(`Missing wasm export for ${hunter}`);
@@ -426,6 +510,7 @@
   // overrides cfg.hunterStats[key] per call instead of using the compiled-in value. Existing
   // callers (optimizer/worker.js) that don't pass STAT_KEYS or a 4th arg are unaffected.
   async function compileEvaluator(hunter, cfg) {
+    if (EMBEDDED) throw new Error('HunterSim.compileEvaluator: the embedded companion scores through cifi-tools\' own worker (optimizer/runner.js pool)');
     const PARAMS = await loadParams();
     const names = PARAMS[hunter];
     if (!names) throw new Error(`Unknown hunter: ${hunter}`);
@@ -515,7 +600,7 @@
   function isAbort(err) { return !!err && err.name === ABORTED; }
 
 
-global.HunterSim = { engineSource: () => engineSource, expectInjectedWasm, setWasmModule, failWasmModule, loadWasmModule,
+global.HunterSim = { engineSource: () => engineSource, expectInjectedWasm, setWasmModule, failWasmModule, loadWasmModule, createNativeEvaluator,
     evaluate, evaluateDetailed, buildArgs, resolveParam, compileEvaluator, loadParams, loadWasm,
     clearCache, throwIfAborted, isAbort, ABORTED,
     // Exposed so a liveness check can tell "changes no wasm argument" apart from "does nothing":

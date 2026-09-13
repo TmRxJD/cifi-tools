@@ -86,10 +86,12 @@ There is no popup and the toolbar icon does nothing — it works passively on th
   generator re-roots every selector at `.cifi-companion` and verifies its own output — it has
   had two bugs that produced valid-looking CSS with rules silently deleted.
 
-- **Every storage key is namespaced `cifi-companion:`.** We share their origin and therefore their
-  localStorage, which already holds ~1,430 of their keys. The durable mirror is
-  `chrome.storage.local`, not IndexedDB, because a user clearing *their* site data has no reason to
-  expect it would destroy *our* store.
+- **No `chrome.storage`, and no `storage` permission.** Companion state persists through the
+  site's own expanded Pinia store (`hostStoreBridge.js`), so it lives in cifi-tools.com's
+  localStorage beside their ~1,430 keys. Keys the companion owns are namespaced `cifi-companion:`;
+  the one native key it writes is `gemPlanner_store`, deliberately, so imported gem progress shows
+  on the site's own Gem Planner. This bullet used to describe a `chrome.storage.local` mirror that
+  no code implemented, and the unused permission it justified would have failed store review.
 
 - **Nav entries are cloned from a live link, never authored.** Their site is Vue; nav links carry a
   scoped-style attribute (`data-v-…`) whose hash changes when they rebuild, and their Tailwind

@@ -39,49 +39,13 @@
   // underlying request is the site's Comlink wire format and evaluator.
   class NativeEvaluationWorker {
     constructor() {
-      const registry = document.getElementById('cifi-companion-navigation');
-      const url = registry?.dataset.evaluationWorkerUrl;
-      if (!url) throw new Error('cifi-tools evaluation worker URL is unavailable');
-      this.worker = new Worker(url, { type: 'module' });
       this.onmessage = null;
       this.onerror = null;
       this.cfg = null;
       this.mode = null;
       this.scoreCtxOverride = null;
-      this.pending = new Map();
-      this.nextId = 0;
-      this.worker.onerror = event => {
-        const error=new Error(event?.message || 'Native evaluation worker failed');
-        this.pending.forEach(({reject,timer})=>{ clearTimeout(timer); reject(error); });
-        this.pending.clear();
-        this.onerror?.(event);
-      };
-      this.worker.onmessage = event => {
-        const entry = this.pending.get(event.data?.id);
-        if (!entry) return;
-        this.pending.delete(event.data.id);
-        clearTimeout(entry.timer);
-        if (event.data.type === 'RAW') entry.resolve(event.data.value);
-        else entry.reject(new Error(event.data.value?.message || 'Native evaluation worker failed'));
-      };
-    }
-
-    rpc(method, args) {
-      const id = `cifi-${++this.nextId}`;
-      return new Promise((resolve, reject) => {
-        // A worker process can disappear without dispatching an ErrorEvent (observed as the UI
-        // sitting forever at one tuning percentage). Bound every native RPC so that failure is
-        // reported and the optimizer modal can close/cancel instead of awaiting a lost reply.
-        const timer=setTimeout(()=>{
-          if (!this.pending.delete(id)) return;
-          reject(new Error(`Native evaluation worker timed out after 60s (${id})`));
-        },60000);
-        this.pending.set(id, { resolve, reject, timer });
-        this.worker.postMessage({
-          id, type: 'APPLY', path: [method],
-          argumentList: args.map(value => ({ type: 'RAW', value })),
-        });
-      });
+      // The site's wire format lives in one place: HunterSim.createNativeEvaluator.
+      this.native = global.HunterSim.createNativeEvaluator({ onerror: (event) => this.onerror?.(event) });
     }
 
     postMessage(message) {
@@ -119,7 +83,7 @@
               hunterSeedSettings: {},
               gemPlannerStore: this.cfg.gemPlannerStore,
             };
-            const result = await this.rpc('evaluate', [this.cfg.hunter, build, storeData]);
+            const result = await this.native.evaluate(this.cfg.hunter, build, storeData);
             scores.push(global.OptimizerObjective.scoreFor(this.mode, result, ctx));
             boss.push({ kill: result.bossKillRate, hp: result.bossHpPercent, maxStage: result.maxStage });
           }
@@ -131,10 +95,7 @@
     }
 
     terminate() {
-      const error = abortError();
-      this.pending.forEach(({ reject,timer }) => { clearTimeout(timer); reject(error); });
-      this.pending.clear();
-      this.worker.terminate();
+      this.native.terminate(abortError());
     }
   }
 

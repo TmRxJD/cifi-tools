@@ -177,9 +177,8 @@ const COPY = [
   'hunterStatPathBrowser.js',
   'hunterStatPathPage.js',
   'app.js',
-  // NOT content scripts -- loaded by the worker and by fetch at runtime, so they ship as
-  // web_accessible_resources instead. params.json is fetched relative to HUNTERSIM_ASSET_BASE.
-  'params.json',
+  // params.json is deliberately NOT shipped: embedded evaluation goes through cifi-tools' own
+  // worker, which uses its own argument list, and HunterSim.loadParams() refuses in embedded mode.
 ];
 
 // ---- the static markup shipsPage.js binds at load time ----------------------------------------

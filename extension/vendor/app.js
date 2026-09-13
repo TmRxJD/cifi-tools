@@ -1650,14 +1650,23 @@ async function openCompareEfficiencyModal(build) {
     if (canInc) candidates.push({ label: a.label, kind: 'attribute', apply: (attrs) => { attrs[a.id] = level + 1; } });
   });
 
-  const results = [];
-  for (const c of candidates) {
-    const talents = { ...build.talents };
-    const attributes = { ...build.attributes };
-    if (c.kind === 'talent') c.apply(talents); else c.apply(attributes);
-    const r = await HunterSim.evaluate(currentHunter, { ...baseState, talents, attributes });
-    results.push({ label: c.label, kind: c.kind, lootDelta: r.lootPerMin - base.lootPerMin, stageDelta: r.avgStage - base.avgStage });
-  }
+  // Three in flight at once: matches the embedded worker pool (hunterSimBrowser.js), and bounds how
+  // many fresh wasm instances the standalone site holds at once -- an unbounded Promise.all over
+  // ~24 candidates is the "Cannot allocate Wasm memory" failure. Results land by index, so the
+  // ranking does not depend on completion order.
+  const results = new Array(candidates.length);
+  let nextCandidate = 0;
+  await Promise.all(Array.from({ length: Math.min(3, candidates.length) }, async () => {
+    while (nextCandidate < candidates.length) {
+      const i = nextCandidate++;
+      const c = candidates[i];
+      const talents = { ...build.talents };
+      const attributes = { ...build.attributes };
+      if (c.kind === 'talent') c.apply(talents); else c.apply(attributes);
+      const r = await HunterSim.evaluate(currentHunter, { ...baseState, talents, attributes });
+      results[i] = { label: c.label, kind: c.kind, lootDelta: r.lootPerMin - base.lootPerMin, stageDelta: r.avgStage - base.avgStage };
+    }
+  }));
   results.sort((a, b) => b.lootDelta - a.lootDelta);
 
   const rows = results.length ? results.map((r) => `
