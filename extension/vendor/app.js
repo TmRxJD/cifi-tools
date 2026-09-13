@@ -1221,11 +1221,11 @@ function overrideNumericRow(f, current, globalVal, onChange) {
       </div>
       <div class="flex items-center">
         <div class="flex items-center">
-          <button data-min class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded-l-md mr-px"><div class="flex">${iconSvg('chevron-left', 14)}${iconSvg('chevron-left', 14, '-ml-2')}</div></button>
-          <button data-dec class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white">${iconSvg('chevron-left', 14)}</button>
+          <button data-min class="stepper-btn rounded-l-md mr-px"><div class="flex">${iconSvg('chevron-left', 14)}${iconSvg('chevron-left', 14, '-ml-2')}</div></button>
+          <button data-dec class="stepper-btn">${iconSvg('chevron-left', 14)}</button>
           <div class="min-w-[45px] text-center bg-gray-800 py-[1px] h-6 border-y border-gray-600 flex items-center justify-center"><span class="${valueClass}">${displayVal}</span></div>
-          <button data-inc class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white">${iconSvg('chevron-right', 14)}</button>
-          <button data-max class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded-r-md ml-px"><div class="flex">${iconSvg('chevron-right', 14)}${iconSvg('chevron-right', 14, '-ml-2')}</div></button>
+          <button data-inc class="stepper-btn">${iconSvg('chevron-right', 14)}</button>
+          <button data-max class="stepper-btn rounded-r-md ml-px"><div class="flex">${iconSvg('chevron-right', 14)}${iconSvg('chevron-right', 14, '-ml-2')}</div></button>
         </div>
       </div>
     </div>
@@ -2407,7 +2407,7 @@ function openStripeColorPicker(build, card) {
   // titledModal is sized for the big statistics dialogs; a palette needs a fraction of that.
   overlay.firstElementChild.classList.replace('max-w-5xl', 'max-w-sm');
   const body = overlay.querySelector('.p-5');
-  const swatch = (c, attrs) => `<button type="button" ${attrs} class="w-7 h-7 rounded-md border border-gray-600 hover:scale-110 transition-transform" style="background:${c}" title="${c}"></button>`;
+  const swatch = (c, attrs) => `<button type="button" ${attrs} class="color-swatch w-7 h-7 rounded-md border border-gray-600 hover:scale-110 transition-transform" style="background:${c}" title="${c}"></button>`;
 
   const commit = (after) => { saveStore(); renderBuildList(); after(); paint(); };
   const apply = (value) => {
@@ -2426,7 +2426,7 @@ function openStripeColorPicker(build, card) {
       const c = pal.favorites[i];
       return c
         ? `<div class="relative group">${swatch(c, `data-apply="${c}"`)}<button type="button" data-unfav="${c}" class="hidden group-hover:flex absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-gray-900 border border-gray-600 text-gray-300 text-[10px] items-center justify-center" title="Remove">&times;</button></div>`
-        : '<div class="w-7 h-7 rounded-md border border-dashed border-gray-600"></div>';
+        : '<div class="color-swatch w-7 h-7 rounded-md border border-dashed border-gray-600"></div>';
     }).join('');
     const canFav = pal.favorites.length < FAV_MAX && !pal.favorites.includes(current);
     body.innerHTML = `
@@ -2607,9 +2607,9 @@ function renderTemporaryRow(catKey, item) {
   row.innerHTML = `
     <span class="text-xs text-white flex-1 mr-2 leading-relaxed">${escapeHtml(item.label)}</span>
     <div class="flex-shrink-0"><div class="flex items-center">
-      <button data-dec class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded-l-md ${canDec ? '' : 'opacity-20 cursor-not-allowed'}" ${canDec ? '' : 'disabled'}>${iconSvg('chevron-left', 14)}</button>
+      <button data-dec class="stepper-btn rounded-l-md ${canDec ? '' : 'opacity-20 cursor-not-allowed'}" ${canDec ? '' : 'disabled'}>${iconSvg('chevron-left', 14)}</button>
       <div class="min-w-[45px] text-center bg-gray-800 py-[1px] h-6 border-y border-gray-600 flex items-center justify-center"><span class="${level ? 'text-green-400' : 'text-gray-500'}">${level}</span></div>
-      <button data-inc class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded-r-md ${canInc ? '' : 'opacity-20 cursor-not-allowed'}" ${canInc ? '' : 'disabled'}>${iconSvg('chevron-right', 14)}</button>
+      <button data-inc class="stepper-btn rounded-r-md ${canInc ? '' : 'opacity-20 cursor-not-allowed'}" ${canInc ? '' : 'disabled'}>${iconSvg('chevron-right', 14)}</button>
     </div></div>`;
   if (canDec) row.querySelector('[data-dec]').onclick = () => setLevel(level - 1);
   if (canInc) row.querySelector('[data-inc]').onclick = () => setLevel(level + 1);
@@ -3422,9 +3422,9 @@ function renderGemsPage(root) {
           <span class="text-xs text-white px-1.5 py-0.5 rounded-full font-mono border border-gray-500/50" style="background:${tree.gradient}">${state.level}/${tree.maxLevel}</span>
         </div>
         <div class="flex items-center gap-1">
-          <button data-lvl-dec class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded-l-md">${iconSvg('chevron-left', 14)}</button>
+          <button data-lvl-dec class="stepper-btn rounded-l-md">${iconSvg('chevron-left', 14)}</button>
           <span class="flex-1 text-center text-white font-medium bg-gray-800 h-6 flex items-center justify-center border-y border-gray-600" data-lvl-val>${state.level}</span>
-          <button data-lvl-inc class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded-r-md">${iconSvg('chevron-right', 14)}</button>
+          <button data-lvl-inc class="stepper-btn rounded-r-md">${iconSvg('chevron-right', 14)}</button>
         </div>
       </div>
       <div class="p-1 space-y-1">
@@ -3498,9 +3498,9 @@ function renderGemsPage(root) {
       wrap.style.borderLeftColor = color;
       wrap.innerHTML = `<div class="flex items-center justify-between mb-1"><span class="text-xs font-medium text-white truncate">${label}</span></div>
         <div class="flex items-center gap-1">
-          <button data-dec class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded-l-md">${iconSvg('chevron-left', 14)}</button>
+          <button data-dec class="stepper-btn rounded-l-md">${iconSvg('chevron-left', 14)}</button>
           <span class="flex-1 text-center text-white text-sm font-medium bg-gray-800 h-6 flex items-center justify-center border-y border-gray-600" data-val>${val}</span>
-          <button data-inc class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded-r-md">${iconSvg('chevron-right', 14)}</button>
+          <button data-inc class="stepper-btn rounded-r-md">${iconSvg('chevron-right', 14)}</button>
         </div>`;
       const setVal = (v) => { state.upgrades[upKey] = Math.max(0, v); saveStore(); renderGemsPage(root); };
       wrap.querySelector('[data-dec]').onclick = () => setVal(val - 1);
@@ -3522,9 +3522,9 @@ function renderGemsPage(root) {
         wrap.style.borderLeftColor = (tree.nonSimFieldColors && tree.nonSimFieldColors[upKey]) || '#6b7280';
         wrap.innerHTML = `<div class="flex items-center justify-between mb-1"><span class="text-xs font-medium text-white truncate">${label}</span>${cap !== null ? `<span class="text-[10px] text-gray-500">${cap}</span>` : ''}</div>
           <div class="flex items-center gap-1">
-            <button data-dec class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded-l-md">${iconSvg('chevron-left', 14)}</button>
+            <button data-dec class="stepper-btn rounded-l-md">${iconSvg('chevron-left', 14)}</button>
             <span class="flex-1 text-center text-white text-sm font-medium bg-gray-800 h-6 flex items-center justify-center border-y border-gray-600" data-val>${val}</span>
-            <button data-inc class="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded-r-md">${iconSvg('chevron-right', 14)}</button>
+            <button data-inc class="stepper-btn rounded-r-md">${iconSvg('chevron-right', 14)}</button>
           </div>`;
         const setVal = (v) => { state.upgrades[upKey] = Math.max(0, cap !== null ? Math.min(cap, v) : v); saveStore(); renderGemsPage(root); };
         wrap.querySelector('[data-dec]').onclick = () => setVal(val - 1);
