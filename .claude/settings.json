@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Bash", "hooks": [{ "type": "command", "command": "node .claude/hooks/filter-bench-output.js" }] }
+    ]
+  }
+}
