@@ -78,15 +78,10 @@ self.onmessage = async (e) => {
   // Delivered by ScoringPool right after `init`. `init` is async and awaits the module, so this
   // message is processed while it waits -- the ordering is safe by construction, not by luck.
   if (msg.type === 'engine') {
+    // Only a compiled Module is ever sent (runner.js); embedded mode does not use this worker at
+    // all. A raw-bytes branch that lived here had no sender and was removed.
     if (msg.error) HunterSim.failWasmModule(msg.error);
-    else {
-      try {
-        const module = msg.module || await WebAssembly.compile(msg.bytes);
-        HunterSim.setWasmModule(module);
-      } catch (error) {
-        HunterSim.failWasmModule(String((error && error.message) || error));
-      }
-    }
+    else HunterSim.setWasmModule(msg.module);
     return;
   }
 

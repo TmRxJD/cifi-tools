@@ -4273,31 +4273,9 @@ function renderOptimizeEffort() {
 renderOptimizeEffort();
 
 document.getElementById('optimizeBtn').onclick = () => document.getElementById('optimizeSetupModal').classList.remove('hidden');
-document.getElementById('cancelOptimizeSetup').onclick = () => {
-  document.getElementById('optimizeSetupModal').classList.add('hidden');
-  // A native-card run owns a one-shot commit callback. Closing its setup dialog must discard it;
-  // otherwise the next optimizer run could write an unrelated build into the previous card.
-  externalOptimizerApply = null;
-};
+document.getElementById('cancelOptimizeSetup').onclick = () => document.getElementById('optimizeSetupModal').classList.add('hidden');
 
 let cancelRequested = false;
-let externalOptimizerApply = null;
-
-// The extension augments cifi-tools' native build card instead of rendering another Hunter UI.
-// This adapter supplies the native build to the canonical optimizer controller and gives the
-// caller one commit hook. The optimizer never reads or writes a parallel extension build store.
-function openOptimizerForExternalBuild(hunter, build, apply) {
-  if (!EMBEDDED) throw new Error('External build optimization is only available in embedded mode');
-  if (!window.HUNTER_DEFS[hunter]) throw new Error(`Unknown hunter: ${hunter}`);
-  if (!build?.id) throw new Error('External build is missing id');
-  if (typeof apply !== 'function') throw new Error('External build optimizer requires an apply callback');
-  currentHunter = hunter;
-  editingBuild = JSON.parse(JSON.stringify(build));
-  externalOptimizerApply = apply;
-  renderOptimizeModes();
-  document.getElementById('optimizeSetupModal').classList.remove('hidden');
-}
-window.openOptimizerForExternalBuild = openOptimizerForExternalBuild;
 
 // The optimizer's real phases (optimizer/search.js), each with the slice of the progress bar
 // it owns and the label shown while it runs. Spans are proportional to each phase's measured
@@ -4409,11 +4387,6 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
 
     editingBuild.talents = result.best.talentAlloc;
     editingBuild.attributes = result.best.attrAlloc;
-    if (externalOptimizerApply) {
-      await externalOptimizerApply(editingBuild);
-      externalOptimizerApply = null;
-      return;
-    }
     // Only fill in a name when the field is actually blank -- this used to always stomp
     // whatever name the user (or a prior save) already had, discarding it every time.
     if (!editingBuild.name.trim()) {
@@ -4425,9 +4398,6 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
     console.error('Optimizer failed', err);
     alert(`Optimizer failed to run: ${err.message || err}`);
   } finally {
-    // The callback belongs to this one run, including cancellation, failure and an unchanged
-    // result. Retaining it past any terminal outcome crosses native build boundaries.
-    externalOptimizerApply = null;
     clearInterval(ticker);
     document.getElementById('optimizeProgressModal').classList.add('hidden');
   }

@@ -275,7 +275,11 @@
           baseline.real ? IncomeModel.currentRates(currentHunter, store, baseline, 1000, signal) : null,
         ]);
       } catch (err) {
-        if (isAbort(err)) return;
+        // A SUPERSEDED RUN MUST NOT PAINT. Aborting terminates the worker pool, which rejects
+        // in-flight batches with an `AbortError` -- not HunterSim's ABORTED name, so isAbort()
+        // misses it. On a mode switch that stale rejection arrives after the new run has drawn its
+        // progress panel and would overwrite it with "Failed to compute". The signal is the truth.
+        if (isAbort(err) || signal.aborted) return;
         overlay.querySelector('.p-5').innerHTML = `<div class="text-red-400 py-8 text-center">Failed to compute Effective Path: ${escapeHtml(err.message || String(err))}</div>`;
         return;
       }
@@ -313,7 +317,11 @@
           baseline.real ? IncomeModel.currentRates(currentHunter, store, baseline, 1000, signal) : null,
         ]);
       } catch (err) {
-        if (isAbort(err)) return;
+        // A SUPERSEDED RUN MUST NOT PAINT. Aborting terminates the worker pool, which rejects
+        // in-flight batches with an `AbortError` -- not HunterSim's ABORTED name, so isAbort()
+        // misses it. On a mode switch that stale rejection arrives after the new run has drawn its
+        // progress panel and would overwrite it with "Failed to compute". The signal is the truth.
+        if (isAbort(err) || signal.aborted) return;
         overlay.querySelector('.p-5').innerHTML = `<div class="text-red-400 py-8 text-center">Failed to compute Effective Path: ${escapeHtml(err.message || String(err))}</div>`;
         return;
       }

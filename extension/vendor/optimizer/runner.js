@@ -12,7 +12,7 @@
   // Bump alongside the ?v= on the <script> tags in index.html. A Worker URL is cached
   // independently of the page, so without this a worker.js change silently keeps running the
   // previous version after a reload.
-  const WORKER_VERSION = '20260910b-path-pool';
+  const WORKER_VERSION = '20260912b-review';
 
   // Each worker compiles and holds its OWN copy of the WASM module and churns a fresh instance
   // per evaluation (required for determinism -- the evaluator's RNG state lives in mutable wasm
@@ -184,10 +184,10 @@
         ? Promise.resolve({})
         : HunterSim.loadWasmModule().then((module) => ({ module })))
         .then((engine) => {
-        // A compiled WebAssembly.Module does not survive the page-origin -> extension-origin
-        // MessageChannel relay in Chromium. Embedded mode passes the bytes fetched directly from
-        // cifi-tools.com's own origin and each extension worker compiles them locally. Nothing is
-        // hosted, persisted or fetched by the extension origin.
+        // Standalone: our workers receive the compiled Module. Embedded: every "worker" is a
+        // NativeEvaluationWorker adapter over cifi-tools' own evaluation worker, which loads its
+        // own same-origin engine and ignores this message -- so nothing is sent. (An earlier
+        // version of this comment described posting raw wasm bytes; no code path does that.)
         this.workers.forEach((w) => w.postMessage({ type: 'engine', ...engine }));
         return null;
       }).catch((err) => {
