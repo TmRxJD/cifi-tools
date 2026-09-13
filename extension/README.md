@@ -1,7 +1,7 @@
 # CIFI Tools Companion
 
-A browser extension that adds this project's **fleet and ship-install tools** to
-**cifi-tools.com**, running in your own browser.
+A browser extension that adds this project's **hunter and fleet build optimization, Effective
+Path planning, and save-file import** to **cifi-tools.com**, running in your own browser.
 
 It is not a copy of cifi-tools and does not host anything of theirs. Their page loads their
 simulator from their own server, exactly as it always has; this adds pages beside it.
@@ -73,7 +73,7 @@ There is no popup and the toolbar icon does nothing — it works passively on th
 
 ---
 
-## Four things that will bite you
+## Five things that will bite you
 
 - **`shipsPage.js` binds five modals at TOP LEVEL** against markup from `index.html`. Without it the
   first binding throws and the rest of the file — including `FleetStoreDefaults` — never runs, which
@@ -96,6 +96,13 @@ There is no popup and the toolbar icon does nothing — it works passively on th
   classes can be retuned at any deploy. Cloning is what makes our entries indistinguishable from
   theirs and what keeps them that way. For the same reason, Vue discarding our nodes on re-render
   is expected: a `MutationObserver` reinstates them.
+
+- **Bump `manifest.json`'s `version` on every change that ships, no exceptions.** An unpacked dev
+  install does not hot-reload on file changes — Chrome only re-reads a MAIN-world/isolated content
+  script's files when the extension itself is reloaded (`chrome://extensions` → reload icon), and
+  a stale in-memory version with no version bump gives no visible signal that a reload is even
+  needed. Bumping every time makes "did my change actually load" checkable at a glance instead of
+  a silent guess.
 
 ## Routing contract and verification
 

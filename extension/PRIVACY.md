@@ -4,9 +4,10 @@ Last updated: 2026-09-13
 
 ## Summary
 
-CIFI Tools Companion is a browser extension that adds fleet and ship-install optimization pages to
-cifi-tools.com, running entirely in your own browser. It does not have a server, does not collect
-analytics or telemetry, and does not transmit your account data anywhere.
+CIFI Tools Companion is a browser extension that adds hunter and fleet build optimization,
+Effective Path planning, and save-file import to cifi-tools.com, running entirely in your own
+browser. It does not have a server, does not collect analytics or telemetry, and does not transmit
+your account data anywhere.
 
 ## What the extension does
 

@@ -2111,10 +2111,10 @@ function describeAdbDeviceStatus(status) {
   // made a real current device render as "no device detected" until a save happened to be pulled.
   if (!Number.isFinite(emulatorCount) || !Number.isFinite(physicalCount)) {
     if (deviceCount > 0) return 'Device Connected';
-    return 'no device detected';
+    return 'No Device Detected';
   }
   if (emulatorCount + physicalCount > 0) return 'Device Connected';
-  return 'no device detected';
+  return 'No Device Detected';
 }
 
 let bridgeStatusWs = null;
@@ -2154,7 +2154,7 @@ function bridgeModalStatus(status = null) {
 async function refreshBridgeAdbStatusText(ws, elements) {
   const status = await window.checkCifiBridgeAdbStatus(ws);
   const desc = describeAdbDeviceStatus(status);
-  setBridgeStatusText(elements, 'CIFI Bridge connected', desc || '');
+  setBridgeStatusText(elements, 'CIFI Bridge Connected', desc || '');
   setBridgeIndicator(elements, desc === 'Device Connected' ? 'device' : 'bridge');
   return status;
 }
@@ -2162,7 +2162,7 @@ function reportCifiBridgePull(result) {
   const elements = bridgeStatusElements();
   if (elements) {
     setBridgeIndicator(elements, 'device');
-    setBridgeStatusText(elements, 'CIFI Bridge connected', 'Device Connected');
+    setBridgeStatusText(elements, 'CIFI Bridge Connected', 'Device Connected');
   }
 }
 window.reportCifiBridgePull = reportCifiBridgePull;
@@ -2193,24 +2193,24 @@ async function updateBridgeStatusIndicator() {
       bridgeStatusWs = ws;
       bridgePollDelay = BRIDGE_POLL_MIN_MS; // connected -- reset backoff so a future drop recovers fast again
       setBridgeIndicator(elements, 'bridge');
-      setBridgeStatusText(elements, 'CIFI Bridge connected');
+      setBridgeStatusText(elements, 'CIFI Bridge Connected');
       refreshBridgeAdbStatusText(ws, elements);
       ws.addEventListener('close', () => {
         bridgeStatusWs = null;
         setBridgeIndicator(elements, 'offline');
-        setBridgeStatusText(elements, 'CIFI Bridge disconnected');
+        setBridgeStatusText(elements, 'CIFI Bridge Disconnected');
       });
       return true;
     }
     if (await localNetworkPermissionAccepted()) {
       setBridgeIndicator(elements,'offline');
-      setBridgeStatusText(elements,'CIFI Bridge disconnected');
+      setBridgeStatusText(elements,'CIFI Bridge Disconnected');
     } else box.classList.add('hidden');
     return false;
   } catch {
     if (await localNetworkPermissionAccepted()) {
       setBridgeIndicator(elements,'offline');
-      setBridgeStatusText(elements,'CIFI Bridge disconnected');
+      setBridgeStatusText(elements,'CIFI Bridge Disconnected');
     } else box.classList.add('hidden');
     return false;
   }
@@ -2287,7 +2287,7 @@ async function autoPollSaveTick() {
     // respond than that. Falls back to tryConnectCifiBridge's own default timeout instead.
     const ws = bridgeStatusWs && bridgeStatusWs.readyState === WebSocket.OPEN ? bridgeStatusWs : await window.tryConnectCifiBridge();
     if (!ws) {
-      setAutoPollStatus(false, 'CIFI Bridge not reachable');
+      setAutoPollStatus(false, 'CIFI Bridge Not Reachable');
     } else {
       const pulled = await window.pullCifiSaveViaBridge(ws);
       window.reportCifiBridgePull(pulled);
