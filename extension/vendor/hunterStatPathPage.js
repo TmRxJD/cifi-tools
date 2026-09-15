@@ -249,7 +249,7 @@
           ${Object.entries(modes).map(([key, spec]) => `<option value="${key}"${key === selected ? ' selected' : ''}>${escapeHtml(spec.label)}</option>`).join('')}
         </select>
         ${timed ? `
-        <span class="text-xs text-gray-400 ml-2" title="Purchases that take much longer than this to afford are ranked down">Horizon:</span>
+        <span class="text-xs text-gray-400 ml-2" title="ROI is discounted by how long the purchase takes to reach; long-term upgrades remain visible">Horizon:</span>
         <select id="pathHorizonSelect" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white">
           ${StoreSchema.PATH_HORIZON_DAYS.map((d) => `<option value="${d}"${d === days ? ' selected' : ''}>${horizonLabel(d)}</option>`).join('')}
         </select>` : ''}

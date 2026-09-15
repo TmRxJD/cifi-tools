@@ -117,8 +117,9 @@
     effectivePathMode: { make: () => 'loot' },
     // How far ahead the Effective Path plans. Within one currency, time-to-afford is cost / income,
     // so ranking by gain-per-cost is already time-optimal over an UNLIMITED horizon -- which is
-    // exactly why it would happily recommend a 2-year wait. A horizon is the missing ingredient,
-    // and it is a player's preference, not a fact the tool can derive; 30 days is the default.
+    // exactly why it would happily recommend a 2-year wait. The horizon exponentially discounts
+    // ROI by cumulative time-to-purchase, without removing long-term upgrades from the list. It is
+    // a player's preference, not a fact the tool can derive; 30 days is the default.
     effectivePathHorizonDays: { make: () => 30 },
     // How many trailing steps the Install Order list shows in full. A late-game ship can spend
     // 500+ points, and a 500-row list is unusable for the thing it is for: knowing what to click

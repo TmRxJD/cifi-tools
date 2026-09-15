@@ -127,19 +127,22 @@
   // positive -- the point of this view is "here's the next N in ranked order for this
   // resource," not "here's how many are worth buying." It only stops early if literally
   // nothing is purchasable anymore (every candidate capped out or missing a cost formula).
-  // TIME PREFERENCE. Within one currency, time-to-afford is cost / income, so gain-per-cost alone
-  // is time-optimal only over an UNLIMITED horizon (Smith's rule) -- which is exactly why it would
-  // pick a 2-year purchase whose ratio edges out a 2-day one. A player plans over a horizon H, so a
-  // gain that lands T hours from now is discounted by H / (H + T): ~1 while T << H, halved at
-  // T = H, vanishing for waits far beyond it. T is CUMULATIVE within the column, because each
-  // purchase waits behind the ones already recommended.
+  // TIME PREFERENCE. Within one currency, gain-per-cost is gain per hour because income is fixed.
+  // That is the unlimited-horizon ROI. For a finite planning horizon, discount that ROI by when
+  // its benefit actually arrives: exp(-T/H), where T is the cumulative time to reach the purchase.
+  // This keeps long-term upgrades visible while making the preference meaningful: at a 30-day
+  // horizon a 3-day purchase retains 90.5% of its ROI, while a 181-day purchase retains 0.24%.
   // Unknown income (no rate for this currency) leaves the ratio untouched rather than inventing a
   // time -- the same rule that makes an unset fragment rate render as unknown, never instant.
-  function horizonWeight(timing, spentHours, cost, resource) {
-    if (!timing) return 1;
+  function completionHours(timing, spentHours, cost, resource) {
+    if (!timing) return spentHours;
     const hours = window.IncomeModel.hoursToAfford(cost, timing.perHour, resource);
-    if (!Number.isFinite(hours)) return 1;
-    return timing.horizonHours / (timing.horizonHours + spentHours + hours);
+    return Number.isFinite(hours) ? spentHours + hours : null;
+  }
+
+  function horizonWeight(timing, completesAt) {
+    if (!timing || completesAt === null) return 1;
+    return Math.exp(-completesAt / timing.horizonHours);
   }
 
   async function greedyResourceColumn(hunter, cfg, scoreBatch, def, CF, candidates, currentStats, currentUpgrades, targetSteps, iterations, mode, onProgress, signal, timing) {
@@ -170,10 +173,11 @@
         if (isFinite(cap) && nextLevel > cap) continue;
         const cost = purchaseCostOf(hunter, CF, cand, nextLevel);
         if (!cost || cost <= 0) continue;
+        const completesAt = completionHours(timing, spentHours, cost, cand.resource);
 
         const candStats = param ? stats : { ...stats, [cand.key]: nextLevel };
         const candUpgrades = param ? { ...upgrades, [param]: nextLevel } : upgrades;
-        sweep.push({ cand, nextLevel, cost, candStats, candUpgrades });
+        sweep.push({ cand, nextLevel, cost, candStats, candUpgrades, completesAt });
       }
       // ONE PURCHASABLE CANDIDATE IS NOT A DECISION. Scoring it at full fidelity -- the whole cost
       // of a step -- would buy nothing: it is chosen regardless. A single-stat currency (Ozzy's
@@ -189,18 +193,15 @@
         : [];
       sweep.forEach((entry, index) => {
         const gainPerCost = (scores[index] - baselineScore) / entry.cost;
-        // Discount only GAINS. Scaling a loss toward zero would make a long wait for a harmful
-        // purchase look less bad than a short one.
+        // Do not shrink losses toward zero: that would make a harmful upgrade look better merely
+        // because its harm arrives later. The time preference ranks positive returns only.
         const valuePerCost = gainPerCost > 0
-          ? gainPerCost * horizonWeight(timing, spentHours, entry.cost, entry.cand.resource)
+          ? gainPerCost * horizonWeight(timing, entry.completesAt)
           : gainPerCost;
         if (!best || valuePerCost > best.valuePerCost) best = { ...entry, score: scores[index], valuePerCost };
       });
       if (!best) break; // every candidate capped out / no cost formula left -- nothing left to rank
-      if (timing) {
-        const hours = window.IncomeModel.hoursToAfford(best.cost, timing.perHour, best.cand.resource);
-        if (Number.isFinite(hours)) spentHours += hours;
-      }
+      if (timing && best.completesAt !== null) spentHours = best.completesAt;
 
       Object.assign(stats, best.candStats);
       Object.assign(upgrades, best.candUpgrades);
@@ -339,4 +340,8 @@
 
   global.resourcesFor = resourcesFor;
   global.greedyPurchasePath = greedyPurchasePath;
+  // Exported with the other pure path helpers so the time discount has a direct negative control:
+  // the old hyperbolic weight barely penalized waits many times longer than the chosen horizon.
+  global.HunterStatPath.completionHours = completionHours;
+  global.HunterStatPath.horizonWeight = horizonWeight;
 })(window);

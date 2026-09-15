@@ -34,6 +34,26 @@ for (const f of ['hunterStatPath.js', 'hunterStatPathBrowser.js']) {
 const INERT = { borge: ['r7', 'r19'], ozzy: ['r7'], knox: [] };
 const STEPS = 6;
 
+check('the planning horizon strongly discounts but does not omit long purchases', () => {
+  // The Node sandbox does not load incomeModel.js because the untimed contract tests below do
+  // not need it. Supply its relevant contract explicitly for this focused boundary test.
+  sb.IncomeModel = { hoursToAfford: (cost, perHour, resource) => cost / perHour[resource] };
+  const timing = { perHour: { mat2: 1 }, horizonHours: 30 * 24 };
+  const short = sb.HunterStatPath.completionHours(timing, 0, 3 * 24, 'mat2');
+  const long = sb.HunterStatPath.completionHours(timing, 0, 181 * 24, 'mat2');
+  const shortWeight = sb.HunterStatPath.horizonWeight(timing, short);
+  const longWeight = sb.HunterStatPath.horizonWeight(timing, long);
+  if (!(shortWeight > 0.9 && shortWeight < 0.91)) return `3-day weight was ${shortWeight}`;
+  if (!(longWeight > 0 && longWeight < 0.003)) return `181-day weight was ${longWeight}`;
+  if (!(shortWeight / longWeight > 300)) return `time preference was only ${shortWeight / longWeight}x`;
+  // Time is cumulative: the same purchase ranks lower behind earlier recommendations.
+  const queued = sb.HunterStatPath.completionHours(timing, 28 * 24, 3 * 24, 'mat2');
+  if (!(sb.HunterStatPath.horizonWeight(timing, queued) < shortWeight)) {
+    return 'cumulative wait did not lower ROI';
+  }
+  return null;
+});
+
 check('fragments is its own column, and Knox has none', () => {
   for (const hunter of ['borge', 'ozzy']) {
     const withUpgrades = sb.resourcesFor(hunter, true);
