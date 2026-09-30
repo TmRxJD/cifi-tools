@@ -4316,21 +4316,26 @@ async function processImportedSaveText(rawText, silent) {
       const sameKeys = (a, b) => Object.keys({ ...a, ...b }).every((k) => (a[k] || 0) === (b[k] || 0));
       const unchanged = existing && sameKeys(existing.talents, info.talents || {}) && sameKeys(existing.attributes, info.attributes || {})
         && existing.level === (info.level ?? existing.level);
-      if (unchanged) return;
-      anyHunterChanged = true;
-      if (existing) {
-        if (info.level !== undefined) existing.level = info.level;
-        Object.entries(info.talents || {}).forEach(([talentId, level]) => { existing.talents[talentId] = level; });
-        Object.entries(info.attributes || {}).forEach(([attrId, level]) => { existing.attributes[attrId] = level; });
-      } else {
-        const build = newDraftBuild();
-        build.id = genBuildId();
-        build.name = scanName;
-        if (info.level !== undefined) build.level = info.level;
-        Object.entries(info.talents || {}).forEach(([talentId, level]) => { build.talents[talentId] = level; });
-        Object.entries(info.attributes || {}).forEach(([attrId, level]) => { build.attributes[attrId] = level; });
-        builds.push(build);
+      if (!unchanged) {
+        anyHunterChanged = true;
+        if (existing) {
+          if (info.level !== undefined) existing.level = info.level;
+          Object.entries(info.talents || {}).forEach(([talentId, level]) => { existing.talents[talentId] = level; });
+          Object.entries(info.attributes || {}).forEach(([attrId, level]) => { existing.attributes[attrId] = level; });
+        } else {
+          const build = newDraftBuild();
+          build.id = genBuildId();
+          build.name = scanName;
+          if (info.level !== undefined) build.level = info.level;
+          Object.entries(info.talents || {}).forEach(([talentId, level]) => { build.talents[talentId] = level; });
+          Object.entries(info.attributes || {}).forEach(([attrId, level]) => { build.attributes[attrId] = level; });
+          builds.push(build);
+        }
       }
+      // A scan proves ownership even when the scanned card is unchanged. Sync the canonical
+      // advanced-talent rule now, so optimization of any build sees it before a UI visit.
+      const wasShown = store.settings.advancedTalents[hunterKey];
+      if (shouldShowAdvancedTalents(hunterKey) !== wasShown) anyHunterChanged = true;
     });
     store.lastScan = window.__lastScan;
     if (anyHunterChanged) applied.push('hunter level/talents/attributes');
