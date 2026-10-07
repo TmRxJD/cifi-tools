@@ -2181,10 +2181,7 @@ function setBridgeIndicator(elements, state) {
   elements.box.classList.remove('hidden');
 }
 async function localNetworkPermissionAccepted() {
-  try {
-    const permission=await navigator.permissions?.query({name:'local-network-access'});
-    return permission?.state==='granted';
-  } catch { return false; }
+  return await window.cifiBridgePermission() === 'granted';
 }
 function bridgeModalStatus(status = null) {
   const desc = describeAdbDeviceStatus(status);
@@ -4092,7 +4089,11 @@ function openImportSaveModal() {
   const pullBtn = document.getElementById('importSaveBridgePullBtn');
   pullBtn.classList.add('hidden');
   statusText.textContent = 'Checking for local CIFI Bridge…';
-  window.tryConnectCifiBridge().then((ws) => {
+  const retryBtn = document.getElementById('importSaveBridgeRetryBtn');
+  retryBtn.disabled = true;
+  retryBtn.onclick = () => openImportSaveModal();
+  window.tryConnectCifiBridge(8000, { interactive: true }).then((ws) => {
+    retryBtn.disabled = false;
     if (ws) {
       statusText.textContent = bridgeModalStatus();
       window.checkCifiBridgeAdbStatus(ws).then((status) => {
@@ -4115,7 +4116,7 @@ function openImportSaveModal() {
         }
       };
     } else {
-      statusText.textContent = 'No local CIFI Bridge detected — drop a save file below instead.';
+      statusText.textContent = window.cifiBridgeConnectionMessage();
     }
   });
 }

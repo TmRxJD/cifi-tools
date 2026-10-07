@@ -480,6 +480,7 @@ tailwind.config = {
     </div>
     <div id="importSaveBridgeStatus" class="rounded-lg border border-gray-700 bg-gray-900/50 p-3 mb-3 text-sm flex items-center justify-between gap-3">
       <span id="importSaveBridgeText" class="text-gray-400">Checking for local CIFI Bridge…</span>
+      <button id="importSaveBridgeRetryBtn" class="px-3 py-1.5 rounded-md bg-gray-700 hover:bg-gray-600 text-white text-sm whitespace-nowrap">Connect / Retry</button>
       <button id="importSaveBridgePullBtn" class="hidden px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-sm whitespace-nowrap">Pull from Device</button>
     </div>
     <div id="importSaveResult" class="text-sm space-y-1 mb-3"></div>
@@ -741,7 +742,7 @@ tailwind.config = {
 <script src="optimizer/corpus.js?v=20260907s-modes"></script>
 <script src="optimizer/search.js?v=20260907zd-notrim"></script>
 <script src="optimizer/runner.js?v=20260913a-native"></script>
-<script src="saveImport.js?v=20260909a-bridge-metadata"></script>
+<script src="saveImport.js?v=20261007-bridge-permission"></script>
 <script src="buildCode.js?v=20260810p"></script>
 <script src="costFormulas.js?v=20260907u-bignum"></script>
 <script src="bigNumberInput.js?v=20260908c-extract"></script>
@@ -755,7 +756,7 @@ tailwind.config = {
      CDN-blocked user still gets the whole tool minus cloud saves. -->
 <script src="https://cdn.jsdelivr.net/npm/appwrite@27.0.0/dist/iife/sdk.js"></script>
 <script src="cloudSync.js?v=20260907c-stamps"></script>
-<script src="app.js?v=20260930a-ultima-save"></script>
+<script src="app.js?v=20261007-bridge-permission"></script>
 <script>
   // Custom (non-Tabler) sidebar icons: real game-asset SVG paths copied verbatim from the
   // live site's rendered DOM (Relics/Loop Mods/Milestones use bespoke icons, not Tabler's).
