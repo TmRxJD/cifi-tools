@@ -666,29 +666,91 @@ window.mapCifiSaveToStore = mapSaveToStore;
 // ---- Bridge client (ws://127.0.0.1:43791, same protocol shape as tracker-bridge) ----
 
 const BRIDGE_PORT = 43791;
-function tryConnectBridge(timeoutMs = 1200) {
-  return new Promise((resolve) => {
+let bridgeConnectPending = null;
+let connectedBridge = null;
+let bridgeConnectionIssue = '';
+window.cifiBridgeConnectionMessage = () => bridgeConnectionIssue;
+window.cifiBridgePermission = async () => {
+  try { return (await navigator.permissions.query({ name: 'loopback-network' })).state; }
+  catch { return 'unsupported'; }
+};
+async function diagnoseBridgeConnection() {
+  if (await window.cifiBridgePermission() === 'denied') {
+    return 'Browser access to the bridge is blocked. In this site’s browser settings, allow Local network / Loopback network access, then Retry.';
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3000);
+  try {
+    const response = await fetch(`http://127.0.0.1:${BRIDGE_PORT}/private-network-ping`, {
+      signal: controller.signal, cache: 'no-store', targetAddressSpace: 'loopback',
+    });
+    if (response.ok) {
+      const info = await response.json();
+      if (info.product === 'adb-bridge' && info.game === 'cifi') {
+        return `ADB Bridge ${info.version} is reachable, but its WebSocket connection failed. Allow this site to connect to localhost in browser permissions / shields, then Retry.`;
+      }
+      return 'A different or outdated service is using CIFI’s port. Run `npx adb-bridge@latest cifi`, then Retry.';
+    }
+  } catch { /* Browsers intentionally hide whether policy or transport blocked a request. */ }
+  finally { clearTimeout(timer); }
+  return 'Could not reach CIFI on this computer. Keep `npx adb-bridge cifi` running, allow Local network access in this site’s browser settings (and check browser shields), then Retry. Reinstalling does not reset browser permissions.';
+}
+function tryConnectBridge(timeoutMs = 8000, { interactive = false } = {}) {
+  if (connectedBridge?.readyState === WebSocket.OPEN) return Promise.resolve(connectedBridge);
+  if (bridgeConnectPending) return bridgeConnectPending;
+  bridgeConnectPending = (async () => {
+    const permission = await window.cifiBridgePermission();
+    if (permission === 'denied' || (permission === 'prompt' && !interactive)) {
+      bridgeConnectionIssue = permission === 'denied'
+        ? 'Browser access to the bridge is blocked. In this site’s browser settings, allow Local network / Loopback network access, then Retry.'
+        : 'Select Connect / Retry and allow browser access to the bridge on this computer.';
+      return null;
+    }
+    return new Promise((resolve) => {
     let settled = false;
     let ws;
     try {
-      ws = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}`);
+      const url = `ws://127.0.0.1:${BRIDGE_PORT}`;
+      try { ws = new WebSocket(url, { targetAddressSpace: 'loopback' }); }
+      catch { ws = new WebSocket(url); }
     } catch {
+      bridgeConnectionIssue = 'The browser could not open the bridge connection. Check this site’s Local network permission and browser shields, then Retry.';
       resolve(null);
       return;
     }
-    const timer = setTimeout(() => { if (!settled) { settled = true; try { ws.close(); } catch {} resolve(null); } }, timeoutMs);
+    // A user must have time to answer the permission prompt. Background probes
+    // use a bounded handshake, not the old one-second cutoff shared with prompts.
+    const waitMs = interactive ? 60000 : Math.max(timeoutMs, 8000);
+    const fail = async () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { ws.close(); } catch {}
+      bridgeConnectionIssue = await diagnoseBridgeConnection();
+      resolve(null);
+    };
+    const timer = setTimeout(fail, waitMs);
     ws.onopen = () => { ws.send(JSON.stringify({ type: 'PING' })); };
     ws.onmessage = (ev) => {
       try {
         const msg = JSON.parse(ev.data);
         if (msg.type === 'HELLO' || msg.type === 'PONG') {
-          if (!settled) { settled = true; clearTimeout(timer); resolve(ws); }
+          if (!settled) {
+            settled = true;
+            clearTimeout(timer);
+            connectedBridge = ws;
+            bridgeConnectionIssue = '';
+            ws.addEventListener('close', () => { if (connectedBridge === ws) connectedBridge = null; });
+            resolve(ws);
+          }
         }
       } catch {}
     };
-    ws.onerror = () => { if (!settled) { settled = true; clearTimeout(timer); resolve(null); } };
-    ws.onclose = () => { if (!settled) { settled = true; clearTimeout(timer); resolve(null); } };
-  });
+    ws.onerror = fail;
+    ws.onclose = fail;
+    });
+  })().finally(() => { bridgeConnectPending = null; });
+  return bridgeConnectPending;
 }
 window.tryConnectCifiBridge = tryConnectBridge;
 
