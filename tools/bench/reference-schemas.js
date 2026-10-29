@@ -458,6 +458,63 @@ const schemas = {
     }).strict()).min(1),
   }).strict(),
 
+  // tools/bench/extract-academy.py. Values are authored numbers or BigDoubles (Personnel start
+  // costs reach 1e3000, which no JS double can hold). `feeds` is the Final<Resource>Bonus the game
+  // multiplies a bonus into -- parsed from code, so an unexpected resource name is a real change.
+  'academy-data.json': (() => {
+    const num = z.union([finite, bigDoublePair]);
+    const mission = z.object({
+      planet: z.enum(['Wasta', 'Cryton', 'Egetuar', 'Sekhur']),
+      kind: z.enum(['campaign', 'farm', 'advancedFarm']),
+      index: z.number().int().positive(),
+      mpRequirement: num,
+      maxPersonnel: num,
+      materials: z.record(z.string(), num),
+      // Strict objects of OPTIONAL keys, not z.record(z.enum(...)): this zod version treats an enum
+      // record key as exhaustive, which would demand every reward on every mission.
+      other: z.object(Object.fromEntries(['ap', 'xp', 'innovationCores', 'darkInnovationCores', 'diamonds']
+        .map((k) => [k, num.optional()]))).strict(),
+      permanentBonus: z.object(Object.fromEntries(['cells', 'ap', 'shards', 'rp', 'mp']
+        .map((k) => [k, num.optional()]))).strict(),
+      fragmentsExponent: num.nullable(),
+    }).strict();
+    const feeds = z.string().regex(/^Final\w+Bonus$/);
+    return z.object({
+      ...generatedMeta,
+      secondsPerMP: finite,
+      materials: z.array(z.string().min(1)).min(8),
+      personnel: z.object(Object.fromEntries(['T1', 'T2', 'T3', 'T4'].map((t) => [t, z.object({
+        name: z.string().min(1), baseOutput: finite, evoExponent: finite, maxEvo: z.number().int(),
+        evoRequirement: z.number().int(), startCost: num, costExponent: num,
+      }).strict()]))).strict(),
+      missions: nonEmptyRecord(z.string().regex(/^[WCES]-[CFA]-\d+$/), mission),
+      projects: nonEmptyRecord(numericKey, z.object({
+        baseSeconds: finite, secondsPerLevel: finite, costExponent: finite,
+        costExponent2: finite.nullable(),
+        costs: z.array(z.object({ material: z.string().min(1), base: num }).strict()).min(1),
+        bonuses: nonEmptyRecord(z.string().regex(/^Project\d+Bonus\d*$/), z.object({ base: num, feeds }).strict()),
+      }).strict()),
+      outpost: z.object({
+        innovationCoreRequirement: z.number().int().positive(),
+        expansionMaxLevel: z.number().int().positive(),
+        expansionProjectBaseRequirement: z.number().int().positive(),
+      }).strict(),
+      milestones: nonEmptyRecord(numericKey, z.object({
+        requirement: z.number().int().positive(),
+        bonuses: z.record(z.string().regex(/^Bonus\d+$/), z.object({ value: num, feeds }).strict()),
+        shipRankPoints: z.record(z.string().regex(/^ship\d$/), z.number().int()),
+      }).strict()),
+      relics: z.object({
+        baseFarmFragments: finite, baseCampaignFragments: finite,
+        // r2 (x1e11 cells), r19 and r20 are authored as BigDoubles.
+        bonusPerLevel: nonEmptyRecord(z.string().regex(/^r\d+$/), num),
+      }).strict(),
+      badges: nonEmptyRecord(z.string().min(1), finite),
+      research: nonEmptyRecord(numericKey, nonEmptyRecord(z.string().regex(/^Bonus\d$/), num)),
+      zeus: z.object({ startRankRequirement: finite, rankExponent: finite }).strict(),
+    }).strict();
+  })(),
+
   'research.json': z.object({
     ...generatedMeta,
     categoryShip: nonEmptyRecord(z.string().min(1), z.number().int().positive()),

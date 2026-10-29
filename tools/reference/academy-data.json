@@ -1,0 +1,3582 @@
+{
+ "generatedFrom": "apk-0.7.3.61 via tools/bench/extract-academy.py (typetree + csharp)",
+ "note": "Authored academy data and code-derived bonus routing. Formulas: academy-mechanics.md.",
+ "secondsPerMP": 3600.0,
+ "materials": [
+  "Difar",
+  "Kento",
+  "Chromium",
+  "Exon",
+  "Organium",
+  "Adamorphium",
+  "Moskom",
+  "Darkseid",
+  "Torkinstone",
+  "Pytoxene",
+  "Gigantium",
+  "Tokenium"
+ ],
+ "personnel": {
+  "T1": {
+   "name": "MiningPod",
+   "baseOutput": 1.0,
+   "evoExponent": 0.5,
+   "maxEvo": 5,
+   "evoRequirement": 50,
+   "startCost": {
+    "mantissa": 1.0,
+    "exponent": 995
+   },
+   "costExponent": {
+    "mantissa": 1.0,
+    "exponent": 5
+   }
+  },
+  "T2": {
+   "name": "FireteamCarrier",
+   "baseOutput": 3.0,
+   "evoExponent": 1.0,
+   "maxEvo": 5,
+   "evoRequirement": 50,
+   "startCost": {
+    "mantissa": 1.0,
+    "exponent": 1250
+   },
+   "costExponent": {
+    "mantissa": 1.0,
+    "exponent": 10
+   }
+  },
+  "T3": {
+   "name": "TitanHauler",
+   "baseOutput": 8.0,
+   "evoExponent": 2.0,
+   "maxEvo": 5,
+   "evoRequirement": 50,
+   "startCost": {
+    "mantissa": 1.0,
+    "exponent": 1750
+   },
+   "costExponent": {
+    "mantissa": 1.0,
+    "exponent": 25
+   }
+  },
+  "T4": {
+   "name": "CombatCorvette",
+   "baseOutput": 16.0,
+   "evoExponent": 4.0,
+   "maxEvo": 5,
+   "evoRequirement": 50,
+   "startCost": {
+    "mantissa": 1.0,
+    "exponent": 3000
+   },
+   "costExponent": {
+    "mantissa": 1.0,
+    "exponent": 50
+   }
+  }
+ },
+ "missions": {
+  "W-C-1": {
+   "planet": "Wasta",
+   "kind": "campaign",
+   "index": 1,
+   "materials": {
+    "Difar": 80.0
+   },
+   "other": {
+    "ap": 5.0,
+    "xp": 10.0
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 0.0028,
+   "maxPersonnel": 1
+  },
+  "W-C-2": {
+   "planet": "Wasta",
+   "kind": "campaign",
+   "index": 2,
+   "materials": {
+    "Kento": 130.0,
+    "Tokenium": 285.0
+   },
+   "other": {
+    "ap": 50.0,
+    "xp": 60.0
+   },
+   "permanentBonus": {
+    "cells": 10.0
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 1.0,
+   "maxPersonnel": 5
+  },
+  "W-C-3": {
+   "planet": "Wasta",
+   "kind": "campaign",
+   "index": 3,
+   "materials": {
+    "Difar": 300.0,
+    "Kento": 300.0
+   },
+   "other": {
+    "ap": 60.0,
+    "xp": 70.0,
+    "innovationCores": 5,
+    "diamonds": 100
+   },
+   "permanentBonus": {
+    "ap": 1.1
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 30.0,
+   "maxPersonnel": 10
+  },
+  "W-C-4": {
+   "planet": "Wasta",
+   "kind": "campaign",
+   "index": 4,
+   "materials": {
+    "Difar": 830.0,
+    "Kento": 550.0,
+    "Chromium": 70.0
+   },
+   "other": {
+    "ap": 700.0,
+    "xp": 220.0,
+    "diamonds": 150
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 80.0,
+   "maxPersonnel": 20
+  },
+  "W-C-5": {
+   "planet": "Wasta",
+   "kind": "campaign",
+   "index": 5,
+   "materials": {
+    "Difar": 1900.0,
+    "Kento": 1400.0,
+    "Chromium": 900.0
+   },
+   "other": {
+    "ap": 1700.0,
+    "xp": 840.0,
+    "innovationCores": 10,
+    "diamonds": 200
+   },
+   "permanentBonus": {
+    "shards": 3.0
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 260.0,
+   "maxPersonnel": 40
+  },
+  "W-C-6": {
+   "planet": "Wasta",
+   "kind": "campaign",
+   "index": 6,
+   "materials": {},
+   "other": {
+    "ap": 3200.0,
+    "xp": 2300.0,
+    "innovationCores": 10
+   },
+   "permanentBonus": {
+    "rp": 5.0
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 540.0,
+   "maxPersonnel": 60
+  },
+  "W-C-7": {
+   "planet": "Wasta",
+   "kind": "campaign",
+   "index": 7,
+   "materials": {
+    "Tokenium": 720.0
+   },
+   "other": {
+    "ap": 7600.0,
+    "xp": 6000.0,
+    "innovationCores": 10
+   },
+   "permanentBonus": {
+    "ap": 1.2
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 1220.0,
+   "maxPersonnel": 70
+  },
+  "W-C-8": {
+   "planet": "Wasta",
+   "kind": "campaign",
+   "index": 8,
+   "materials": {
+    "Tokenium": 1440.0,
+    "Difar": 26000.0,
+    "Kento": 20000.0,
+    "Chromium": 18000.0
+   },
+   "other": {
+    "ap": 26700.0,
+    "xp": 23000.0,
+    "innovationCores": 15
+   },
+   "permanentBonus": {
+    "mp": 3.0
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 3000.0,
+   "maxPersonnel": 100
+  },
+  "W-C-9": {
+   "planet": "Wasta",
+   "kind": "campaign",
+   "index": 9,
+   "materials": {
+    "Difar": 55000.0
+   },
+   "other": {
+    "ap": {
+     "mantissa": 5.0,
+     "exponent": 8
+    },
+    "xp": {
+     "mantissa": 5.0,
+     "exponent": 7
+    },
+    "innovationCores": 8
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 6400000.0,
+   "maxPersonnel": 750
+  },
+  "W-C-10": {
+   "planet": "Wasta",
+   "kind": "campaign",
+   "index": 10,
+   "materials": {
+    "Kento": 80000.0
+   },
+   "other": {
+    "ap": {
+     "mantissa": 2.0,
+     "exponent": 9
+    },
+    "xp": {
+     "mantissa": 2.0,
+     "exponent": 8
+    },
+    "innovationCores": 10
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 9600000.0,
+   "maxPersonnel": 1000
+  },
+  "W-C-11": {
+   "planet": "Wasta",
+   "kind": "campaign",
+   "index": 11,
+   "materials": {
+    "Chromium": 1100000.0
+   },
+   "other": {
+    "ap": {
+     "mantissa": 5.0,
+     "exponent": 9
+    },
+    "xp": {
+     "mantissa": 4.0,
+     "exponent": 8
+    },
+    "innovationCores": 12
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 14200000.0,
+   "maxPersonnel": 1250
+  },
+  "W-C-12": {
+   "planet": "Wasta",
+   "kind": "campaign",
+   "index": 12,
+   "materials": {
+    "Difar": 55000.0,
+    "Kento": 80000.0,
+    "Chromium": 1100000.0
+   },
+   "other": {
+    "ap": {
+     "mantissa": 7.0,
+     "exponent": 9
+    },
+    "xp": {
+     "mantissa": 8.0,
+     "exponent": 8
+    },
+    "innovationCores": 14
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": 1.0,
+   "mpRequirement": 28400000.0,
+   "maxPersonnel": 1500
+  },
+  "W-F-1": {
+   "planet": "Wasta",
+   "kind": "farm",
+   "index": 1,
+   "materials": {
+    "Difar": 38.0
+   },
+   "other": {
+    "ap": 5.0,
+    "xp": 1.0
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 1.0,
+   "maxPersonnel": 20
+  },
+  "W-F-2": {
+   "planet": "Wasta",
+   "kind": "farm",
+   "index": 2,
+   "materials": {
+    "Kento": 320.0
+   },
+   "other": {
+    "ap": 150.0,
+    "xp": 55.0
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 12.0,
+   "maxPersonnel": 60
+  },
+  "W-F-3": {
+   "planet": "Wasta",
+   "kind": "farm",
+   "index": 3,
+   "materials": {
+    "Tokenium": 10.0,
+    "Chromium": 760.0,
+    "Kento": 280.0,
+    "Difar": 1350.0
+   },
+   "other": {
+    "ap": 1200.0,
+    "xp": 500.0
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 80.0,
+   "maxPersonnel": 100
+  },
+  "W-F-4": {
+   "planet": "Wasta",
+   "kind": "farm",
+   "index": 4,
+   "materials": {},
+   "other": {
+    "ap": {
+     "mantissa": 1.5,
+     "exponent": 3
+    },
+    "xp": {
+     "mantissa": 8.0,
+     "exponent": 2
+    }
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": 1.0,
+   "mpRequirement": 200.0,
+   "maxPersonnel": 120
+  },
+  "W-A-1": {
+   "planet": "Wasta",
+   "kind": "advancedFarm",
+   "index": 1,
+   "mpRequirement": 21600000.0,
+   "maxPersonnel": 2000.0,
+   "materials": {
+    "Moskom": {
+     "mantissa": 2.0,
+     "exponent": 9
+    },
+    "Torkinstone": {
+     "mantissa": 5.5,
+     "exponent": -3
+    }
+   },
+   "other": {
+    "ap": {
+     "mantissa": 1.0,
+     "exponent": 8
+    },
+    "xp": {
+     "mantissa": 7.77,
+     "exponent": 7
+    }
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null
+  },
+  "W-A-2": {
+   "planet": "Wasta",
+   "kind": "advancedFarm",
+   "index": 2,
+   "mpRequirement": 140000000.0,
+   "maxPersonnel": 8000.0,
+   "materials": {
+    "Organium": {
+     "mantissa": 0.0,
+     "exponent": 0
+    },
+    "Darkseid": {
+     "mantissa": 6.66,
+     "exponent": 9
+    },
+    "Torkinstone": {
+     "mantissa": 1.1,
+     "exponent": -2
+    }
+   },
+   "other": {
+    "ap": {
+     "mantissa": 5.25,
+     "exponent": 8
+    },
+    "xp": {
+     "mantissa": 4.3,
+     "exponent": 8
+    }
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null
+  },
+  "W-A-3": {
+   "planet": "Wasta",
+   "kind": "advancedFarm",
+   "index": 3,
+   "mpRequirement": 1320000000.0,
+   "maxPersonnel": 24000.0,
+   "materials": {
+    "Tokenium": {
+     "mantissa": 3.0,
+     "exponent": 2
+    },
+    "Chromium": {
+     "mantissa": 2.0,
+     "exponent": 9
+    },
+    "Pytoxene": {
+     "mantissa": 9.0,
+     "exponent": -3
+    }
+   },
+   "other": {
+    "ap": {
+     "mantissa": 9.0,
+     "exponent": 8
+    },
+    "xp": {
+     "mantissa": 8.88,
+     "exponent": 8
+    }
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null
+  },
+  "C-C-1": {
+   "planet": "Cryton",
+   "kind": "campaign",
+   "index": 1,
+   "materials": {
+    "Exon": 1300.0
+   },
+   "other": {
+    "ap": 34600.0,
+    "xp": 26000.0
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 5000.0,
+   "maxPersonnel": 100
+  },
+  "C-C-2": {
+   "planet": "Cryton",
+   "kind": "campaign",
+   "index": 2,
+   "materials": {
+    "Tokenium": 1230.0,
+    "Organium": 600.0
+   },
+   "other": {
+    "ap": 53000.0,
+    "xp": 50000.0
+   },
+   "permanentBonus": {
+    "cells": 100.0
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 6500.0,
+   "maxPersonnel": 120
+  },
+  "C-C-3": {
+   "planet": "Cryton",
+   "kind": "campaign",
+   "index": 3,
+   "materials": {
+    "Exon": 6520.0,
+    "Organium": 1100.0
+   },
+   "other": {
+    "ap": 93000.0,
+    "xp": 76000.0,
+    "innovationCores": 5,
+    "diamonds": 500
+   },
+   "permanentBonus": {
+    "ap": 1.25
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 9000.0,
+   "maxPersonnel": 140
+  },
+  "C-C-4": {
+   "planet": "Cryton",
+   "kind": "campaign",
+   "index": 4,
+   "materials": {
+    "Exon": 8300.0,
+    "Organium": 6200.0,
+    "Adamorphium": 300.0
+   },
+   "other": {
+    "ap": 110000.0,
+    "xp": 255000.0,
+    "diamonds": 800
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 13500.0,
+   "maxPersonnel": 160
+  },
+  "C-C-5": {
+   "planet": "Cryton",
+   "kind": "campaign",
+   "index": 5,
+   "materials": {
+    "Exon": 13000.0,
+    "Organium": 7500.0,
+    "Adamorphium": 2300.0
+   },
+   "other": {
+    "ap": 145000.0,
+    "xp": 265000.0,
+    "innovationCores": 5,
+    "diamonds": 900
+   },
+   "permanentBonus": {
+    "shards": 5.0
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 16000.0,
+   "maxPersonnel": 180
+  },
+  "C-C-6": {
+   "planet": "Cryton",
+   "kind": "campaign",
+   "index": 6,
+   "materials": {},
+   "other": {
+    "ap": 180000.0,
+    "xp": 270000.0,
+    "innovationCores": 10
+   },
+   "permanentBonus": {
+    "rp": 25.0
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 19000.0,
+   "maxPersonnel": 200
+  },
+  "C-C-7": {
+   "planet": "Cryton",
+   "kind": "campaign",
+   "index": 7,
+   "materials": {
+    "Tokenium": 3600.0
+   },
+   "other": {
+    "ap": 260000.0,
+    "xp": 320000.0,
+    "innovationCores": 15
+   },
+   "permanentBonus": {
+    "ap": 1.5
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 28000.0,
+   "maxPersonnel": 300
+  },
+  "C-C-8": {
+   "planet": "Cryton",
+   "kind": "campaign",
+   "index": 8,
+   "materials": {
+    "Tokenium": 4200.0,
+    "Exon": 135000.0,
+    "Organium": 65000.0,
+    "Adamorphium": 35000.0
+   },
+   "other": {
+    "ap": 5000000.0,
+    "xp": 820000.0,
+    "innovationCores": 20
+   },
+   "permanentBonus": {
+    "mp": 5.0
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 120000.0,
+   "maxPersonnel": 500
+  },
+  "C-C-9": {
+   "planet": "Cryton",
+   "kind": "campaign",
+   "index": 9,
+   "materials": {
+    "Exon": 355000.0
+   },
+   "other": {
+    "ap": {
+     "mantissa": 5.0,
+     "exponent": 9
+    },
+    "xp": {
+     "mantissa": 4.0,
+     "exponent": 8
+    },
+    "innovationCores": 10,
+    "darkInnovationCores": 1
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 19200000.0,
+   "maxPersonnel": 1500
+  },
+  "C-C-10": {
+   "planet": "Cryton",
+   "kind": "campaign",
+   "index": 10,
+   "materials": {
+    "Organium": 165000.0
+   },
+   "other": {
+    "ap": {
+     "mantissa": 1.5,
+     "exponent": 10
+    },
+    "xp": {
+     "mantissa": 1.2,
+     "exponent": 9
+    },
+    "innovationCores": 15,
+    "darkInnovationCores": 1
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 37600000.0,
+   "maxPersonnel": 3000
+  },
+  "C-C-11": {
+   "planet": "Cryton",
+   "kind": "campaign",
+   "index": 11,
+   "materials": {
+    "Adamorphium": 85000.0
+   },
+   "other": {
+    "ap": {
+     "mantissa": 4.5,
+     "exponent": 10
+    },
+    "xp": {
+     "mantissa": 3.6,
+     "exponent": 9
+    },
+    "innovationCores": 20,
+    "darkInnovationCores": 2
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 72800000.0,
+   "maxPersonnel": 6000
+  },
+  "C-C-12": {
+   "planet": "Cryton",
+   "kind": "campaign",
+   "index": 12,
+   "materials": {
+    "Exon": 355000.0,
+    "Organium": 165000.0,
+    "Adamorphium": 85000.0
+   },
+   "other": {
+    "ap": {
+     "mantissa": 1.0,
+     "exponent": 11
+    },
+    "xp": {
+     "mantissa": 1.0,
+     "exponent": 10
+    },
+    "innovationCores": 25,
+    "darkInnovationCores": 4
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": 2.0,
+   "mpRequirement": 218400000.0,
+   "maxPersonnel": 12000
+  },
+  "C-F-1": {
+   "planet": "Cryton",
+   "kind": "farm",
+   "index": 1,
+   "materials": {
+    "Exon": 20.0
+   },
+   "other": {
+    "ap": 35.0,
+    "xp": 7.0
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 5.0,
+   "maxPersonnel": 80
+  },
+  "C-F-2": {
+   "planet": "Cryton",
+   "kind": "farm",
+   "index": 2,
+   "materials": {
+    "Organium": 80.0,
+    "Chromium": 560.0
+   },
+   "other": {
+    "ap": 178.0,
+    "xp": 132.0
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 80.0,
+   "maxPersonnel": 160
+  },
+  "C-F-3": {
+   "planet": "Cryton",
+   "kind": "farm",
+   "index": 3,
+   "materials": {
+    "Tokenium": 140.0,
+    "Adamorphium": 260.0,
+    "Organium": 320.0,
+    "Exon": 2200.0
+   },
+   "other": {
+    "ap": 11500.0,
+    "xp": 30000.0
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 2400.0,
+   "maxPersonnel": 500
+  },
+  "C-F-4": {
+   "planet": "Cryton",
+   "kind": "farm",
+   "index": 4,
+   "materials": {},
+   "other": {
+    "ap": {
+     "mantissa": 2.3,
+     "exponent": 4
+    },
+    "xp": {
+     "mantissa": 6.0,
+     "exponent": 4
+    }
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": 5.0,
+   "mpRequirement": 4400.0,
+   "maxPersonnel": 1000
+  },
+  "C-A-1": {
+   "planet": "Cryton",
+   "kind": "advancedFarm",
+   "index": 1,
+   "mpRequirement": 100000000.0,
+   "maxPersonnel": 6000.0,
+   "materials": {
+    "Difar": {
+     "mantissa": 2.2,
+     "exponent": 9
+    },
+    "Organium": {
+     "mantissa": 3.0,
+     "exponent": 8
+    },
+    "Gigantium": {
+     "mantissa": 1.2,
+     "exponent": -4
+    }
+   },
+   "other": {
+    "ap": {
+     "mantissa": 6.0,
+     "exponent": 8
+    },
+    "xp": {
+     "mantissa": 6.0,
+     "exponent": 7
+    }
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null
+  },
+  "C-A-2": {
+   "planet": "Cryton",
+   "kind": "advancedFarm",
+   "index": 2,
+   "mpRequirement": 280000000.0,
+   "maxPersonnel": 12000.0,
+   "materials": {
+    "Kento": {
+     "mantissa": 1.8,
+     "exponent": 9
+    },
+    "Pytoxene": {
+     "mantissa": 1.2,
+     "exponent": -2
+    }
+   },
+   "other": {
+    "ap": {
+     "mantissa": 1.0,
+     "exponent": 9
+    },
+    "xp": {
+     "mantissa": 3.0,
+     "exponent": 8
+    }
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null
+  },
+  "C-A-3": {
+   "planet": "Cryton",
+   "kind": "advancedFarm",
+   "index": 3,
+   "mpRequirement": 7500000000.0,
+   "maxPersonnel": 36000.0,
+   "materials": {
+    "Tokenium": {
+     "mantissa": 1.0,
+     "exponent": 4
+    },
+    "Exon": {
+     "mantissa": 3.0,
+     "exponent": 9
+    },
+    "Moskom": {
+     "mantissa": 4.0,
+     "exponent": 9
+    },
+    "Gigantium": {
+     "mantissa": 4.2,
+     "exponent": -3
+    }
+   },
+   "other": {
+    "ap": {
+     "mantissa": 2.3,
+     "exponent": 9
+    },
+    "xp": {
+     "mantissa": 1.0,
+     "exponent": 9
+    }
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null
+  },
+  "E-C-1": {
+   "planet": "Egetuar",
+   "kind": "campaign",
+   "index": 1,
+   "materials": {
+    "Moskom": 650.0
+   },
+   "other": {
+    "ap": 1050000.0,
+    "xp": 830000.0
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 100000.0,
+   "maxPersonnel": 500
+  },
+  "E-C-2": {
+   "planet": "Egetuar",
+   "kind": "campaign",
+   "index": 2,
+   "materials": {
+    "Tokenium": 1900.0,
+    "Moskom": 960.0
+   },
+   "other": {
+    "ap": 1650000.0,
+    "xp": 1230000.0
+   },
+   "permanentBonus": {
+    "cells": 2500.0
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 150000.0,
+   "maxPersonnel": 600
+  },
+  "E-C-3": {
+   "planet": "Egetuar",
+   "kind": "campaign",
+   "index": 3,
+   "materials": {
+    "Moskom": 1440.0,
+    "Darkseid": 100.0
+   },
+   "other": {
+    "ap": 1950000.0,
+    "xp": 1750000.0,
+    "innovationCores": 5,
+    "diamonds": 300
+   },
+   "permanentBonus": {
+    "ap": 1.5
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 200000.0,
+   "maxPersonnel": 700
+  },
+  "E-C-4": {
+   "planet": "Egetuar",
+   "kind": "campaign",
+   "index": 4,
+   "materials": {
+    "Moskom": 4300.0,
+    "Darkseid": 300.0
+   },
+   "other": {
+    "ap": 2250000.0,
+    "xp": 2100000.0,
+    "diamonds": 500
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 250000.0,
+   "maxPersonnel": 800
+  },
+  "E-C-5": {
+   "planet": "Egetuar",
+   "kind": "campaign",
+   "index": 5,
+   "materials": {
+    "Exon": 63000.0,
+    "Organium": 86000.0
+   },
+   "other": {
+    "ap": 2650000.0,
+    "xp": 2400000.0,
+    "innovationCores": 10,
+    "diamonds": 1000
+   },
+   "permanentBonus": {
+    "shards": 20.0
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 300000.0,
+   "maxPersonnel": 900
+  },
+  "E-C-6": {
+   "planet": "Egetuar",
+   "kind": "campaign",
+   "index": 6,
+   "materials": {},
+   "other": {
+    "ap": 2950000.0,
+    "xp": 2800000.0,
+    "innovationCores": 10
+   },
+   "permanentBonus": {
+    "rp": 100.0
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 350000.0,
+   "maxPersonnel": 1000
+  },
+  "E-C-7": {
+   "planet": "Egetuar",
+   "kind": "campaign",
+   "index": 7,
+   "materials": {
+    "Tokenium": 6200.0
+   },
+   "other": {
+    "ap": 4500000.0,
+    "xp": 4200000.0,
+    "innovationCores": 15
+   },
+   "permanentBonus": {
+    "ap": 2.0
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 800000.0,
+   "maxPersonnel": 1100
+  },
+  "E-C-8": {
+   "planet": "Egetuar",
+   "kind": "campaign",
+   "index": 8,
+   "materials": {
+    "Tokenium": 12300.0,
+    "Moskom": 63000.0,
+    "Darkseid": 13000.0
+   },
+   "other": {
+    "ap": 750000000.0,
+    "xp": 18200000.0,
+    "innovationCores": 25
+   },
+   "permanentBonus": {
+    "mp": 20.0
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 1500000.0,
+   "maxPersonnel": 1200
+  },
+  "E-C-9": {
+   "planet": "Egetuar",
+   "kind": "campaign",
+   "index": 9,
+   "materials": {
+    "Moskom": 35500000.0
+   },
+   "other": {
+    "ap": {
+     "mantissa": 5.0,
+     "exponent": 10
+    },
+    "xp": {
+     "mantissa": 4.0,
+     "exponent": 9
+    },
+    "innovationCores": 20,
+    "darkInnovationCores": 1
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 192000000.0,
+   "maxPersonnel": 10000
+  },
+  "E-C-10": {
+   "planet": "Egetuar",
+   "kind": "campaign",
+   "index": 10,
+   "materials": {
+    "Darkseid": 3550000.0
+   },
+   "other": {
+    "ap": {
+     "mantissa": 1.5,
+     "exponent": 11
+    },
+    "xp": {
+     "mantissa": 1.2,
+     "exponent": 10
+    },
+    "innovationCores": 25,
+    "darkInnovationCores": 1
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 376000000.0,
+   "maxPersonnel": 20000
+  },
+  "E-C-11": {
+   "planet": "Egetuar",
+   "kind": "campaign",
+   "index": 11,
+   "materials": {
+    "Moskom": 35500000.0,
+    "Darkseid": 16500000.0
+   },
+   "other": {
+    "ap": {
+     "mantissa": 4.5,
+     "exponent": 11
+    },
+    "xp": {
+     "mantissa": 3.6,
+     "exponent": 10
+    },
+    "innovationCores": 30,
+    "darkInnovationCores": 2
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 526000000.0,
+   "maxPersonnel": 30000
+  },
+  "E-C-12": {
+   "planet": "Egetuar",
+   "kind": "campaign",
+   "index": 12,
+   "materials": {
+    "Darkseid": 35500000.0,
+    "Moskom": 35500000.0,
+    "Tokenium": 1538000
+   },
+   "other": {
+    "ap": {
+     "mantissa": 1.0,
+     "exponent": 12
+    },
+    "xp": {
+     "mantissa": 1.0,
+     "exponent": 11
+    },
+    "innovationCores": 35,
+    "darkInnovationCores": 4
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": 12.0,
+   "mpRequirement": 976000000.0,
+   "maxPersonnel": 40000
+  },
+  "E-F-1": {
+   "planet": "Egetuar",
+   "kind": "farm",
+   "index": 1,
+   "materials": {
+    "Moskom": 19.0
+   },
+   "other": {
+    "ap": 2000.0,
+    "xp": 1000.0
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 100.0,
+   "maxPersonnel": 150
+  },
+  "E-F-2": {
+   "planet": "Egetuar",
+   "kind": "farm",
+   "index": 2,
+   "materials": {
+    "Darkseid": 80.0
+   },
+   "other": {
+    "ap": 1000000.0,
+    "xp": 900000.0
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 32500.0,
+   "maxPersonnel": 2000
+  },
+  "E-F-3": {
+   "planet": "Egetuar",
+   "kind": "farm",
+   "index": 3,
+   "materials": {
+    "Tokenium": 185.0,
+    "Moskom": 3980.0,
+    "Darkseid": 160.0,
+    "Organium": 5200.0,
+    "Adamorphium": 2440.0
+   },
+   "other": {
+    "ap": 2000000.0,
+    "xp": 1600000.0
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 62500.0,
+   "maxPersonnel": 4000
+  },
+  "E-F-4": {
+   "planet": "Egetuar",
+   "kind": "farm",
+   "index": 4,
+   "materials": {},
+   "other": {
+    "ap": {
+     "mantissa": 4.0,
+     "exponent": 6
+    },
+    "xp": {
+     "mantissa": 3.2,
+     "exponent": 6
+    }
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": 50.0,
+   "mpRequirement": 130000.0,
+   "maxPersonnel": 8000
+  },
+  "E-A-1": {
+   "planet": "Egetuar",
+   "kind": "advancedFarm",
+   "index": 1,
+   "mpRequirement": 700000000.0,
+   "maxPersonnel": 15000.0,
+   "materials": {
+    "Difar": {
+     "mantissa": 6.3,
+     "exponent": 8
+    },
+    "Exon": {
+     "mantissa": 5.0,
+     "exponent": 9
+    },
+    "Torkinstone": {
+     "mantissa": 4.0,
+     "exponent": -2
+    }
+   },
+   "other": {
+    "ap": {
+     "mantissa": 1.5,
+     "exponent": 9
+    },
+    "xp": {
+     "mantissa": 1.8,
+     "exponent": 8
+    }
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null
+  },
+  "E-A-2": {
+   "planet": "Egetuar",
+   "kind": "advancedFarm",
+   "index": 2,
+   "mpRequirement": 2900000000.0,
+   "maxPersonnel": 30000.0,
+   "materials": {
+    "Adamorphium": {
+     "mantissa": 1.0,
+     "exponent": 10
+    },
+    "Pytoxene": {
+     "mantissa": 2.6,
+     "exponent": -2
+    }
+   },
+   "other": {
+    "ap": {
+     "mantissa": 2.0,
+     "exponent": 9
+    },
+    "xp": {
+     "mantissa": 6.0,
+     "exponent": 8
+    }
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null
+  },
+  "E-A-3": {
+   "planet": "Egetuar",
+   "kind": "advancedFarm",
+   "index": 3,
+   "mpRequirement": 95000000000.0,
+   "maxPersonnel": 100000.0,
+   "materials": {
+    "Tokenium": {
+     "mantissa": 1.0,
+     "exponent": 4
+    },
+    "Chromium": {
+     "mantissa": 2.0,
+     "exponent": 12
+    },
+    "Gigantium": {
+     "mantissa": 8.4,
+     "exponent": -2
+    }
+   },
+   "other": {
+    "ap": {
+     "mantissa": 8.0,
+     "exponent": 9
+    },
+    "xp": {
+     "mantissa": 2.0,
+     "exponent": 9
+    }
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null
+  },
+  "S-C-1": {
+   "planet": "Sekhur",
+   "kind": "campaign",
+   "index": 1,
+   "materials": {
+    "Difar": {
+     "mantissa": 6.3,
+     "exponent": 7
+    }
+   },
+   "other": {
+    "ap": {
+     "mantissa": 1.5,
+     "exponent": 8
+    },
+    "xp": {
+     "mantissa": 2.0,
+     "exponent": 6
+    }
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 4800000.0,
+   "maxPersonnel": 2800
+  },
+  "S-C-2": {
+   "planet": "Sekhur",
+   "kind": "campaign",
+   "index": 2,
+   "materials": {
+    "Exon": {
+     "mantissa": 5.5,
+     "exponent": 6
+    },
+    "Tokenium": 110000.0
+   },
+   "other": {
+    "ap": {
+     "mantissa": 4.0,
+     "exponent": 8
+    },
+    "xp": {
+     "mantissa": 3.0,
+     "exponent": 6
+    }
+   },
+   "permanentBonus": {
+    "cells": {
+     "mantissa": 5.0,
+     "exponent": 3
+    }
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 6500000.0,
+   "maxPersonnel": 3000
+  },
+  "S-C-3": {
+   "planet": "Sekhur",
+   "kind": "campaign",
+   "index": 3,
+   "materials": {
+    "Moskom": {
+     "mantissa": 3.3,
+     "exponent": 4
+    },
+    "Adamorphium": {
+     "mantissa": 3.2,
+     "exponent": 4
+    }
+   },
+   "other": {
+    "ap": {
+     "mantissa": 1.0,
+     "exponent": 9
+    },
+    "xp": {
+     "mantissa": 9.8,
+     "exponent": 6
+    },
+    "diamonds": 250
+   },
+   "permanentBonus": {
+    "ap": {
+     "mantissa": 2.0,
+     "exponent": 1
+    }
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 8000000.0,
+   "maxPersonnel": 3600
+  },
+  "S-C-4": {
+   "planet": "Sekhur",
+   "kind": "campaign",
+   "index": 4,
+   "materials": {
+    "Difar": {
+     "mantissa": 7.7,
+     "exponent": 5
+    },
+    "Darkseid": {
+     "mantissa": 1.0,
+     "exponent": 4
+    }
+   },
+   "other": {
+    "ap": {
+     "mantissa": 1.2,
+     "exponent": 9
+    },
+    "xp": {
+     "mantissa": 1.2,
+     "exponent": 7
+    },
+    "diamonds": 450
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 10000000.0,
+   "maxPersonnel": 3900
+  },
+  "S-C-5": {
+   "planet": "Sekhur",
+   "kind": "campaign",
+   "index": 5,
+   "materials": {
+    "Tokenium": 215000,
+    "Kento": {
+     "mantissa": 3.5,
+     "exponent": 7
+    },
+    "Adamorphium": {
+     "mantissa": 1.2,
+     "exponent": 6
+    }
+   },
+   "other": {
+    "ap": {
+     "mantissa": 1.4,
+     "exponent": 9
+    },
+    "xp": {
+     "mantissa": 1.5,
+     "exponent": 7
+    },
+    "diamonds": 300
+   },
+   "permanentBonus": {
+    "shards": {
+     "mantissa": 1.5,
+     "exponent": 1
+    }
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 13000000.0,
+   "maxPersonnel": 4200
+  },
+  "S-C-6": {
+   "planet": "Sekhur",
+   "kind": "campaign",
+   "index": 6,
+   "materials": {
+    "Tokenium": 242000
+   },
+   "other": {
+    "ap": {
+     "mantissa": 1.5,
+     "exponent": 9
+    },
+    "xp": {
+     "mantissa": 2.3,
+     "exponent": 7
+    }
+   },
+   "permanentBonus": {
+    "rp": {
+     "mantissa": 1.0,
+     "exponent": 3
+    }
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 22000000.0,
+   "maxPersonnel": 4500
+  },
+  "S-C-7": {
+   "planet": "Sekhur",
+   "kind": "campaign",
+   "index": 7,
+   "materials": {
+    "Tokenium": 346000,
+    "Organium": {
+     "mantissa": 5.8,
+     "exponent": 6
+    }
+   },
+   "other": {
+    "ap": {
+     "mantissa": 1.7,
+     "exponent": 9
+    },
+    "xp": {
+     "mantissa": 2.5,
+     "exponent": 7
+    }
+   },
+   "permanentBonus": {
+    "ap": {
+     "mantissa": 2.5,
+     "exponent": 1
+    }
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 30000000.0,
+   "maxPersonnel": 4800
+  },
+  "S-C-8": {
+   "planet": "Sekhur",
+   "kind": "campaign",
+   "index": 8,
+   "materials": {
+    "Tokenium": 538000,
+    "Chromium": {
+     "mantissa": 1.8,
+     "exponent": 7
+    },
+    "Adamorphium": {
+     "mantissa": 1.4,
+     "exponent": 7
+    },
+    "Darkseid": {
+     "mantissa": 9.0,
+     "exponent": 6
+    }
+   },
+   "other": {
+    "ap": {
+     "mantissa": 3.0,
+     "exponent": 9
+    },
+    "xp": {
+     "mantissa": 3.0,
+     "exponent": 8
+    }
+   },
+   "permanentBonus": {
+    "mp": {
+     "mantissa": 3.0,
+     "exponent": 4
+    }
+   },
+   "fragmentsExponent": null,
+   "mpRequirement": 64000000.0,
+   "maxPersonnel": 5000
+  },
+  "S-C-9": {
+   "planet": "Sekhur",
+   "kind": "campaign",
+   "index": 9,
+   "materials": {
+    "Difar": {
+     "mantissa": 1.1,
+     "exponent": 6
+    },
+    "Exon": {
+     "mantissa": 1.1,
+     "exponent": 6
+    },
+    "Moskom": {
+     "mantissa": 1.1,
+     "exponent": 6
+    },
+    "Tokenium": 7480000
+   },
+   "other": {
+    "ap": {
+     "mantissa": 5.0,
+     "exponent": 12
+    },
+    "xp": {
+     "mantissa": 4.0,
+     "exponent": 11
+    },
+    "darkInnovationCores": 1
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 1920000000.0,
+   "maxPersonnel": 30000
+  },
+  "S-C-10": {
+   "planet": "Sekhur",
+   "kind": "campaign",
+   "index": 10,
+   "materials": {
+    "Kento": {
+     "mantissa": 1.1,
+     "exponent": 6
+    },
+    "Organium": {
+     "mantissa": 1.1,
+     "exponent": 6
+    },
+    "Tokenium": 9520000
+   },
+   "other": {
+    "ap": {
+     "mantissa": 1.5,
+     "exponent": 13
+    },
+    "xp": {
+     "mantissa": 1.2,
+     "exponent": 12
+    },
+    "darkInnovationCores": 1
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 5760000000.0,
+   "maxPersonnel": 50000
+  },
+  "S-C-11": {
+   "planet": "Sekhur",
+   "kind": "campaign",
+   "index": 11,
+   "materials": {
+    "Difar": {
+     "mantissa": 1.1,
+     "exponent": 6
+    },
+    "Chromium": {
+     "mantissa": 1.1,
+     "exponent": 6
+    },
+    "Adamorphium": {
+     "mantissa": 1.1,
+     "exponent": 6
+    },
+    "Tokenium": 12300000
+   },
+   "other": {
+    "ap": {
+     "mantissa": 4.5,
+     "exponent": 13
+    },
+    "xp": {
+     "mantissa": 3.6,
+     "exponent": 12
+    },
+    "darkInnovationCores": 2
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 17280000000.0,
+   "maxPersonnel": 70000
+  },
+  "S-C-12": {
+   "planet": "Sekhur",
+   "kind": "campaign",
+   "index": 12,
+   "materials": {
+    "Tokenium": 18000000
+   },
+   "other": {
+    "ap": {
+     "mantissa": 1.0,
+     "exponent": 14
+    },
+    "xp": {
+     "mantissa": 1.0,
+     "exponent": 13
+    },
+    "innovationCores": 100,
+    "darkInnovationCores": 4
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": 18.0,
+   "mpRequirement": 71840000000.0,
+   "maxPersonnel": 90000
+  },
+  "S-F-1": {
+   "planet": "Sekhur",
+   "kind": "farm",
+   "index": 1,
+   "materials": {
+    "Difar": {
+     "mantissa": 4.0,
+     "exponent": 1
+    },
+    "Kento": {
+     "mantissa": 6.0,
+     "exponent": 1
+    },
+    "Organium": {
+     "mantissa": 5.0,
+     "exponent": 1
+    }
+   },
+   "other": {
+    "ap": {
+     "mantissa": 1.7,
+     "exponent": 4
+    },
+    "xp": {
+     "mantissa": 1.3,
+     "exponent": 4
+    }
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 700.0,
+   "maxPersonnel": 1000
+  },
+  "S-F-2": {
+   "planet": "Sekhur",
+   "kind": "farm",
+   "index": 2,
+   "materials": {
+    "Chromium": {
+     "mantissa": 8.0,
+     "exponent": 3
+    },
+    "Adamorphium": {
+     "mantissa": 7.0,
+     "exponent": 3
+    },
+    "Darkseid": {
+     "mantissa": 2.0,
+     "exponent": 3
+    }
+   },
+   "other": {
+    "ap": {
+     "mantissa": 3.3,
+     "exponent": 6
+    },
+    "xp": {
+     "mantissa": 2.9,
+     "exponent": 6
+    }
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 162500.0,
+   "maxPersonnel": 10000
+  },
+  "S-F-3": {
+   "planet": "Sekhur",
+   "kind": "farm",
+   "index": 3,
+   "materials": {
+    "Moskom": {
+     "mantissa": 2.0,
+     "exponent": 4
+    },
+    "Exon": {
+     "mantissa": 3.0,
+     "exponent": 4
+    },
+    "Darkseid": {
+     "mantissa": 5.0,
+     "exponent": 3
+    },
+    "Tokenium": 200
+   },
+   "other": {
+    "ap": {
+     "mantissa": 6.7,
+     "exponent": 6
+    },
+    "xp": {
+     "mantissa": 5.0,
+     "exponent": 6
+    }
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": null,
+   "mpRequirement": 325000.0,
+   "maxPersonnel": 20000
+  },
+  "S-F-4": {
+   "planet": "Sekhur",
+   "kind": "farm",
+   "index": 4,
+   "materials": {},
+   "other": {
+    "ap": {
+     "mantissa": 4.0,
+     "exponent": 7
+    },
+    "xp": {
+     "mantissa": 3.0,
+     "exponent": 7
+    }
+   },
+   "permanentBonus": {},
+   "fragmentsExponent": 200.0,
+   "mpRequirement": 650000.0,
+   "maxPersonnel": 40000
+  }
+ },
+ "projects": {
+  "1": {
+   "baseSeconds": 180.0,
+   "secondsPerLevel": 60.0,
+   "costExponent": 1.25,
+   "costExponent2": null,
+   "costs": [
+    {
+     "material": "Difar",
+     "base": 600.0
+    },
+    {
+     "material": "Kento",
+     "base": 200.0
+    }
+   ],
+   "bonuses": {
+    "Project1Bonus": {
+     "base": 4.0,
+     "feeds": "FinalCellBonus"
+    }
+   }
+  },
+  "2": {
+   "baseSeconds": 320.0,
+   "secondsPerLevel": 120.0,
+   "costExponent": 1.4,
+   "costExponent2": null,
+   "costs": [
+    {
+     "material": "Difar",
+     "base": 2750.0
+    },
+    {
+     "material": "Kento",
+     "base": 1500.0
+    },
+    {
+     "material": "Chromium",
+     "base": 500.0
+    }
+   ],
+   "bonuses": {
+    "Project2Bonus": {
+     "base": 2.0,
+     "feeds": "FinalAllGensBonus"
+    }
+   }
+  },
+  "3": {
+   "baseSeconds": 840.0,
+   "secondsPerLevel": 180.0,
+   "costExponent": 1.7,
+   "costExponent2": null,
+   "costs": [
+    {
+     "material": "Chromium",
+     "base": 2400.0
+    },
+    {
+     "material": "Exon",
+     "base": 1000.0
+    },
+    {
+     "material": "Organium",
+     "base": 500.0
+    }
+   ],
+   "bonuses": {
+    "Project3Bonus": {
+     "base": 2.0,
+     "feeds": "FinalMPBonus"
+    }
+   }
+  },
+  "4": {
+   "baseSeconds": 1680.0,
+   "secondsPerLevel": 240.0,
+   "costExponent": 1.4,
+   "costExponent2": null,
+   "costs": [
+    {
+     "material": "Kento",
+     "base": 7000.0
+    },
+    {
+     "material": "Chromium",
+     "base": 5000.0
+    },
+    {
+     "material": "Exon",
+     "base": 1500.0
+    },
+    {
+     "material": "Organium",
+     "base": 1000.0
+    }
+   ],
+   "bonuses": {
+    "Project4Bonus": {
+     "base": 2.0,
+     "feeds": "FinalShardBonus"
+    }
+   }
+  },
+  "5": {
+   "baseSeconds": 2700.0,
+   "secondsPerLevel": 300.0,
+   "costExponent": 1.6,
+   "costExponent2": null,
+   "costs": [
+    {
+     "material": "Adamorphium",
+     "base": 1000.0
+    },
+    {
+     "material": "Moskom",
+     "base": 200.0
+    }
+   ],
+   "bonuses": {
+    "Project5Bonus": {
+     "base": 2.0,
+     "feeds": "FinalRPBonus"
+    }
+   }
+  },
+  "6": {
+   "baseSeconds": 3600.0,
+   "secondsPerLevel": 360.0,
+   "costExponent": 2.0,
+   "costExponent2": null,
+   "costs": [
+    {
+     "material": "Organium",
+     "base": 260000.0
+    },
+    {
+     "material": "Adamorphium",
+     "base": 120000.0
+    },
+    {
+     "material": "Moskom",
+     "base": 28000.0
+    },
+    {
+     "material": "Darkseid",
+     "base": 5000.0
+    }
+   ],
+   "bonuses": {
+    "Project6Bonus": {
+     "base": 1.25,
+     "feeds": "FinalAPBonus"
+    }
+   }
+  },
+  "7": {
+   "baseSeconds": 24400.0,
+   "secondsPerLevel": 3600.0,
+   "costExponent": 3.0,
+   "costExponent2": null,
+   "costs": [
+    {
+     "material": "Difar",
+     "base": 1e+38
+    },
+    {
+     "material": "Exon",
+     "base": 4e+37
+    },
+    {
+     "material": "Moskom",
+     "base": 7e+36
+    }
+   ],
+   "bonuses": {
+    "Project7Bonus1": {
+     "base": 3.0,
+     "feeds": "FinalAllGensBonus"
+    },
+    "Project7Bonus2": {
+     "base": 2.5,
+     "feeds": "FinalRPBonus"
+    },
+    "Project7Bonus3": {
+     "base": 1.600000023841858,
+     "feeds": "FinalAPBonus"
+    }
+   }
+  },
+  "8": {
+   "baseSeconds": 38800.0,
+   "secondsPerLevel": 7200.0,
+   "costExponent": 3.2,
+   "costExponent2": null,
+   "costs": [
+    {
+     "material": "Kento",
+     "base": 2e+45
+    },
+    {
+     "material": "Organium",
+     "base": 5e+44
+    }
+   ],
+   "bonuses": {
+    "Project8Bonus1": {
+     "base": 2.299999952316284,
+     "feeds": "FinalMPBonus"
+    },
+    "Project8Bonus2": {
+     "base": 2.0999999046325684,
+     "feeds": "FinalRPBonus"
+    },
+    "Project8Bonus3": {
+     "base": 1.899999976158142,
+     "feeds": "FinalAPBonus"
+    }
+   }
+  },
+  "9": {
+   "baseSeconds": 64400.0,
+   "secondsPerLevel": 14400.0,
+   "costExponent": 18.0,
+   "costExponent2": null,
+   "costs": [
+    {
+     "material": "Chromium",
+     "base": 3e+55
+    },
+    {
+     "material": "Adamorphium",
+     "base": 6e+55
+    },
+    {
+     "material": "Darkseid",
+     "base": 8e+54
+    }
+   ],
+   "bonuses": {
+    "Project9Bonus1": {
+     "base": 7.0,
+     "feeds": "FinalShardBonus"
+    },
+    "Project9Bonus2": {
+     "base": 1.75,
+     "feeds": "FinalMatsBonus"
+    }
+   }
+  },
+  "10": {
+   "baseSeconds": 45660000.0,
+   "secondsPerLevel": 40000000.0,
+   "costExponent": 33.0,
+   "costExponent2": 1.3,
+   "costs": [
+    {
+     "material": "Kento",
+     "base": {
+      "mantissa": 5.0,
+      "exponent": 950
+     }
+    },
+    {
+     "material": "Exon",
+     "base": {
+      "mantissa": 5.0,
+      "exponent": 930
+     }
+    },
+    {
+     "material": "Torkinstone",
+     "base": {
+      "mantissa": 2.4,
+      "exponent": 3
+     }
+    },
+    {
+     "material": "Pytoxene",
+     "base": {
+      "mantissa": 2.1,
+      "exponent": 2
+     }
+    }
+   ],
+   "bonuses": {
+    "Project10Bonus1": {
+     "base": {
+      "mantissa": 1.0,
+      "exponent": 100
+     },
+     "feeds": "FinalCellBonus"
+    },
+    "Project10Bonus2": {
+     "base": 0.019999999552965164,
+     "feeds": "FinalOOBonus"
+    }
+   }
+  },
+  "11": {
+   "baseSeconds": 25600000.0,
+   "secondsPerLevel": 60000000.0,
+   "costExponent": 43.0,
+   "costExponent2": 1.3,
+   "costs": [
+    {
+     "material": "Organium",
+     "base": {
+      "mantissa": 5.0,
+      "exponent": 1020
+     }
+    },
+    {
+     "material": "Moskom",
+     "base": {
+      "mantissa": 5.0,
+      "exponent": 1015
+     }
+    },
+    {
+     "material": "Pytoxene",
+     "base": {
+      "mantissa": 8.0,
+      "exponent": 3
+     }
+    },
+    {
+     "material": "Gigantium",
+     "base": {
+      "mantissa": 8.3,
+      "exponent": 2
+     }
+    }
+   ],
+   "bonuses": {
+    "Project11Bonus1": {
+     "base": 15.0,
+     "feeds": "FinalAllGensBonus"
+    },
+    "Project11Bonus2": {
+     "base": 10000000000.0,
+     "feeds": "FinalMPBonus"
+    },
+    "Project11Bonus3": {
+     "base": 0.019999999552965164,
+     "feeds": "FinalFarmFragsBonus"
+    },
+    "Project11Bonus4": {
+     "base": 10.0,
+     "feeds": "FinalMatsBonus"
+    }
+   }
+  }
+ },
+ "outpost": {
+  "innovationCoreRequirement": 4,
+  "expansionMaxLevel": 7,
+  "expansionProjectBaseRequirement": 10
+ },
+ "milestones": {
+  "1": {
+   "requirement": 10,
+   "bonuses": {
+    "Bonus1": {
+     "value": 500.0,
+     "feeds": "FinalCellBonus"
+    },
+    "Bonus2": {
+     "value": 12.0,
+     "feeds": "FinalShardBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "2": {
+   "requirement": 10,
+   "bonuses": {
+    "Bonus1": {
+     "value": 10.0,
+     "feeds": "FinalMPBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "3": {
+   "requirement": 10,
+   "bonuses": {
+    "Bonus1": {
+     "value": 8.0,
+     "feeds": "FinalRPBonus"
+    },
+    "Bonus2": {
+     "value": 250.0,
+     "feeds": "FinalCellBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship3": 4
+   }
+  },
+  "4": {
+   "requirement": 20,
+   "bonuses": {
+    "Bonus1": {
+     "value": 1.5,
+     "feeds": "FinalAPBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship2": 2
+   }
+  },
+  "5": {
+   "requirement": 20,
+   "bonuses": {
+    "Bonus1": {
+     "value": 25.0,
+     "feeds": "FinalShardBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship1": 5
+   }
+  },
+  "6": {
+   "requirement": 20,
+   "bonuses": {
+    "Bonus1": {
+     "value": 4000.0,
+     "feeds": "FinalCellBonus"
+    },
+    "Bonus2": {
+     "value": 15.0,
+     "feeds": "FinalMPBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "7": {
+   "requirement": 30,
+   "bonuses": {
+    "Bonus1": {
+     "value": 100.0,
+     "feeds": "FinalRPBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship6": 3,
+    "ship5": 3
+   }
+  },
+  "8": {
+   "requirement": 30,
+   "bonuses": {
+    "Bonus1": {
+     "value": 50000.0,
+     "feeds": "FinalCellBonus"
+    },
+    "Bonus2": {
+     "value": 50.0,
+     "feeds": "FinalShardBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "9": {
+   "requirement": 30,
+   "bonuses": {
+    "Bonus1": {
+     "value": 20.0,
+     "feeds": "FinalMPBonus"
+    },
+    "Bonus2": {
+     "value": 20.0,
+     "feeds": "FinalShardBonus"
+    },
+    "Bonus3": {
+     "value": 20.0,
+     "feeds": "FinalRPBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "10": {
+   "requirement": 40,
+   "bonuses": {
+    "Bonus1": {
+     "value": 100.0,
+     "feeds": "FinalShardBonus"
+    },
+    "Bonus2": {
+     "value": 100.0,
+     "feeds": "FinalRPBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship3": 6
+   }
+  },
+  "11": {
+   "requirement": 40,
+   "bonuses": {
+    "Bonus1": {
+     "value": 1.5,
+     "feeds": "FinalAPBonus"
+    },
+    "Bonus2": {
+     "value": 125000.0,
+     "feeds": "FinalCellBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship6": 6
+   }
+  },
+  "12": {
+   "requirement": 40,
+   "bonuses": {},
+   "shipRankPoints": {
+    "ship2": 12,
+    "ship7": 12,
+    "ship5": 12
+   }
+  },
+  "13": {
+   "requirement": 50,
+   "bonuses": {
+    "Bonus1": {
+     "value": 333.0,
+     "feeds": "FinalMPBonus"
+    },
+    "Bonus2": {
+     "value": 33.0,
+     "feeds": "FinalShardBonus"
+    },
+    "Bonus3": {
+     "value": 1.3,
+     "feeds": "FinalAPBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "14": {
+   "requirement": 50,
+   "bonuses": {
+    "Bonus1": {
+     "value": 1e+44,
+     "feeds": "FinalCellBonus"
+    },
+    "Bonus2": {
+     "value": 1.5,
+     "feeds": "FinalAPBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship7": 4
+   }
+  },
+  "15": {
+   "requirement": 50,
+   "bonuses": {
+    "Bonus1": {
+     "value": 15000000000.0,
+     "feeds": "FinalRPBonus"
+    },
+    "Bonus2": {
+     "value": 1.5,
+     "feeds": "FinalAPBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship6": 5
+   }
+  },
+  "16": {
+   "requirement": 60,
+   "bonuses": {
+    "Bonus1": {
+     "value": 600.0,
+     "feeds": "FinalMPBonus"
+    },
+    "Bonus2": {
+     "value": 1.6,
+     "feeds": "FinalAPBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship3": 6
+   }
+  },
+  "17": {
+   "requirement": 60,
+   "bonuses": {
+    "Bonus1": {
+     "value": 1700.0,
+     "feeds": "FinalShardBonus"
+    },
+    "Bonus2": {
+     "value": 1.7,
+     "feeds": "FinalAPBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship5": 7
+   }
+  },
+  "18": {
+   "requirement": 60,
+   "bonuses": {
+    "Bonus1": {
+     "value": 1e+50,
+     "feeds": "FinalCellBonus"
+    },
+    "Bonus2": {
+     "value": 18000.0,
+     "feeds": "FinalShardBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "19": {
+   "requirement": 80,
+   "bonuses": {
+    "Bonus1": {
+     "value": 1900000000.0,
+     "feeds": "FinalMPBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "20": {
+   "requirement": 80,
+   "bonuses": {
+    "Bonus1": {
+     "value": 2000.0,
+     "feeds": "FinalRPBonus"
+    },
+    "Bonus2": {
+     "value": 1e+20,
+     "feeds": "FinalCellBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship3": 20
+   }
+  },
+  "21": {
+   "requirement": 80,
+   "bonuses": {
+    "Bonus1": {
+     "value": 2.1,
+     "feeds": "FinalAPBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship2": 21
+   }
+  },
+  "22": {
+   "requirement": 100,
+   "bonuses": {
+    "Bonus1": {
+     "value": 2200000.0,
+     "feeds": "FinalShardBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship1": 22
+   }
+  },
+  "23": {
+   "requirement": 100,
+   "bonuses": {
+    "Bonus1": {
+     "value": 2.3e+70,
+     "feeds": "FinalCellBonus"
+    },
+    "Bonus2": {
+     "value": 23000000.0,
+     "feeds": "FinalMPBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "24": {
+   "requirement": 100,
+   "bonuses": {
+    "Bonus1": {
+     "value": 240000000.0,
+     "feeds": "FinalRPBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship5": 12,
+    "ship6": 12
+   }
+  },
+  "25": {
+   "requirement": 120,
+   "bonuses": {
+    "Bonus1": {
+     "value": 250000.0,
+     "feeds": "FinalMPBonus"
+    },
+    "Bonus2": {
+     "value": 25000000000.0,
+     "feeds": "FinalShardBonus"
+    },
+    "Bonus3": {
+     "value": 2500000000000000.0,
+     "feeds": "FinalRPBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "26": {
+   "requirement": 120,
+   "bonuses": {
+    "Bonus1": {
+     "value": 26000000.0,
+     "feeds": "FinalAPBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "27": {
+   "requirement": 120,
+   "bonuses": {},
+   "shipRankPoints": {
+    "ship1": 27,
+    "ship2": 27,
+    "ship5": 27
+   }
+  },
+  "28": {
+   "requirement": 140,
+   "bonuses": {
+    "Bonus1": {
+     "value": 2.8e+50,
+     "feeds": "FinalCellBonus"
+    },
+    "Bonus2": {
+     "value": 28000000000.0,
+     "feeds": "FinalMPBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "29": {
+   "requirement": 140,
+   "bonuses": {
+    "Bonus1": {
+     "value": 2.9e+50,
+     "feeds": "FinalCellBonus"
+    },
+    "Bonus2": {
+     "value": 2900000000000.0,
+     "feeds": "FinalShardBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "30": {
+   "requirement": 140,
+   "bonuses": {
+    "Bonus1": {
+     "value": 3e+50,
+     "feeds": "FinalCellBonus"
+    },
+    "Bonus2": {
+     "value": 3e+24,
+     "feeds": "FinalRPBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "31": {
+   "requirement": 160,
+   "bonuses": {
+    "Bonus1": {
+     "value": 310000000000.0,
+     "feeds": "FinalAPBonus"
+    },
+    "Bonus2": {
+     "value": 3.1e+93,
+     "feeds": "FinalCellBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship6": 50
+   }
+  },
+  "32": {
+   "requirement": 160,
+   "bonuses": {
+    "Bonus1": {
+     "value": 3.2e+62,
+     "feeds": "FinalCellBonus"
+    },
+    "Bonus2": {
+     "value": 320000000000.0,
+     "feeds": "FinalAPBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship7": 45
+   }
+  },
+  "33": {
+   "requirement": 160,
+   "bonuses": {
+    "Bonus1": {
+     "value": 33000000.0,
+     "feeds": "FinalMPBonus"
+    },
+    "Bonus2": {
+     "value": 330000.0,
+     "feeds": "FinalAPBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship3": 40
+   }
+  },
+  "34": {
+   "requirement": 200,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 3.4,
+      "exponent": 20
+     },
+     "feeds": "FinalShardBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship1": 16
+   }
+  },
+  "35": {
+   "requirement": 200,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 3.5,
+      "exponent": 10
+     },
+     "feeds": "FinalAPBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship2": 18
+   }
+  },
+  "36": {
+   "requirement": 200,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 3.6,
+      "exponent": 5
+     },
+     "feeds": "FinalRPBonus"
+    },
+    "Bonus2": {
+     "value": {
+      "mantissa": 3.6,
+      "exponent": 60
+     },
+     "feeds": "FinalCellBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship3": 9
+   }
+  },
+  "37": {
+   "requirement": 240,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 3.7,
+      "exponent": 22
+     },
+     "feeds": "FinalShardBonus"
+    },
+    "Bonus2": {
+     "value": {
+      "mantissa": 3.7,
+      "exponent": 7
+     },
+     "feeds": "FinalAPBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship5": 19
+   }
+  },
+  "38": {
+   "requirement": 240,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 3.8,
+      "exponent": 100
+     },
+     "feeds": "FinalCellBonus"
+    },
+    "Bonus2": {
+     "value": {
+      "mantissa": 3.8,
+      "exponent": 8
+     },
+     "feeds": "FinalAPBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship7": 19
+   }
+  },
+  "39": {
+   "requirement": 240,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 3.9,
+      "exponent": 15
+     },
+     "feeds": "FinalRPBonus"
+    },
+    "Bonus2": {
+     "value": {
+      "mantissa": 3.9,
+      "exponent": 14
+     },
+     "feeds": "FinalAPBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship6": 14
+   }
+  },
+  "40": {
+   "requirement": 280,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 1.0,
+      "exponent": 250
+     },
+     "feeds": "FinalCellBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship1": 10,
+    "ship2": 10
+   }
+  },
+  "41": {
+   "requirement": 280,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 1.0,
+      "exponent": 28
+     },
+     "feeds": "FinalShardBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship3": 10,
+    "ship5": 10
+   }
+  },
+  "42": {
+   "requirement": 280,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 1.0,
+      "exponent": 20
+     },
+     "feeds": "FinalAPBonus"
+    }
+   },
+   "shipRankPoints": {
+    "ship6": 10,
+    "ship7": 10
+   }
+  },
+  "43": {
+   "requirement": 320,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 1.0,
+      "exponent": 150
+     },
+     "feeds": "FinalCellBonus"
+    },
+    "Bonus2": {
+     "value": {
+      "mantissa": 1.0,
+      "exponent": 30
+     },
+     "feeds": "FinalShardBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "44": {
+   "requirement": 320,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 1.0,
+      "exponent": 150
+     },
+     "feeds": "FinalCellBonus"
+    },
+    "Bonus2": {
+     "value": {
+      "mantissa": 1.0,
+      "exponent": 30
+     },
+     "feeds": "FinalMPBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "45": {
+   "requirement": 320,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 1.0,
+      "exponent": 150
+     },
+     "feeds": "FinalCellBonus"
+    },
+    "Bonus2": {
+     "value": {
+      "mantissa": 1.0,
+      "exponent": 30
+     },
+     "feeds": "FinalAPBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "46": {
+   "requirement": 640,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 1.2,
+      "exponent": 1
+     },
+     "feeds": "FinalMatsBonus"
+    },
+    "Bonus2": {
+     "value": {
+      "mantissa": 1.03,
+      "exponent": 0
+     },
+     "feeds": "FinalLootBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "47": {
+   "requirement": 640,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 1.04,
+      "exponent": 0
+     },
+     "feeds": "FinalOOBonus"
+    },
+    "Bonus2": {
+     "value": {
+      "mantissa": 1.02,
+      "exponent": 0
+     },
+     "feeds": "FinalLootBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "48": {
+   "requirement": 640,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 1.07,
+      "exponent": 0
+     },
+     "feeds": "FinalLootBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "49": {
+   "requirement": 640,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 1.0,
+      "exponent": 308
+     },
+     "feeds": "FinalCellBonus"
+    },
+    "Bonus2": {
+     "value": {
+      "mantissa": 1.08,
+      "exponent": 0
+     },
+     "feeds": "FinalOOBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "50": {
+   "requirement": 640,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 1.0,
+      "exponent": 38
+     },
+     "feeds": "FinalMPBonus"
+    },
+    "Bonus2": {
+     "value": {
+      "mantissa": 1.05,
+      "exponent": 0
+     },
+     "feeds": "FinalOOBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "51": {
+   "requirement": 640,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 1.05,
+      "exponent": 0
+     },
+     "feeds": "FinalLootBonus"
+    },
+    "Bonus2": {
+     "value": {
+      "mantissa": 1.02,
+      "exponent": 0
+     },
+     "feeds": "FinalOOBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "52": {
+   "requirement": 640,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 3.2,
+      "exponent": 1
+     },
+     "feeds": "FinalMatsBonus"
+    },
+    "Bonus2": {
+     "value": {
+      "mantissa": 1.1,
+      "exponent": 0
+     },
+     "feeds": "FinalOOBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "53": {
+   "requirement": 640,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 1.0,
+      "exponent": 45
+     },
+     "feeds": "FinalShardBonus"
+    },
+    "Bonus2": {
+     "value": {
+      "mantissa": 1.05,
+      "exponent": 0
+     },
+     "feeds": "FinalOOBonus"
+    },
+    "Bonus3": {
+     "value": {
+      "mantissa": 1.02,
+      "exponent": 0
+     },
+     "feeds": "FinalLootBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "54": {
+   "requirement": 640,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 1.0,
+      "exponent": 60
+     },
+     "feeds": "FinalRPBonus"
+    },
+    "Bonus2": {
+     "value": {
+      "mantissa": 1.04,
+      "exponent": 0
+     },
+     "feeds": "FinalOOBonus"
+    },
+    "Bonus3": {
+     "value": {
+      "mantissa": 1.02,
+      "exponent": 0
+     },
+     "feeds": "FinalLootBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "55": {
+   "requirement": 640,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 1.28,
+      "exponent": 2
+     },
+     "feeds": "FinalMatsBonus"
+    },
+    "Bonus2": {
+     "value": {
+      "mantissa": 1.2,
+      "exponent": 0
+     },
+     "feeds": "FinalOOBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "56": {
+   "requirement": 640,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 1.0,
+      "exponent": 70
+     },
+     "feeds": "FinalMPBonus"
+    },
+    "Bonus2": {
+     "value": {
+      "mantissa": 1.0,
+      "exponent": 50
+     },
+     "feeds": "FinalShardBonus"
+    },
+    "Bonus3": {
+     "value": {
+      "mantissa": 1.0,
+      "exponent": 30
+     },
+     "feeds": "FinalAPBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "57": {
+   "requirement": 640,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 1.0,
+      "exponent": 777
+     },
+     "feeds": "FinalCellBonus"
+    },
+    "Bonus2": {
+     "value": {
+      "mantissa": 1.1,
+      "exponent": 0
+     },
+     "feeds": "FinalLootBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "58": {
+   "requirement": 1000,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 1.0,
+      "exponent": 58
+     },
+     "feeds": "FinalMPBonus"
+    },
+    "Bonus2": {
+     "value": {
+      "mantissa": 1.08,
+      "exponent": 0
+     },
+     "feeds": "FinalLootBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "59": {
+   "requirement": 1000,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 5.9,
+      "exponent": 1
+     },
+     "feeds": "FinalMatsBonus"
+    },
+    "Bonus2": {
+     "value": {
+      "mantissa": 1.06,
+      "exponent": 0
+     },
+     "feeds": "FinalOOBonus"
+    }
+   },
+   "shipRankPoints": {}
+  },
+  "60": {
+   "requirement": 1000,
+   "bonuses": {
+    "Bonus1": {
+     "value": {
+      "mantissa": 1.0,
+      "exponent": 30
+     },
+     "feeds": "FinalShardBonus"
+    },
+    "Bonus2": {
+     "value": {
+      "mantissa": 1.0,
+      "exponent": 30
+     },
+     "feeds": "FinalRPBonus"
+    }
+   },
+   "shipRankPoints": {}
+  }
+ },
+ "relics": {
+  "baseFarmFragments": 0.0010000000474974513,
+  "baseCampaignFragments": 2.5,
+  "bonusPerLevel": {
+   "r1": 0.004,
+   "r2": {
+    "mantissa": 1.0,
+    "exponent": 11
+   },
+   "r3": 0.029999999329447746,
+   "r4": 0.03,
+   "r5": 0.0010000000474974513,
+   "r6": 2.75,
+   "r7": 1.0499999523162842,
+   "r8": 100000.0,
+   "r9": 1.0800000429153442,
+   "r10": 2.0,
+   "r11": 0.5,
+   "r12": 80.0,
+   "r13": 484.0,
+   "r14": 1,
+   "r15": 5,
+   "r16": 0.03,
+   "r17": 0.03,
+   "r18": 365.0,
+   "r19": {
+    "mantissa": 2.0,
+    "exponent": 0
+   },
+   "r20": {
+    "mantissa": 8.0,
+    "exponent": 0
+   }
+  }
+ },
+ "badges": {
+  "Badge6Bonus1": 2.0,
+  "Badge20Bonus1": 30,
+  "DarkBadge5Bonus": 1.25
+ },
+ "research": {
+  "43": {
+   "Bonus1": 2.0,
+   "Bonus2": 1.5,
+   "Bonus3": 1.2999999523162842,
+   "Bonus4": 1.5,
+   "Bonus5": 1.2999999523162842,
+   "Bonus6": 1.5
+  },
+  "55": {
+   "Bonus1": 3.0,
+   "Bonus2": 1.75,
+   "Bonus3": 1.5,
+   "Bonus4": 1.75,
+   "Bonus5": 1.5,
+   "Bonus6": 1.75
+  },
+  "58": {
+   "Bonus1": 1.0499999523162842,
+   "Bonus2": 50,
+   "Bonus3": 1.0499999523162842,
+   "Bonus4": 50,
+   "Bonus5": 1.0499999523162842,
+   "Bonus6": 50
+  },
+  "60": {
+   "Bonus1": {
+    "mantissa": 5.0,
+    "exponent": 6
+   },
+   "Bonus2": 5.0,
+   "Bonus3": {
+    "mantissa": 5.0,
+    "exponent": 2
+   },
+   "Bonus4": {
+    "mantissa": 1.0,
+    "exponent": 1
+   },
+   "Bonus5": {
+    "mantissa": 7.5,
+    "exponent": 5
+   },
+   "Bonus6": {
+    "mantissa": 5.0,
+    "exponent": 2
+   }
+  },
+  "62": {
+   "Bonus1": 1.5,
+   "Bonus2": 1.5,
+   "Bonus3": 2.0,
+   "Bonus4": 2.0,
+   "Bonus5": 2.5,
+   "Bonus6": 2.5
+  },
+  "67": {
+   "Bonus1": 4.0,
+   "Bonus2": 2.0,
+   "Bonus3": 2.0,
+   "Bonus4": 3.0,
+   "Bonus5": 3.0,
+   "Bonus6": 4.0
+  },
+  "70": {
+   "Bonus1": {
+    "mantissa": 1.0,
+    "exponent": 200
+   },
+   "Bonus2": {
+    "mantissa": 5.0,
+    "exponent": 0
+   },
+   "Bonus3": {
+    "mantissa": 1.0,
+    "exponent": 25
+   },
+   "Bonus4": 50.0,
+   "Bonus5": 2.0,
+   "Bonus6": {
+    "mantissa": 1.0,
+    "exponent": 50
+   }
+  },
+  "72": {
+   "Bonus1": 2.0,
+   "Bonus2": 2.0,
+   "Bonus3": 3.0,
+   "Bonus4": 3.0,
+   "Bonus5": 4.0,
+   "Bonus6": 4.0
+  },
+  "77": {
+   "Bonus1": 10000.0,
+   "Bonus2": 3.0,
+   "Bonus3": 3.0,
+   "Bonus4": 4.0,
+   "Bonus5": 4.0,
+   "Bonus6": 5.0
+  },
+  "80": {
+   "Bonus1": {
+    "mantissa": 9.9,
+    "exponent": 420
+   },
+   "Bonus2": {
+    "mantissa": 9.0,
+    "exponent": 0
+   },
+   "Bonus3": {
+    "mantissa": 9.99,
+    "exponent": 50
+   },
+   "Bonus4": 1.0000000200408773e+20,
+   "Bonus5": 1.5,
+   "Bonus6": {
+    "mantissa": 9.99,
+    "exponent": 100
+   }
+  },
+  "82": {
+   "Bonus1": 0.001,
+   "Bonus2": 0.002,
+   "Bonus3": 0.003,
+   "Bonus4": 0.004,
+   "Bonus5": 0.005,
+   "Bonus6": 0.006
+  },
+  "87": {
+   "Bonus1": {
+    "mantissa": 1.01,
+    "exponent": 0
+   },
+   "Bonus2": {
+    "mantissa": 1.02,
+    "exponent": 0
+   },
+   "Bonus3": {
+    "mantissa": 1.03,
+    "exponent": 0
+   },
+   "Bonus4": {
+    "mantissa": 1.04,
+    "exponent": 0
+   },
+   "Bonus5": {
+    "mantissa": 1.05,
+    "exponent": 0
+   },
+   "Bonus6": {
+    "mantissa": 1.06,
+    "exponent": 0
+   }
+  },
+  "89": {
+   "Bonus1": 1.1,
+   "Bonus2": 1.1,
+   "Bonus3": 1.14,
+   "Bonus4": 1.14,
+   "Bonus5": 1.18,
+   "Bonus6": 1.18
+  },
+  "93": {
+   "Bonus1": {
+    "mantissa": 2.0,
+    "exponent": -3
+   },
+   "Bonus2": {
+    "mantissa": 3.0,
+    "exponent": -3
+   },
+   "Bonus3": {
+    "mantissa": 4.0,
+    "exponent": -3
+   },
+   "Bonus4": {
+    "mantissa": 5.0,
+    "exponent": -3
+   },
+   "Bonus5": {
+    "mantissa": 6.0,
+    "exponent": -3
+   },
+   "Bonus6": {
+    "mantissa": 7.0,
+    "exponent": -3
+   }
+  },
+  "94": {
+   "Bonus1": {
+    "mantissa": 1.0,
+    "exponent": 1
+   },
+   "Bonus2": {
+    "mantissa": 2.0,
+    "exponent": 1
+   },
+   "Bonus3": {
+    "mantissa": 3.0,
+    "exponent": 1
+   },
+   "Bonus4": {
+    "mantissa": 4.0,
+    "exponent": 1
+   },
+   "Bonus5": {
+    "mantissa": 5.0,
+    "exponent": 1
+   },
+   "Bonus6": {
+    "mantissa": 6.0,
+    "exponent": 1
+   }
+  },
+  "97": {
+   "Bonus1": {
+    "mantissa": 1.03,
+    "exponent": 0
+   },
+   "Bonus2": {
+    "mantissa": 1.04,
+    "exponent": 0
+   },
+   "Bonus3": {
+    "mantissa": 1.05,
+    "exponent": 0
+   },
+   "Bonus4": {
+    "mantissa": 1.06,
+    "exponent": 0
+   },
+   "Bonus5": {
+    "mantissa": 1.07,
+    "exponent": 0
+   },
+   "Bonus6": {
+    "mantissa": 1.08,
+    "exponent": 0
+   }
+  },
+  "99": {
+   "Bonus1": {
+    "mantissa": 1.02,
+    "exponent": 0
+   },
+   "Bonus2": {
+    "mantissa": 1.03,
+    "exponent": 0
+   },
+   "Bonus3": {
+    "mantissa": 1.04,
+    "exponent": 0
+   },
+   "Bonus4": {
+    "mantissa": 1.05,
+    "exponent": 0
+   },
+   "Bonus5": {
+    "mantissa": 1.06,
+    "exponent": 0
+   },
+   "Bonus6": {
+    "mantissa": 1.07,
+    "exponent": 0
+   }
+  },
+  "104": {
+   "Bonus1": {
+    "mantissa": 1.01,
+    "exponent": 0
+   },
+   "Bonus2": {
+    "mantissa": 1.02,
+    "exponent": 0
+   },
+   "Bonus3": {
+    "mantissa": 1.03,
+    "exponent": 0
+   },
+   "Bonus4": {
+    "mantissa": 1.04,
+    "exponent": 0
+   },
+   "Bonus5": {
+    "mantissa": 1.05,
+    "exponent": 0
+   },
+   "Bonus6": {
+    "mantissa": 1.06,
+    "exponent": 0
+   }
+  },
+  "106": {
+   "Bonus1": {
+    "mantissa": 1.0,
+    "exponent": 1
+   },
+   "Bonus2": {
+    "mantissa": 3.0,
+    "exponent": 1
+   },
+   "Bonus3": {
+    "mantissa": 7.0,
+    "exponent": 1
+   },
+   "Bonus4": {
+    "mantissa": 1.2,
+    "exponent": 2
+   },
+   "Bonus5": {
+    "mantissa": 1.8,
+    "exponent": 2
+   },
+   "Bonus6": {
+    "mantissa": 2.5,
+    "exponent": 2
+   }
+  },
+  "113": {
+   "Bonus1": {
+    "mantissa": 1.0,
+    "exponent": 3
+   },
+   "Bonus2": 50,
+   "Bonus3": 50,
+   "Bonus4": {
+    "mantissa": 1.0,
+    "exponent": 6
+   },
+   "Bonus5": 100,
+   "Bonus6": 100
+  }
+ },
+ "zeus": {
+  "startRankRequirement": 4,
+  "rankExponent": 4.0
+ }
+}
