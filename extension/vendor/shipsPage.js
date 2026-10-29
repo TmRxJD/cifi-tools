@@ -472,38 +472,12 @@ function shipEvolutionMultiplier(shipId, evoLevel) {
 // because the type-tree enum fix landed -- GemPerks was unreadable before it. PowerQualityPower is
 // 1 unless PowerQualityLevel >= 2, and that branch has an operand Cpp2IL could not resolve, so it
 // is reported rather than guessed.
-const POWER_GU1_CREW_COEFF = 0.0012;   // GemPerks.PowerGU1BonusExponentCrew
-const POWER_GU1_RANK_COEFF = 0.02;     // GemPerks.PowerGU1BonusExponentRank
-
-/** The PowerGU1 level, once it is an input. Not yet in the gem store -- see the note below. */
-function powerGU1Level() {
-  const gems = (window.store && window.store.gems) || {};
-  const power = gems.power || {};
-  return Number((power.upgrades && power.upgrades.gu1) || 0) || 0;
-}
-
-/**
- * The global multiplier applied to every install node's bonus.
- * Exactly 1 when its sources are unowned, which is the common case and is what the game returns.
- * @returns {number}
- */
-function installBonusGlobalMultiplier() {
-  const level = powerGU1Level();
-  if (level <= 0) return 1;   // the game returns a literal 1 on this branch
-  const cradle = getShipInput(1);
-  const crew = Number(cradle.crew) || 0;
-  const rank = Number(cradle.rank) || 0;
-  // PowerQualityPower is 1 below quality level 2; the >= 2 branch is unmodelled and reported.
-  return Math.pow(1 + POWER_GU1_CREW_COEFF * level, crew)
-    * Math.pow(1 + POWER_GU1_RANK_COEFF * level, rank);
-}
-
 /** Install-bonus multipliers we cannot compute for this account. Empty when the model is exact. */
 function unmodelledInstallBonusTerms() {
   const gems = (window.store && window.store.gems) || {};
   const research = (window.store && window.store.fleetResearch && window.store.fleetResearch.levels) || {};
   const out = [];
-  // PowerGU1's own maths is modelled; what is not is (a) the quality-2+ exponent, whose operand
+  // PowerGU1's formula is known but not applied; missing inputs include (a) the quality-2+ exponent, whose operand
   // Cpp2IL could not resolve, and (b) the LEVEL itself, which the gem store does not carry yet --
   // it tracks a tree level, node booleans and named upgrades, but not per-GU levels. Until that
   // input exists the level reads 0 and the multiplier is 1, which is right for any account
@@ -2205,10 +2179,6 @@ function isGenLikeTag(tag) { return /^mk\d+$/.test(tag) || TECH_UPGRADE_TAGS.inc
 const GROWTH_GEAR_KEYS = new Set([
   'ticksThisLoop', 'operationsCompleted', 'studiesThisLR', 'loopFillsThisRun', 'totalManualGens',
 ]);
-function nodeScalesWithGrowth(gearKey) {
-  if (!gearKey) return false;
-  return Array.isArray(gearKey) ? gearKey.some((k) => GROWTH_GEAR_KEYS.has(k)) : GROWTH_GEAR_KEYS.has(gearKey);
-}
 // Run Length tactic: skews the optimizer's Cells-vs-Generators preference within the "cells"
 // weight bucket (see RESOURCE_TO_WEIGHT_BUCKET -- both direct Cells nodes and all Generator-tier
 // nodes feed that one slider, so there's otherwise no way to prefer one over the other). Direct

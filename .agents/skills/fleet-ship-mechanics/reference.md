@@ -53,7 +53,7 @@ fleet allocator. See hunter-sim-mechanics for the per-hunter evaluator/relic/opt
   the optimizer. **Their unowned case is now modelled exactly** -- `PowerGU1BonusCalc` returns a
   literal 1 when `PowerGU1Level <= 0`, and the research product is 1 at level 0, which is the
   reference account -- and `unmodelledInstallBonusTerms()` now reports when an account owns them (it did NOT until it was wired -- see below).
-  **PowerGU1 is now fully modelled**, because the type-tree enum bug below was fixed and GemPerks
+  **PowerGU1's formula is fully known, but is not applied by the tool**, because the type-tree enum bug below was fixed and GemPerks
   became readable: `PowerGU1BonusCalc` = `Pow(Pow(1 + 0.0012*L, FinalCradleCrew) *
   Pow(1 + 0.02*L, FinalCradleRank), PowerQualityPower)`, using CRADLE's crew and rank even though
   the result multiplies every ship's nodes. `PowerQualityPower` is 1 below quality level 2. What

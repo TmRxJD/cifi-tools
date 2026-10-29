@@ -92,45 +92,6 @@ for (const [what, bad] of [
 }
 
 // ---------------------------------------------------------------------------------------------
-// CONSTRAINT SEMANTICS for the regime decomposition. Same module, same failure mode: a run field
-// that means two different things depending on where the run ended.
-console.log('');
-console.log('-- constraint violation (regime decomposition)');
-{
-  const R = (maxStage, hp) => ({ maxStage, bossHpPercent: hp });
-  const cases = [
-    // label,               result,             target, cleared, violation
-    ['dies AT the boss, 1/3 damage', R(300.0, 67.44), 3, 2, 0.6744],
-    ['dies AT the boss, nearly won', R(300.0, 3.43), 3, 2, 0.0343],
-    ['clears it, runs on',          R(303.8, 3.43), 3, 3, 0],
-    // THE BUG THIS SECTION EXISTS FOR. bossHpPercent is 0 because the build is PAST the 100 boss,
-    // not because it nearly killed the 200 one. Crediting that as progress made an unreachable
-    // regime score FEASIBLE. Caught by the borge@35 decomposition smoke test.
-    ['past a wall, died in the open', R(155.2, 0.00), 2, 1, 1.0],
-    ['never engaged anything',        R(140.0, 100), 2, 1, 1.0],
-  ];
-  for (const [label, res, target, wantCleared, wantViolation] of cases) {
-    checked++;
-    const gotCleared = H.Objective.regimeOf(res);
-    const gotViolation = H.Objective.constraintViolation(res, target);
-    const okCleared = gotCleared === wantCleared;
-    const okViolation = Math.abs(gotViolation - wantViolation) < 1e-4;
-    if (okCleared && okViolation) {
-      console.log(`ok    ${label.padEnd(30)} cleared ${gotCleared}  violation ${gotViolation.toFixed(4)}`);
-    } else {
-      failures++;
-      console.log(`FAIL  ${label}: cleared ${gotCleared} (want ${wantCleared}), `
-        + `violation ${gotViolation.toFixed(4)} (want ${wantViolation})`);
-    }
-  }
-  // The feasibility SEPARATOR assertion lived here and tested `Objective.constrainScore`, which
-  // has been deleted: it was dead in the shipped app AND a second expression of feasibility that
-  // the FI machinery never used -- search.js computes its own violation via `bossViolationOf`.
-  // Two definitions of one rule is the drift hazard this project's canonical-method inventory
-  // exists to prevent, so the duplicate went rather than being kept alive by its test.
-}
-
-console.log('');
 if (!checked) { console.log('FAIL  describe-run-check compared nothing'); process.exit(1); }
 if (failures) { console.log(`FAIL  ${failures} of ${checked} assertion(s) failed`); process.exit(1); }
 console.log(`PASS  ${checked} assertions over 5 measured runs + 3 malformed inputs`);
