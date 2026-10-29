@@ -38,10 +38,12 @@ check('the share link is a query on the app root, not a path segment',
 // 2. The app must consume it.
 check('the app reads ?code= on load', /consumeSharedBuildFromUrl\s*\(\)/.test(app)
   && /URLSearchParams\(location\.search\)/.test(app));
-check('an inbound code goes through the same importer as the paste dialog',
-  /parseBuildCode\(code\.trim\(\)\)/.test(app) && /applyImportedBuild\(payload, false\)/.test(app));
-check('a shared link does NOT apply the sender\'s account-wide upgrades',
-  /applyImportedBuild\(payload, false\)/.test(app));
+// Live parity: a link opens the Import Build modal PREFILLED, and the recipient picks "Build Only"
+// or "with Upgrades" there -- the same modal, parser and importer as pasting a code.
+const consumeFn = app.slice(app.indexOf('async function consumeSharedBuildFromUrl'), app.indexOf('async function consumeSharedBuildFromUrl') + 1200);
+const openFn = app.slice(app.indexOf('async function openImportModal'), app.indexOf('async function openImportModal') + 800);
+check('an inbound code opens the same Import Build modal as pasting, prefilled',
+  /openImportModal\(code\.trim\(\)\)/.test(consumeFn) && /validateImportCode\(\)/.test(openFn));
 
 // 3. 404.html must rewrite the OLD path form. Replay its transform exactly.
 const fallback = fs.readFileSync(path.join(PUB, '404.html'), 'utf8');
@@ -83,10 +85,27 @@ for (const [p, q, want] of CASES) {
 const applyStart = app.indexOf('function applyImportedBuild');
 const applyEnd = app.indexOf("\ndocument.getElementById('importBuildOnlyBtn')", applyStart);
 const applyFn = app.slice(applyStart, applyEnd > applyStart ? applyEnd : applyStart + 8000);
-check('the imported build is filed under the payload hunter, not currentHunter',
-  /const targetHunter = /.test(applyFn) && /store\[targetHunter\]\.builds\.push\(build\)/.test(applyFn));
-check('the destination does not depend on switchHunter having succeeded',
-  !/store\[currentHunter\]\.builds\.push/.test(applyFn));
+// The import is an unsaved Build Creator draft now (live flow), so "filed under the right hunter"
+// has two halves: the draft only opens once the code's hunter is really current (nav gating can
+// bounce a locked hunter back to Borge), and Save files under the hunter captured at open.
+const saveFn = handlerOfStatic("document.getElementById('updateBuildBtn').onclick", '\n};');
+check('the draft opens only when the payload hunter is actually current',
+  /const targetHunter = /.test(applyFn) && /if \(currentHunter !== targetHunter\) \{[\s\S]*?return;/.test(applyFn)
+  && applyFn.indexOf('currentHunter !== targetHunter) {\n    paintImportModal') < applyFn.indexOf('openBuildModal(build)'));
+check('Save files the build under the hunter the creator was opened for',
+  /store\[editingHunter\]\.builds/.test(saveFn) && !/store\[currentHunter\]\.builds/.test(saveFn));
+// "Import with Upgrades" puts the code's values in the BUILD's overrides. It must never write the
+// importer's account -- it used to, silently replacing their stats/relics/gems with the sender's.
+check('importing a build never writes the account (stats, upgrades, gems)',
+  !/(hunterStats|globalUpgrades|store\.gems)(\[[^\]]+\])*(\.[\w-]+)*\s*=[^=]/.test(applyFn)
+  && !/saveStore\(\)/.test(applyFn));
+
+function handlerOfStatic(start, end) {
+  const a = app.indexOf(start);
+  if (a === -1) return '';
+  const b = app.indexOf(end, a);
+  return app.slice(a, b === -1 ? a + 1200 : b);
+}
 
 // 5. FILE INPUTS MUST CLEAR THEIR SELECTION AFTER READING.
 //

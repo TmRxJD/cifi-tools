@@ -12,17 +12,24 @@
   // refuse to hand back a result for a superseded run. That is the whole of what "abortable"
   // can mean here, and it is worth doing: the caller then has one uniform way to cancel instead
   // of a special case that has to be guarded at every call site.
-  async function currentRates(hunter, storeState, baseline, iterations, signal) {
+  async function currentRates(hunter, cfg, iterations, signal) {
     HunterSim.throwIfAborted(signal);
-    const h = storeState[hunter];
+    // Ranking and income consume the SAME frozen account/build projection. Reading the live
+    // store again here could price a plan for a different allocation or account snapshot.
     const r = await HunterSim.evaluate(hunter, {
-      level: baseline.level, hunterStats: h.hunterStats, talents: baseline.talents, attributes: baseline.attributes,
-      overrides: {}, upgrades: window.buildNestedUpgrades(storeState.globalUpgrades),
-      gemPlannerStore: { gemStates: storeState.gems }, iterations: iterations || 1000,
+      level: cfg.level, hunterStats: cfg.hunterStats, talents: cfg.talents, attributes: cfg.attributes,
+      overrides: cfg.baseOverrides, upgrades: cfg.globalUpgrades,
+      gemPlannerStore: cfg.gemPlannerStore, iterations,
     });
     HunterSim.throwIfAborted(signal);
-    const runsPerDay = r.avgTime ? 1440 / r.avgTime : 0;
-    const perDay = { mat1: r.mat1 * runsPerDay, mat2: r.mat2 * runsPerDay, mat3: r.mat3 * runsPerDay };
+    // Missing yields must not become NaN prices that silently drop every purchase.
+    for (const key of ['avgTime', 'mat1', 'mat2', 'mat3']) {
+      if (!Number.isFinite(r[key]) || r[key] < 0 || (key === 'avgTime' && r[key] === 0)) {
+        throw new Error(`IncomeModel.currentRates: invalid simulation field ${key}`);
+      }
+    }
+    const runsPerDay = 1440 / Number(r.avgTime);
+    const perDay = { mat1: Number(r.mat1) * runsPerDay, mat2: Number(r.mat2) * runsPerDay, mat3: Number(r.mat3) * runsPerDay };
     const perHour = { mat1: perDay.mat1 / 24, mat2: perDay.mat2 / 24, mat3: perDay.mat3 / 24 };
     return { runsPerDay, perDay, perHour, sim: r };
   }

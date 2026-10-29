@@ -106,13 +106,15 @@ for (const hunter of ['borge', 'ozzy', 'knox']) {
   }
 
   const liveKeys = new Set(liveTable.upgradeKeys);
-  const missingAll = [...liveKeys].filter((k) => !ours.has(k));
-  // The live tool lets you override gem nodes from its Overrides panel; we surface gems through
-  // the Gem Planner instead. Different UI location, not a coverage gap -- but ONLY because
-  // gem-coverage-test.js separately proves every gem param the wasm reads is reachable from Gem
-  // Planner state. Do not soften this filter while that test is failing.
-  const missing = missingAll.filter((k) => !k.startsWith('upgrades.gems_nodes.'));
-  const viaGemPlanner = missingAll.length - missing.length;
+  // Gem rows come from OVERRIDE_GEM_KEYS, not globalUpgrades. They used to be excused here as
+  // "handled by the Gem Planner" -- true for the account, false for a BUILD's gem overrides, which
+  // then had no row in our panel at all. creation_galvTrinketsCount is covered by the three
+  // per-trinket keys (resolveParam sums them), so it is the one gem key not listed.
+  const gemKeys = sb.OVERRIDE_GEM_KEYS[hunter];
+  for (const list of Object.values(gemKeys)) for (const f of list) ours.add(`upgrades.gems_nodes.${f}`);
+  const TRINKET_SUM = 'upgrades.gems_nodes.creation_galvTrinketsCount';
+  const missing = [...liveKeys].filter((k) => !ours.has(k) && k !== TRINKET_SUM);
+  const viaGemPlanner = Object.values(gemKeys).flat().length;
   // The live table is only the ORIGINAL'S OVERRIDES PANEL. cifi-tools is code-split, and several
   // upgrade families live on their own lazily-loaded pages instead -- assets/Trinkets-*.js
   // (`const $="trinkets"`, one card per trinket), IAP-*.js (`const U="iap"`), Ultima-*.js and
@@ -134,7 +136,7 @@ for (const hunter of ['borge', 'ozzy', 'knox']) {
   const viaOwnPage = extraAll.length - extra.length;
 
   if (missing.length) note(`MISSING ${missing.length} override(s) the live tool exposes:\n      ${missing.join('\n      ')}`);
-  else console.log(`  no missing overrides (${viaGemPlanner} gem node(s) handled by the Gem Planner)`);
+  else console.log(`  no missing overrides (${viaGemPlanner} gem row(s) from OVERRIDE_GEM_KEYS)`);
   if (viaOwnPage) {
     console.log(`  ${viaOwnPage} key(s) the live tool exposes on their own page rather than in its `
       + 'Overrides panel (Trinkets / IAP / Ultima / DiamondSpecials) -- in parity, different location');

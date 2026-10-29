@@ -405,6 +405,20 @@ h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -.
 .fit-number::-webkit-outer-spin-button,
 .fit-number::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
+.stepper-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  background: var(--surface-700);
+  color: var(--surface-200);
+  touch-action: none;
+}
+.stepper-btn:hover { background: var(--surface-600); color: #fff; }
+.stepper-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.stepper-btn:focus-visible { outline: 2px solid var(--surface-200); outline-offset: 2px; }
+
 .ctrl-btn {
   display: flex;
   align-items: center;

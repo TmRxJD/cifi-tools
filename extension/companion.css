@@ -421,6 +421,20 @@
 .cifi-companion .fit-number { appearance: textfield; -moz-appearance: textfield; }
 .cifi-companion .fit-number::-webkit-outer-spin-button, .cifi-companion .fit-number::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
+.cifi-companion .stepper-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  background: var(--surface-700);
+  color: var(--surface-200);
+  touch-action: none;
+}
+.cifi-companion .stepper-btn:hover { background: var(--surface-600); color: #fff; }
+.cifi-companion .stepper-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.cifi-companion .stepper-btn:focus-visible { outline: 2px solid var(--surface-200); outline-offset: 2px; }
+
 .cifi-companion .ctrl-btn {
   display: flex;
   align-items: center;

@@ -136,19 +136,13 @@ function countingEvaluator() {
     // call so this cannot be interrupted partway -- but it must refuse to START work nobody is
     // waiting for, and must not hand back a result for a superseded run. Otherwise the caller
     // needs a special-case guard at every site, which is how the guard eventually gets forgotten.
-    const store = {
-      borge: { hunterStats: {} },
-      globalUpgrades: {},
-      gems: {},
-    };
-    const baseline = { level: cfg.level, talents: cfg.talents, attributes: cfg.attributes };
     const ac = new AbortController();
     ac.abort();
     let calls = 0;
     const orig = sb.HunterSim.evaluate;
     sb.HunterSim.evaluate = function counted(...args) { calls += 1; return orig.apply(this, args); };
     try {
-      await sb.IncomeModel.currentRates(HUNTER, store, baseline, 100, ac.signal);
+      await sb.IncomeModel.currentRates(HUNTER, cfg, 100, ac.signal);
       return 'resolved despite an aborted signal';
     } catch (err) {
       if (err.name !== sb.HunterSim.ABORTED) return `wrong error: ${err.name} ${err.message}`;
@@ -158,9 +152,7 @@ function countingEvaluator() {
   });
 
   await check('currentRates without a signal still works', async () => {
-    const store = { borge: { hunterStats: {} }, globalUpgrades: {}, gems: {} };
-    const baseline = { level: cfg.level, talents: cfg.talents, attributes: cfg.attributes };
-    const r = await sb.IncomeModel.currentRates(HUNTER, store, baseline, 100);
+    const r = await sb.IncomeModel.currentRates(HUNTER, cfg, 100);
     return r && r.perHour && Number.isFinite(r.runsPerDay) ? null : 'a signal-less call stopped working';
   });
 

@@ -38,11 +38,9 @@
   // columns compete for -- so they form their own independent column, same as every other
   // resource here.
   //
-  // No relic is filtered out by hand, including the ones measured to do nothing (Borge r7/r19,
-  // Ozzy r7, Knox t2r5 -- see CLAUDE.md). The walk ranks by REAL measured marginal effect, so
-  // an inert relic scores a delta of exactly 0 and loses to anything that moves the number. It
-  // falls out of the ranking rather than needing a maintained blocklist -- and if the game ever
-  // makes one of them matter, this picks that up with no code change.
+  // No hand-maintained relic blocklist: a materials/XP relic may be useful for those rewards,
+  // yet have no measured gain for the selected loot/stage/boss goal. Such a purchase is omitted
+  // from this goal's plan rather than described as an intrinsically useless relic.
   // A candidate the account cannot unlock yet must never be recommended. The gate lives in
   // hunterDefs.js (UPGRADE_GATES, transcribed from the live bundle); the account's gem levels
   // come from the Gem Planner state the caller already passes in cfg.gemPlannerStore.
@@ -123,10 +121,8 @@
   // real values, since the point is that this column's recommendation shouldn't depend on
   // (or wait on) any other resource's queue.
   //
-  // Always walks the full targetSteps regardless of whether a step's marginal ROI is
-  // positive -- the point of this view is "here's the next N in ranked order for this
-  // resource," not "here's how many are worth buying." It only stops early if literally
-  // nothing is purchasable anymore (every candidate capped out or missing a cost formula).
+  // Recommendations require positive measured gain. The old fixed-length queue filled its
+  // remaining rows with useless/harmful upgrades; ten is now a limit, never a purchase quota.
   // TIME PREFERENCE. Within one currency, gain-per-cost is gain per hour because income is fixed.
   // That is the unlimited-horizon ROI. For a finite planning horizon, discount that ROI by when
   // its benefit actually arrives: exp(-T/H), where T is the cumulative time to reach the purchase.
@@ -156,6 +152,7 @@
     let baselineScore = (await scoreBatch([jobFor(stats, upgrades)], iterations))[0];
 
     const steps = [];
+    let stopReason = 'step-limit';
     for (let i = 0; i < targetSteps; i++) {
       await yieldToUI();
       throwIfAborted(signal);
@@ -172,35 +169,32 @@
         const cap = capOf(def, cand);
         if (isFinite(cap) && nextLevel > cap) continue;
         const cost = purchaseCostOf(hunter, CF, cand, nextLevel);
-        if (!cost || cost <= 0) continue;
+        if (!Number.isFinite(cost) || cost <= 0) continue;
         const completesAt = completionHours(timing, spentHours, cost, cand.resource);
+        if (timing && completesAt !== null && completesAt > timing.horizonHours) continue;
 
         const candStats = param ? stats : { ...stats, [cand.key]: nextLevel };
         const candUpgrades = param ? { ...upgrades, [param]: nextLevel } : upgrades;
         sweep.push({ cand, nextLevel, cost, candStats, candUpgrades, completesAt });
       }
-      // ONE PURCHASABLE CANDIDATE IS NOT A DECISION. Scoring it at full fidelity -- the whole cost
-      // of a step -- would buy nothing: it is chosen regardless. A single-stat currency (Ozzy's
-      // mat3 is Attack Speed alone) was spending 30 full-fidelity evaluations choosing between one
-      // option. Candidates only ever leave the sweep (capped / no cost), so once a column is down
-      // to one it stays there, and its baseline score is never compared against again.
-      if (sweep.length === 1) {
-        best = { ...sweep[0], score: NaN, valuePerCost: 0 };
-        sweep.length = 0;
-      }
+      // Even a sole candidate must prove it improves the chosen goal. A currency with one
+      // remaining option is not permission to recommend a useless or harmful purchase.
       const scores = sweep.length
         ? await scoreBatch(sweep.map((entry) => jobFor(entry.candStats, entry.candUpgrades)), iterations)
         : [];
       sweep.forEach((entry, index) => {
-        const gainPerCost = (scores[index] - baselineScore) / entry.cost;
-        // Do not shrink losses toward zero: that would make a harmful upgrade look better merely
-        // because its harm arrives later. The time preference ranks positive returns only.
-        const valuePerCost = gainPerCost > 0
-          ? gainPerCost * horizonWeight(timing, entry.completesAt)
-          : gainPerCost;
-        if (!best || valuePerCost > best.valuePerCost) best = { ...entry, score: scores[index], valuePerCost };
+        const gain = window.OptimizerObjective.pathGain(baselineScore, scores[index]);
+        if (!(gain.delta > 0)) return;
+        const valuePerCost = gain.delta / entry.cost * horizonWeight(timing, entry.completesAt);
+        // Reach/kill boundaries and raw progress components are categorical priorities. Costs
+        // rank improvements of the same kind; invented scalar tier bonuses never become ROI.
+        if (!best || gain.tier > best.gain.tier
+          || (gain.tier === best.gain.tier && (gain.component < best.gain.component
+            || (gain.component === best.gain.component && valuePerCost > best.valuePerCost)))) {
+          best = { ...entry, score: scores[index], gain, valuePerCost };
+        }
       });
-      if (!best) break; // every candidate capped out / no cost formula left -- nothing left to rank
+      if (!best) { stopReason = sweep.length ? 'no-improvement' : 'no-affordable-candidate'; break; }
       if (timing && best.completesAt !== null) spentHours = best.completesAt;
 
       Object.assign(stats, best.candStats);
@@ -209,10 +203,11 @@
       steps.push({
         kind: best.cand.kind, key: best.cand.key, label: best.cand.label, level: best.nextLevel,
         cost: best.cost, resource: best.cand.resource,
+        gain: best.gain.delta, metric: best.gain.metric,
       });
     }
     if (onProgress) onProgress(targetSteps, targetSteps);
-    return { steps };
+    return { steps, stopReason };
   }
 
   // Every resource here has an independent candidate pool, so the resource list -- and
@@ -295,7 +290,7 @@
           for (const item of items) {
             throwIfAborted(scoreSignal);
             const result = await evalFast(item.talentAlloc, item.attrAlloc, iterations, item.hunterStats, item.upgradeValues);
-            scores.push(window.OptimizerObjective.scoreFor(mode, result));
+            scores.push(window.OptimizerObjective.pathProgress(mode, result, window.OptimizerObjective.contextFor(workerCfg)));
           }
           return scores;
         },

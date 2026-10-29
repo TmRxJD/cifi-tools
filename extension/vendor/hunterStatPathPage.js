@@ -21,19 +21,15 @@
     return Object.values(talents || {}).some((v) => v > 0) || Object.values(attributes || {}).some((v) => v > 0);
   }
 
-  // This tool is a build-comparison planner, not a live account mirror -- there's no single
-  // "current real build" on store[hunter] itself, only a list of user-created builds
-  // (talents/attributes live per-build). The "Active" category is what the rest of the app
-  // treats as the player's real, in-use loadouts, so the first one there is the best available
-  // stand-in for "my actual current talents/attributes." Falls back to an all-zero allocation
-  // if the player hasn't created any build yet, rather than erroring.
-  function getBaselineBuild(hunter) {
-    const h = store[hunter];
-    const active = (h.builds || []).filter((b) => (b.categoryId || 'active') === 'active');
-    const build = active[0] || h.builds?.[0];
-    const talents = build?.talents || {};
-    const attributes = build?.attributes || {};
-    return { level: build?.level || h.level || 1, talents, attributes, real: hasMeaningfulAllocation(talents, attributes) };
+  // Allocations live per build, not per account. The user chooses which one to plan for;
+  // silently using the first Active build used to make this a plan for an arbitrary loadout.
+  function getBaselineBuild(build) {
+    if (!build || !Number.isFinite(build.level)) throw new Error('Choose a saved build with a level before calculating a path.');
+    const talents = structuredClone(build.talents);
+    const attributes = structuredClone(build.attributes);
+    // A purchase plan starts from owned account upgrades. Imported hypothetical overrides must
+    // not become owned levels, either in scoring or in the farming rate used to price the plan.
+    return { level: build.level, talents, attributes, overrides: {}, real: hasMeaningfulAllocation(talents, attributes) };
   }
 
   // Commit a confirmed purchase to the right place. Relics and inscriptions are ACCOUNT-wide
@@ -147,6 +143,7 @@
           <span class="text-gray-500 w-4 text-right shrink-0">${r.i + 1}</span>
           <span class="text-white font-medium">${escapeHtml(rl)} → ${r.level}</span>
         </div>
+        ${r.metric ? `<div class="text-emerald-300 mt-1 pl-[22px]">${escapeHtml(r.metric)}${r.metric.endsWith('unlocked') || r.metric.endsWith('reached') ? '' : ` +${Number(r.gain).toPrecision(3)}`}</div>` : ''}
         <div class="flex items-center justify-between gap-1.5 mt-1 pl-[22px]">
           <span class="text-amber-400 font-medium">${CF.fmtBig(r.cost)}</span>
           <div class="flex items-center gap-1.5">
@@ -155,10 +152,11 @@
           </div>
         </div>
       </li>`;
-    }).join('') || '<div class="text-gray-500 text-xs py-4 text-center">No purchases available for this resource right now.</div>';
+    }).join('') || '<div class="text-gray-400 text-xs py-4 text-center">No measured improving purchase in this planning window. Several purchases together may behave differently.</div>';
 
     colEl.innerHTML = `
       <div class="flex items-center gap-1.5 mb-2 font-semibold text-white text-sm">${matIcon(resource)}${escapeHtml(label)}</div>
+      ${!rates || !Number.isFinite(rates.perHour[resource]) || rates.perHour[resource] <= 0 ? '<p class="text-xs text-amber-300 mb-2">Income unknown: timing and the planning window cannot be applied to this currency.</p>' : ''}
       <ul data-rows class="space-y-0"></ul>`;
     const rowsEl = colEl.querySelector('[data-rows]');
     rowsEl.innerHTML = renderRows();
@@ -183,7 +181,6 @@
         rows.slice(0, upTo + 1).forEach((r) => { if (r.i > confirmedUpTo) applyStepToStore(hunter, r); });
         saveStore();
         onChange();
-        renderColumn(colEl, resource, colResult, rates, rowLabel, hunter, onChange, Math.max(confirmedUpTo, upTo));
       };
     });
   }
@@ -206,13 +203,13 @@
   const PATH_MODE_SUBTITLE = {
     loot: 'ranked by effect on simulated loot/min',
     push: 'ranked by effect on average stage reached',
-    boss: 'ranked by what most improves the boss kill — loot is ignored until the kill is secured',
+    boss: 'ranked by boss reach, damage and kill chance; loot bonuses do not count',
   };
 
   function pathSubtitle(mode) {
     const how = PATH_MODE_SUBTITLE[mode];
     if (!how) throw new Error(`pathSubtitle: no description for mode "${mode}"`);
-    return `Next ${TARGET_STEPS} recommended purchases per currency, ${how}.`;
+    return `Up to ${TARGET_STEPS} improving purchases per currency, ${how}. Each currency is planned separately, with the other columns held at current levels. Farming times start from zero saved currency and use the current rate.`;
   }
 
   function currentHorizonDays() {
@@ -226,74 +223,55 @@
   // Rates for every currency the path can price. Materials come from the simulated run;
   // fragments come from the player's own per-day entry (the sim does not produce them), so the
   // relic column is timed only once that rate is set -- an unset rate stays unknown, never instant.
-  function pathRates(simRates) {
-    return { ...simRates, perHour: { ...simRates.perHour, frags: (store.fragments.perDay || 0) / 24 } };
+  function pathRates(simRates, fragsPerDay) {
+    return { ...simRates, perHour: { ...simRates.perHour, frags: fragsPerDay / 24 } };
   }
 
   // The time preference handed to greedyPurchasePath; null ranks by gain-per-cost alone, which is
   // what "No limit" means and all that is possible without a real build's income.
-  function timingFor(rates) {
-    const days = currentHorizonDays();
+  function timingFor(rates, days) {
     return rates && days ? { perHour: rates.perHour, horizonHours: days * 24 } : null;
   }
 
   const horizonLabel = (d) => (d === 0 ? 'No limit' : d === 1 ? '1 day' : d === 365 ? '1 year' : `${d} days`);
 
-  function modePickerHtml(selected, timed) {
+  function modePickerHtml(selected) {
     const modes = window.OptimizerObjective.pathModes();
     const days = currentHorizonDays();
     return `
       <div class="flex flex-wrap items-center gap-2 mb-3">
-        <span class="text-xs text-gray-400">Optimise for:</span>
-        <select id="pathModeSelect" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white">
+        <label for="pathModeSelect" class="text-sm text-gray-300">Goal</label>
+        <select id="pathModeSelect" class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white">
           ${Object.entries(modes).map(([key, spec]) => `<option value="${key}"${key === selected ? ' selected' : ''}>${escapeHtml(spec.label)}</option>`).join('')}
         </select>
-        ${timed ? `
-        <span class="text-xs text-gray-400 ml-2" title="ROI is discounted by how long the purchase takes to reach; long-term upgrades remain visible">Horizon:</span>
-        <select id="pathHorizonSelect" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white">
+        <label for="pathHorizonSelect" class="text-sm text-gray-300 ml-2">Planning window</label>
+        <select id="pathHorizonSelect" class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white">
           ${StoreSchema.PATH_HORIZON_DAYS.map((d) => `<option value="${d}"${d === days ? ' selected' : ''}>${horizonLabel(d)}</option>`).join('')}
-        </select>` : ''}
+        </select>
       </div>`;
   }
 
-  function bindModePicker(overlay, rerun) {
-    const sel = overlay.querySelector('#pathModeSelect');
-    if (!sel) return;
-    sel.onchange = () => {
-      store[PATH_MODE_STORE_KEY] = sel.value;
-      saveStore();
-      rerun(sel.value);
-    };
-    const horizon = overlay.querySelector('#pathHorizonSelect');
-    if (horizon) {
-      horizon.onchange = () => {
-        store.effectivePathHorizonDays = Number(horizon.value);
-        saveStore();
-        rerun(sel.value);
-      };
-    }
-  }
-
-  function renderColumnsModal(overlay, columns, rates, rowLabel, hunter, subtitle, modeSelected, timed) {
+  function renderColumnsModal(overlay, columns, rates, rowLabel, hunter, subtitle) {
     widenModal(overlay);
-    const body = overlay.querySelector('.p-5');
+    const body = overlay.querySelector('[data-path-results]');
     const resources = Object.keys(columns);
     body.innerHTML = `
-      ${modeSelected ? modePickerHtml(modeSelected, timed) : ''}
       ${subtitle ? `<div class="text-xs text-gray-500 mb-3">${subtitle}</div>` : ''}
+      <p class="text-xs text-gray-300 mb-3">Each row shows cost, then time for that purchase · total saving time.</p>
       <div class="grid grid-cols-1 md:grid-cols-${Math.min(resources.length, 4)} gap-3">
         ${resources.map((r) => `<div data-col="${r}" class="bg-gray-900/40 rounded-lg p-2 max-h-[60vh] overflow-y-auto"></div>`).join('')}
       </div>`;
     const onChange = () => {
       if (typeof renderStatsModalBody === 'function') renderStatsModalBody();
       if (typeof renderBuildList === 'function') renderBuildList();
+      body.innerHTML = '<p class="text-gray-300 py-4">Account updated. Calculate again to plan the remaining purchases.</p>';
     };
     resources.forEach((r) => {
       renderColumn(body.querySelector(`[data-col="${r}"]`), r, columns[r], rates, rowLabel, hunter, onChange);
     });
   }
 
-  // REOPENING AN UNCHANGED PATH IS INSTANT. A path is ~10-20s of full-fidelity evaluation and is a
+  // RECALCULATING AN UNCHANGED PATH IS INSTANT. A path is ~10-20s of full-fidelity evaluation and is a
   // pure function of its inputs, so a repeat view with nothing changed is served from memory. The
   // key is EVERYTHING the result depends on: the account state and baseline build (both inside
   // cfg), the candidate pool, the objective, the planning horizon and the fragment rate. Any edit
@@ -302,19 +280,21 @@
   // Entries are cloned both ways so a render that mutates its columns cannot corrupt the cache.
   const pathCache = new Map();
   const PATH_CACHE_LIMIT = 12;
-  async function cachedPath(overlay, baseline, includeAccountUpgrades, mode, signal) {
-    const cfg = statPathCfgFor(currentHunter, baseline);
+  async function cachedPath(overlay, hunter, baseline, includeAccountUpgrades, mode, signal) {
+    const cfg = structuredClone(statPathCfgFor(hunter, baseline));
+    const days = currentHorizonDays();
+    const fragsPerDay = store.fragments.perDay || 0;
     const key = JSON.stringify({
-      hunter: currentHunter, includeAccountUpgrades, mode, steps: TARGET_STEPS,
-      horizon: currentHorizonDays(), fragsPerDay: store.fragments.perDay, real: baseline.real, cfg,
+      hunter, includeAccountUpgrades, mode, steps: TARGET_STEPS,
+      horizon: days, fragsPerDay, real: baseline.real, cfg,
     });
     const hit = pathCache.get(key);
     if (hit) return structuredClone(hit);
     // SEQUENTIAL, not Promise.all: the ranking needs the income rates (time-to-afford), so they
     // must exist before the walk starts. They cost ~150ms against a walk of seconds.
-    const rates = baseline.real ? pathRates(await IncomeModel.currentRates(currentHunter, store, baseline, 1000, signal)) : null;
-    const result = await greedyPurchasePath(currentHunter, cfg, TARGET_STEPS, includeAccountUpgrades, mode,
-      (resource, done, total) => updateProgress(overlay, resource, done, total), signal, timingFor(rates));
+    const rates = baseline.real ? pathRates(await IncomeModel.currentRates(hunter, cfg, HunterOptimizer.FINAL_ITERATIONS, signal), fragsPerDay) : null;
+    const result = await greedyPurchasePath(hunter, cfg, TARGET_STEPS, includeAccountUpgrades, mode,
+      (resource, done, total) => updateProgress(overlay, resource, done, total), signal, timingFor(rates, days));
     if (!signal.aborted) {
       pathCache.delete(key);
       pathCache.set(key, structuredClone({ result, rates }));
@@ -327,78 +307,69 @@
   // relics), so a stats-only labeler shows raw ids like "r4" for everything that is not a stat.
   const pathRowLabel = (r) => (r.kind === 'stat' ? (STAT_LABELS[r.key] || r.key) : (r.label || r.key));
 
-  async function openHunterStatPathModal() {
-    const resources = window.resourcesFor(currentHunter, true, store.gems);
-    const overlay = titledModal('chart-arrows-vertical', 'Effective Path', renderProgressPanel(resources), 'hunterStatPathModal');
+  function openEffectivePathModal(build = null) {
+    if (window.HUNTERSIM_EMBEDDED) window.refreshStoreFromNative();
+    const hunter = currentHunter;
+    const choices = store[hunter].builds;
+    const title = build ? `Effective Path: ${escapeHtml(build.name || 'Unnamed')}` : 'Effective Path';
+    const setup = `
+      <form data-path-setup>
+        ${build ? `<p class="text-sm text-white mb-3">Build: ${escapeHtml(build.name || 'Unnamed')} · Level ${build.level}</p>` : `
+          <label for="pathBuildSelect" class="block text-sm text-gray-300 mb-1">Build to plan for</label>
+          <select id="pathBuildSelect" required class="bg-gray-700 border border-gray-600 rounded px-3 py-2 mb-3 text-sm text-white">
+            <option value="">Choose a build</option>
+            ${choices.map(b => `<option value="${escapeHtml(b.id)}">${escapeHtml(b.name || 'Unnamed')} · Level ${b.level}</option>`).join('')}
+          </select>`}
+        ${modePickerHtml(currentPathMode())}
+        <p class="text-xs text-gray-400 mb-3">Uses this build’s level, talents and attributes with your current account stats and upgrades. Build overrides are excluded. Choose your goal and window before calculating.</p>
+        <button type="submit" data-calculate-path class="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded text-white text-sm">Calculate path</button>
+      </form>
+      <div data-path-results aria-live="polite" class="mt-4"><p class="text-sm text-gray-400">${!build && !choices.length ? 'Create or import a build first.' : 'Ready when you are.'}</p></div>`;
+    const overlay = titledModal('chart-arrows-vertical', title, setup, build ? 'buildEffectivePathModal' : 'hunterStatPathModal');
     widenModal(overlay);
-    bindProgressLabels(overlay, currentHunter, resources);
-
     const nextSignal = abortableRuns(overlay);
-    const run = async (mode) => {
-      const signal = nextSignal();
-      overlay.querySelector('.p-5').innerHTML = renderProgressPanel(resources);
-      bindProgressLabels(overlay, currentHunter, resources);
-      let result; let rates;
-      const baseline = getBaselineBuild(currentHunter);
-      try {
-        ({ result, rates } = await cachedPath(overlay, baseline, true, mode, signal));
-      } catch (err) {
-        // A SUPERSEDED RUN MUST NOT PAINT. Aborting terminates the worker pool, which rejects
-        // in-flight batches with an `AbortError` -- not HunterSim's ABORTED name, so isAbort()
-        // misses it. On a mode switch that stale rejection arrives after the new run has drawn its
-        // progress panel and would overwrite it with "Failed to compute". The signal is the truth.
-        if (isAbort(err) || signal.aborted) return;
-        overlay.querySelector('.p-5').innerHTML = `<div class="text-red-400 py-8 text-center">Failed to compute Effective Path: ${escapeHtml(err.message || String(err))}</div>`;
-        return;
-      }
-      // The rates half is not abortable (it is ~150ms), so a run can still finish just after
-      // being superseded. Rendering then would overwrite the newer run's progress panel.
-      if (signal.aborted) return;
-      const timingNote = baseline.real ? '' : ' Create a build to unlock timing estimates.';
-      renderColumnsModal(overlay, result.columns, rates, pathRowLabel, currentHunter,
-        `${pathSubtitle(mode)}${timingNote}`, mode, !!rates);
-      bindModePicker(overlay, run);
+    const form = overlay.querySelector('[data-path-setup]');
+    const resultsEl = overlay.querySelector('[data-path-results]');
+    const button = overlay.querySelector('[data-calculate-path]');
+    const buildSelect = overlay.querySelector('#pathBuildSelect');
+    const invalidate = () => {
+      nextSignal();
+      button.disabled = !build && !buildSelect.value;
+      resultsEl.innerHTML = '<p class="text-sm text-gray-400">Calculate to see a path for these choices.</p>';
     };
-    run(currentPathMode());
+    form.onchange = invalidate;
+    button.disabled = !build;
+    form.onsubmit = async event => {
+      event.preventDefault();
+      const signal = nextSignal();
+      button.disabled = true;
+      try {
+        if (window.HUNTERSIM_EMBEDDED) window.refreshStoreFromNative();
+        const selected = build || store[hunter].builds.find(b => b.id === buildSelect.value);
+        const baseline = getBaselineBuild(selected);
+        const mode = overlay.querySelector('#pathModeSelect').value;
+        store[PATH_MODE_STORE_KEY] = mode;
+        store.effectivePathHorizonDays = Number(overlay.querySelector('#pathHorizonSelect').value);
+        saveStore();
+        const resources = window.resourcesFor(hunter, true, store.gems);
+        resultsEl.innerHTML = renderProgressPanel(resources);
+        bindProgressLabels(overlay, hunter, resources);
+        const { result, rates } = await cachedPath(overlay, hunter, baseline, true, mode, signal);
+        if (signal.aborted) return;
+        const timingNote = baseline.real ? '' : ' No allocated points: income and timing are unavailable.';
+        renderColumnsModal(overlay, result.columns, rates, pathRowLabel, hunter,
+          `${pathSubtitle(mode)}${timingNote}`);
+      } catch (err) {
+        if (isAbort(err) || signal.aborted) return;
+        resultsEl.innerHTML = `<p class="text-red-400 py-4">Failed to compute Effective Path: ${escapeHtml(err.message || String(err))}</p>`;
+      } finally {
+        if (!signal.aborted) button.disabled = false;
+      }
+    };
   }
 
-  async function openBuildEffectivePathModal(build) {
-    const resources = window.resourcesFor(currentHunter, true, store.gems);
-    const overlay = titledModal('chart-arrows-vertical', `Effective Path: ${escapeHtml(build.name || 'Unnamed')}`, renderProgressPanel(resources), 'buildEffectivePathModal');
-    widenModal(overlay);
-    bindProgressLabels(overlay, currentHunter, resources);
-
-    const talents = build.talents || {};
-    const attributes = build.attributes || {};
-    const baseline = { level: build.level || 1, talents, attributes, real: hasMeaningfulAllocation(talents, attributes) };
-
-    const nextSignal = abortableRuns(overlay);
-    const run = async (mode) => {
-      const signal = nextSignal();
-      overlay.querySelector('.p-5').innerHTML = renderProgressPanel(resources);
-      bindProgressLabels(overlay, currentHunter, resources);
-      let result; let rates;
-      try {
-        ({ result, rates } = await cachedPath(overlay, baseline, true, mode, signal));
-      } catch (err) {
-        // A SUPERSEDED RUN MUST NOT PAINT. Aborting terminates the worker pool, which rejects
-        // in-flight batches with an `AbortError` -- not HunterSim's ABORTED name, so isAbort()
-        // misses it. On a mode switch that stale rejection arrives after the new run has drawn its
-        // progress panel and would overwrite it with "Failed to compute". The signal is the truth.
-        if (isAbort(err) || signal.aborted) return;
-        overlay.querySelector('.p-5').innerHTML = `<div class="text-red-400 py-8 text-center">Failed to compute Effective Path: ${escapeHtml(err.message || String(err))}</div>`;
-        return;
-      }
-      // See the note in openHunterStatPathModal: the rates half is not abortable, so a superseded
-      // run can still land here and would otherwise clobber the newer run's panel.
-      if (signal.aborted) return;
-      const timingNote = baseline.real ? '' : ' Allocate talent/attribute points on this build to unlock timing estimates.';
-      renderColumnsModal(overlay, result.columns, rates, pathRowLabel, currentHunter,
-        `${pathSubtitle(mode)}${timingNote}`, mode, !!rates);
-      bindModePicker(overlay, run);
-    };
-    run(currentPathMode());
-  }
+  const openHunterStatPathModal = () => openEffectivePathModal();
+  const openBuildEffectivePathModal = build => openEffectivePathModal(build);
 
   document.addEventListener('click', (e) => {
     if (e.target && e.target.id === 'openStatPathBtn') openHunterStatPathModal();

@@ -179,9 +179,15 @@
     const attrIds = new Set(def.attributes.map((a) => a.id));
     const baseStatKeys = new Set(def.baseStatKeys);
 
+    /** @type {ParsedBuild} */
     const build = {
       hunterId: hunter, hunter, name: `${hunter[0].toUpperCase()}${hunter.slice(1)} Import`,
       level: 1, talents: {}, attributes: {}, overrides: {}, upgradeOverrides: {},
+      // Every upgrade key this code ENCODES, zeros included. upgradeOverrides drops zeros, but
+      // "Import with Upgrades" must diff each carried value against the account (the live
+      // parseCode(code, currentState) keeps an upgrade only when it differs), and a code's 0
+      // against an account's 5 is a real difference.
+      carriedUpgradeKeys: [],
     };
     let sawLvlParam = false;
     levels.forEach((value, i) => {
@@ -194,7 +200,10 @@
       if (baseStatKeys.has(name)) { build.overrides[name] = value; return; }
       if (talentIds.has(name)) { build.talents[name] = value; return; }
       if (attrIds.has(name)) { build.attributes[name] = value; return; }
-      if (name.startsWith('upgrades.') && value) { build.upgradeOverrides[name] = value; }
+      if (name.startsWith('upgrades.')) {
+        build.carriedUpgradeKeys.push(name);
+        if (value) build.upgradeOverrides[name] = value;
+      }
     });
     // No hunter's CODE_PARAMS table actually includes "lvl" -- share codes never encode
     // level directly -- so build.level silently stayed at the newDraftBuild() default of 1

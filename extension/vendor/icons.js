@@ -4,6 +4,14 @@
 window.ICONS = {
   plus: '<path d="M12 5l0 14"/><path d="M5 12l14 0"/>',
   x: '<path d="M18 6l-12 12"/><path d="M6 6l12 12"/>',
+  // The live Import Build modal's icons (buttons, error box) and its per-hunter icons
+  // (HUNTERS[].icon: Borge tool, Ozzy prong, Knox anchor), from the live bundle.
+  'user-check': '<path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0"/><path d="M6 21v-2a4 4 0 0 1 4 -4h4"/><path d="M15 19l2 2l4 -4"/>',
+  package: '<path d="M12 3l8 4.5l0 9l-8 4.5l-8 -4.5l0 -9l8 -4.5"/><path d="M12 12l8 -4.5"/><path d="M12 12l0 9"/><path d="M12 12l-8 -4.5"/><path d="M16 5.25l-8 4.5"/>',
+  'alert-triangle': '<path d="M12 9v4"/><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z"/><path d="M12 16h.01"/>',
+  tool: '<path d="M7 10h3v-3l-3.5 -3.5a6 6 0 0 1 8 8l6 6a2 2 0 0 1 -3 3l-6 -6a6 6 0 0 1 -8 -8l3.5 3.5"/>',
+  prong: '<path d="M10.2 10.2l6.3 6.3"/><path d="M19.347 16.575l1.08 1.079a1.96 1.96 0 0 1 -2.773 2.772l-1.08 -1.079a1.96 1.96 0 0 1 2.773 -2.772z"/><path d="M3 7l3.05 3.15a2.9 2.9 0 0 0 4.1 -4.1l-3.15 -3.05"/>',
+  anchor: '<path d="M12 9v12m-8 -8a8 8 0 0 0 16 0m1 0h-2m-14 0h-2"/><path d="M12 6m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/>',
   'chevron-left': '<path d="M15 6l-6 6l6 6"/>',
   'chevron-right': '<path d="M9 6l6 6l-6 6"/>',
   'chevron-down': '<path d="M6 9l6 6l6 -6"/>',

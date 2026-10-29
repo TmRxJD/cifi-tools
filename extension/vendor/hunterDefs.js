@@ -559,6 +559,59 @@ window.NAV_UNLOCKS = {
   },
 };
 
+// The gem rows of the live Overrides panel, per hunter, in its order. Source: the live bundle's
+// per-hunter OVERRIDES tables (index-CglTk0cm.js, `gemNodes` / `gemUpgrades` / `gemLevels`) --
+// "matches the original tool". tools/bench/live-override-diff.js checks these against a fresh
+// bundle. Labels are the live panel's own (its `UPGRADES.gems` node names, and "<Gem> Level").
+//
+// These used to be absent -- the panel offered three Borge-only gem rows -- on the theory that
+// the Gem Planner covers gems. It does for the ACCOUNT, but a build's gem OVERRIDES (every
+// "Import with Upgrades" code carries several) then had no row anywhere, so they changed the
+// score invisibly and could not be edited or cleared one at a time.
+//
+// creation_galvTrinketsCount (the live panel's "Trinkets" group) is deliberately not listed: we
+// expose the three trinkets individually and resolveParam sums them into that param.
+window.OVERRIDE_GEM_KEYS = {
+  borge: {
+    gemNodes: ['exodus_gem1', 'exodus_gem3', 'exodus_gem4', 'temporal_gem4', 'temporal_gem6', 'innovation_gem3', 'innovation_gem5', 'attraction_gem2', 'attraction_gem3', 'creation_gem1', 'creation_gem2', 'creation_gem3', 'creation_gem4', 'creation_gem5', 'evolution_gem2', 'evolution_gem3', 'evolution_gem6'],
+    gemUpgrades: ['attraction_catchUp', 'attraction_lootBorge', 'creation_borgeGU', 'exodus_temporalEvolutionCount'],
+    gemLevels: ['attraction_level', 'power_level', 'innovation_level'],
+  },
+  ozzy: {
+    gemNodes: ['exodus_gem3', 'exodus_gem4', 'temporal_gem6', 'innovation_gem2', 'innovation_gem3', 'innovation_gem5', 'attraction_gem3', 'creation_gem4', 'creation_gem5', 'creation_gem6', 'evolution_gem2', 'evolution_gem3', 'evolution_gem6'],
+    gemUpgrades: ['attraction_catchUp', 'attraction_lootOzzy', 'creation_ozzyGU', 'exodus_powerInnovationCount'],
+    gemLevels: ['attraction_level', 'power_level', 'innovation_level'],
+  },
+  knox: {
+    gemNodes: ['exodus_gem5', 'exodus_gem4', 'temporal_gem6', 'innovation_gem5', 'power_gem6', 'creation_gem4', 'creation_gem5', 'evolution_gem2', 'evolution_gem3', 'evolution_gem6'],
+    gemUpgrades: ['creation_knoxGU', 'exodus_attractionCreationCount', 'attraction_lootKnox', 'attraction_catchUp2'],
+    gemLevels: ['attraction_level', 'power_level', 'innovation_level'],
+  },
+};
+// The live panel's names for the named (non-node, non-level) gem params.
+window.GEM_PARAM_LABELS = {
+  lootBorge: 'Loot (Borge)', lootOzzy: 'Loot (Ozzy)', lootKnox: 'Loot (Knox)',
+  catchUp: 'Catch-Up Power (Borge/Ozzy)', catchUp2: 'Catch-Up Power (Knox)',
+  borgeGU: 'Borge Stat Bonus', ozzyGU: 'Ozzy Stat Bonus', knoxGU: 'Knox Stat Bonus',
+  galvTrinketsCount: 'Galvarium Trinkets Count',
+  temporalEvolutionCount: 'Temporal & Evolution Upgrades Count',
+  powerInnovationCount: 'Power & Innovation Upgrades Count',
+  attractionCreationCount: 'Attraction & Creation Upgrades Count',
+};
+// "exodus_gem3" -> "Exodus Gem Node #3", "power_level" -> "Power Gem Level", aliases by name.
+window.gemParamLabel = (field) => {
+  const us = field.indexOf('_');
+  const tree = window.GEM_TREES[field.slice(0, us)];
+  const suffix = field.slice(us + 1);
+  if (!tree) throw new Error(`gemParamLabel: unknown gem tree in ${field}`);
+  if (suffix === 'level') return `${tree.label} Gem Level`;
+  const node = /^gem(\d+)$/.exec(suffix);
+  if (node) return `${tree.label} Gem Node #${node[1]}`;
+  const label = window.GEM_PARAM_LABELS[suffix];
+  if (!label) throw new Error(`gemParamLabel: no label for ${field}`);
+  return label;
+};
+
 function defaultGemState() {
   const state = {};
   Object.entries(window.GEM_TREES).forEach(([key, tree]) => {

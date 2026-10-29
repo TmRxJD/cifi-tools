@@ -20,16 +20,14 @@
    * In 'loot' this is exactly what it always was, a lootPerMin difference, because that is what
    * the loot objective returns.
    *
-   * Note on boss scale: the boss objective is lexicographic, so a purchase that turns a non-kill
-   * into a kill produces a delta around 1e9 while ordinary improvements are far smaller. That is
-   * the intent -- the thing that unlocks the kill should outrank everything else -- and dividing
-   * by cost still orders correctly within each tier.
+   * Reach/kill boundaries remain categorical. Raw component differences, rather than the
+   * search's synthetic tier offsets or loot tie-breaker, measure a purchase's actual gain.
    */
   function marginalValue(baselineSim, candidateSim, mode = 'loot') {
     if (!baselineSim || !candidateSim) return { delta: -Infinity };
     const Objective = global.OptimizerObjective;
     if (!Objective) throw new Error('marginalValue: optimizer/objective.js must load before this file');
-    return { delta: Objective.scoreFor(mode, candidateSim) - Objective.scoreFor(mode, baselineSim) };
+    return Objective.pathGain(Objective.pathProgress(mode, baselineSim), Objective.pathProgress(mode, candidateSim));
   }
 
   // Purely COSMETIC, post-hoc label for the UI -- describes what the sim's own numbers say is

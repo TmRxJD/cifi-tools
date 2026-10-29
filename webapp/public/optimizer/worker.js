@@ -20,6 +20,8 @@ importScripts(
 let evalFast = null;
 let scoreMode = 'loot';
 let scoreCtx = null;
+let batchTiming = null;
+const kernelTiming = { argumentMs: 0, instantiateMs: 0, simulateMs: 0, extractMs: 0 };
 
 // Evaluations between macrotask yields -- see the note in the scoring loop below.
 const YIELD_EVERY = 32;
@@ -55,10 +57,12 @@ async function evaluateWithGcRetry(item, iterations) {
     try {
       return await evalFast(item.talentAlloc, item.attrAlloc, iterations, item.hunterStats, item.upgradeValues);
     } catch (err) {
-      const message = String((err && err.message) || err);
+      const message = String((err && /** @type {{message?: string}} */ (err).message) || err);
       if (!/out of memory|cannot allocate/i.test(message)) throw err;
       lastError = err;
+      const retryStarted = performance.now();
       await sleep(delay);
+      if (batchTiming) { batchTiming.retries++; batchTiming.retryMs += performance.now() - retryStarted; }
     }
   }
   throw lastError;
@@ -90,7 +94,7 @@ self.onmessage = async (e) => {
     // never settles and the whole optimizer hangs with Cancel unable to help, because cancel is
     // only consulted after the pool is up.
     try {
-      evalFast = await HunterSim.compileEvaluator(msg.cfg.hunter, msg.cfg);
+      evalFast = await HunterSim.compileEvaluator(msg.cfg.hunter, msg.cfg, kernelTiming);
       scoreMode = msg.mode;
       OptimizerObjective.modeOrThrow(scoreMode); // fail loudly on an unknown mode, not silently as loot
       // Derived once per worker from the cfg it was initialised with -- the boss target cannot
@@ -100,7 +104,7 @@ self.onmessage = async (e) => {
       scoreCtx = { ...OptimizerObjective.contextFor(msg.cfg), ...(msg.scoreCtxOverride || {}) };
       self.postMessage({ type: 'ready' });
     } catch (err) {
-      self.postMessage({ type: 'ready', error: String((err && err.message) || err) });
+      self.postMessage({ type: 'ready', error: String((err && /** @type {{message?: string}} */ (err).message) || err) });
     }
     return;
   }
@@ -113,10 +117,14 @@ self.onmessage = async (e) => {
     // second search to recover the same information. The search uses them to keep boss-capable
     // shapes in play while still ranking on the caller's objective.
     const boss = [];
+    batchTiming = { batches: 1, evaluations: batch.length, evaluateMs: 0, yieldMs: 0, retryMs: 0, retries: 0 };
+    const kernelBefore = { ...kernelTiming };
     try {
       let evaluationsSinceYield = 0;
       for (const item of batch) {
+        const evaluationStarted = performance.now();
         const r = await evaluateWithGcRetry(item, iterations);
+        batchTiming.evaluateMs += performance.now() - evaluationStarted;
         scores.push(OptimizerObjective.scoreFor(scoreMode, r, scoreCtx));
         boss.push({ kill: r.bossKillRate, hp: r.bossHpPercent, maxStage: r.maxStage });
         // Determinism requires a FRESH WASM instance per evaluation (the evaluator's RNG state
@@ -129,15 +137,20 @@ self.onmessage = async (e) => {
         // few milliseconds per batch and does not change any score.
         if (++evaluationsSinceYield >= YIELD_EVERY) {
           evaluationsSinceYield = 0;
+          const yieldStarted = performance.now();
           await new Promise((resolve) => setTimeout(resolve, 0));
+          batchTiming.yieldMs += performance.now() - yieldStarted;
         }
       }
-      self.postMessage({ type: 'scored', requestId, scores, boss });
+      for (const key of Object.keys(kernelTiming)) batchTiming[key] = kernelTiming[key] - kernelBefore[key];
+      self.postMessage({ type: 'scored', requestId, scores, boss, telemetry: batchTiming });
     } catch (err) {
       // Fail the request explicitly rather than returning a sentinel score. A candidate that
       // cannot be evaluated is a bug to surface, not a candidate to silently rank last -- the
       // old engine's -Infinity fallback let real evaluation failures pass as "bad builds".
-      self.postMessage({ type: 'scored', requestId, error: String((err && err.message) || err) });
+      self.postMessage({ type: 'scored', requestId, error: String((err && /** @type {{message?: string}} */ (err).message) || err) });
+    } finally {
+      batchTiming = null;
     }
   }
 };

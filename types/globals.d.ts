@@ -46,7 +46,7 @@ interface HunterDef {
   globalUpgrades: Record<string, UpgradeCategory>;
 }
 
-declare const HUNTER_DEFS: Record<HunterId, HunterDef>;
+declare var HUNTER_DEFS: Record<HunterId, HunterDef>;
 declare function talentBudgetForLevel(level: number): number;
 declare function attributeBudgetForLevel(level: number): number;
 declare function buildNestedUpgrades(flat: Record<string, number>): Record<string, Record<string, number>>;
@@ -78,7 +78,7 @@ interface AllocSpaceApi {
   /** Every dependency-closed, affordable support set. Exhaustive. */
   enumerateSupports(defs: AllocNode[], deps: Record<string, string[]>, budget: number): SupportSet[];
   /** Deterministic full-budget fill over exactly `supportIds`. Null if unrealizable. */
-  canonicalFill(defs: AllocNode[], deps: Record<string, string[]>, minVal: Record<string, number>, budget: number, supportIds: string[]): Allocation | null;
+  canonicalFill(defs: AllocNode[], deps: Record<string, string[]>, minVal: Record<string, number>, budget: number, supportIds: string[], openOnly?: boolean): Allocation | null;
   fillLeftover(defs: AllocNode[], deps: Record<string, string[]>, minVal: Record<string, number>, budget: number, alloc: Allocation): Allocation;
   /** Reduce to fit `budget`, then repair anything stranded. Mutates `alloc`. */
   trimToBudget(defs: AllocNode[], deps: Record<string, string[]>, minVal: Record<string, number>, budget: number, alloc: Allocation): Allocation;
@@ -88,13 +88,13 @@ interface AllocSpaceApi {
   signature(defs: AllocNode[], alloc: Allocation): string;
 }
 
-declare const AllocSpace: AllocSpaceApi;
+declare var AllocSpace: AllocSpaceApi;
 
 // ---------------------------------------------------------------------------------------
 // Optimizer -- optimizer/search.js and optimizer/runner.js
 // ---------------------------------------------------------------------------------------
 
-type OptimizeMode = 'loot' | 'push';
+type OptimizeMode = 'loot' | 'push' | 'boss' | 'bossTimeless';
 
 /** As built by app.js's cfgFor(). Feeds HunterSim.compileEvaluator plus the search. */
 interface OptimizerConfig {
@@ -116,6 +116,8 @@ interface OptimizerConfig {
 
 interface AllocationPair { talentAlloc: Allocation; attrAlloc: Allocation }
 interface ScoredAllocation extends AllocationPair { score: number }
+interface BossMetadata { kill: number; hp: number; maxStage: number }
+type ScoreBatch = number[] & { boss?: BossMetadata[]; telemetry?: Record<string, number> };
 
 interface OptimizeProgress {
   phase: 'enumerate' | 'screen' | 'survey' | 'refine' | 'final' | 'done';
@@ -125,6 +127,7 @@ interface OptimizeProgress {
 }
 
 interface OptimizeResult {
+  diag?: Record<string, any>;
   best: ScoredAllocation | null;
   ranked: ScoredAllocation[];
   evals: number;
@@ -134,11 +137,21 @@ interface OptimizeResult {
   supportsEnumerated?: number;
   supportsRealizable?: number;
 }
+/** Diagnostic archive-only effort returns before final ranking and full-fidelity verification. */
+interface ArchiveOnlyOptimizeResult {
+  archiveOnly: true;
+  best: ScoredAllocation;
+  evals: number;
+  notes: string[];
+  diag: Record<string, unknown>;
+}
 
 interface OptimizeOptions {
   mode?: OptimizeMode;
+  effort?: string | Record<string, unknown>;
+  maxSeconds?: number;
   /** The ONLY I/O the search performs. Must be pure and deterministic. */
-  scorer: (pairs: AllocationPair[], iterations: number) => Promise<number[]>;
+  scorer: (pairs: AllocationPair[], iterations: number) => Promise<ScoreBatch>;
   /**
    * A scorer bound to a DIFFERENT objective, for the cross-seed pass.
    *
@@ -153,24 +166,28 @@ interface OptimizeOptions {
 }
 
 interface HunterOptimizerApi {
-  optimize(cfg: OptimizerConfig, options: OptimizeOptions): Promise<OptimizeResult>;
+  readonly EFFORT_LEVELS: Record<string, { label: string; help: string; localOnly?: boolean }>;
+  readonly DEFAULT_EFFORT: string;
+  optimize(cfg: OptimizerConfig, options: OptimizeOptions): Promise<OptimizeResult | ArchiveOnlyOptimizeResult>;
   /** Coarse ranking fidelity. The one shared value -- do not introduce a second. */
   readonly SCREEN_ITERATIONS: number;
   /** Decision fidelity, matching what the build card displays. */
   readonly FINAL_ITERATIONS: number;
-  readonly SURVEY_SUPPORTS: number;
-  readonly REFINE_SUPPORTS: number;
   readonly STEP_SIZES: number[];
-  readonly SURVEY_STEP_SIZES: number[];
+  optimizeJointly(ctx: {score(pairs: AllocationPair[], iterations: number): Promise<ScoreBatch>; shouldCancel(): boolean; note(message: string): void}, cfg: OptimizerConfig,
+    talents: Allocation, attributes: Allocation, startScore: number, stepSizes: number[], maxSweeps: number,
+    pinnedAttrs?: string[], onFrac?: ((fraction: number) => void) | null, iterations?: number, maxRounds?: number,
+    stopAfterSweep?: ((sweep: number) => boolean) | null): Promise<ScoredAllocation>;
 }
 
-declare const HunterOptimizer: HunterOptimizerApi;
+declare var HunterOptimizer: HunterOptimizerApi;
+declare var OptimizerObjective: typeof import('../webapp/public/optimizer/objective.js');
 
 /** Browser entry point: stands up the worker pool and runs HunterOptimizer.optimize. */
 declare function runOptimizer(
   cfg: OptimizerConfig,
-  options?: { mode?: OptimizeMode; onProgress?: (p: OptimizeProgress) => void; shouldCancel?: () => boolean; poolSize?: number },
-): Promise<OptimizeResult>;
+  options?: { mode?: OptimizeMode; effort?: string; maxSeconds?: number; onProgress?: (p: OptimizeProgress) => void; shouldCancel?: () => boolean; poolSize?: number },
+): Promise<OptimizeResult | ArchiveOnlyOptimizeResult | { best: null; ranked: ScoredAllocation[]; cancelled: true }>;
 
 // ---------------------------------------------------------------------------------------
 // Simulation -- hunterSimBrowser.js
@@ -217,13 +234,20 @@ type EvalFast = (
 ) => Promise<EvalResult>;
 
 interface HunterSimApi {
+  engineSource(): string;
+  expectInjectedWasm(): void;
+  setWasmModule(module: WebAssembly.Module): void;
+  failWasmModule(error: unknown): void;
+  loadWasmModule(): Promise<WebAssembly.Module>;
+  createNativeEvaluator(options?: { onerror?: (event: ErrorEvent) => void }): NativeEvaluator;
+  readonly POST_SIM_XP_MULTIPLIERS: Array<{key: string; perLevel: number}>;
   evaluate(hunter: HunterId, state: EvalState): Promise<EvalResult>;
   evaluateDetailed(hunter: HunterId, state: EvalState): Promise<DetailedEvalResult>;
   buildArgs(hunter: HunterId, state: EvalState): Promise<number[]>;
   resolveParam(name: string, state: Partial<EvalState>): number;
-  compileEvaluator(hunter: HunterId, cfg: OptimizerConfig & { STAT_KEYS?: string[]; INSCRYPTION_PARAMS?: string[] }): Promise<EvalFast>;
+  compileEvaluator(hunter: HunterId, cfg: OptimizerConfig & { STAT_KEYS?: string[]; INSCRYPTION_PARAMS?: string[] }, timings?: { argumentMs:number; instantiateMs:number; simulateMs:number; extractMs:number } | null): Promise<EvalFast>;
   loadParams(): Promise<Record<HunterId, string[]>>;
-  loadWasm(): Promise<Record<string, Function>>;
+  loadWasm(): Promise<WebAssembly.Exports>;
   clearCache(): void;
   /**
    * THE cancellation primitive for long-running sim work (purchase paths, income rates).
@@ -234,10 +258,23 @@ interface HunterSimApi {
   readonly ABORTED: string;
 }
 
-declare const HunterSim: HunterSimApi;
+interface NativeEvaluator {
+  evaluate(hunter: HunterId, build: {level: number; talents: Allocation; attributes: Allocation; overrides: Record<string, number>}, store: {
+    hunterStats: Partial<Record<HunterId, Record<string, number>>>;
+    upgrades: Record<string, Record<string, number>>;
+    hunterIterations: Partial<Record<HunterId, number>>;
+    hunterSeedSettings: Record<string, unknown>;
+    gemPlannerStore: OptimizerConfig['gemPlannerStore'];
+  }): Promise<EvalResult & {stats: string}>;
+  inFlight(): number;
+  terminate(error: unknown): void;
+}
+declare var HunterSim: HunterSimApi;
 
 /** Set by a Worker before importing hunterSimBrowser.js so relative asset fetches resolve. */
 declare var HUNTERSIM_ASSET_BASE: string | undefined;
+declare var HUNTERSIM_EMBEDDED: boolean | undefined;
+declare var HUNTERSIM_WORKER_URL: string | undefined;
 
 // ---------------------------------------------------------------------------------------
 // Persisted store -- storeSchema.js
@@ -273,7 +310,7 @@ interface StoreSchemaApi {
   validateAllocation(hunter: HunterId, build: StoredBuild, where: string): string[];
 }
 
-declare const StoreSchema: StoreSchemaApi;
+declare var StoreSchema: StoreSchemaApi;
 
 // ---------------------------------------------------------------------------------------
 // Build share codes -- buildCode.js
@@ -290,6 +327,7 @@ interface ParsedBuild {
   overrides: Record<string, number>;
   /** Full param names, e.g. "upgrades.gadgets.anchor". */
   upgradeOverrides: Record<string, number>;
+  carriedUpgradeKeys: string[];
 }
 
 declare function parseBuildCode(code: string): Promise<ParsedBuild | null>;
@@ -327,10 +365,8 @@ declare function greedyPurchasePath(
 // ---------------------------------------------------------------------------------------
 // The same names as properties of window / globalThis
 // ---------------------------------------------------------------------------------------
-// `declare const X` above makes the bare identifier resolve, which covers every READ. It does
-// not make `window.X = ...` or `global.X = ...` legal, and each module ends by assigning
-// exactly that -- so without these interface merges the type checker flags every module's own
-// export line. Both forms are needed: bare reads and namespaced writes.
+// Runtime properties use `declare var` so they also exist on typeof globalThis; Window merges
+// below describe the same API when a browser module receives window explicitly.
 
 interface HunterSimGlobals {
   HUNTER_DEFS: Record<HunterId, HunterDef>;
@@ -340,12 +376,23 @@ interface HunterSimGlobals {
   ALL_UPGRADE_CATEGORIES: Record<string, UpgradeCategory>;
   AllocSpace: AllocSpaceApi;
   HunterOptimizer: HunterOptimizerApi;
+  OptimizerObjective: typeof OptimizerObjective;
   HunterSim: HunterSimApi;
   StoreSchema: StoreSchemaApi;
   CostFormulas: Record<string, any>;
   IncomeModel: Record<string, any>;
   HunterStatPath: Record<string, any>;
   HUNTERSIM_ASSET_BASE?: string;
+  HUNTERSIM_EMBEDDED?: boolean;
+  HUNTERSIM_WORKER_URL?: string;
+  AccountState: { workerCfg(cfg: OptimizerConfig): Pick<OptimizerConfig, 'hunter' | 'level' | 'hunterStats' | 'baseOverrides' | 'globalUpgrades' | 'gemPlannerStore' | 'TALENTS' | 'ATTRIBUTES'> };
+  releaseScoringPools(): void;
+  cancelOptimizerRun(): void;
+  createHunterPathScorer(cfg: OptimizerConfig, mode: OptimizeMode): Promise<{
+    score(pairs: AllocationPair[], iterations: number): Promise<ScoreBatch>;
+    release(): void;
+    abort(): void;
+  }>;
   talentBudgetForLevel(level: number): number;
   attributeBudgetForLevel(level: number): number;
   buildNestedUpgrades(flat: Record<string, number>): Record<string, Record<string, number>>;

@@ -43,6 +43,8 @@ function genBuildId() {
 // their origin's localStorage, which already holds ~1,430 of theirs. Both are configured by the
 // embedder BEFORE this file runs; on the website neither is set and everything below is unchanged.
 const EMBEDDED = !!window.HUNTERSIM_EMBEDDED;
+// Optimistic write token: a cached full-store projection must never replace newer native data.
+let embeddedHostSnapshot = null;
 const STORAGE_KEY = 'huntersim_clone_v2';
 
 // Both of these are the schema (storeSchema.js), not separate shape declarations. Adding a
@@ -76,27 +78,45 @@ function dedupeStoreIds(parsed) {
   return changed;
 }
 
+// The ONE projection of the native Pinia state (published by extension/hostStoreBridge.js) into
+// this app's store shape. Returns null while the host has not published yet.
+function storeFromHostState() {
+  document.dispatchEvent(new Event('cifi-companion:request-host-state'));
+  const raw=document.getElementById('cifi-companion-host-state')?.textContent;
+  if (!raw) return null;
+  embeddedHostSnapshot = raw;
+  const host=JSON.parse(raw);
+  const canonical=host.canonicalStore;
+  if (!canonical) {
+    const initial=freshStore();
+    initial.globalUpgrades=host.globalUpgrades;
+    initial.gems=host.gems;
+    for (const hunter of ['borge','ozzy','knox']) {
+      initial[hunter].hunterStats=host.hunterStats?.[hunter] || initial[hunter].hunterStats;
+      initial[hunter].builds=host.hunterBuilds?.[hunter] || [];
+      initial[hunter].iterations=host.hunterIterations?.[hunter] ?? initial[hunter].iterations;
+    }
+    return initial;
+  }
+  window.StoreSchema.migrateStore(canonical);
+  dedupeStoreIds(canonical);
+  return canonical;
+}
+
+// True while the embedded store is a placeholder awaiting the host. Content scripts run at
+// document_idle, which is routinely BEFORE cifi-tools mounts Vue/Pinia, so the host state is often
+// not published yet when this file loads. This used to throw at top level, which killed the rest
+// of app.js -- including the Import Save opener and every later binding -- so buttons silently did
+// nothing on some loads. The placeholder is never rendered (companion.js refreshes from the host
+// before every render) and saveStore() refuses to write it, so it cannot clobber the account.
+let __embeddedStorePending = false;
+
 function loadStore() {
   if (EMBEDDED) {
-    const raw=document.getElementById('cifi-companion-host-state')?.textContent;
-    if (!raw) throw new Error('Native cifi-tools store is unavailable; reload the page and retry.');
-    const canonical=JSON.parse(raw).canonicalStore;
-    if (!canonical) {
-      const host=JSON.parse(raw), initial=freshStore();
-      initial.globalUpgrades=host.globalUpgrades;
-      initial.gems=host.gems;
-      for (const hunter of ['borge','ozzy','knox']) {
-        initial[hunter].hunterStats=host.hunterStats?.[hunter] || initial[hunter].hunterStats;
-        initial[hunter].builds=host.hunterBuilds?.[hunter] || [];
-        initial[hunter].iterations=host.hunterIterations?.[hunter] ?? initial[hunter].iterations;
-      }
-      __storeWasFreshOnLoad = false;
-      return initial;
-    }
-    window.StoreSchema.migrateStore(canonical);
-    dedupeStoreIds(canonical);
     __storeWasFreshOnLoad = false;
-    return canonical;
+    const hosted = storeFromHostState();
+    __embeddedStorePending = !hosted;
+    return hosted || freshStore();
   }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -180,15 +200,24 @@ let __storeWasFreshOnLoad = false;
 function saveStore() {
   const json = JSON.stringify(store);
   if (EMBEDDED) {
+    if (__embeddedStorePending) throw new Error('Native cifi-tools store has not loaded yet; refusing to overwrite it with defaults.');
     let request=document.getElementById('cifi-companion-native-store-write');
     if (!request) request=document.documentElement.appendChild(Object.assign(document.createElement('script'),{
       id:'cifi-companion-native-store-write',type:'application/json',hidden:true,
     }));
-    request.textContent=json;
+    if (!embeddedHostSnapshot) throw new Error('Native cifi-tools snapshot is missing; refusing to overwrite account data.');
+    request.textContent=JSON.stringify({state:store,expectedHostState:embeddedHostSnapshot});
     document.dispatchEvent(new Event('cifi-companion:write-native-store'));
     const result=document.getElementById('cifi-companion-native-store-result')?.dataset.value;
     const parsed=result ? JSON.parse(result) : null;
-    if (!parsed?.ok) throw new Error(`Native cifi-tools store write failed: ${parsed?.error || 'no response from bridge'}`);
+    if (!parsed?.ok) {
+      const error=parsed?.error || 'no response from bridge';
+      showImportToast(error, 'error');
+      throw new Error(`Native cifi-tools store write failed: ${error}`);
+    }
+    // The bridge publishes the committed native state synchronously. Refresh this token only
+    // after success; a rejected write must not become the new expected account state.
+    embeddedHostSnapshot=document.getElementById('cifi-companion-host-state').textContent;
     updateNavGating();
     return;
   }
@@ -319,14 +348,13 @@ window.__lastScan = store.lastScan;
 // goes straight back through saveStore(), and route entry re-reads the native source of truth.
 window.refreshStoreFromNative = () => {
   if (!EMBEDDED) return store;
-  document.dispatchEvent(new Event('cifi-companion:request-host-state'));
-  const raw=document.getElementById('cifi-companion-host-state')?.textContent;
-  const canonical=raw && JSON.parse(raw).canonicalStore;
-  if (!canonical) return store;
-  window.StoreSchema.migrateStore(canonical);
+  const hosted=storeFromHostState();
+  if (!hosted) throw new Error('Native cifi-tools store is unavailable; reload the page and retry.');
   Object.keys(store).forEach((key)=>delete store[key]);
-  Object.assign(store,canonical);
+  Object.assign(store,hosted);
+  __embeddedStorePending=false;
   window.__lastScan=store.lastScan;
+  if (['borge','ozzy','knox'].includes(store.lastHunter)) currentHunter=store.lastHunter;
   return store;
 };
 
@@ -894,7 +922,7 @@ function renderSimPage(root) {
   wireHunterTabs();
   switchHunter(currentHunter, true);
   document.getElementById('newBuildBtn').onclick = () => openBuildModal(newDraftBuild());
-  document.getElementById('importBtn').onclick = () => document.getElementById('importModal').classList.remove('hidden');
+  document.getElementById('importBtn').onclick = () => openImportModal();
   document.getElementById('hunterStatsBtn').onclick = openStatsModal;
   document.getElementById('hunterStatsBtnLabel').textContent = `${HUNTER_TITLES[currentHunter].replace(' Simulator', '')} Stats`;
   document.getElementById('manageCategoriesBtn').onclick = openCategoriesModal;
@@ -1064,78 +1092,61 @@ const BASE_STAT_LABELS = {
 // per-hunter item lists (Ozzy's Loop Mods is scavenger2+stelzi, not trample+scavenger;
 // Knox's is stelzi alone) -- this reads that generically instead, the same way
 // Relics/Inscryptions/Gadgets already do a few lines up.
-function getOverrideGroups() {
-  const d = defs();
-  const groups = [
-    {
-      title: 'Base Stats',
-      fields: d.baseStatKeys.filter((k) => k !== 'stage' && k !== 'proj').map((key) => ({
-        key, label: BASE_STAT_LABELS[key] || key, global: () => store[currentHunter].hunterStats[key],
-      })),
-    },
-  ];
-  const relics = d.globalUpgrades?.relics?.items || [];
-  if (relics.length) {
-    groups.push({
-      title: 'Relics',
-      fields: relics.map((r) => ({
-        key: `upgrades.relics.${r.id}`, label: r.label, global: () => store.globalUpgrades[`relics.${r.id}`],
-      })),
+//
+// Every HUNTER_DEFS globalUpgrades category gets a group, in the live panel's order
+// (OVERRIDE_CATEGORY_LABELS). This used to hand-list categories and silently omitted
+// Researches, Shard Milestones and Mats Exchange, so an override on any of them had no row.
+// IAP / Ultima / Trinkets are on their own pages in the live tool; we keep them here too.
+const OVERRIDE_GROUP_ORDER = [
+  ['gadgets', 'Gadgets'], ['relics', 'Relics'], ['inscryptions', 'Inscryptions'],
+  ['researches', 'Researches'], ['cms', 'Construction Milestones'], ['loopmods', 'Loop Mods'],
+  ['shardmilestones', 'Shard Milestones'], ['diamondspecials', 'Diamond Specials'],
+  ['gemNodes', 'Gem Nodes'], ['gemUpgrades', 'Gem Upgrades'], ['gemLevels', 'Gem Levels'],
+  ['trinkets', 'Trinkets'], ['diamondcards', 'Diamond Cards'], ['mats_exchange', 'Mats Exchange'],
+  ['iap', 'IAP'], ['ultima', 'Diamond Ultima'],
+];
+
+// THE account's current raw level for an override / share-code key: the Overrides panel's
+// "global", what Compare shows for a build that does not override the key, and what "Import with
+// Upgrades" diffs a code against. Gem keys go through the sim's own resolver so aliases
+// (attraction_catchUp -> catch-up-power-borge-ozzy) and the derived counts cannot drift from it.
+function accountLevel(hunter, key) {
+  if (!key.startsWith('upgrades.')) return store[hunter].hunterStats[key] ?? 0;
+  if (key.startsWith('upgrades.gems_nodes.')) {
+    return window.HunterSim.resolveParam(key, {
+      gemPlannerStore: { gemStates: store.gems },
+      upgrades: window.buildNestedUpgrades(store.globalUpgrades),
     });
   }
-  const inscryptions = d.globalUpgrades?.inscryptions?.items || [];
-  if (inscryptions.length) {
-    groups.push({
-      title: 'Inscryptions',
-      fields: inscryptions.map((i) => ({
-        key: `upgrades.inscryptions.${i.id}`, label: i.label, global: () => store.globalUpgrades[`inscryptions.${i.id}`],
-      })),
-    });
-  }
-  // Gadgets (Wrench/Zaptron/Anchor) were missing from this panel entirely -- the live site's
-  // Overrides editor has its own priced Gadgets section (confirmed via its `O()`/cost-badge
-  // function, which has a whole branch for "upgrades.gadgets." keys).
-  const GADGET_BY_HUNTER = { borge: { id: 'wrench', label: 'The Wrench of Gore' }, ozzy: { id: 'zaptron', label: 'Zaptron-533 Bio-Repair Tool' }, knox: { id: 'anchor', label: 'The Anchor of Ages' } };
-  const gadget = GADGET_BY_HUNTER[currentHunter];
-  if (gadget) {
-    groups.push({
-      title: 'Gadgets',
-      fields: [{ key: `upgrades.gadgets.${gadget.id}`, label: gadget.label, global: () => store.globalUpgrades[`gadgets.${gadget.id}`] }],
-    });
-  }
-  // Every remaining globalUpgrades category HUNTER_DEFS declares (loopmods/diamondspecials/
-  // diamondcards/iap/ultima/trinkets/cms), read the same generic way as Relics/Inscryptions/
-  // Gadgets above -- one group per category, one field per item, for whichever hunter is
-  // current. `toggle: true` on a maxLevel-1 item matches the boolean-pill rendering the
-  // Loop Mods/Diamond Cards rows already used for Trample/Gaiden/Iridian.
-  const GENERIC_GLOBAL_GROUPS = [
-    ['loopmods', 'Loop Mods'], ['diamondspecials', 'Diamond Specials'], ['diamondcards', 'Diamond Cards'],
-    ['iap', 'IAP'], ['ultima', 'Diamond Ultima'], ['trinkets', 'Trinkets'], ['cms', 'Construction Milestones'],
-  ];
-  GENERIC_GLOBAL_GROUPS.forEach(([cat, title]) => {
-    const items = d.globalUpgrades?.[cat]?.items || [];
-    if (!items.length) return;
-    groups.push({
-      title,
-      fields: items.map((it) => ({
-        key: `upgrades.${cat}.${it.id}`,
-        label: it.label,
-        toggle: it.maxLevel === 1,
-        global: () => store.globalUpgrades[`${cat}.${it.id}`],
-      })),
-    });
-  });
-  if (currentHunter === 'borge') {
-    groups.push({
-      title: 'Gem Nodes & Upgrades',
-      fields: [
-        { key: 'upgrades.gems_nodes.attraction_level', label: 'Attraction Gem Level', global: () => store.gems?.attraction?.level },
-        { key: 'upgrades.gems_nodes.attraction_catchUp', label: 'Attraction Catch-Up Power', global: () => store.gems?.attraction?.upgrades?.['catch-up-power-borge-ozzy'] },
-        { key: 'upgrades.gems_nodes.attraction_lootBorge', label: 'Attraction Loot (Borge)', global: () => store.gems?.attraction?.upgrades?.['borge-loot-bonus'] },
-      ],
-    });
+  return store.globalUpgrades[key.slice('upgrades.'.length)] ?? 0;
+}
+
+function getOverrideGroups(hunter = currentHunter) {
+  const d = window.HUNTER_DEFS[hunter];
+  const gemKeys = window.OVERRIDE_GEM_KEYS[hunter];
+  const field = (key, label, toggle) => ({ key, label, toggle, global: () => accountLevel(hunter, key) });
+  const groups = [{
+    title: 'Base Stats',
+    fields: d.baseStatKeys.filter((k) => k !== 'stage' && k !== 'proj').map((key) => field(key, BASE_STAT_LABELS[key] || key, false)),
+  }];
+  for (const [cat, title] of OVERRIDE_GROUP_ORDER) {
+    const fields = gemKeys[cat]
+      ? gemKeys[cat].map((f) => field(`upgrades.gems_nodes.${f}`, window.gemParamLabel(f), /_gem\d+$/.test(f)))
+      // `toggle` on a maxLevel-1 item matches the live boolean-pill rows (Trample/Gaiden/Iridian).
+      : (d.globalUpgrades[cat]?.items || []).map((it) => field(`upgrades.${cat}.${it.id}`, it.label, it.maxLevel === 1));
+    if (fields.length) groups.push({ title, fields });
   }
   return groups;
+}
+
+// Display name for any override key, from the same table the panel renders.
+function overrideLabel(hunter, key) {
+  for (const g of getOverrideGroups(hunter)) {
+    const f = g.fields.find((x) => x.key === key);
+    if (f) return f.label;
+  }
+  if (key.startsWith('upgrades.gems_nodes.')) return window.gemParamLabel(key.slice('upgrades.gems_nodes.'.length));
+  return key.replace(/^upgrades\./, '').replace(/[._]/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 // Verbatim port of the live Overrides panel's row template (captured via outerHTML from
@@ -1195,7 +1206,11 @@ function overrideCost(key, fromLevel, toLevel) {
   if (key.startsWith('upgrades.gems_nodes.')) {
     const alias = gemFieldAlias(key.split('.')[2]);
     if (alias) return CF.gemAliasCostRange(alias, fromLevel, toLevel);
-    return CF.baseStatCostRange(key, fromLevel, toLevel, currentHunter);
+    // Gem LEVELS and NODES: the live O() falls through to its base-stat cost aV(), whose final
+    // branch returns 0 for any key without a cost table -- so the live badge reads "Cost: 0".
+    // Our base-stat formula (rightly) throws on an unknown stat, and did so here the first time a
+    // gem-level override sat above the account's level: the whole panel failed to render.
+    return 0;
   }
   return CF.baseStatCostRange(key, fromLevel, toLevel, currentHunter);
 }
@@ -1230,11 +1245,56 @@ function overrideNumericRow(f, current, globalVal, onChange) {
       </div>
     </div>
     ${costLine}`;
-  div.querySelector('[data-inc]').onclick = () => onChange((overridden ? current : globalVal) + 1);
-  div.querySelector('[data-dec]').onclick = () => onChange((overridden ? current : globalVal) - 1);
-  div.querySelector('[data-max]').onclick = () => onChange((overridden ? current : globalVal) + 10);
-  div.querySelector('[data-min]').onclick = () => onChange('');
+  let value = Number(displayVal);
+  const max = overrideFieldMaxLevel(f.key);
+  for (const [selector, delta, label] of [
+    ['[data-inc]', 1, 'Increase'], ['[data-dec]', -1, 'Decrease'],
+    ['[data-max]', 10, 'Increase by 10'], ['[data-min]', -10, 'Decrease by 10'],
+  ]) {
+    const button = div.querySelector(selector);
+    button.setAttribute('aria-label', `${label} ${f.label}`);
+    button.disabled = delta > 0 ? value >= max : value <= 0;
+    // The modal re-renders rows on every change. Keep the held value in this closure so repeat
+    // does not keep applying the first step to a detached row's initial value.
+    const step = () => {
+      const next = Math.max(0, Math.min(max, value + delta));
+      if (next === value) return false;
+      value = next;
+      onChange(value);
+      return true;
+    };
+    wireOverrideRepeat(button, step);
+  }
   return div;
+}
+
+// Match ValueControls: act on press, repeat after 200ms at 60ms, stop on release/blur/close.
+function wireOverrideRepeat(button, step) {
+  let timer;
+  let pressed = false;
+  const stop = () => {
+    clearTimeout(timer);
+    document.removeEventListener('pointerup', stop);
+    document.removeEventListener('pointercancel', stop);
+    document.removeEventListener('mouseleave', stop);
+    window.removeEventListener('blur', stop);
+  };
+  button.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || button.disabled) return;
+    event.preventDefault();
+    pressed = true;
+    stop();
+    document.addEventListener('pointerup', stop);
+    document.addEventListener('pointercancel', stop);
+    document.addEventListener('mouseleave', stop);
+    window.addEventListener('blur', stop);
+    const repeat = () => {
+      if (!document.getElementById('overridesModal') || !step()) { stop(); return; }
+      timer = setTimeout(repeat, 60);
+    };
+    if (step()) timer = setTimeout(repeat, 200); else stop();
+  });
+  button.onclick = () => { if (pressed) { pressed = false; return; } step(); };
 }
 
 function overrideToggleRow(f, current, globalVal, onChange) {
@@ -1273,10 +1333,13 @@ function overrideFieldMaxLevel(key) {
 }
 
 function openOverridesModal(build, onSave) {
+  if (EMBEDDED) window.refreshStoreFromNative();
   const existing = document.getElementById('overridesModal');
   if (existing) existing.remove();
   const overrides = { ...(build.overrides || {}) };
-  let hideMaxed = false;
+  // Live parity: the toggle is remembered, except that an imported build always opens with every
+  // row shown, so none of the overrides it brought in can be hidden behind "maxed".
+  let hideMaxed = build.isImported ? false : store.settings.ui.overridesHideMaxed;
   const overlay = document.createElement('div');
   overlay.id = 'overridesModal';
   overlay.className = 'fixed inset-0 z-50 overflow-y-auto bg-gray-900/80';
@@ -1309,16 +1372,27 @@ function openOverridesModal(build, onSave) {
         <div class="p-3 sm:p-4" id="overridesBody"></div>
       </div>
     </div>`;
-  document.body.appendChild(overlay);
+  (document.getElementById('cifi-companion-modals') || document.body).appendChild(overlay);
   const body = overlay.querySelector('#overridesBody');
   const renderBody = () => {
     body.innerHTML = '';
-    getOverrideGroups().forEach((group) => {
+    const groups = getOverrideGroups();
+    // An override with no row would change the score invisibly and could only be cleared by
+    // Reset, so anything the table does not cover (e.g. from an older share code) still gets one.
+    const listed = new Set(groups.flatMap((g) => g.fields.map((f) => f.key)));
+    const other = Object.keys(overrides).filter((k) => !listed.has(k)).sort();
+    if (other.length) {
+      groups.push({ title: 'Other', fields: other.map((key) => ({ key, label: overrideLabel(currentHunter, key), global: () => accountLevel(currentHunter, key) })) });
+    }
+    groups.forEach((group) => {
       const rowsData = group.fields.map((f) => {
         const current = overrides[f.key] !== undefined ? overrides[f.key] : '';
         const globalVal = f.global() ?? 0;
         const maxLevel = overrideFieldMaxLevel(f.key);
-        const isMaxed = maxLevel !== Infinity && (current !== '' ? current : globalVal) >= maxLevel;
+        // Live keeps a differing override visible even when it is at cap: this is still a
+        // difference the account does not own. Explicitly disabled booleans also remain visible.
+        const keepOverride = current !== '' && ((f.toggle && !current) || current < globalVal || current < maxLevel);
+        const isMaxed = !keepOverride && (f.toggle ? !!globalVal : maxLevel !== Infinity && globalVal >= maxLevel);
         return { f, current, globalVal, isMaxed };
       }).filter((r) => !hideMaxed || !r.isMaxed);
       if (!rowsData.length) return;
@@ -1335,19 +1409,31 @@ function openOverridesModal(build, onSave) {
       body.appendChild(section);
     });
   };
-  renderBody();
   const setHideMaxed = (val) => {
     hideMaxed = val;
     ['[data-hide-maxed]', '[data-hide-maxed-m]'].forEach((sel) => {
       const btn = overlay.querySelector(sel);
-      btn.className = `relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none ${hideMaxed ? 'bg-blue-600' : 'bg-gray-600'}`;
+      btn.className = `relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none ${hideMaxed ? 'bg-green-600' : 'bg-gray-600'}`;
       btn.querySelector('span').className = `inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${hideMaxed ? 'translate-x-5' : 'translate-x-1'}`;
     });
     renderBody();
   };
-  overlay.querySelector('[data-hide-maxed]').onclick = () => setHideMaxed(!hideMaxed);
-  overlay.querySelector('[data-hide-maxed-m]').onclick = () => setHideMaxed(!hideMaxed);
+  setHideMaxed(hideMaxed);
+  const toggleHideMaxed = () => {
+    if (EMBEDDED) window.refreshStoreFromNative();
+    setHideMaxed(!hideMaxed);
+    store.settings.ui.overridesHideMaxed = hideMaxed;
+    saveStore();
+  };
+  overlay.querySelector('[data-hide-maxed]').onclick = toggleHideMaxed;
+  overlay.querySelector('[data-hide-maxed-m]').onclick = toggleHideMaxed;
   const close = () => {
+    if (EMBEDDED) window.refreshStoreFromNative();
+    // Live parity (OverrideModal's save): an override equal to the account value is dropped, so
+    // the build only records what it genuinely assumes differently.
+    Object.keys(overrides).forEach((k) => {
+      if (Math.floor(Number(overrides[k])) === Math.floor(Number(accountLevel(currentHunter, k)))) delete overrides[k];
+    });
     if (onSave) onSave(overrides);
     else {
       const target = store[currentHunter].builds.find((b) => b.id === build.id);
@@ -1356,6 +1442,9 @@ function openOverridesModal(build, onSave) {
     overlay.remove();
   };
   overlay.querySelector('[data-close]').onclick = close;
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay || e.target === overlay.firstElementChild) close();
+  });
   overlay.querySelector('[data-reset]').onclick = () => { Object.keys(overrides).forEach((k) => delete overrides[k]); renderBody(); };
 }
 
@@ -1403,7 +1492,7 @@ function titledModal(icon, title, bodyHtml, id) {
       </div>
       <div class="p-5">${bodyHtml}</div>
     </div>`;
-  document.body.appendChild(overlay);
+  (document.getElementById('cifi-companion-modals') || document.body).appendChild(overlay);
   // Announce the close BEFORE removing, so a feature with work in flight can cancel it. Without
   // this, a modal that kicked off a long async computation leaves it running after the user
   // closes -- invisible, uncancellable, and still competing for the main thread and for wasm
@@ -1417,37 +1506,21 @@ function titledModal(icon, title, bodyHtml, id) {
   return overlay;
 }
 
-// Verbatim port of the live "Override Costs" modal (captured via outerHTML): grouped
-// per-category tables (Base Stats / Relics / Inscryptions) with Upgrade/Global/
-// Override/Difference/Resource/Cost columns, a per-resource cost total per category header,
-// and a footer grid of grand totals per resource -- using the real cost-curve formulas
-// extracted from the live bundle (costFormulas.js), not a placeholder. The live modal also
-// has a "Collection Time" column computed from the account's per-resource production rate;
-// we don't have that production-rate data (it isn't in the save file or any API we read),
-// so that column is intentionally omitted rather than showing a fabricated duration.
-async function openOverrideCostsModal(build) {
+// The original cost overview only includes positive, priced increases with a known currency.
+// Gem overrides affect simulation but its cost overview does not price them. In particular,
+// sending their keys to the strict base-stat cost API used to abort every imported-build click.
+// Use the card's existing results, as the original does; opening this overview needs no new sim.
+function openOverrideCostsModal(build, hunter = currentHunter, results = null) {
+  if (EMBEDDED) window.refreshStoreFromNative();
   const overrides = build.overrides || {};
   const CF = window.CostFormulas;
-  const d = defs();
-  const overrideGroups = getOverrideGroups();
+  const d = window.HUNTER_DEFS[hunter];
+  const overrideGroups = getOverrideGroups(hunter);
 
-  // Collection Time is inferred (not a stored value) from THIS build's own simulated
-  // per-resource loot rate (mat1/mat2/mat3 per run * runs/day) -- the same numbers already
-  // shown on the build card's Main Statistics.
-  //
-  // Fragments are the exception and always will be: they come from campaign/boss content the
-  // evaluator does not model, so no amount of simulating produces a rate. The user supplies it
-  // (Settings -> Fragments per day). When they have, relic rows get a real Collection Time like
-  // everything else; when they haven't, perDayRate.frags stays 0 and the row renders unknown --
-  // which is the honest answer, not a zero.
-  let perDayRate = {};
-  try {
-    const iterations = currentIterations();
-    const r = await HunterSim.evaluate(currentHunter, evalStateFor(build, iterations));
-    const runsPerDay = r.avgTime ? 1440 / r.avgTime : 0;
-    perDayRate = { mat1: r.mat1 * runsPerDay, mat2: r.mat2 * runsPerDay, mat3: r.mat3 * runsPerDay };
-  } catch { /* Collection Time just won't be shown if evaluation fails */ }
-  perDayRate.frags = Number(store.fragments.perDay) || 0;
+  // Match the original overview's collection time from the card's existing simulation results.
+  // Fragments and Ozzy's HBM have no simulated rate and display "-" in this overview.
+  const runsPerDay = results?.avgTime > 0 ? 1440 / results.avgTime : 0;
+  const perDayRate = Object.fromEntries(['mat1', 'mat2', 'mat3'].map(key => [key, (results?.[key] || 0) * runsPerDay]));
 
   // Verbatim behavior port of the live "Override Costs" modal's own computation (its `C()`
   // function, extracted directly from the bundle): it iterates ONLY the keys actually present
@@ -1476,21 +1549,26 @@ async function openOverrideCostsModal(build) {
         const field = overrideGroups.find((g) => g.title === 'Base Stats').fields.find((f) => f.key === k);
         const globalVal = field ? (field.global() ?? 0) : 0;
         const overrideVal = overrides[k];
-        const resource = CF.baseStatResource(currentHunter, k);
-        const cost = resource ? CF.baseStatCostRange(k, globalVal, overrideVal, currentHunter) : undefined;
+        const costKey = hunter === 'ozzy' ? ({ multichance: 'critchance', multipower: 'critpower' }[k] || k) : k;
+        const resource = CF.baseStatResource(hunter, costKey);
+        const cost = resource ? CF.baseStatCostRange(costKey, globalVal, overrideVal, hunter) : undefined;
         return { label: field ? field.label : k, globalVal, overrideVal, resource, cost };
       }),
     },
     {
       title: 'Relics', icon: 'scale',
-      rows: positiveOverrideKeys('upgrades.relics.').map((k) => {
+      // The original overview normalizes every relic id with `r${id.substring(1)}`.
+      // That leaves tier-1 ids intact but makes tier-2 ids unpriced, so they are omitted
+      // here for workflow parity. The canonical tier-2 prices remain available elsewhere.
+      rows: positiveOverrideKeys('upgrades.relics.').filter(k => !k.split('.')[2].startsWith('t2r')).map((k) => {
         const id = k.split('.')[2];
         const field = overrideGroups.find((g) => g.title === 'Relics')?.fields.find((f) => f.key === k);
         const globalVal = field ? (field.global() ?? 0) : 0;
         const overrideVal = overrides[k];
-        const resource = CF.relicResource(currentHunter);
+        const resource = CF.relicResource(hunter);
         const cost = resource ? CF.relicCostRange(id, globalVal, overrideVal) : undefined;
-        return { label: field ? field.label : id, globalVal, overrideVal, resource, cost };
+        const label = id.startsWith('t2r') ? `T2 Relic #${id.slice(3)}` : `Relic #${id.slice(1)}`;
+        return { label, globalVal, overrideVal, resource, cost };
       }),
     },
     {
@@ -1500,10 +1578,9 @@ async function openOverrideCostsModal(build) {
         const field = overrideGroups.find((g) => g.title === 'Gadgets')?.fields.find((f) => f.key === k);
         const globalVal = field ? (field.global() ?? 0) : 0;
         const overrideVal = overrides[k];
-        // No resource/material table extracted for gadgets yet -- shown without a material
-        // icon (still a real, correctly-formatted cost number, just no currency badge).
+        // The live overview assigns a gadget currency only to Knox's Anchor (Tesseracts).
         const cost = CF.gadgetCostRange(id, globalVal, overrideVal);
-        return { label: field ? field.label : id, globalVal, overrideVal, resource: null, cost };
+        return { label: field ? field.label : id, globalVal, overrideVal, resource: hunter === 'knox' && id === 'anchor' ? 'mat3' : null, cost };
       }),
     },
     {
@@ -1513,40 +1590,20 @@ async function openOverrideCostsModal(build) {
         const field = overrideGroups.find((g) => g.title === 'Inscryptions')?.fields.find((f) => f.key === k);
         const globalVal = field ? (field.global() ?? 0) : 0;
         const overrideVal = overrides[k];
-        const resource = CF.inscryptionResource(currentHunter);
+        const resource = CF.inscryptionResource(hunter);
         const cost = resource ? CF.inscryptionCostRange(id, globalVal, overrideVal) : undefined;
         return { label: field ? field.label : id, globalVal, overrideVal, resource, cost };
       }),
     },
-    {
-      title: 'Gem Nodes', icon: 'diamond',
-      rows: positiveOverrideKeys('upgrades.gems_nodes.').map((k) => {
-        const suffix = k.split('.')[2];
-        const field = overrideGroups.find((g) => g.title === 'Gem Nodes & Upgrades')?.fields.find((f) => f.key === k);
-        const globalVal = field ? (field.global() ?? 0) : 0;
-        const overrideVal = overrides[k];
-        const alias = gemFieldAlias(suffix);
-        const cost = alias ? CF.gemAliasCostRange(alias, globalVal, overrideVal) : CF.baseStatCostRange(k, globalVal, overrideVal, currentHunter);
-        return { label: field ? field.label : suffix, globalVal, overrideVal, resource: null, cost };
-      }),
-    },
-  ].filter((g) => g.rows.length);
-
-  const modeledPrefixes = ['upgrades.inscryptions.', 'upgrades.relics.', 'upgrades.gadgets.', 'upgrades.gems_nodes.'];
-  const knownKeys = new Set([
-    ...positiveOverrideBaseStats,
-    ...modeledPrefixes.flatMap((p) => positiveOverrideKeys(p)),
-  ]);
-  // Anything else with a positive override we don't have a cost formula for yet -- still
-  // flagged for transparency (an intentional divergence from the live site, which -- since it
-  // has cost data for every category it supports -- would never hit this "unknown" case at
-  // all; ours honestly says so instead of fabricating a number).
-  const unmodeledKeys = Object.keys(overrides).filter((k) => {
-    if (knownKeys.has(k)) return false;
-    const field = overrideGroups.flatMap((g) => g.fields).find((f) => f.key === k);
-    const globalVal = field ? (field.global() ?? 0) : 0;
-    return overrides[k] > globalVal;
-  });
+  ];
+  if (hunter === 'knox' && overrides.proj > accountLevel(hunter, 'proj')) {
+    const globalVal = accountLevel(hunter, 'proj'), overrideVal = overrides.proj;
+    for (const [resource, cost] of Object.entries(CF.projCostRange(globalVal, overrideVal))) {
+      groups[0].rows.push({ label: `Projectiles Per Salvo (${CF.resourceAbbr(hunter, resource)})`, globalVal, overrideVal, resource, cost });
+    }
+  }
+  groups.forEach(g => { g.rows = g.rows.filter(r => r.resource && r.cost > 0); });
+  const pricedGroups = groups.filter(g => g.rows.length);
 
   const resourceTotals = {};
   groups.forEach((g) => g.rows.forEach((r) => {
@@ -1555,11 +1612,14 @@ async function openOverrideCostsModal(build) {
   }));
 
   const fmtTimeShort = (mins) => {
-    if (mins === null || mins === undefined || !isFinite(mins)) return '—';
+    if (mins === null || mins === undefined || !isFinite(mins) || mins <= 0) return '-';
+    if (mins > 52560000) return 'Not in your lifetime';
+    const years = Math.floor(mins / 525600);
+    if (years > 0) return `${years}y ${Math.floor((mins % 525600) / 1440)}d`;
     const days = Math.floor(mins / 1440); const hrs = Math.floor((mins % 1440) / 60);
     if (days > 0) return `${days}d ${hrs}h`;
-    if (hrs > 0) return `${hrs}h ${Math.round(mins % 60)}m`;
-    return `${Math.round(mins)}m`;
+    if (hrs > 0) return `${hrs}h ${Math.floor(mins % 60)}m`;
+    return `${Math.floor(mins)}m`;
   };
 
   const rowHtml = (r) => {
@@ -1571,13 +1631,13 @@ async function openOverrideCostsModal(build) {
       <td class="py-1.5 pr-3 text-gray-400">${r.globalVal}</td>
       <td class="py-1.5 pr-3 text-blue-300">${r.overrideVal}</td>
       <td class="py-1.5 pr-3 text-green-400">${r.overrideVal - r.globalVal}</td>
-      <td class="py-1.5 pr-3">${r.resource ? `<span class="inline-flex items-center gap-1">${matIcon(r.resource)}${CF.resourceAbbr(currentHunter, r.resource)}</span>` : '—'}</td>
+      <td class="py-1.5 pr-3"><span class="inline-flex items-center gap-1" title="${CF.resourceLabel(hunter, r.resource)}">${matIcon(r.resource)}${CF.resourceAbbr(hunter, r.resource)}</span></td>
       <td class="py-1.5 pr-3 text-amber-400 font-medium">${r.cost === undefined ? 'unknown' : CF.fmtBig(r.cost)}</td>
       <td class="py-1.5 pr-3 text-gray-400">${fmtTimeShort(timeMins)}</td>
     </tr>`;
   };
 
-  const groupHtml = groups.map((g) => {
+  const groupHtml = pricedGroups.map((g) => {
     const totalsForGroup = {};
     g.rows.forEach((r) => { if (r.cost !== undefined && r.resource) totalsForGroup[r.resource] = (totalsForGroup[r.resource] || 0) + r.cost; });
     const totalsBadges = Object.entries(totalsForGroup).map(([res, amt]) => `<span class="text-amber-400 font-medium ml-3 inline-flex items-center gap-1">${matIcon(res)}${CF.fmtBig(amt)}</span>`).join('');
@@ -1587,10 +1647,20 @@ async function openOverrideCostsModal(build) {
           <div class="flex items-center gap-2">${iconSvg(g.icon, 16, 'text-blue-400')}<span class="font-semibold text-white text-sm">${escapeHtml(g.title)}</span><span class="text-xs text-gray-400 bg-gray-800 px-1.5 py-0.5 rounded">${g.rows.length} upgrade${g.rows.length === 1 ? '' : 's'}</span></div>
           <div class="text-xs">${totalsBadges}</div>
         </div>
-        <div class="overflow-x-auto"><table class="w-full text-sm">
+        <div class="hidden md:block overflow-x-auto"><table class="w-full text-sm">
           <thead><tr class="text-left text-xs text-gray-400 border-b border-gray-700"><th class="py-1.5 pr-3 font-normal">Upgrade</th><th class="py-1.5 pr-3 font-normal">Global</th><th class="py-1.5 pr-3 font-normal">Override</th><th class="py-1.5 pr-3 font-normal">Difference</th><th class="py-1.5 pr-3 font-normal">Resource</th><th class="py-1.5 pr-3 font-normal">Cost</th><th class="py-1.5 pr-3 font-normal">Collection Time</th></tr></thead>
           <tbody>${g.rows.map(rowHtml).join('')}</tbody>
         </table></div>
+        <div class="md:hidden space-y-3 p-4">${g.rows.map(r => `<div class="bg-gray-800/30 rounded-lg p-4 border border-gray-700">
+          <h4 class="text-white font-medium mb-3">${escapeHtml(r.label)}</h4>
+          <div class="grid grid-cols-2 gap-3 text-sm">
+            <div><div class="text-gray-400 text-xs">Global</div><div class="text-gray-300">${r.globalVal}</div></div>
+            <div><div class="text-gray-400 text-xs">Override</div><div class="text-blue-300">${r.overrideVal}</div></div>
+            <div><div class="text-gray-400 text-xs">Difference</div><div class="text-green-400">${r.overrideVal - r.globalVal}</div></div>
+            <div><div class="text-gray-400 text-xs">Cost</div><div class="text-yellow-400">${CF.fmtBig(r.cost)} ${CF.resourceAbbr(hunter, r.resource)}</div></div>
+          </div>
+          <div class="mt-3 pt-3 border-t border-gray-700 flex justify-between text-xs"><span class="text-gray-400">Collection Time</span><span class="text-cyan-400">${fmtTimeShort(perDayRate[r.resource] ? CF.collectionTimeMinutes(r.cost, perDayRate[r.resource]) : null)}</span></div>
+        </div>`).join('')}</div>
       </div>`;
   }).join('');
 
@@ -1598,23 +1668,18 @@ async function openOverrideCostsModal(build) {
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
       ${Object.entries(resourceTotals).map(([res, amt]) => `
         <div class="bg-gray-700/50 rounded-lg p-3">
-          <div class="text-xs text-gray-400 mb-1 flex items-center gap-1.5">${matIcon(res)}${CF.resourceLabel(currentHunter, res)}</div>
+          <div class="text-xs text-gray-400 mb-1 flex items-center gap-1.5">${matIcon(res)}${CF.resourceLabel(hunter, res)}</div>
           <div class="text-amber-400 font-bold">${CF.fmtBig(amt)}</div>
         </div>`).join('')}
     </div>` : '';
 
-  const unmodeledHtml = unmodeledKeys.length ? `<p class="text-xs text-gray-500 mt-3">No cost data for: ${unmodeledKeys.map(escapeHtml).join(', ')}.</p>` : '';
-  // Only the ACTIONABLE half survives: an unset fragment rate is something the user can fix, and
-  // is why relic times read unknown. How collection time is derived was explanation, not action.
-  const timeNoteHtml = perDayRate.frags
-    ? ''
-    : '<p class="text-xs text-amber-400 mt-2">Set a fragments/day rate to see relic collection times.</p>';
+  const body = pricedGroups.length
+    ? `<p class="text-sm text-gray-300 mb-4">This overview shows the cost differences between your global values and the override values used in this build.</p>${groupHtml}${footerHtml}`
+    : '<div class="p-4 text-center"><h3 class="text-lg font-medium text-gray-300 mb-2">No Override Costs</h3><p class="text-gray-400">This build has no overrides that incur costs, or all overrides are at or below global values.</p></div>';
 
-  const body = Object.keys(overrides).length
-    ? `<p class="text-sm text-gray-300 mb-4">This overview shows the cost differences between your global values and the override values used in this build.</p>${groupHtml}${footerHtml}${unmodeledHtml}${timeNoteHtml}`
-    : '<p class="text-sm text-gray-400">No overrides set on this build.</p>';
-
-  titledModal('adjustments-horizontal', `Override Costs: ${escapeHtml(build.name || 'Unnamed')}`, body, 'overrideCostsModal');
+  const overlay = titledModal('adjustments-horizontal', `Override Costs: ${escapeHtml(build.name || 'Unnamed')}`, body, 'overrideCostsModal');
+  overlay.firstElementChild.classList.replace('max-w-5xl', 'max-w-4xl');
+  return overlay;
 }
 
 // Evaluates the build's current Loot Score, then tries +1 on every talent/attribute that
@@ -1876,7 +1941,7 @@ async function renderBuildList() {
         <div class="absolute top-1.5 right-[34px] z-10 bg-gray-700/80 text-gray-200 rounded-lg px-1 py-1 shadow-lg text-xs font-medium text-center leading-tight w-9 h-12" title="Build Level">
           <div><div class="pb-2">Lvl</div><div class="font-bold">${build.level}</div></div>
         </div>
-        <button data-act="overrideCosts" class="absolute top-1.5 right-2 z-10 text-white rounded-full p-1 shadow-lg transition-colors cursor-pointer bg-red-500/50 hover:bg-red-500/70" title="View override costs">${iconSvg('adjustments-horizontal', 14, 'text-red-300')}</button>
+        ${Object.keys(build.overrides || {}).length ? `<button data-act="overrideCosts" class="absolute top-1.5 right-2 z-10 text-white rounded-full p-1 shadow-lg transition-colors cursor-pointer bg-${accent}-500/50 hover:bg-${accent}-500/70" title="View override costs">${iconSvg('adjustments-horizontal', 14, `text-${accent}-300`)}</button>` : ''}
         <button data-act="reEvaluate" class="absolute top-8 right-2 z-10 bg-gray-600 text-gray-300 rounded-full p-1 shadow-lg hover:bg-gray-500 hover:text-white transition-colors" title="Re-evaluate Build">${iconSvg('refresh', 14)}</button>
         <div class="header-main p-4 flex justify-between items-center">
           <div class="flex items-center flex-1 min-w-0">
@@ -1949,7 +2014,14 @@ async function renderBuildList() {
       store[currentHunter].builds = store[currentHunter].builds.filter((b) => b.id !== build.id);
       saveStore(); renderCategoryTabs(); renderBuildList();
     };
-    card.querySelector('[data-act=overrideCosts]').onclick = () => openOverrideCostsModal(build);
+    const overrideCostsButton = card.querySelector('[data-act=overrideCosts]');
+    if (overrideCostsButton) overrideCostsButton.onclick = () => {
+      try { openOverrideCostsModal(build, cardHunter, cardResults[buildIdx]); }
+      catch (error) {
+        console.error('Error calculating costs:', error);
+        titledModal('adjustments-horizontal', 'Override Costs', `<p class="text-red-400">Error calculating costs: ${escapeHtml(error.message)}</p>`, 'overrideCostsModal');
+      }
+    };
     card.querySelector('[data-act=compareEfficiency]').onclick = () => openCompareEfficiencyModal(build);
     card.querySelector('[data-act=buildStats]').onclick = () => openBuildStatsModal(build);
     card.querySelector('[data-act=effectivePath]').onclick = () => openBuildEffectivePathModal(build);
@@ -2511,20 +2583,43 @@ function openCompareBuildsModal() {
   const selected = new Set();
   const overlay = titledModal('git-compare', 'Compare Builds', '', 'compareBuildsModal');
   const body = overlay.querySelector('.p-5');
-  const show = (v) => (v === undefined ? '&mdash;' : escapeHtml(typeof v === 'object' ? JSON.stringify(v) : String(v)));
+  const show = (v) => (v === undefined ? '&hellip;' : escapeHtml(typeof v === 'object' ? JSON.stringify(v) : String(v)));
+  // Scores are evaluated once per build per open, with the same state the build cards use.
+  const scores = new Map();
+  const scoreOf = (b) => {
+    if (!scores.has(b.id)) {
+      scores.set(b.id, null);
+      HunterSim.evaluate(hunter, evalStateFor(b, currentIterations()))
+        .then((r) => { scores.set(b.id, r); paint(); })
+        .catch((err) => { scores.set(b.id, { error: err.message }); paint(); });
+    }
+    return scores.get(b.id);
+  };
+  const scoreCell = (r, pick, format) => (!r ? undefined : r.error ? 'error' : format(pick(r)));
 
   const diffRows = (picked) => {
     const sections = [];
-    const section = (name, entries) => {
-      const rows = entries.filter(({ values }) => new Set(values.map((v) => JSON.stringify(v ?? null))).size > 1);
+    const section = (name, entries, { always = false } = {}) => {
+      const rows = always ? entries : entries.filter(({ values }) => new Set(values.map((v) => JSON.stringify(v ?? null))).size > 1);
       if (rows.length) sections.push({ name, rows });
     };
+    const results = picked.map(scoreOf);
+    section('Scores', [
+      { label: 'Loot Score', values: results.map((r) => scoreCell(r, (x) => x.lootPerMin, fmt)), raw: results.map((r) => r?.lootPerMin) },
+      { label: 'Stage Score', values: results.map((r) => scoreCell(r, (x) => x.avgStage, (v) => v.toFixed(1))), raw: results.map((r) => r?.avgStage) },
+    ], { always: true });
     section('Build', [{ label: 'Level', values: picked.map((b) => b.level) }]);
     // HUNTER_DEFS names these `label`, not `name` -- reading `name` rendered every row unlabelled.
     section('Talents', d.talents.map((t) => ({ label: t.label, values: picked.map((b) => b.talents?.[t.id] || 0) })));
     section('Attributes', d.attributes.map((a) => ({ label: a.label, values: picked.map((b) => b.attributes?.[a.id] || 0) })));
-    const overrideKeys = [...new Set(picked.flatMap((b) => Object.keys(b.overrides || {})))].sort();
-    section('Overrides', overrideKeys.map((k) => ({ label: k.replace(/^upgrades\./, ''), values: picked.map((b) => b.overrides?.[k]) })));
+    // A build without an override on a key runs at the ACCOUNT's level, so that is what it shows
+    // (muted), not a blank -- otherwise "301 vs --" hides that the other build has, say, 250.
+    const overrideKeys = [...new Set(picked.flatMap((b) => Object.keys(b.overrides || {})))];
+    section('Overrides', overrideKeys.map((k) => ({
+      label: overrideLabel(hunter, k),
+      values: picked.map((b) => (b.overrides && k in b.overrides ? b.overrides[k] : accountLevel(hunter, k))),
+      muted: picked.map((b) => !(b.overrides && k in b.overrides)),
+    })).sort((a, b) => a.label.localeCompare(b.label)));
     return sections;
   };
 
@@ -2537,12 +2632,13 @@ function openCompareBuildsModal() {
         </tr></thead>
         <tbody>${sections.map(({ name, rows }) => `
           <tr><td colspan="${picked.length + 1}" class="pt-3 pb-1 text-xs uppercase tracking-wider text-gray-500">${name}</td></tr>
-          ${rows.map(({ label, values }) => {
-            const nums = values.filter((v) => typeof v === 'number');
-            const best = nums.length === values.length ? Math.max(...nums) : null;
+          ${rows.map(({ label, values, raw, muted }) => {
+            const cmp = raw || values;
+            const nums = cmp.filter((v) => typeof v === 'number');
+            const best = nums.length === cmp.length && new Set(nums).size > 1 ? Math.max(...nums) : null;
             return `<tr class="border-t border-gray-700/50">
               <td class="py-1 pr-3 text-gray-300 whitespace-nowrap">${escapeHtml(label)}</td>
-              ${values.map((v) => `<td class="py-1 px-2 text-right tabular-nums ${best !== null && v === best ? 'text-green-300 font-semibold' : 'text-gray-300'}">${show(v)}</td>`).join('')}
+              ${values.map((v, i) => `<td class="py-1 px-2 text-right tabular-nums ${best !== null && cmp[i] === best ? 'text-green-300 font-semibold' : muted?.[i] ? 'text-gray-500' : 'text-gray-300'}"${muted?.[i] ? ' title="Account value (no override)"' : ''}>${show(v)}</td>`).join('')}
             </tr>`;
           }).join('')}`).join('')}
         </tbody>
@@ -2720,8 +2816,8 @@ function renderUpgradeInput(catKey, item) {
   card.className = 'relative rounded-xl overflow-hidden border border-gray-700/50 bg-gradient-to-br from-gray-800/80 via-gray-800/60 to-gray-900/80 p-4 flex flex-col';
   if (fullKey === 'ultima.ulti') {
     // Confirmed real (live Ultima.vue): this isn't a leveled upgrade at all -- the stored
-    // value itself IS the loot multiplier, set directly via a 1.0000-3.4476 slider (a number
-    // input allows typing up to 10.0000 manually). No level/curve formula involved.
+    // value itself IS the loot multiplier. Keep the original's manual 1.0000-10.0000 range;
+    // a typed input avoids the slider's coarse pointer jumps. No level/curve formula involved.
     const mult = level || 1;
     card.innerHTML = `
       <div class="flex items-center justify-between gap-2 mb-3">
@@ -2729,8 +2825,8 @@ function renderUpgradeInput(catKey, item) {
       </div>
       ${effectBox([{ label: 'Loot Reward', value: `x${mult.toFixed(4)}` }])}
       <div class="flex flex-col items-center gap-2">
-        <input data-ulti-input type="number" step="0.0001" min="1" max="10" value="${mult.toFixed(4)}" class="bg-gray-900/70 border border-gray-700/30 text-white text-center font-mono rounded-lg py-1 w-28" />
-        <input data-ulti-slider type="range" min="1" max="3.4476" step="0.0001" value="${Math.min(mult, 3.4476)}" class="w-full appearance-none bg-gray-700/60 h-3 rounded-full outline-none cursor-pointer" />
+        <label for="diamondUltimaMultiplier" class="text-sm text-gray-300">Loot multiplier</label>
+        <input id="diamondUltimaMultiplier" data-ulti-input type="number" inputmode="decimal" aria-label="Diamond Ultima loot multiplier" step="0.0001" min="1" max="10" value="${mult.toFixed(4)}" class="bg-gray-900/70 border border-gray-700/30 text-white text-center font-mono rounded-lg py-2 w-36" />
       </div>`;
     const setUlti = (v) => {
       v = Math.max(1, Math.min(10, v));
@@ -2738,8 +2834,14 @@ function renderUpgradeInput(catKey, item) {
       saveStore();
       renderUpgradesPage(document.getElementById('pageRoot'), catKey);
     };
-    card.querySelector('[data-ulti-input]').onchange = (e) => setUlti(parseFloat(e.target.value) || 1);
-    card.querySelector('[data-ulti-slider]').oninput = (e) => setUlti(parseFloat(e.target.value));
+    const input = card.querySelector('[data-ulti-input]');
+    input.onchange = () => {
+      if (!input.value || !Number.isFinite(input.valueAsNumber)) {
+        input.value = mult.toFixed(4);
+        return;
+      }
+      setUlti(input.valueAsNumber);
+    };
     return card;
   }
 
@@ -3576,8 +3678,14 @@ function renderGemsPage(root) {
 
 // ==================== BUILD CREATOR MODAL ====================
 
+let buildModalSnapshot = null;
+// The hunter the open Build Creator describes, captured at open: Save files the build under THIS
+// hunter, never under whatever `currentHunter` says by the time Save is clicked.
+let editingHunter = null;
 function openBuildModal(build) {
+  editingHunter = currentHunter;
   editingBuild = JSON.parse(JSON.stringify(build));
+  buildModalSnapshot = JSON.parse(JSON.stringify(build));
   if (!editingBuild.categoryId) editingBuild.categoryId = 'active';
   const nameEl = document.getElementById('modalHunterName');
   nameEl.textContent = currentHunter[0].toUpperCase() + currentHunter.slice(1);
@@ -3610,6 +3718,35 @@ function openBuildModal(build) {
   document.getElementById('buildModal').classList.remove('hidden');
 }
 function closeBuildModal() { document.getElementById('buildModal').classList.add('hidden'); editingBuild = null; }
+
+// Live parity: closing the Build Creator with unsaved edits asks first. It matters most for an
+// import, which now arrives here UNSAVED -- but, as on the live site, an import you have not
+// touched closes silently (there is nothing of yours to lose yet).
+function buildModalDirty() {
+  const snap = buildModalSnapshot;
+  const name = document.getElementById('buildNameInput').value;
+  const same = (a, b) => JSON.stringify(a || {}) === JSON.stringify(b || {});
+  return name !== snap.name || !same(editingBuild.overrides, snap.overrides)
+    || !same(editingBuild.talents, snap.talents) || !same(editingBuild.attributes, snap.attributes);
+}
+function requestCloseBuildModal() {
+  if (!editingBuild || !buildModalDirty()) { closeBuildModal(); return; }
+  const overlay = document.createElement('div');
+  overlay.className = 'fixed inset-0 z-[60] overflow-y-auto bg-black/70 flex items-center justify-center p-4';
+  overlay.innerHTML = `
+    <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-md animate-fade-in p-5 border border-gray-600">
+      <h3 class="text-lg font-medium text-white mb-3">Discard changes?</h3>
+      <p class="text-gray-300 mb-5">You have unsaved changes in this build. Are you sure you want to discard them?</p>
+      <div class="flex justify-end gap-3">
+        <button data-cancel class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md"> Cancel </button>
+        <button data-discard class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-md"> Discard </button>
+      </div>
+    </div>`;
+  (document.getElementById('cifi-companion-modals') || document.body).appendChild(overlay);
+  overlay.querySelector('[data-cancel]').onclick = () => overlay.remove();
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  overlay.querySelector('[data-discard]').onclick = () => { overlay.remove(); closeBuildModal(); };
+}
 
 function renderBudgetHeader() {
   const { talentBudget, attributeBudget } = budgetsForLevel(editingBuild.level);
@@ -3811,8 +3948,11 @@ document.getElementById('levelIncBtn').onclick = () => {
 
 document.getElementById('updateBuildBtn').onclick = () => {
   editingBuild.name = document.getElementById('buildNameInput').value.trim() || 'Unnamed';
+  // Keep the detached draft, but append it to the CURRENT native list, not the list cached when
+  // the companion mounted. Native builds/account edits made while the draft was open survive.
+  if (EMBEDDED) window.refreshStoreFromNative();
   if (!editingBuild.id) editingBuild.id = genBuildId();
-  const builds = store[currentHunter].builds;
+  const builds = store[editingHunter].builds;
   const idx = builds.findIndex((b) => b.id === editingBuild.id);
   if (idx >= 0) builds[idx] = editingBuild; else builds.push(editingBuild);
   saveStore();
@@ -3820,7 +3960,9 @@ document.getElementById('updateBuildBtn').onclick = () => {
   renderCategoryTabs();
   renderBuildList();
 };
-document.getElementById('closeModalBtn').onclick = closeBuildModal;
+document.getElementById('closeModalBtn').onclick = requestCloseBuildModal;
+// Live: a click on the Build Creator's backdrop is a close request too (and asks the same way).
+document.getElementById('buildModal').addEventListener('click', (e) => { if (e.target.id === 'buildModal') requestCloseBuildModal(); });
 
 // ==================== IMPORT / EXPORT ====================
 // Build-sharing codes (see buildCode.js) -- byte-compatible with the real cifi-tools.com
@@ -3934,36 +4076,93 @@ function openShareModal(build, code, lootScore) {
 }
 document.getElementById('exportBuildBtn').onclick = () => exportBuildCode(editingBuild);
 
-document.getElementById('cancelImportBtn').onclick = () => resetImportModal();
+// ---- Import Build modal: a port of the live BuildImportModal --------------------------------
+// The live hunter list's colour and icon (HUNTERS[].color / .icon: Borge tool, Ozzy prong, Knox
+// anchor). Knox is BLUE here, not this app's sky accent, because that is what the live modal paints.
+const IMPORT_HUNTER_STYLE = { borge: { color: 'red', icon: 'tool' }, ozzy: { color: 'green', icon: 'prong' }, knox: { color: 'blue', icon: 'anchor' } };
+
+document.getElementById('importModalIcon').innerHTML = iconSvg('download', 20);
+document.getElementById('cancelImportBtn').innerHTML = iconSvg('x', 18);
+document.getElementById('importErrorIcon').innerHTML = iconSvg('alert-triangle', 16);
+
+function paintImportModal(payload, error) {
+  window.__pendingImportPayload = payload;
+  const style = payload ? IMPORT_HUNTER_STYLE[payload.hunter] : null;
+  const c = style ? style.color : 'gray';
+  const input = document.getElementById('importCodeInput');
+  input.classList.toggle('border-red-500', !!error);
+  document.getElementById('importError').classList.toggle('hidden', !error);
+  document.getElementById('importErrorText').textContent = error || '';
+  const preview = document.getElementById('importPreview');
+  preview.classList.toggle('hidden', !payload);
+  if (payload) {
+    preview.className = `mb-4 p-3 border rounded-md transition-all duration-300 border-${c}-500 bg-${c}-900/20`;
+    const badge = document.getElementById('importPreviewBadge');
+    badge.className = `mr-3 rounded-full p-2 bg-${c}-900/20`;
+    badge.innerHTML = iconSvg(style.icon, 24, `text-${c}-400`);
+    document.getElementById('importPreviewName').textContent = `${payload.hunter[0].toUpperCase()}${payload.hunter.slice(1)} Build`;
+  }
+  const only = document.getElementById('importBuildOnlyBtn');
+  const all = document.getElementById('importWithUpgradesBtn');
+  only.disabled = all.disabled = !payload;
+  only.className = `w-full px-4 py-2.5 rounded-md transition-colors flex items-center justify-center text-white ${payload ? `bg-${c}-600 hover:bg-${c}-700` : 'bg-gray-600 cursor-not-allowed opacity-50'}`;
+  all.className = `w-full px-4 py-2.5 rounded-md transition-colors mt-2 flex items-center justify-center text-white ${payload ? `bg-${c}-800 hover:bg-${c}-900 border border-${c}-600` : 'bg-gray-700 cursor-not-allowed opacity-50 border border-gray-600'}`;
+  only.innerHTML = `${iconSvg('user-check', 20, 'mr-2')}<span>Import Build Only</span>`;
+  all.innerHTML = `${iconSvg('package', 20, 'mr-2')}<span>Import with Upgrades</span>`;
+}
+
 function resetImportModal() {
   document.getElementById('importModal').classList.add('hidden');
   document.getElementById('importCodeInput').value = '';
-  document.getElementById('importPreview').classList.add('hidden');
-  window.__pendingImportPayload = null;
+  paintImportModal(null, '');
 }
 
-// Matches the live site's actual import flow (confirmed live: paste a code, it shows a
-// "<Hunter> Build" preview, then two buttons -- "Import Build Only" (talents/attributes
-// only) and "Import with Upgrades" (everything else too, except pure-loot upgrades since
-// the live UI's own tooltip says those "don't affect loot score") -- rather than a single
-// blind "Import" button with no choice.
-document.getElementById('importCodeInput').addEventListener('input', async (e) => {
-  const code = e.target.value.trim();
-  const preview = document.getElementById('importPreview');
-  if (!code) { preview.classList.add('hidden'); window.__pendingImportPayload = null; return; }
+/** Opens the Import Build modal, optionally prefilled (a share link lands here, as on the live site). */
+async function openImportModal(prefilledCode) {
+  const input = document.getElementById('importCodeInput');
+  input.value = prefilledCode || '';
+  paintImportModal(null, '');
+  document.getElementById('importModal').classList.remove('hidden');
+  if (prefilledCode) await validateImportCode();
+}
+
+// The live modal's messages, verbatim: an unparseable code and a thrown decode differ.
+async function validateImportCode() {
+  const input = document.getElementById('importCodeInput');
+  const code = input.value.trim();
+  if (!code) { paintImportModal(null, ''); return; }
   try {
     const payload = await window.parseBuildCode(code);
-    if (!payload) throw new Error('unrecognized');
-    window.__pendingImportPayload = payload;
-    document.getElementById('importPreviewName').textContent = `${payload.hunter[0].toUpperCase()}${payload.hunter.slice(1)} Build`;
-    preview.classList.remove('hidden');
-  } catch (err) {
-    window.__pendingImportPayload = null;
-    preview.classList.add('hidden');
+    if (payload) paintImportModal(payload, '');
+    else paintImportModal(null, 'Invalid build code. Please check the code and try again.');
+  } catch {
+    paintImportModal(null, 'An error occurred while validating the code.');
   }
-});
+}
 
+document.getElementById('cancelImportBtn').onclick = () => resetImportModal();
+document.getElementById('importModal').addEventListener('click', (e) => { if (e.target.id === 'importModal') resetImportModal(); });
+document.getElementById('importCodeInput').addEventListener('input', validateImportCode);
+// Pasting a whole share LINK imports its ?code= (live: onPaste extracts it after the paste lands).
+document.getElementById('importCodeInput').addEventListener('paste', () => {
+  setTimeout(() => {
+    const input = document.getElementById('importCodeInput');
+    if (!input.value.includes('http') || !input.value.includes('code=')) return;
+    try {
+      const code = new URL(input.value.trim()).searchParams.get('code');
+      if (code) { input.value = code; validateImportCode(); }
+    } catch { /* not a URL: validate as typed */ }
+  }, 0);
+});
+paintImportModal(null, '');
+
+// WHAT HAPPENS AFTER THE CLICK is the live flow, not a direct save: the import opens in the Build
+// Creator as an UNSAVED draft ("Build imported and ready to edit. Click Save to keep it."), so the
+// user reviews it -- and its overrides -- before anything is written. A code for another hunter
+// first switches there ("Redirecting to Ozzy and importing build..."). This used to push the build
+// straight into the list and save.
 function applyImportedBuild(payload, includeUpgrades) {
+  if (EMBEDDED) window.refreshStoreFromNative();
   // THE BUILD IS FILED UNDER THE CODE'S OWN HUNTER, EXPLICITLY.
   //
   // This used to call switchHunter() and then push into `store[currentHunter]`, i.e. it depended
@@ -3981,52 +4180,48 @@ function applyImportedBuild(payload, includeUpgrades) {
   // called -- the user should end up looking at the build they just imported -- but nothing
   // depends on it having worked.
   const targetHunter = (payload.hunter && store[payload.hunter]) ? payload.hunter : currentHunter;
-  if (targetHunter !== currentHunter) switchHunter(targetHunter);
+  if (targetHunter !== currentHunter) {
+    showImportToast(`Redirecting to ${targetHunter[0].toUpperCase()}${targetHunter.slice(1)} and importing build...`, 'info');
+    switchHunter(targetHunter);
+  }
+  // switchHunter's save runs nav gating, which switches straight back to Borge when the target
+  // hunter is still gem-locked on this account. Opening the draft anyway would edit an Ozzy/Knox
+  // allocation in Borge's tree -- the wrong-hunter failure this function is built to prevent.
+  if (currentHunter !== targetHunter) {
+    paintImportModal(payload, `${targetHunter[0].toUpperCase()}${targetHunter.slice(1)} is not unlocked on this account yet, so this build cannot be imported.`);
+    return;
+  }
+  // id stays null: the Build Creator's Save assigns one and files it as a NEW build (live: an
+  // imported payload has no id, so Save takes its addBuild branch).
   const build = newDraftBuild();
-  // Must assign a real id before pushing directly into the store -- leaving it null and
-  // relying on the "Save Build" handler to assign one later only works for drafts opened
-  // via the modal (which aren't in the array yet). A null-id build already in the array
-  // gets a DIFFERENT id assigned the first time it's edited and saved, so the update
-  // handler's id-match lookup fails to find the original and pushes a second copy instead
-  // of overwriting it -- this was the "editing creates a duplicate" bug.
-  build.id = genBuildId();
-  build.name = payload.name || 'Imported';
+  build.isImported = true;
+  build.categoryId = showCategoryId;
+  build.name = payload.name;
   build.level = payload.level || 1;
   Object.assign(build.talents, payload.talents || {});
   Object.assign(build.attributes, payload.attributes || {});
   if (includeUpgrades) {
-    Object.assign(build.overrides, payload.overrides || {});
-    Object.entries(payload.upgradeOverrides || {}).forEach(([key, val]) => {
-      if (!window.isPureLootOverrideKey(key)) build.overrides[key] = val;
-    });
-    // Base-stat overrides (hp/atk/regen/etc.) and global-upgrade overrides (relics,
-    // inscryptions, gadgets, diamond specials/cards, gem nodes) both encode real account-wide
-    // values captured at import time, but were only ever written onto THIS one build's
-    // overrides object -- any OTHER build for the same hunter (most of all a brand new blank
-    // one) never saw them and fell back to the all-zero fresh-install baseline, so hitting
-    // Optimize on a from-scratch build scored as if the account had no relics/stats at all.
-    // Propagate them into the actual global stores (store[hunter].hunterStats /
-    // store.globalUpgrades / store.gems) so every build -- including ones that don't exist
-    // yet -- inherits the real current account state through the normal fallback path,
-    // instead of needing its own copy of every override.
-    const baseKeys = new Set(window.HUNTER_DEFS[targetHunter]?.baseStatKeys || []);
-    const applyGlobal = (key, val) => {
-      if (baseKeys.has(key)) { store[targetHunter].hunterStats[key] = val; return; }
-      const m = /^upgrades\.gems_nodes\.(.+)$/.exec(key);
-      if (m) { /* gem node state has its own dedicated store shape; skip rather than guess */ return; }
-      const u = /^upgrades\.(.+)$/.exec(key);
-      if (u) { store.globalUpgrades[u[1]] = val; return; }
-      if (key in store[targetHunter].hunterStats) store[targetHunter].hunterStats[key] = val;
-    };
-    Object.entries(payload.overrides || {}).forEach(([key, val]) => applyGlobal(key, val));
-    Object.entries(payload.upgradeOverrides || {}).forEach(([key, val]) => {
-      if (!window.isPureLootOverrideKey(key)) applyGlobal(key, val);
-    });
+    // Parity with the live site's parseCode(code, {hunterStats, upgrades}): the imported values
+    // live ONLY in this build's overrides, where the Overrides panel shows them. Base stats are
+    // always kept; an upgrade is kept only where it differs from the current account, so an
+    // override means "this build assumes something your account does not have".
+    //
+    // This used to ALSO write every value into hunterStats/globalUpgrades, so importing someone
+    // else's code silently overwrote the importer's own account with theirs. The account is the
+    // save import's to set, never a share code's.
+    //
+    // Pure-loot keys are KEPT, although the live button's caption says "except pure loot
+    // upgrades": its parseCode/setParamValue has no such filter and neither does its save, so an
+    // i103 in the code is an i103 override there too. Behaviour follows the code, not the caption.
+    Object.assign(build.overrides, payload.overrides);
+    for (const key of payload.carriedUpgradeKeys) {
+      const value = payload.upgradeOverrides[key] ?? 0;
+      if (value !== Number(accountLevel(targetHunter, key))) build.overrides[key] = value;
+    }
   }
-  store[targetHunter].builds.push(build);
-  saveStore();
   resetImportModal();
-  renderCategoryTabs(); renderBuildList();
+  openBuildModal(build);
+  showImportToast('Build imported and ready to edit. Click Save to keep it.', 'info');
 }
 document.getElementById('importBuildOnlyBtn').onclick = () => {
   if (window.__pendingImportPayload) applyImportedBuild(window.__pendingImportPayload, false);
@@ -4082,6 +4277,9 @@ function wireImportChecklist() {
 }
 
 function openImportSaveModal() {
+  // Embedded, this opens from the site's own header on ANY page, where no companion render has
+  // refreshed the store; the import writes it back, so it must start from the native state.
+  window.refreshStoreFromNative();
   document.getElementById('importSaveModal').classList.remove('hidden');
   document.getElementById('importSaveResult').innerHTML = '';
   wireImportChecklist();
@@ -4317,21 +4515,26 @@ async function processImportedSaveText(rawText, silent) {
       const sameKeys = (a, b) => Object.keys({ ...a, ...b }).every((k) => (a[k] || 0) === (b[k] || 0));
       const unchanged = existing && sameKeys(existing.talents, info.talents || {}) && sameKeys(existing.attributes, info.attributes || {})
         && existing.level === (info.level ?? existing.level);
-      if (unchanged) return;
-      anyHunterChanged = true;
-      if (existing) {
-        if (info.level !== undefined) existing.level = info.level;
-        Object.entries(info.talents || {}).forEach(([talentId, level]) => { existing.talents[talentId] = level; });
-        Object.entries(info.attributes || {}).forEach(([attrId, level]) => { existing.attributes[attrId] = level; });
-      } else {
-        const build = newDraftBuild();
-        build.id = genBuildId();
-        build.name = scanName;
-        if (info.level !== undefined) build.level = info.level;
-        Object.entries(info.talents || {}).forEach(([talentId, level]) => { build.talents[talentId] = level; });
-        Object.entries(info.attributes || {}).forEach(([attrId, level]) => { build.attributes[attrId] = level; });
-        builds.push(build);
+      if (!unchanged) {
+        anyHunterChanged = true;
+        if (existing) {
+          if (info.level !== undefined) existing.level = info.level;
+          Object.entries(info.talents || {}).forEach(([talentId, level]) => { existing.talents[talentId] = level; });
+          Object.entries(info.attributes || {}).forEach(([attrId, level]) => { existing.attributes[attrId] = level; });
+        } else {
+          const build = newDraftBuild();
+          build.id = genBuildId();
+          build.name = scanName;
+          if (info.level !== undefined) build.level = info.level;
+          Object.entries(info.talents || {}).forEach(([talentId, level]) => { build.talents[talentId] = level; });
+          Object.entries(info.attributes || {}).forEach(([attrId, level]) => { build.attributes[attrId] = level; });
+          builds.push(build);
+        }
       }
+      // A scan proves ownership even when the scanned card is unchanged. Sync the canonical
+      // advanced-talent rule now, so optimization of any build sees it before a UI visit.
+      const wasShown = store.settings.advancedTalents[hunterKey];
+      if (shouldShowAdvancedTalents(hunterKey) !== wasShown) anyHunterChanged = true;
     });
     store.lastScan = window.__lastScan;
     if (anyHunterChanged) applied.push('hunter level/talents/attributes');
@@ -4364,14 +4567,16 @@ async function processImportedSaveText(rawText, silent) {
 // Small transient toast for auto-poll imports -- the import modal isn't necessarily open when
 // this fires, so it can't just write into importSaveResult.
 let importToastTimer = null;
-function showImportToast(message) {
+// `tone: 'info'` is the live tool's blue info toast (used for its build-import messages).
+function showImportToast(message, tone = 'success') {
   let el = document.getElementById('importToast');
   if (!el) {
     el = document.createElement('div');
     el.id = 'importToast';
-    el.className = 'fixed bottom-4 right-4 z-[60] max-w-xs px-4 py-3 rounded-lg bg-gray-800 border border-green-700 text-green-300 text-sm shadow-2xl transition-opacity duration-300';
-    document.body.appendChild(el);
+    (document.getElementById('cifi-companion-modals') || document.body).appendChild(el);
   }
+  const colours = tone === 'info' ? 'border-blue-700 text-blue-300' : 'border-green-700 text-green-300';
+  el.className = `fixed bottom-4 right-4 z-[60] max-w-xs px-4 py-3 rounded-lg bg-gray-800 border ${colours} text-sm shadow-2xl transition-opacity duration-300`;
   el.textContent = message;
   el.style.opacity = '1';
   clearTimeout(importToastTimer);
@@ -4474,9 +4679,10 @@ function renderOptimizeEffort() {
   const help = document.getElementById('optimizeEffortHelp');
   if (!select || !help) return;
   const LEVELS = window.HunterOptimizer.EFFORT_LEVELS;
-  select.innerHTML = Object.entries(LEVELS)
-    .map(([key, spec]) => `<option value="${key}">${escapeHtml(spec.label)}</option>`)
-    .join('');
+  const options = entries => entries.map(([key, spec]) => `<option value="${key}">${escapeHtml(spec.label)}</option>`).join('');
+  const entries = Object.entries(LEVELS);
+  select.innerHTML = `<optgroup label="Improve this build">${options(entries.filter(([, spec]) => spec.localOnly))}</optgroup>`
+    + `<optgroup label="Explore other builds">${options(entries.filter(([, spec]) => !spec.localOnly))}</optgroup>`;
   const stored = store.optimizeEffort;
   select.value = LEVELS[stored] ? stored : window.HunterOptimizer.DEFAULT_EFFORT;
   // SELF-HEAL A LEVEL THAT NO LONGER EXISTS. `exhaustive` was a shipped option and is now removed,
@@ -4518,6 +4724,36 @@ document.getElementById('optimizeBtn').onclick = () => document.getElementById('
 document.getElementById('cancelOptimizeSetup').onclick = () => document.getElementById('optimizeSetupModal').classList.add('hidden');
 
 let cancelRequested = false;
+let lastOptimizerReport = null;
+document.getElementById('optimizerDetailsBtn').onclick = () => {
+  if (!lastOptimizerReport) return;
+  const diag = lastOptimizerReport.diag;
+  const profile = diag.profile;
+  const phases = Object.entries(profile.stageWallMs).map(([phase, ms]) => {
+    const counts = profile.stages[phase];
+    return `<tr><td class="py-2 pr-3">${escapeHtml(phase)}</td><td class="pr-3">${(Number(ms) / 1000).toFixed(2)}s</td><td class="pr-3">${counts?.performed || 0}</td><td>${counts?.memoHits || 0}</td></tr>`;
+  }).join('');
+  const worker = profile.worker;
+  const protection = diag.incumbent?.protected
+    ? (diag.incumbent.kept ? 'Your original build was retained after verification.' : 'The result was verified against your original build at full accuracy.')
+    : (diag.incumbent?.exclusion || 'No original-build comparison was made for this run.');
+  const details = titledModal('chart-arrows-vertical', 'Last optimization run', `
+    <p class="text-sm text-gray-300 mb-3">${escapeHtml(lastOptimizerReport.hunter)} · level ${lastOptimizerReport.level} · ${escapeHtml(lastOptimizerReport.mode)}. Measurements stay in this browser until you download them.</p>
+    <p class="text-sm text-gray-300 mb-3">${escapeHtml(protection)}</p>
+    <div class="overflow-x-auto"><table class="w-full text-sm text-left text-gray-300"><thead><tr><th>Phase</th><th>Wall time</th><th>Evaluations</th><th>Reused results</th></tr></thead><tbody>${phases}</tbody></table></div>
+    <p class="text-xs text-gray-400 my-3">Worker sums overlap when workers run in parallel. They must not be added to wall time. Candidate scores at different iteration counts are recorded separately in the report.</p>
+    ${profile.kernelTimingAvailable ? `<p class="text-sm text-gray-300 mb-3">Simulation: ${(worker.simulateMs / 1000).toFixed(2)} worker-seconds · fresh instances: ${(worker.instantiateMs / 1000).toFixed(2)} worker-seconds.</p>` : '<p class="text-sm text-gray-400 mb-3">Detailed simulation timing is unavailable for this evaluation backend.</p>'}
+    <button data-download-report class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-white">Download diagnostic report</button>
+    `, 'optimizerDetailsModal');
+  details.querySelector('[data-download-report]').onclick = () => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(lastOptimizerReport, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `hunter-optimizer-${lastOptimizerReport.hunter}-${lastOptimizerReport.recordedAt.replace(/[:.]/g, '-')}.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+};
 
 // The optimizer's real phases (optimizer/search.js), each with the slice of the progress bar
 // it owns and the label shown while it runs. Spans are proportional to each phase's measured
@@ -4607,6 +4843,14 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
       },
     });
 
+    if (result.diag?.profile) {
+      lastOptimizerReport = structuredClone({ version: 1, recordedAt: new Date().toISOString(), hunter: currentHunter,
+        level: cfg.level, mode, effort, cancelled: result.cancelled, truncated: result.truncated,
+        input: { hunterStats: cfg.hunterStats, baseOverrides: cfg.baseOverrides, globalUpgrades: cfg.globalUpgrades,
+          gemPlannerStore: cfg.gemPlannerStore, currentTalents: cfg.currentTalents, currentAttrs: cfg.currentAttrs },
+        best: result.best, diag: result.diag });
+      document.getElementById('optimizerDetailsBtn').classList.remove('hidden');
+    }
     if (result.cancelled || !result.best) return;
 
     // The winner's score needs no re-check here. It is the search's own final-stage number,
@@ -4623,7 +4867,10 @@ document.getElementById('startOptimizeBtn').onclick = async () => {
     const unchanged = AllocSpace.sameAlloc(d.talents, result.best.talentAlloc, editingBuild.talents)
       && AllocSpace.sameAlloc(d.attributes, result.best.attrAlloc, editingBuild.attributes);
     if (unchanged) {
-      alert(`Your build is already the best allocation found. Every legal attribute combination was enumerated (${result.diag.stages.enumerate.realizable} of ${result.diag.stages.enumerate.supports} are reachable at this budget) and none beat what you have.`);
+      const scope = result.diag.strategy === 'refinement'
+        ? 'Quick refinement verified its changes and kept your original build.'
+        : `${result.diag.stages.enumerate.realizable} reachable attribute support patterns were considered.`;
+      alert(`No better allocation found in this run. ${scope} Last run details shows the work performed.`);
       return;
     }
 
@@ -4712,30 +4959,22 @@ if (!EMBEDDED) {
 // have shown the normal start page and silently dropped the build -- the share feature was broken
 // at both ends, and neither end could be noticed by the person who generated the link.
 //
-// It goes through the SAME parseBuildCode + applyImportedBuild the paste-a-code dialog uses, so a
-// link and a pasted code cannot diverge in what they produce. The hunter comes from the CODE's own
-// header rather than the `hunter=` query param -- the param exists only so 404.html can preserve
-// the old path form, and trusting it over the code would let a hand-edited URL open a build under
-// the wrong hunter.
+// Live parity: a link opens the Import Build modal PREFILLED with its code, and the recipient
+// chooses "Build Only" or "with Upgrades" there, exactly as when pasting. The same modal and the
+// same applyImportedBuild, so a link and a pasted code cannot diverge. The hunter comes from the
+// CODE's own header rather than the `hunter=` query param -- that param exists only so 404.html
+// can preserve the old path form.
 //
-// `includeUpgrades: false` deliberately: a shared build carries the sender's account-wide upgrade
-// levels, and applying those to the recipient would silently overwrite their own gems and
-// upgrades with a stranger's. The dialog offers that as an explicit second choice; a link must not
-// make it for you.
+// This used to import build-only immediately, because "with upgrades" then OVERWROTE the
+// recipient's account. It no longer does (upgrades land in the build's overrides), so the choice
+// can be the user's, as it is on the original.
 async function consumeSharedBuildFromUrl() {
   let code = null;
   try { code = new URLSearchParams(location.search).get('code'); } catch { return; }
   if (!code) return;
-  // Strip the query BEFORE importing: importing re-renders, and a refresh mid-import would
-  // otherwise import the same build a second time.
+  // Strip the query first, so a refresh does not reopen the same import.
   try { history.replaceState(null, '', location.pathname); } catch { /* file:// */ }
-  try {
-    const payload = await window.parseBuildCode(code.trim());
-    if (!payload) throw new Error('the code was not recognised');
-    applyImportedBuild(payload, false);
-  } catch (e) {
-    alert(`That shared build could not be opened: ${e.message}`);
-  }
+  await openImportModal(code.trim());
 }
 // Would strip the query string off THEIR URL via replaceState.
 if (!EMBEDDED) consumeSharedBuildFromUrl();

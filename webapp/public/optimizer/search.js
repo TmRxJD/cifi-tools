@@ -213,11 +213,17 @@
   // overstates the work by 2x, and every run now reports the real split in its notes so the two
   // numbers cannot be confused again.
   const EFFORT_LEVELS = {
+    refinement: {
+      label: 'Quick refinement', localOnly: true,
+      help: 'Try small changes to this build. Verify the result at full accuracy and keep the original '
+        + 'if nothing better is found. Required attributes for the selected goal still apply. '
+        + 'Does not explore other build structures.',
+    },
     fast: {
       // MEASURED against Complete, solo, nine builds levels 20-73: ~1.9x faster, worst quality gap
       // -0.29% (inside the +-0.2% two-score sampling floor), and EXACTLY 0.00% on the three hardest
       // boss builds -- borge@73, ozzy@62, knox@30. It is not a downgrade on anything tested.
-      label: 'Fast', archiveEvals: 1200, refineSupports: 3, ocbaPolish: true,
+      label: 'Fast search', archiveEvals: 1200, refineSupports: 3, ocbaPolish: true,
       help: 'About twice as quick. Measured across nine builds it returned the same result as '
         + 'Complete, so this is the sensible default.',
     },
@@ -250,7 +256,7 @@
       // The lesson is the one this file already records about maxevals: a budget justified on a
       // handful of builds is a SAMPLE STATISTIC, NOT A BOUND. Two builds agreeing is not evidence
       // that a third will. Widening the sweep is cheap next to shipping a 62% regression.
-      label: 'Complete', archiveEvals: 9600, refineSupports: 8, ocbaPolish: true,
+      label: 'Complete search', archiveEvals: 9600, refineSupports: 8, ocbaPolish: true,
       // THE OLD HELP CLAIMED IT "finds builds Fast misses". Nine builds later that is not
       // supported: the two returned the same build every time, and Complete spent 2.4x the
       // evaluations to do it. It is kept because the archive is what covers a build the CORPUS
@@ -298,6 +304,7 @@
   // that is deliberate friction: it is the step that makes a typo throw instead of quietly
   // disabling the thing being measured.
   const EFFORT_SPEC_KEYS = new Set([
+    'localOnly',                                       // explicit incumbent refinement, no archive
     'label', 'help',                                   // shipped-level metadata
     'archiveEvals', 'refineSupports',                  // the two budget dials
     // Adding a flag to the search means adding it here, and that friction is the point: an
@@ -501,6 +508,7 @@
     const thresholdOf = (d) => minVal[d.id] || 0;
     const costOf = (d) => d.cost || 1;
     const capOf = (d) => (Number.isFinite(d.maxLevel) ? d.maxLevel : Infinity);
+    /** @type {Allocation} */
     const alloc = {};
     for (const d of members) alloc[d.id] = 0;
     const spent = () => Space.costOf(defs, alloc);
@@ -1870,6 +1878,7 @@
     return screened.slice(0, REFINE_TALENT_SUPPORTS);
   }
 
+  /** @param {((fraction: number) => void) | null} [onFrac] */
   async function optimizeBlock(ctx, defs, deps, minVal, budget, alloc, buildPair, baseScore, stepSizes, pinnedIds = [], onFrac = null, iterations = SCREEN_ITERATIONS, maxRounds = MAX_ROUNDS_PER_BLOCK) {
     let current = { ...alloc };
     let currentScore = baseScore;
@@ -1962,15 +1971,24 @@
   // Alternate attribute and talent blocks until neither improves. Both blocks see the other's
   // current state, so this converges on a joint fixpoint rather than optimizing each in
   // isolation against a stale partner.
-  async function optimizeJointly(ctx, cfg, talentAlloc, attrAlloc, startScore, stepSizes, maxSweeps, pinnedAttrs = [], onFrac = null, iterations = SCREEN_ITERATIONS, maxRounds = MAX_ROUNDS_PER_BLOCK) {
+  /**
+   * @param {((fraction: number) => void) | null} [onFrac]
+   * @param {((sweep: number) => boolean) | null} [stopAfterSweep]
+   */
+  async function optimizeJointly(ctx, cfg, talentAlloc, attrAlloc, startScore, stepSizes, maxSweeps, pinnedAttrs = [], onFrac = null, iterations = SCREEN_ITERATIONS, maxRounds = MAX_ROUNDS_PER_BLOCK, stopAfterSweep = null) {
     const { TALENTS, ATTRIBUTES, TALENT_BUDGET, ATTRIBUTE_BUDGET } = cfg;
+    /** @type {Record<string, string[]>} */
     const noDeps = {};
+    /** @type {Record<string, number>} */
     const noMin = {};
     let talents = { ...talentAlloc };
     let attrs = { ...attrAlloc };
     let score = startScore;
 
     for (let sweep = 0; sweep < maxSweeps; sweep++) {
+      // Only explicit local refinement supplies this emergency boundary. Broad-search callers
+      // retain their existing count budgets and traversal; a completed sweep is a legal result.
+      if (sweep > 0 && stopAfterSweep && stopAfterSweep(sweep)) break;
       const before = score;
       // Each sweep runs two blocks, so a sweep owns 1/maxSweeps of the bar and each block half of
       // that. A sweep that exits early simply leaves the remainder unused -- the fraction is
@@ -2107,16 +2125,23 @@
     // this removes a large fraction of the real work rather than a rounding error.
     const cache = new Map();
     const diag = { stages: {}, timings: {} };
+    const clock = () => typeof performance !== 'undefined' ? performance.now() : Date.now();
+    let activeStage = 'stage0_seed';
+    const profile = diag.profile = { version: 1, settings: { mode, screenIterations: SCREEN_ITERATIONS, finalIterations: FINAL_ITERATIONS, effort: opts.effort || 'default' }, workerTimingAvailable: false, kernelTimingAvailable: false, stages: {}, fidelities: {}, bestEvaluated: {}, worker: { batches: 0, evaluations: 0, evaluateMs: 0, yieldMs: 0, retryMs: 0, retries: 0, argumentMs: 0, instantiateMs: 0, simulateMs: 0, extractMs: 0 }, stageWallMs: {} };
+    const nextStage = { stage0_seed: 'stage1_enumerate_screen', stage1_enumerate_screen: 'stage2a_archive', stage2a_archive: 'stage2b_refine', stage2b_refine: 'stage2c_corpus', stage2c_corpus: 'stage3_decide', stage3_decide: 'polish', polish: 'winner_cleanup', winner_cleanup: 'value_ledger' };
     // STAGE TIMINGS, because `timings` was declared empty and never written -- so every question
     // about where a run spends itself has been answered by guessing. That is not hypothetical: a
     // 45s cap was added to a bench expecting a speedup and bought nothing, because the cost was in
     // a stage the cap never touched. Seconds, one decimal, cumulative per stage so a stage entered
     // more than once accumulates rather than reporting only its last visit.
-    let stageMark = Date.now();
+    const profileStartedAt = clock();
+    let stageMark = profileStartedAt;
     const markStage = (name) => {
-      const now = Date.now();
-      diag.timings[name] = Number((((diag.timings[name] || 0) * 1000 + (now - stageMark)) / 1000).toFixed(1));
+      const now = clock();
+      profile.stageWallMs[name] = (profile.stageWallMs[name] || 0) + now - stageMark;
+      diag.timings[name] = Number((profile.stageWallMs[name] / 1000).toFixed(1));
       stageMark = now;
+      activeStage = nextStage[name] || name;
     };
     const startedAt = Date.now();
     const maxSeconds = Number.isFinite(opts.maxSeconds) ? opts.maxSeconds : DEFAULT_MAX_SECONDS;
@@ -2146,8 +2171,15 @@
       // dependent on whether a candidate happened to be re-scored, which is not deterministic in
       // any useful sense.
       async score(pairs, iterations) {
-        if (!pairs.length) { const e = []; e.boss = []; return e; }
-        const out = new Array(pairs.length);
+        if (!pairs.length) { const e = /** @type {ScoreBatch} */ ([]); e.boss = []; return e; }
+        const started = clock();
+        const bucket = () => ({ batches: 0, requests: 0, memoHits: 0, performed: 0, withinBatchDuplicates: 0, scorerWallMs: 0, wallMs: 0 });
+        const stageProfile = profile.stages[activeStage] || (profile.stages[activeStage] = bucket());
+        const fidelityProfile = profile.fidelities[iterations] || (profile.fidelities[iterations] = bucket());
+        const counters = [stageProfile, fidelityProfile];
+        counters.forEach(p => { p.batches++; p.requests += pairs.length; });
+        const batchKeys = new Map();
+        const out = /** @type {ScoreBatch} */ (new Array(pairs.length));
         const boss = new Array(pairs.length);
         const missIdx = [];
         const missPairs = [];
@@ -2158,18 +2190,61 @@
             const hit = cache.get(key);
             out[i] = hit.score; boss[i] = hit.boss; cacheHits++; continue;
           }
-          missIdx.push(i);
+          // Coalesce only identical allocation+fidelity requests. Preserve first-occurrence
+          // scorer order and scatter BOTH score and boss metadata back to every caller. Search
+          // proposal/refinement budgets still count their original candidates, so this removes
+          // repeated deterministic simulation without changing which moves get explored.
+          if (batchKeys.has(key)) {
+            counters.forEach(p => p.withinBatchDuplicates++);
+            missIdx[batchKeys.get(key)].push(i);
+            cacheHits++;
+            continue;
+          }
+          batchKeys.set(key, missPairs.length);
+          missIdx.push([i]);
           missPairs.push(pairs[i]);
           missKeys.push(key);
         }
         if (missPairs.length) {
           evals += missPairs.length;
+          const scoreStarted = clock();
           const scores = await scorer(missPairs, iterations);
+          const scorerWallMs = clock() - scoreStarted;
+          counters.forEach(p => { p.performed += missPairs.length; p.scorerWallMs += scorerWallMs; });
+          if (scores.telemetry) {
+            profile.workerTimingAvailable = true;
+            profile.kernelTimingAvailable = 'simulateMs' in scores.telemetry;
+            for (const [key, value] of Object.entries(scores.telemetry)) {
+              if (typeof value === 'number' && Number.isFinite(value)) profile.worker[key] = (profile.worker[key] || 0) + value;
+            }
+          }
           const meta = scores.boss || [];
           for (let j = 0; j < missIdx.length; j++) {
             cache.set(missKeys[j], { score: scores[j], boss: meta[j] });
-            out[missIdx[j]] = scores[j];
-            boss[missIdx[j]] = meta[j];
+            for (const index of missIdx[j]) {
+              out[index] = scores[j];
+              boss[index] = meta[j];
+            }
+          }
+        }
+        counters.forEach(p => { p.memoHits += pairs.length - missPairs.length; p.wallMs += clock() - started; });
+        // Keep fidelities separate: a screening best and a final-fidelity best are different
+        // rulers. These are observed candidate scores, not promises of the returned champion.
+        const observed = profile.bestEvaluated[iterations] || (profile.bestEvaluated[iterations] = { score: null, improvements: 0, lastImprovementAtBatchEndEvaluation: 0, history: [], historyDropped: 0 });
+        // Batch completion is the first moment its candidates are available to the search.
+        // Preserve the allocation too: a surrogate score alone cannot establish when this
+        // run reached another method's quality under a shared, full-fidelity evaluator.
+        const batchEndedAfterMs = clock() - profileStartedAt;
+        for (let index = 0; index < out.length; index++) {
+          const score = out[index];
+          if (Number.isFinite(score) && (observed.score === null || score > observed.score)) {
+            observed.score = score;
+            observed.improvements++;
+            observed.lastImprovementAtBatchEndEvaluation = evals;
+            const point = { stage: activeStage, batchEndEvaluations: evals, batchEndedAfterMs, score,
+              talentAlloc: { ...pairs[index].talentAlloc }, attrAlloc: { ...pairs[index].attrAlloc } };
+            if (observed.history.length < 128) observed.history.push(point);
+            else { observed.history[127] = point; observed.historyDropped++; }
           }
         }
         out.boss = boss;
@@ -2179,7 +2254,9 @@
 
     const deps = cfg.ATTRIBUTE_DEPENDENCIES;
     const minVal = cfg.ATTRIBUTE_MIN_VALUE;
+    /** @type {Record<string, string[]>} */
     const noDeps = {};
+    /** @type {Record<string, number>} */
     const noMin = {};
 
     // A budget can exceed what the available nodes are able to absorb -- most concretely for
@@ -2212,9 +2289,256 @@
     // than merely still running -- and it costs nothing, since it is already computed.
     let bestSoFarScore = null;
     const noteBest = (v) => { if (typeof v === 'number' && Number.isFinite(v) && (bestSoFarScore === null || v > bestSoFarScore)) bestSoFarScore = v; };
-    const report = (phase, done, total) => onProgress({ phase, done, total, evals, best: bestSoFarScore });
+    const report = (phase, done, total) => onProgress({ phase, done, total, evals, best: bestSoFarScore,
+      bestByFidelity: Object.fromEntries(Object.entries(profile.bestEvaluated).map(([key, value]) => [key, value.score])) });
+
+    function validatePair(pair, label) {
+      for (const [field, defs, dependencies, thresholds, budget] of [
+        ['talentAlloc', TALENTS, noDeps, noMin, talentBudget],
+        ['attrAlloc', ATTRIBUTES, deps, minVal, attrBudget],
+      ]) {
+        const allocation = pair[field];
+        if (!allocation || typeof allocation !== 'object' || Array.isArray(allocation)) {
+          throw new Error(`optimize(): ${label}.${field} must be an allocation object`);
+        }
+        for (const [id, value] of Object.entries(allocation)) {
+          const def = defs.find(d => d.id === id);
+          if (!Number.isInteger(value) || value < 0 || (!def && value !== 0) || (def && value > def.maxLevel)) {
+            throw new Error(`optimize(): invalid ${label}.${field}.${id}=${value}`);
+          }
+        }
+        if (!Space.isLegal(defs, dependencies, thresholds, allocation, budget)) {
+          throw new Error(`optimize(): illegal ${label}.${field} for this account and budget`);
+        }
+      }
+    }
+    const hasTalents = cfg.currentTalents !== undefined, hasAttrs = cfg.currentAttrs !== undefined;
+    if (hasTalents !== hasAttrs) throw new Error('optimize(): currentTalents and currentAttrs must be supplied together');
+    let incumbent = null;
+    if (hasTalents) {
+      validatePair({ talentAlloc: cfg.currentTalents, attrAlloc: cfg.currentAttrs }, 'incumbent');
+      incumbent = { talentAlloc: { ...cfg.currentTalents }, attrAlloc: { ...cfg.currentAttrs } };
+    }
+    diag.incumbent = { provided: incumbent !== null,
+      modeCompatible: incumbent !== null && pinsHeld(ATTRIBUTES, incumbent.attrAlloc, pinnedAttrs),
+      protected: false, kept: false, score: null };
+    if (incumbent && !diag.incumbent.modeCompatible) {
+      diag.incumbent.exclusion = 'The original allocation does not satisfy this mode’s required attribute pins.';
+    }
+
+    async function finish(ranked, stageChampions) {
+      markStage('polish');
+      // Normalize every contender on a clone, then rank the actual allocations at one fidelity.
+      // Cleaning only ranked[0] left its old score attached to a different build and could hide
+      // a repaired rival. Unchanged candidates are exact memo hits, not new simulations.
+      const spendable = (defs, dependencies, thresholds, budget, alloc) => {
+        const idle = budget - Space.costOf(defs, alloc);
+        if (idle <= 0) return null;
+        const node = defs.find(d => (d.cost || 1) <= idle && Space.isEligible(d, defs, dependencies, thresholds, alloc));
+        return node ? { idle, node: node.id } : null;
+      };
+      const normalized = [];
+      const seenNormalized = new Set();
+      let changedCount = 0;
+      for (const candidate of ranked) {
+        let t = { ...candidate.talentAlloc }, a = { ...candidate.attrAlloc };
+        t = await greedyTopUp(ctx, TALENTS, noDeps, noMin, talentBudget, t,
+          talentAlloc => ({ talentAlloc, attrAlloc: a }));
+        a = await greedyTopUp(ctx, ATTRIBUTES, deps, minVal, attrBudget, a,
+          attrAlloc => ({ talentAlloc: t, attrAlloc }));
+        a = applyPins(ATTRIBUTES, deps, minVal, attrBudget, a, pinnedAttrs);
+        const pair = { talentAlloc: t, attrAlloc: a };
+        if (!Space.sameAlloc(TALENTS, t, candidate.talentAlloc) || !Space.sameAlloc(ATTRIBUTES, a, candidate.attrAlloc)) changedCount++;
+        validatePair(pair, 'normalized contender');
+        if (!pinsHeld(ATTRIBUTES, a, pinnedAttrs)) throw new Error('Optimizer cannot satisfy the mode attribute pins within this budget');
+        for (const [label, defs, dependencies, thresholds, budget, alloc] of [
+          ['talent', TALENTS, noDeps, noMin, talentBudget, t],
+          ['attribute', ATTRIBUTES, deps, minVal, attrBudget, a],
+        ]) {
+          const left = spendable(defs, dependencies, thresholds, budget, alloc);
+          if (left) throw new Error(`Optimizer left ${left.idle} ${label} point(s) unspent while "${left.node}" could still take one: ${JSON.stringify(alloc)}`);
+        }
+        const sig = `${Space.signature(TALENTS, t)}|${Space.signature(ATTRIBUTES, a)}`;
+        if (!seenNormalized.has(sig)) { seenNormalized.add(sig); normalized.push(pair); }
+      }
+      if (!normalized.length) throw new Error('Optimizer produced no final contenders');
+      report('final', 0, 1);
+      const verified = await ctx.score(normalized, FINAL_ITERATIONS);
+      if (verified.some(score => !Number.isFinite(score))) throw new Error('Optimizer final contender score must be finite');
+      if (diag.strategy === 'refinement') diag.localRefinement.candidateFinalScore = verified[0];
+      ranked = normalized.map((pair, i) => ({ ...pair, score: verified[i] }));
+      diag.incumbent.candidateScore = verified.reduce((best, score) => Math.max(best, score), -Infinity);
+      let protectedCandidate = null;
+      if (incumbent && diag.incumbent.modeCompatible) {
+        const [score] = await ctx.score([incumbent], FINAL_ITERATIONS);
+        if (!Number.isFinite(score)) throw new Error('Optimizer incumbent score must be finite');
+        protectedCandidate = { talentAlloc: { ...incumbent.talentAlloc }, attrAlloc: { ...incumbent.attrAlloc }, score };
+        // The original is allowed to retain unspent points. Topping it up would change the
+        // quality floor: even one extra point can make a farming run longer and worse.
+        ranked = ranked.filter(r => !(Space.sameAlloc(TALENTS, r.talentAlloc, incumbent.talentAlloc)
+          && Space.sameAlloc(ATTRIBUTES, r.attrAlloc, incumbent.attrAlloc)));
+        ranked.push(protectedCandidate);
+        diag.incumbent.score = score;
+        diag.incumbent.protected = true;
+        stageChampions.unshift({ stage: 'incumbent', ...incumbent });
+      }
+      ranked.sort((a, b) => b.score - a.score
+        || Number(b === protectedCandidate) - Number(a === protectedCandidate));
+      diag.incumbent.kept = protectedCandidate !== null && ranked[0] === protectedCandidate;
+      if (diag.incumbent.kept) ctx.note('The original build met or beat every verified contender; keeping it unchanged.');
+      diag.finalization = { contenders: normalized.length, changedCount, finalIterations: FINAL_ITERATIONS,
+        deadlineOverrunMs: Number.isFinite(deadlineAt) ? Math.max(0, Date.now() - deadlineAt) : 0 };
+
+      report('done', 1, 1);
+      if (ranked[0]) {
+        stageChampions.push({
+          stage: 'returned', talentAlloc: ranked[0].talentAlloc, attrAlloc: ranked[0].attrAlloc,
+        });
+      }
+
+      // ============================== THE VALUE-LOSS LEDGER ==============================
+      //
+      // WHY THIS EXISTS. "Where does the search lose the value?" was repeatedly answered by
+      // comparing an archive score (SCREEN_ITERATIONS) against an import score (FINAL_ITERATIONS)
+      // and reading the difference as a loss. Those numbers are ~10x apart in sampling cost and
+      // mean different things. Every entry below is re-scored at THE SAME fidelity, and the
+      // fidelity is stated in the field name and in the text.
+      //
+      // The ledger states CONCLUSIONS, not raw fields to be paraphrased. `avgStage` was read as
+      // "how far the build gets" twice in one session when `maxStage` is that number, so each
+      // entry carries `Objective.describeRun`'s labelled regime instead of stage numbers alone.
+      markStage('winner_cleanup');
+      /** @type {Array<{stage: string, scoreAtFinalIterations: number, finalIterations: number, killRatePct: number | null, maxStageReached: number | null, gainOverPreviousStagePct: number | null}>} */
+      const ledger = [];
+      for (const c of stageChampions) {
+        const pair = { talentAlloc: c.talentAlloc, attrAlloc: c.attrAlloc };
+        const [sc] = await ctx.score([pair], FINAL_ITERATIONS);
+        const meta = ((await ctx.score([pair], FINAL_ITERATIONS)).boss || [])[0];
+        ledger.push({
+          stage: c.stage,
+          scoreAtFinalIterations: sc,
+          finalIterations: FINAL_ITERATIONS,
+          killRatePct: meta ? meta.kill : null,
+          maxStageReached: meta ? meta.maxStage : null,
+          gainOverPreviousStagePct: null,
+        });
+      }
+      // Deltas between consecutive stages, so a reader does not have to subtract and mislabel.
+      for (let i = 1; i < ledger.length; i++) {
+        const prev = ledger[i - 1].scoreAtFinalIterations;
+        ledger[i].gainOverPreviousStagePct = prev ? ((ledger[i].scoreAtFinalIterations - prev) / prev) * 100 : null;
+      }
+      diag.ledger = ledger;
+      diag.ledgerText = ledger.map((e, i) => {
+        const d = e.gainOverPreviousStagePct;
+        const delta = (i === 0 || d === null) ? '' : `  (${d >= 0 ? '+' : ''}${d.toFixed(2)}% vs ${ledger[i - 1].stage})`;
+        return `${e.stage.padEnd(9)} ${Math.round(e.scoreAtFinalIterations)} loot/min @${FINAL_ITERATIONS} iters`
+          + `  kill ${e.killRatePct}%  maxStage ${e.maxStageReached}${delta}`;
+      }).join('\n');
+      ctx.note(`value ledger (all at ${FINAL_ITERATIONS} iterations):\n${diag.ledgerText}`);
+
+      // A TRUNCATED RUN IS NOT REPRODUCIBLE AND MUST SAY SO. Where the cap fired depends on machine
+      // speed and load, so two runs of identical input can differ -- the one property this file
+      // otherwise guarantees. Reporting it is what keeps a truncated answer distinguishable from a
+      // converged one; the original wall-clock bug hid precisely because it was silent.
+      diag.truncated = truncated;
+      diag.elapsedSeconds = Math.round((Date.now() - startedAt) / 1000);
+      if (truncated) {
+        ctx.note(`STOPPED AT THE ${maxSeconds}s TIME CAP -- returning the best build found, which is `
+          + 'not necessarily the best this search would have found. This run is NOT reproducible; '
+          + 'raise the cap for a deterministic answer.');
+      }
+
+      markStage('value_ledger');
+      // Cancellation can arrive during the final scoring await, after its pre-flight check.
+      // Never turn that into an applicable build merely because no further batch is needed.
+      if (ctx.shouldCancel()) throw new Cancelled();
+      // The split, on every run: a reader comparing `evals` against a budget needs to know the
+      // budget counted proposals and this counts evaluations actually performed.
+      {
+        const requests = evals + cacheHits;
+        const pct = requests ? (100 * cacheHits / requests) : 0;
+        ctx.note(`evaluations: ${evals} performed, ${cacheHits} served from the exact memo `
+          + `(${pct.toFixed(1)}% of ${requests} requests)`);
+        diag.evaluations = { performed: evals, memoHits: cacheHits, requests, memoHitPct: Number(pct.toFixed(1)) };
+      }
+
+      return {
+        best: ranked[0],
+        ranked,
+        evals,
+        cacheHits,
+        notes,
+        cancelled: false,
+        truncated,
+        // ONE diagnostic channel, not two. `supportsEnumerated`/`supportsRealizable` used to sit
+        // here as well as in the diag record -- the same numbers reported twice, which is how the
+        // two copies get to disagree.
+        diag,
+      };
+    }
 
     try {
+      const effortSpec = (effort && typeof effort === 'object') ? effort : EFFORT_LEVELS[effort];
+      if (!effortSpec) throw new Error(`optimize(): unknown effort level "${effort}"`);
+      // AN UNRECOGNISED EFFORT KEY IS A SILENT NO-OP, AND A SILENT NO-OP IN AN A/B MEASURES A LIE.
+      //
+      // Every flag here is read as `effortSpec.<name>`, so a misspelling reads `undefined`, the
+      // feature stays off, and the arm meant to have it ON returns the control's number -- which
+      // is then recorded as "measured, no effect". That is not hypothetical: `bossDamageBands` was
+      // added to illuminate's signature and to cellOf and was never passed at the call site,
+      // because the surrounding lines used `!== false` where the patch expected `=== true`. It
+      // read as fully wired at three of four sites.
+      //
+      // The top-level options object is already whitelisted for exactly this reason
+      // (OPTIMIZE_OPTIONS); the effort spec is the other half and had no such check.
+      if (Number.isFinite(effortSpec.finalIterations)) {
+        setFinalIterations(effortSpec.finalIterations);
+        fidelityClaimed = true;
+      }
+      if (Number.isFinite(effortSpec.screenIterations)) {
+        setScreenIterations(effortSpec.screenIterations);
+        screenClaimed = true;
+      }
+      if (effort && typeof effort === 'object') {
+        const unknown = Object.keys(effortSpec).filter((k) => !EFFORT_SPEC_KEYS.has(k));
+        if (unknown.length) {
+          throw new Error(`optimize(): unknown effort option(s) ${unknown.join(', ')}; `
+            + `known keys are ${[...EFFORT_SPEC_KEYS].sort().join(', ')}`);
+        }
+      }
+
+      if (effortSpec.localOnly) {
+        if (!incumbent) throw new Error('Quick refinement requires currentTalents and currentAttrs');
+        diag.strategy = 'refinement';
+        activeStage = 'incumbent_refine';
+        report('refine', 0, 1);
+        let t = { ...incumbent.talentAlloc };
+        let a = applyPins(ATTRIBUTES, deps, minVal, attrBudget, { ...incumbent.attrAlloc }, pinnedAttrs);
+        validatePair({ talentAlloc: t, attrAlloc: a }, 'refinement start');
+        if (!pinsHeld(ATTRIBUTES, a, pinnedAttrs)) throw new Error('Quick refinement cannot satisfy this mode’s pins within the budget');
+        t = await greedyTopUp(ctx, TALENTS, noDeps, noMin, talentBudget, t,
+          talentAlloc => ({ talentAlloc, attrAlloc: a }));
+        a = await greedyTopUp(ctx, ATTRIBUTES, deps, minVal, attrBudget, a,
+          attrAlloc => ({ talentAlloc: t, attrAlloc }));
+        const [startScore] = await ctx.score([{ talentAlloc: t, attrAlloc: a }], SCREEN_ITERATIONS);
+        const localStart = { talentAlloc: { ...t }, attrAlloc: { ...a }, score: startScore };
+        diag.localRefinement = { maxSweeps: 6, screenIterations: SCREEN_ITERATIONS, stoppedAfterSweeps: null };
+        const local = await optimizeJointly(ctx, budgets, t, a, startScore, STEP_SIZES, 6,
+          pinnedAttrs, f => report('refine', f, 1), SCREEN_ITERATIONS, MAX_ROUNDS_PER_BLOCK, completed => {
+            if (!ctx.pastDeadline()) return false;
+            truncated = true;
+            diag.localRefinement.stoppedAfterSweeps = completed;
+            return true;
+          });
+        diag.localRefinement.candidateScreenScore = local.score;
+        markStage('incumbent_refine');
+        return await finish([local, localStart], [
+          { stage: 'mode-start', talentAlloc: localStart.talentAlloc, attrAlloc: localStart.attrAlloc },
+          { stage: 'local', talentAlloc: local.talentAlloc, attrAlloc: local.attrAlloc },
+        ]);
+      }
+      diag.strategy = 'global';
       // --- Stage 0: a talent allocation to screen attribute supports against. -------------
       // Supports must be compared against SOME talent build, and the choice is NOT cosmetic. An
       // earlier version used a canonical round-robin fill and called it "neutral", reasoning that
@@ -2230,11 +2554,11 @@
       // of the refinement cut by a talent build nothing like the one it would be used with, and the
       // optimizer returned a build 16.7% worse than one it was allowed to make.
       //
-      // So the seed is TUNED once, against a neutral attribute fill, before any support is scored.
-      // It is one extra block optimization -- cheap next to screening every support -- and it makes
-      // every later comparison a comparison between supports rather than between artefacts of the
-      // seed. It introduces no randomness and no new heuristic: it is the same coordinate exchange
-      // the rest of the search uses, run once up front.
+      // The archive now preserves different behaviours before joint refinement, rather than
+      // irreversibly cutting supports by this initial score. Keep the canonical seed here: adding
+      // the selected build to the archive would change its parent choices and PRNG trajectory.
+      // That build competes unchanged in final verification; Quick refinement starts from it
+      // explicitly. The previous comment claiming this seed was tuned described removed code.
       const flatTalents = Space.canonicalFill(TALENTS, noDeps, noMin, talentBudget, TALENTS.map((t) => t.id));
       if (!flatTalents) throw new Error('Could not build a legal starting talent allocation within budget');
       let seedTalents = flatTalents;
@@ -2330,35 +2654,6 @@
       // `effort` is a key from EFFORT_LEVELS, or a spec object of the same shape. The object form
       // exists so a bench can ABLATE a stage without editing constants and rebuilding. The UI only
       // ever passes a key, so there is still exactly one table of shipped levels.
-      const effortSpec = (effort && typeof effort === 'object') ? effort : EFFORT_LEVELS[effort];
-      if (!effortSpec) throw new Error(`optimize(): unknown effort level "${effort}"`);
-      // AN UNRECOGNISED EFFORT KEY IS A SILENT NO-OP, AND A SILENT NO-OP IN AN A/B MEASURES A LIE.
-      //
-      // Every flag here is read as `effortSpec.<name>`, so a misspelling reads `undefined`, the
-      // feature stays off, and the arm meant to have it ON returns the control's number -- which
-      // is then recorded as "measured, no effect". That is not hypothetical: `bossDamageBands` was
-      // added to illuminate's signature and to cellOf and was never passed at the call site,
-      // because the surrounding lines used `!== false` where the patch expected `=== true`. It
-      // read as fully wired at three of four sites.
-      //
-      // The top-level options object is already whitelisted for exactly this reason
-      // (OPTIMIZE_OPTIONS); the effort spec is the other half and had no such check.
-      if (Number.isFinite(effortSpec.finalIterations)) {
-        setFinalIterations(effortSpec.finalIterations);
-        fidelityClaimed = true;
-      }
-      if (Number.isFinite(effortSpec.screenIterations)) {
-        setScreenIterations(effortSpec.screenIterations);
-        screenClaimed = true;
-      }
-      if (effort && typeof effort === 'object') {
-        const unknown = Object.keys(effortSpec).filter((k) => !EFFORT_SPEC_KEYS.has(k));
-        if (unknown.length) {
-          throw new Error(`optimize(): unknown effort option(s) ${unknown.join(', ')}; `
-            + `known keys are ${[...EFFORT_SPEC_KEYS].sort().join(', ')}`);
-        }
-      }
-
       markStage('stage1_enumerate_screen');
       // --- Stage 2a: ILLUMINATE THE BEHAVIOUR SPACE. --------------------------------------
       //
@@ -2484,7 +2779,7 @@
       // NOT predict the final build. Full fidelity stays where it belongs: on the ONE configuration
       // that wins, measured once.
       if (effortSpec.archiveOnly) {
-        return { best: surveyed[0], archiveOnly: true, evals, notes, diag };
+        return { best: surveyed[0], archiveOnly: /** @type {const} */ (true), evals, notes, diag };
       }
 
       markStage('stage2a_archive');
@@ -2890,166 +3185,7 @@
         }
       }
 
-      // Nothing illegal can reach here -- every allocation was produced by Space.transfer or
-      // Space.canonicalFill, both of which refuse to return an illegal state. Assert it rather
-      // than repair it: a violation means a real bug in this file, not a condition to paper
-      // over at the last moment the way the old repairLegality pass did.
-      for (const r of ranked) {
-        if (!Space.isLegal(ATTRIBUTES, deps, minVal, r.attrAlloc, attrBudget)) {
-          throw new Error(`Optimizer produced an illegal attribute allocation: ${JSON.stringify(r.attrAlloc)}`);
-        }
-        if (!Space.isLegal(TALENTS, noDeps, noMin, r.talentAlloc, talentBudget)) {
-          throw new Error(`Optimizer produced an illegal talent allocation: ${JSON.stringify(r.talentAlloc)}`);
-        }
-      }
-
-      // Unspent points must be UNSPENDABLE, not merely unspent.
-      //
-      // "The winner spends its whole budget" is the wrong assertion: a build can legitimately
-      // finish with points left when every remaining node is maxed or still gated behind a
-      // threshold it cannot reach, and throwing there would break Optimize on a valid build.
-      // The defensible rule is that no eligible node could have taken another point -- if one
-      // could, value was left on the table and that IS a defect. Measured on the reported case:
-      // the 12 unspent talent points were worth 13.26%, and a single point into Lucky Loot alone
-      // was worth 2.24%.
-      //
-      // This is a backstop, not the real guarantee. The real one is local optimality -- that no
-      // single move improves the winner at full fidelity -- which cannot be checked here without
-      // spending another few hundred evaluations per run, so it lives in
-      // tools/bench/local-optimality.js instead.
-      const winner = ranked[0];
-      //
-      // TOP UP THE WINNER BEFORE ASSERTING IT IS SPENT -- WITHOUT THIS, `fast` EFFORT CRASHES.
-      //
-      // The assertion below demands that no eligible node could take another point. Nothing
-      // guaranteed it: greedyTopUp existed for exactly this purpose -- its own header notes that
-      // its leftover condition "is exactly the condition the Stage 3 assertion allows" -- but it
-      // was only ever wired into ONE candidate-generation path, on ATTRIBUTES, and never reached
-      // the returned build.
-      //
-      // MEASURED, and it is a user-visible crash rather than a quality issue:
-      //     ozzy@11  effort 'fast'      THROWS  left 1 talent point unspent ("revival")
-      //     ozzy@11  effort 'complete'  ok
-      // The UI ships Fast as a dropdown option, so a level-11 Ozzy player choosing it got an
-      // exception instead of a build. A thorough search happens to spend the last point; a cheaper
-      // one does not, and the backstop turned that into a hard failure.
-      //
-      // Costs nothing on a build that is already fully spent -- the loop does not run -- so the
-      // complete-effort path is untouched, which `search-identity-probe` verifies rather than
-      // assumes. Pins are re-applied afterwards because a top-up must not spend a pinned node's
-      // points elsewhere.
-      winner.talentAlloc = await greedyTopUp(
-        ctx, TALENTS, noDeps, noMin, talentBudget, winner.talentAlloc,
-        (t) => ({ talentAlloc: t, attrAlloc: winner.attrAlloc }),
-      );
-      winner.attrAlloc = await greedyTopUp(
-        ctx, ATTRIBUTES, deps, minVal, attrBudget, winner.attrAlloc,
-        (a) => ({ talentAlloc: winner.talentAlloc, attrAlloc: a }),
-      );
-      if (pinnedAttrs.length) {
-        winner.attrAlloc = applyPins(ATTRIBUTES, deps, minVal, attrBudget, winner.attrAlloc, pinnedAttrs);
-      }
-      const spendable = (defs, deps, minVal, budget, alloc) => {
-        const idle = budget - Space.costOf(defs, alloc);
-        // STRICT, AND IT IS RIGHT TO BE. I briefly relaxed this to Space.MAX_IDLE_POINTS (1) to
-        // stop `fast` throwing on ozzy@11, which HID A REAL DEFECT: measured on all three hunters,
-        // EVERY talent costs 1 and each has an uncapped, dependency-free, cost-1 attribute
-        // (ares / lotl / kraken), so a point is ALWAYS spendable in both blocks. There is no such
-        // thing here as an unspendable leftover, and an optimal build never leaves one.
-        if (idle <= 0) return null;
-        const node = defs.find((d) => (d.cost || 1) <= idle && Space.isEligible(d, defs, deps, minVal, alloc));
-        return node ? { idle, node: node.id } : null;
-      };
-      const talentLeft = spendable(TALENTS, noDeps, noMin, talentBudget, winner.talentAlloc);
-      if (talentLeft) {
-        throw new Error(`Optimizer left ${talentLeft.idle} talent point(s) unspent while "${talentLeft.node}" could still take one: ${JSON.stringify(winner.talentAlloc)}`);
-      }
-      const attrLeft = spendable(ATTRIBUTES, deps, minVal, attrBudget, winner.attrAlloc);
-      if (attrLeft) {
-        throw new Error(`Optimizer left ${attrLeft.idle} attribute point(s) unspent while "${attrLeft.node}" could still take one: ${JSON.stringify(winner.attrAlloc)}`);
-      }
-
-      report('done', 1, 1);
-      if (ranked[0]) {
-        stageChampions.push({
-          stage: 'returned', talentAlloc: ranked[0].talentAlloc, attrAlloc: ranked[0].attrAlloc,
-        });
-      }
-
-      // ============================== THE VALUE-LOSS LEDGER ==============================
-      //
-      // WHY THIS EXISTS. "Where does the search lose the value?" was repeatedly answered by
-      // comparing an archive score (SCREEN_ITERATIONS) against an import score (FINAL_ITERATIONS)
-      // and reading the difference as a loss. Those numbers are ~10x apart in sampling cost and
-      // mean different things. Every entry below is re-scored at THE SAME fidelity, and the
-      // fidelity is stated in the field name and in the text.
-      //
-      // The ledger states CONCLUSIONS, not raw fields to be paraphrased. `avgStage` was read as
-      // "how far the build gets" twice in one session when `maxStage` is that number, so each
-      // entry carries `Objective.describeRun`'s labelled regime instead of stage numbers alone.
-      const ledger = [];
-      for (const c of stageChampions) {
-        const pair = { talentAlloc: c.talentAlloc, attrAlloc: c.attrAlloc };
-        const [sc] = await ctx.score([pair], FINAL_ITERATIONS);
-        const meta = ((await ctx.score([pair], FINAL_ITERATIONS)).boss || [])[0];
-        ledger.push({
-          stage: c.stage,
-          scoreAtFinalIterations: sc,
-          finalIterations: FINAL_ITERATIONS,
-          killRatePct: meta ? meta.kill : null,
-          maxStageReached: meta ? meta.maxStage : null,
-        });
-      }
-      // Deltas between consecutive stages, so a reader does not have to subtract and mislabel.
-      for (let i = 1; i < ledger.length; i++) {
-        const prev = ledger[i - 1].scoreAtFinalIterations;
-        ledger[i].gainOverPreviousStagePct = prev ? ((ledger[i].scoreAtFinalIterations - prev) / prev) * 100 : null;
-      }
-      diag.ledger = ledger;
-      diag.ledgerText = ledger.map((e, i) => {
-        const d = e.gainOverPreviousStagePct;
-        const delta = (i === 0 || d === null) ? '' : `  (${d >= 0 ? '+' : ''}${d.toFixed(2)}% vs ${ledger[i - 1].stage})`;
-        return `${e.stage.padEnd(9)} ${Math.round(e.scoreAtFinalIterations)} loot/min @${FINAL_ITERATIONS} iters`
-          + `  kill ${e.killRatePct}%  maxStage ${e.maxStageReached}${delta}`;
-      }).join('\n');
-      ctx.note(`value ledger (all at ${FINAL_ITERATIONS} iterations):\n${diag.ledgerText}`);
-
-      // A TRUNCATED RUN IS NOT REPRODUCIBLE AND MUST SAY SO. Where the cap fired depends on machine
-      // speed and load, so two runs of identical input can differ -- the one property this file
-      // otherwise guarantees. Reporting it is what keeps a truncated answer distinguishable from a
-      // converged one; the original wall-clock bug hid precisely because it was silent.
-      diag.truncated = truncated;
-      diag.elapsedSeconds = Math.round((Date.now() - startedAt) / 1000);
-      if (truncated) {
-        ctx.note(`STOPPED AT THE ${maxSeconds}s TIME CAP -- returning the best build found, which is `
-          + 'not necessarily the best this search would have found. This run is NOT reproducible; '
-          + 'raise the cap for a deterministic answer.');
-      }
-
-      markStage('polish');
-      // The split, on every run: a reader comparing `evals` against a budget needs to know the
-      // budget counted proposals and this counts evaluations actually performed.
-      {
-        const requests = evals + cacheHits;
-        const pct = requests ? (100 * cacheHits / requests) : 0;
-        ctx.note(`evaluations: ${evals} performed, ${cacheHits} served from the exact memo `
-          + `(${pct.toFixed(1)}% of ${requests} requests)`);
-        diag.evaluations = { performed: evals, memoHits: cacheHits, requests, memoHitPct: Number(pct.toFixed(1)) };
-      }
-
-      return {
-        best: ranked[0],
-        ranked,
-        evals,
-        cacheHits,
-        notes,
-        cancelled: false,
-        truncated,
-        // ONE diagnostic channel, not two. `supportsEnumerated`/`supportsRealizable` used to sit
-        // here as well as in the diag record -- the same numbers reported twice, which is how the
-        // two copies get to disagree.
-        diag,
-      };
+      return await finish(ranked, stageChampions);
     } catch (err) {
       if (err instanceof Cancelled) return { best: null, ranked: [], evals, cacheHits, notes, cancelled: true, diag };
       throw err;

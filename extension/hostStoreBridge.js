@@ -89,23 +89,26 @@ function migrateLegacyStore() {
   indexedDB.deleteDatabase('cifi-companion-backup');
 }
 
+function readHostState(hunter, gems) {
+  return {
+    hunterStats: hunter.hunterStats || {},
+    hunterBuilds: hunter.hunterBuilds || {},
+    hunterIterations: hunter.hunterIterations || {},
+    globalUpgrades: flattenUpgrades(hunter.upgrades),
+    gems: gems.gemStates || {},
+    canonicalStore: canonicalStoreFromNative(hunter,gems),
+  };
+}
+
 function publishHostState() {
   const hunter = piniaStore('hunter');
   const gems = piniaStore('gemPlanner');
   if (!hunter || !gems) return false;
-  const flatUpgrades = flattenUpgrades(hunter.upgrades);
   const el = document.getElementById(HOST_STATE_ID)
     || document.documentElement.appendChild(Object.assign(document.createElement('script'), {
       id: HOST_STATE_ID, type: 'application/json', hidden: true,
     }));
-  el.textContent = JSON.stringify({
-    hunterStats: hunter.hunterStats || {},
-    hunterBuilds: hunter.hunterBuilds || {},
-    hunterIterations: hunter.hunterIterations || {},
-    globalUpgrades: flatUpgrades,
-    gems: gems.gemStates || {},
-    canonicalStore: canonicalStoreFromNative(hunter,gems),
-  });
+  el.textContent = JSON.stringify(readHostState(hunter,gems));
   document.dispatchEvent(new Event('cifi-companion:host-state'));
   return true;
 }
@@ -173,7 +176,14 @@ document.addEventListener('cifi-companion:write-native-store', () => {
     || document.body.appendChild(Object.assign(document.createElement('div'),{id:'cifi-companion-native-store-result',hidden:true}));
   try {
     const request=document.getElementById('cifi-companion-native-store-write');
-    applyCanonicalStore(piniaStore('hunter'),piniaStore('gemPlanner'),JSON.parse(request?.textContent || ''));
+    const incoming=JSON.parse(request?.textContent || '');
+    const hunter=piniaStore('hunter'), gems=piniaStore('gemPlanner');
+    if (!hunter || !gems) throw new Error('Native stores are unavailable; refusing to overwrite account data.');
+    if (typeof incoming.expectedHostState !== 'string') throw new Error('Native store write is missing its expected snapshot.');
+    if (incoming.expectedHostState !== JSON.stringify(readHostState(hunter,gems))) {
+      throw new Error('Native account changed since this page loaded. Refresh the companion page and retry; nothing was overwritten.');
+    }
+    applyCanonicalStore(hunter,gems,incoming.state);
     result.dataset.value=JSON.stringify({ok:true});
     publishHostState();
   } catch(error) {

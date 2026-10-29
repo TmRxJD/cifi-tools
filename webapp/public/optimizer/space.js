@@ -250,12 +250,14 @@
   // can still take a point. Round-robin rather than "dump it all in the first node" because
   // the screen should reflect what a support set can do when actually used, not a degenerate
   // corner of it. Fully deterministic: no randomness, ties broken by declaration order.
+  /** @returns {Allocation | null} */
   function canonicalFill(defs, deps, minVal, budget, supportIds, openOnly = false) {
     assertDefs(defs, 'Space.canonicalFill');
     assertDeps(deps, 'Space.canonicalFill', defs);
     assertBudget(budget, 'Space.canonicalFill');
     const inSupport = new Set(supportIds);
     const members = defs.filter((d) => inSupport.has(d.id));
+    /** @type {Allocation} */
     const alloc = {};
     defs.forEach((d) => { alloc[d.id] = 0; });
 

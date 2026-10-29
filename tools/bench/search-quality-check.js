@@ -128,6 +128,7 @@ function stratify(fixtures, n, rand) {
     let res;
     try {
       res = await H.Optimizer.optimize(bare, { mode: 'loot', scorer });
+      if (res.diag?.incumbent?.protected !== false) throw new Error('search-quality: result did not confirm the incumbent was absent');
     } catch (err) {
       console.log(`ERR  ${p.hunter}#${p.fx.index} lvl${p.level}: ${err.message}`);
       rows.push({ ...p, err: err.message });
@@ -143,6 +144,9 @@ function stratify(fixtures, n, rand) {
   }
 
   const scored = rows.filter((r) => r.delta !== undefined);
+  if (scored.length !== picks.length || scored.some(r => !Number.isFinite(r.delta))) {
+    throw new Error(`incomplete measurement: ${scored.filter(r => Number.isFinite(r.delta)).length}/${picks.length} fixtures scored`);
+  }
   if (!scored.length) { console.log('\nnothing scored'); process.exit(1); }
   const deltas = scored.map((r) => r.delta).sort((a, b) => a - b);
   const median = deltas[Math.floor(deltas.length / 2)];

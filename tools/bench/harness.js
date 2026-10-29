@@ -197,6 +197,8 @@ function cfgForImport(hunter, build, { budgetMode = 'spend' } = {}) {
     hunter,
     level: build.level,
     hunterStats: {},
+    currentTalents: { ...build.talents },
+    currentAttrs: { ...build.attributes },
     globalUpgrades: {},
     gemPlannerStore: { gemStates: {} },
     baseOverrides: overrides,
@@ -212,11 +214,14 @@ function cfgForImport(hunter, build, { budgetMode = 'spend' } = {}) {
 /** A scorer backed by the shipped compileEvaluator -- the exact evaluation path the app uses. */
 async function makeScorer(cfg, mode, ctxOverride) {
   const sb = browserSandbox();
-  const evalFast = await sb.HunterSim.compileEvaluator(cfg.hunter, cfg);
+  const timings = { argumentMs: 0, instantiateMs: 0, simulateMs: 0, extractMs: 0 };
+  const evalFast = await sb.HunterSim.compileEvaluator(cfg.hunter, cfg, timings);
   // Same one definition the browser worker uses, so the bench and the app cannot disagree about
   // which boss is being aimed at.
   const ctx = { ...Objective.contextFor(cfg), ...(ctxOverride || {}) };
   return async function score(pairs, iterations) {
+    const before = { ...timings };
+    const started = performance.now();
     const out = [];
     // Boss progress rides alongside the score, exactly as the browser pool does it, so a bench and
     // the app cannot disagree about what the search can see.
@@ -228,6 +233,8 @@ async function makeScorer(cfg, mode, ctxOverride) {
       boss.push({ kill: r.bossKillRate, hp: r.bossHpPercent, maxStage: r.maxStage });
     }
     out.boss = boss;
+    out.telemetry = { batches: 1, evaluations: pairs.length, evaluateMs: performance.now() - started,
+      ...Object.fromEntries(Object.keys(timings).map(key => [key, timings[key] - before[key]])) };
     return out;
   };
 }

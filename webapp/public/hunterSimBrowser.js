@@ -58,6 +58,7 @@
   // answers "did the extension take" on demand; a console line on every load was noise in
   // production, where the console should only ever carry something meaningful.
   let engineSource = 'not loaded yet';
+  /** @type {(source: string, detail?: string) => void} */
   function setEngineSource(src) {
     engineSource = src;
   }
@@ -70,6 +71,7 @@
   // which uses the site's own parameters for its own engine. Reaching this loader there is a bug.
   const EMBEDDED = !!global.HUNTERSIM_EMBEDDED;
 
+  /** @type {Promise<WebAssembly.Module> | null} */
   let wasmModulePromise = null;
   function loadWasmModule() {
     if (EMBEDDED) throw new Error('HunterSim: the embedded companion must evaluate through cifi-tools\' own worker, never a locally compiled engine');
@@ -381,6 +383,7 @@
   // final combat stats as a comma list, in the same getter order as FINAL_STAT_NAMES (read out of
   // the worker's own source). Unlike the local engine it is NOT repeatable call to call: the site
   // seeds each run itself, so two identical evaluations differ by a fraction of a percent.
+  /** @param {{onerror?: (event: ErrorEvent) => void}} [options] */
   function createNativeEvaluator({ onerror } = {}) {
     const url = global.document?.getElementById('cifi-companion-navigation')?.dataset.evaluationWorkerUrl;
     if (!url) throw new Error('cifi-tools evaluation worker URL is unavailable');
@@ -466,7 +469,7 @@
   async function evaluate(hunter, state) {
     if (EMBEDDED) return nativeResult(hunter, state, false);
     const ex = await loadWasm();
-    const fn = ex[WASM_EXPORT[hunter]];
+    const fn = /** @type {(...args: number[]) => number} */ (ex[WASM_EXPORT[hunter]]);
     if (!fn) throw new Error(`Missing wasm export for ${hunter}`);
     const args = await buildArgs(hunter, state);
     const lootPerMin = fn(...args);
@@ -479,7 +482,7 @@
   async function evaluateDetailed(hunter, state) {
     if (EMBEDDED) return nativeResult(hunter, state, true);
     const ex = await loadWasm();
-    const fn = ex[WASM_EXPORT[hunter]];
+    const fn = /** @type {(...args: number[]) => number} */ (ex[WASM_EXPORT[hunter]]);
     if (!fn) throw new Error(`Missing wasm export for ${hunter}`);
     const args = await buildArgs(hunter, state);
     const lootPerMin = fn(...args);
@@ -499,7 +502,8 @@
   // `dynamic` slot mechanism as talents/attributes -- evalFast's new 4th arg (`statAlloc`)
   // overrides cfg.hunterStats[key] per call instead of using the compiled-in value. Existing
   // callers (optimizer/worker.js) that don't pass STAT_KEYS or a 4th arg are unaffected.
-  async function compileEvaluator(hunter, cfg) {
+  /** @param {{argumentMs:number,instantiateMs:number,simulateMs:number,extractMs:number}|null} [timings] */
+  async function compileEvaluator(hunter, cfg, timings = null) {
     if (EMBEDDED) throw new Error('HunterSim.compileEvaluator: the embedded companion scores through cifi-tools\' own worker (optimizer/runner.js pool)');
     const PARAMS = await loadParams();
     const names = PARAMS[hunter];
@@ -549,6 +553,7 @@
     // in a drifting internal RNG state, which is both non-reproducible and an unfair
     // comparison between candidates.
     return async function evalFast(talentAlloc, attrAlloc, iterations, statAlloc, upgradeAlloc) {
+      const started = timings ? performance.now() : 0;
       for (const d of dynamic) {
         if (d.kind === 'iterations') args[d.index] = iterations ?? 1000;
         else if (d.kind === 'talent') args[d.index] = talentAlloc[d.id] || 0;
@@ -556,11 +561,21 @@
         else if (d.kind === 'stat') args[d.index] = (statAlloc && statAlloc[d.id] !== undefined) ? statAlloc[d.id] : (cfg.hunterStats?.[d.id] || 0);
         else args[d.index] = (upgradeAlloc && upgradeAlloc[d.id] !== undefined) ? upgradeAlloc[d.id] : currentUpgradeLevels[d.id];
       }
+      const prepared = timings ? performance.now() : 0;
       const instance = await WebAssembly.instantiate(mod, IMPORT_OBJECT);
+      const instantiated = timings ? performance.now() : 0;
       const ex = instance.exports;
-      const fn = ex[WASM_EXPORT[hunter]];
+      const fn = /** @type {(...args: number[]) => number} */ (ex[WASM_EXPORT[hunter]]);
       const lootPerMin = fn(...args);
-      return { lootPerMin, ...getStats(ex, hunter) };
+      const simulated = timings ? performance.now() : 0;
+      const result = { lootPerMin, ...getStats(ex, hunter) };
+      if (timings) {
+        timings.argumentMs += prepared - started;
+        timings.instantiateMs += instantiated - prepared;
+        timings.simulateMs += simulated - instantiated;
+        timings.extractMs += performance.now() - simulated;
+      }
+      return result;
     };
   }
 

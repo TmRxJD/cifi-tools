@@ -151,11 +151,20 @@
 
   /** For HunterSim.compileEvaluator + HunterOptimizer.optimize. */
   function optimizerCfg(acct) {
+    for (const field of ['talents', 'attributes']) {
+      if (!acct[field] || typeof acct[field] !== 'object' || Array.isArray(acct[field])) {
+        throw new Error(`AccountState.optimizerCfg: selected build ${field} is required`);
+      }
+    }
     return {
       hunter: acct.hunter,
       level: acct.level,
       hunterStats: acct.hunterStats,
       baseOverrides: acct.buildOverrides,
+      // The selected allocation is search input, not worker initialization state. Clone it so
+      // editing or normalizing a candidate cannot mutate the build that sets the quality floor.
+      currentTalents: { ...acct.talents },
+      currentAttrs: { ...acct.attributes },
       globalUpgrades: acct.upgrades,
       gemPlannerStore: { gemStates: acct.gems },
       TALENTS: acct.TALENTS,

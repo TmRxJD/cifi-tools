@@ -63,6 +63,9 @@ const savedBuild = z.object({
   attributes: z.record(z.string().min(1), z.number()),
   categoryId: z.union([z.number(), z.string(), z.null()]).optional(),
   overrides: z.record(z.string().min(1), z.unknown()).optional(),
+  // Set by "Import Build"; the live tool persists it too and uses it to show every Overrides row
+  // (Hide Maxed forced off) so an imported build's overrides are never hidden.
+  isImported: z.boolean().optional(),
 }).strict();
 
 const hunterState = z.object({

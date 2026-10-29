@@ -123,8 +123,8 @@
 
   /**
    * `ctx.bossTarget` is the stage of the boss being aimed at. Absent, the objective keeps its old
-   * target-agnostic behaviour, which is right for the Effective Path (it never changes the
-   * account's stage) but NOT for the optimizer, which always supplies one.
+   * target-agnostic behaviour. Production optimizer and purchase-path callers derive the target
+   * from the account's highest reached stage through contextFor().
    */
   function bossScore(r, ctx) {
     const target = ctx && Number.isFinite(ctx.bossTarget) ? ctx.bossTarget : null;
@@ -223,7 +223,46 @@
 
   /** Score one evaluate() result under a mode. */
   function scoreFor(mode, result, ctx) {
+    if (ctx?.purpose === 'purchasePath') return pathProgress(mode, result, ctx);
     return modeOrThrow(mode).score(result, ctx);
+  }
+
+  // Search may use loot to break a boss-kill tie; a purchase recommendation must improve the
+  // selected goal itself. Keep raw components so tiny real gains survive without subtracting
+  // the search score's 1e9 tier offsets. The worker, embedded bridge and Node path share this.
+  function pathProgress(mode, result, ctx) {
+    if (!pathModes()[mode]) throw new Error(`pathProgress: unsupported mode "${mode}"`);
+    const value = key => {
+      if (!Number.isFinite(result[key])) throw new Error(`pathProgress: missing finite ${key}`);
+      return result[key];
+    };
+    if (mode === 'loot') return { tier: 0, values: [value('lootPerMin')], labels: ['Loot/min'] };
+    const stage = value('avgStage');
+    if (mode === 'push') return { tier: 0, values: [stage], labels: ['Average stage'] };
+    const target = ctx?.bossTarget;
+    if (Number.isFinite(target) && value('maxStage') < target) {
+      return { tier: 0, values: [stage, value('maxStage')], labels: ['Average stage toward boss', 'Furthest stage'] };
+    }
+    const kills = value('bossKillRate');
+    if (kills > 0) return { tier: 2, values: [kills], labels: ['Boss kill chance (percentage points)'] };
+    return { tier: 1, values: [stage, 100 - value('bossHpPercent')], labels: ['Average stage', 'Boss damage (percentage points)'] };
+  }
+
+  function pathGain(before, after) {
+    if (!before || !after || !Array.isArray(before.values) || !Array.isArray(after.values)) {
+      throw new Error('pathGain: expected purchase-path progress records');
+    }
+    // Crossing a real reach/kill boundary is categorical. Among purchases crossing the same
+    // boundary prefer the cheapest, rather than dividing an invented billion-point bonus by cost.
+    if (after.tier !== before.tier) return {
+      tier: after.tier, component: -1, delta: Math.sign(after.tier - before.tier),
+      metric: after.tier === 2 ? 'Boss kill unlocked' : 'Boss reached',
+    };
+    for (let i = 0; i < after.values.length; i++) {
+      const delta = after.values[i] - before.values[i];
+      if (delta !== 0) return { tier: after.tier, component: i, delta, metric: after.labels[i] };
+    }
+    return { tier: after.tier, component: 0, delta: 0, metric: after.labels[0] };
   }
 
 
@@ -467,7 +506,7 @@
 
 
   const Objective = { MODES, modesForAttributes, scoreFor, regimeOf, constraintViolation,
-    INFEASIBLE_BASE, pinnedAttrsFor, pathModes, modeOrThrow, bossTargetFor, contextFor, describeRun, BOSS_INTERVAL, KILL_ACHIEVED_BASE };
+    INFEASIBLE_BASE, pinnedAttrsFor, pathModes, pathProgress, pathGain, modeOrThrow, bossTargetFor, contextFor, describeRun, BOSS_INTERVAL, KILL_ACHIEVED_BASE };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Objective;
   else global.OptimizerObjective = Objective;

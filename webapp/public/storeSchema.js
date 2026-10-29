@@ -23,12 +23,14 @@
 (function (global) {
   'use strict';
 
+  /** @type {HunterId[]} */
   const HUNTERS = ['borge', 'ozzy', 'knox'];
 
   // Base stat keys per hunter, mirroring HUNTER_DEFS[h].baseStatKeys. Seeded to 0 so a fresh
   // account starts with an explicit zero for every stat rather than a missing key -- resolveParam
   // treats missing and zero the same, but the editor renders from these keys.
   function seedHunterStats(hunter) {
+    /** @type {Record<string, number>} */
     const stats = {};
     global.HUNTER_DEFS[hunter].baseStatKeys.forEach((k) => { stats[k] = 0; });
     stats.stage = 1;
@@ -197,7 +199,9 @@
       deep: true,
       make: () => ({
         advancedTalents: {},
-        ui: { upgradesSidebar: true, highIterations: false },
+        // overridesHideMaxed: the Overrides panel's "Hide Maxed" toggle, remembered like the
+        // live tool's `overrideModal_hideMaxed` (forced off while viewing an imported build).
+        ui: { upgradesSidebar: true, highIterations: false, overridesHideMaxed: false },
       }),
     },
   };

@@ -12,7 +12,7 @@
   // Bump alongside the ?v= on the <script> tags in index.html. A Worker URL is cached
   // independently of the page, so without this a worker.js change silently keeps running the
   // previous version after a reload.
-  const WORKER_VERSION = '20260912b-review';
+  const WORKER_VERSION = '20261029-cleanup';
 
   // Each worker compiles and holds its OWN copy of the WASM module and churns a fresh instance
   // per evaluation (required for determinism -- the evaluator's RNG state lives in mutable wasm
@@ -60,6 +60,7 @@
       if (message.type !== 'score') return;
       (async () => {
         try {
+          const started = performance.now();
           const scores = [];
           const boss = [];
           const ctx = { ...global.OptimizerObjective.contextFor(this.cfg), ...(this.scoreCtxOverride || {}) };
@@ -87,9 +88,10 @@
             scores.push(global.OptimizerObjective.scoreFor(this.mode, result, ctx));
             boss.push({ kill: result.bossKillRate, hp: result.bossHpPercent, maxStage: result.maxStage });
           }
-          this.onmessage?.({ data: { type: 'scored', requestId: message.requestId, scores, boss } });
+          this.onmessage?.({ data: { type: 'scored', requestId: message.requestId, scores, boss,
+            telemetry: { batches: 1, evaluations: scores.length, evaluateMs: performance.now() - started } } });
         } catch (error) {
-          this.onmessage?.({ data: { type: 'scored', requestId: message.requestId, error: String(error?.message || error) } });
+          this.onmessage?.({ data: { type: 'scored', requestId: message.requestId, error: String(/** @type {{message?: string} | null | undefined} */ (error)?.message || error) } });
         }
       })();
     }
@@ -112,6 +114,8 @@
       this.pending = new Map();
       this.nextRequestId = 0;
       this.readyPromises = [];
+      this.profile = { dispatchedChunks: 0, completedChunks: 0, queueWaitMs: 0, roundTripMs: 0, evaluated: 0 };
+      this.isReady = false;
       // Shared work queue -- see score(). `busy[w]` is true while worker w has a chunk in flight.
       this.queue = [];
       this.busy = new Array(size).fill(false);
@@ -169,6 +173,14 @@
       this.pending.delete(msg.requestId);
       this.busy[entry.w] = false;
       const { job, start } = entry;
+      const roundTripMs = performance.now() - entry.startedAt;
+      this.profile.completedChunks++;
+      this.profile.roundTripMs += roundTripMs;
+      this.profile.evaluated += msg.scores?.length || 0;
+      job.out.telemetry.roundTripMs = (job.out.telemetry.roundTripMs || 0) + roundTripMs;
+      for (const [key, value] of Object.entries(msg.telemetry || {})) {
+        if (typeof value === 'number' && Number.isFinite(value)) job.out.telemetry[key] = (job.out.telemetry[key] || 0) + value;
+      }
       if (msg.error) {
         // One failed chunk fails the whole batch; its unsent chunks are skipped, not run.
         job.next = job.pairs.length;
@@ -194,7 +206,12 @@
         job.next += batch.length;
         const requestId = this.nextRequestId++;
         this.busy[w] = true;
-        this.pending.set(requestId, { job, start, w, reject: job.reject });
+        const startedAt = performance.now();
+        const queueWaitMs = startedAt - job.queuedAt;
+        this.profile.dispatchedChunks++;
+        this.profile.queueWaitMs += queueWaitMs;
+        job.out.telemetry.queueWaitMs = (job.out.telemetry.queueWaitMs || 0) + queueWaitMs;
+        this.pending.set(requestId, { job, start, w, reject: job.reject, startedAt });
         this.workers[w].postMessage({ type: 'score', requestId, iterations: job.iterations, batch });
       }
     }
@@ -208,6 +225,7 @@
         new Promise((resolve) => setTimeout(() => resolve(['worker initialization timed out']), 20000)),
       ]);
       const [engineError, errors] = await Promise.all([this.enginePromise, workerReadiness]);
+      this.isReady = !engineError && !errors.find((e) => e);
       return engineError || errors.find((e) => e) || null;
     }
 
@@ -225,9 +243,11 @@
     score(pairs, iterations) {
       if (!pairs.length) return Promise.resolve([]);
       return new Promise((resolve, reject) => {
-        const out = new Array(pairs.length);
+        const out = /** @type {any[] & {boss:any[],telemetry:Record<string,number>}} */ (new Array(pairs.length));
         out.boss = new Array(pairs.length); // boss progress rides alongside, as before
+        out.telemetry = {};
         const job = {
+          queuedAt: performance.now(),
           pairs, iterations, out, next: 0, remaining: pairs.length, settled: false,
           chunk: Math.ceil(pairs.length / this.workers.length),
           resolve: (v) => { if (!job.settled) { job.settled = true; resolve(v); } },
@@ -288,6 +308,9 @@
     // Keyed by the serialized cfg and mode, because that is exactly what a worker is initialised
     // with -- if either changes the old pool cannot answer for the new account and is replaced.
     const pool = acquirePool(cfg, mode, size);
+    const profileBefore = { ...pool.profile };
+    const cold = !pool.isReady;
+    const readyStarted = performance.now();
     activePool = pool;
     try {
       const initError = await pool.ready();
@@ -301,7 +324,8 @@
           : '';
         throw new Error(`Optimizer worker failed to initialize: ${initError}.${stale}`);
       }
-      return await global.HunterOptimizer.optimize(cfg, {
+      const readyWaitMs = performance.now() - readyStarted;
+      const result = await global.HunterOptimizer.optimize(cfg, {
         mode,
         // Omitted rather than defaulted here: optimize() owns DEFAULT_EFFORT, so there is one
         // place that decides what an unspecified effort means.
@@ -315,10 +339,17 @@
         onProgress,
         shouldCancel,
       });
+      if (result.diag) result.diag.pool = {
+        workers: pool.workers.length, cold, readyWaitMs,
+        counters: Object.fromEntries(Object.entries(pool.profile).map(([key, value]) => [key, value - profileBefore[key]])),
+        note: 'Worker/queue sums overlap across parallel workers; they are not additional wall time.',
+      };
+      return result;
     } catch (error) {
-      if (error?.name === 'AbortError') {
+      if (/** @type {{name?: string} | null | undefined} */ (error)?.name === 'AbortError') {
         if (cachedPool?.pool === pool) cachedPool = null;
-        return { best: null, ranked: [], cancelled: true };
+        // An aborted pool can have work in flight. Do not invent zero search statistics for it.
+        return { best: null, ranked: [], cancelled: /** @type {const} */ (true) };
       }
       throw error;
     } finally {
@@ -355,7 +386,7 @@
   // That fixed cost is the "slow to generate" that the optimizer had long since stopped paying.
   async function createHunterPathScorer(cfg, mode) {
     const size = Math.max(2, Math.min(MAX_POOL_SIZE, (navigator.hardwareConcurrency || 4) - 1));
-    const pool = acquirePool(cfg, mode, size);
+    const pool = acquirePool(cfg, mode, size, { purpose: 'purchasePath' });
     const error = await pool.ready();
     if (error) {
       if (cachedPool?.pool === pool) cachedPool = null;
@@ -378,13 +409,14 @@
   // the path would hold a second set of up to MAX_POOL_SIZE WASM instances beside the optimizer's --
   // exactly the unbounded residency MAX_POOL_SIZE exists to prevent. Switching between the two
   // costs a rebuild; memory stays bounded.
-  function acquirePool(cfg, mode, size) {
-    const key = `${mode}|${JSON.stringify(serializeCfg(cfg))}`;
+  /** @param {{purpose: string} | null} [scoreCtxOverride] */
+  function acquirePool(cfg, mode, size, scoreCtxOverride = null) {
+    const key = `${mode}|${JSON.stringify(scoreCtxOverride)}|${JSON.stringify(serializeCfg(cfg))}`;
     if (cachedPool && cachedPool.key !== key) {
       cachedPool.pool.terminate();
       cachedPool = null;
     }
-    if (!cachedPool) cachedPool = { key, pool: new ScoringPool(cfg, mode, size) };
+    if (!cachedPool) cachedPool = { key, pool: new ScoringPool(cfg, mode, size, scoreCtxOverride) };
     return cachedPool.pool;
   }
 

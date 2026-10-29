@@ -39,7 +39,7 @@ const jobsArg = args.find((a) => a.startsWith('--jobs='));
 // parallelism here trades a suite that is slow for one that dies on
 // "Cannot allocate Wasm memory for new instance", which is the failure MAX_POOL_SIZE exists
 // to prevent inside a single process and which nothing prevents across several.
-const JOBS = jobsArg ? Math.max(1, Number(jobsArg.slice('--jobs='.length)))
+const JOBS = jobsArg ? Number(jobsArg.slice('--jobs='.length))
   : Math.max(1, Math.min(4, os.cpus().length - 1));
 const bundle = bundleArg ? bundleArg.slice('--bundle='.length) : null;
 
@@ -47,7 +47,7 @@ const bundle = bundleArg ? bundleArg.slice('--bundle='.length) : null;
 const LOCAL = [
   // The benches' own bench. Cheap (pure source inspection) and first, because every number the
   // rest of this suite prints is only as trustworthy as the bench that produced it.
-  'bench-integrity-check',
+  'bench-integrity-check', 'suite-plan-check', 'search-report-check',
   // Every shipped effort level must return a build. `fast` used to THROW on ozzy@11.
   'effort-level-check',
   'asset-version-check',
@@ -70,7 +70,7 @@ const LOCAL = [
   'attribute-tree-check', 'cap-raise-check',
   'gem-coverage-test', 'gem-tree-test',
   'param-plumbing-check', 'override-liveness-check', 'wasm-arity-check',
-  'trinket-semantics-check', 'boss-target-check', 'import-legality-check',
+  'trinket-semantics-check', 'boss-target-check', 'import-legality-check', 'save-advanced-talents-check',
   'gear-install-check', 'gear-name-check',
   'inscryption-slot-test', 'scene-defs-test',
   'path-relic-test', 'path-abort-test', 'route-test', 'gate-visibility-check',
@@ -79,7 +79,7 @@ const LOCAL = [
   // moves out of that subset breaks it silently -- not at load, but as "undefined is not a
   // function" inside a click handler, after shipping. It also vendors copies of webapp/public files
   // that go stale the moment either side is edited. Both are checked here.
-  'companion-deps-check', 'companion-route-lifecycle-check', 'companion-gem-store-check',
+  'companion-deps-check', 'companion-route-lifecycle-check', 'companion-gem-store-check', 'override-costs-check', 'override-interaction-check', 'import-account-isolation-check', 'path-goal-check', 'optimizer-telemetry-check', 'incumbent-guard-check',
   'optimizer-worker-liveness-check',
   // An unpacked extension does not refresh its content script until it is reloaded. Every change
   // that can ship into it must advance manifest.json so the loaded build is identifiable.
@@ -99,7 +99,7 @@ const LOCAL = [
   // who generates one never sees it fail -- only whoever clicks it does.
   'share-link-check',
   // Structural/self-audit gates that existed but were in no list, so nothing ran them.
-  'config-sanity-check', 'guard-liveness-check', 'dead-symbol-audit',
+  'config-sanity-check', 'guard-liveness-check',
   // THE MEASUREMENT MODULE'S OWN NEGATIVE CONTROLS. Every case is a real failure replayed: an
   // illegal build that scored +7.50%, a wall-clock stopping rule that made a PRNG-free method
   // return +78.80% then +62.72%, two arms judged at different fidelities, a sub-noise delta
@@ -142,6 +142,9 @@ const LOCAL = [
   // The bench refit and the SHIPPED refit are two copies of one rule. Compares 864 allocations.
   'refit-parity-check',
   'reachability-audit',
+  'runtime-ceiling-check',
+  'attr-save-order-check', 'authored-value-check', 'mode-availability-check',
+  'scorer-scale-check', 'ultima-multiplier-check', 'eval-pool-check',
 ];
 
 // Gates that compare against the live cifi-tools bundle; they need --bundle=.
@@ -154,7 +157,7 @@ const NEEDS_BUNDLE = [
 // REPORTS, deliberately: they exit 0 even when they disagree, because a stronger check owns the
 // same question (see each file's own note). Listed so they are run and read, never silently
 // counted as gates.
-const REPORTS = ['sirred-ship-check', 'save-coverage', 'loopmod-test'];
+const REPORTS = ['sirred-ship-check', 'save-coverage', 'loopmod-test', 'dead-symbol-audit', 'search-quality-check', 'effort-value-check'];
 
 // SIMULATION GATES: they run the real optimizer or evaluator over fixtures, and each costs
 // minutes. Excluded from the default run and included by --sims. Seconds are from a measured full
@@ -200,6 +203,22 @@ const TIMING_SENSITIVE = new Set([
   'runtime-ceiling-check',
   'effort-value-check',
 ]);
+
+// A classification does not schedule a bench. Refuse orphaned or duplicate entries;
+// otherwise --sims can advertise coverage while quietly omitting its hardest checks.
+function validateRegistry(local, reports, simulation) {
+  const scheduled = [...local, ...reports];
+  if (new Set(scheduled).size !== scheduled.length) throw new Error('suite registry contains duplicate benches');
+  for (const name of simulation) {
+    if (!scheduled.includes(name)) throw new Error(`simulation bench is not scheduled: ${name}`);
+  }
+}
+
+function planSuite(includeSims, liveBundle) {
+  validateRegistry(LOCAL, REPORTS, SIMS);
+  return [...LOCAL, ...(liveBundle ? NEEDS_BUNDLE : []), ...REPORTS]
+    .filter(name => includeSims || !SIMS.has(name));
+}
 
 function run(name, extra) {
   const file = path.join(__dirname, `${name}.js`);
@@ -255,6 +274,12 @@ async function pool(tasks, limit) {
 }
 
 async function main() {
+  if (!Number.isInteger(JOBS) || JOBS < 1) throw new Error('--jobs must be a positive integer');
+  const names = planSuite(withSims, bundle);
+  if (args.includes('--list')) { console.log(JSON.stringify(names)); return; }
+  // Integrity must finish successfully BEFORE any result depending on it is produced.
+  await run('bench-integrity-check');
+  if (results[0].status !== 'PASS') { report(); return; }
   const queued = [];
   const serial = [];
   let skippedSims = 0;
@@ -262,7 +287,7 @@ async function main() {
     if (SIMS.has(n) && !withSims) { skippedSims++; return; }
     (TIMING_SENSITIVE.has(n) ? serial : queued).push({ name: n, extra });
   };
-  LOCAL.forEach((n) => add(n));
+  LOCAL.filter(n => n !== 'bench-integrity-check').forEach((n) => add(n));
   if (bundle) NEEDS_BUNDLE.forEach((n) => add(n, [bundle]));
   REPORTS.forEach((n) => add(n));
 
@@ -302,7 +327,8 @@ for (const r of results) {
 }
 
 const gates = results.filter((r) => !reportNames.has(r.name));
-const failed = gates.filter((r) => r.status === 'FAIL' || r.status === 'MISSING');
+// Reports may disagree without failing, but a crashed report is still a failed run.
+const failed = results.filter((r) => r.status === 'FAIL' || r.status === 'MISSING');
 const skipped = gates.filter((r) => r.status === 'SKIP');
 
 console.log('');
@@ -318,7 +344,7 @@ if (!bundle) {
   console.log('      node tools/bench/fetch-bundle.js');
   console.log('      node tools/bench/all.js --bundle=tools/bench/live-bundle.js');
 }
-console.log(`${gates.length - failed.length - skipped.length} passed, ${failed.length} failed, `
+console.log(`${gates.filter(r => r.status === 'PASS').length} passed, ${failed.length} failed, `
   + `${skipped.length} skipped, ${REPORTS.length} report(s)`);
 
 if (failed.length) {
@@ -337,11 +363,12 @@ if (skipped.length) {
   });
 }
 
-  const bad = failed.length + (strict ? skipped.length : 0);
+  const bad = failed.length + (strict ? skipped.length + (bundle ? 0 : NEEDS_BUNDLE.length) : 0);
   process.exitCode = bad ? 1 : 0;
 }
 
-main().catch((e) => {
+module.exports = { planSuite, validateRegistry };
+if (require.main === module) main().catch((e) => {
   console.error('FAIL  the suite itself crashed: ' + ((e && e.stack) || e));
   process.exit(1);
 });
