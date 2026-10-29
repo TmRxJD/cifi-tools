@@ -1,0 +1,23 @@
+version = 1
+title = "HunterSim release correctness and explicit evidence gaps"
+sources = ["AGENTS.md", "MEASUREMENT.md", "package.json", "THIRD-PARTY.md"]
+
+[[requirements]]
+id = "structural-contracts"
+description = "Run the canonical structural suite with its original-site comparisons and strict missing-input handling. Review nonzero counts and negative controls for build/account isolation, goal-specific paths, incumbent preservation, and suite/report coverage. This does not establish simulation search quality."
+required = true
+require_enforcement = true
+checks = [{ kind = "command", command = 'bash -lc "node.exe tools/bench/all.js --strict --bundle=tools/bench/live-bundle.js"' }]
+enforcement = [{ path = "tools/bench/all.js", pattern = "'import-account-isolation-check', 'path-goal-check', 'optimizer-telemetry-check', 'incumbent-guard-check'" }, { path = "tools/bench/all.js", pattern = "'underspend-contract-check'" }]
+
+[[requirements]]
+id = "checked-javascript"
+description = "The existing strict jsconfig.json scope must type-check with zero errors. Excluded DOM modules are not covered by this check."
+required = true
+checks = [{ kind = "command", command = 'bash -lc "node.exe node_modules/typescript/bin/tsc --noEmit -p jsconfig.json"' }]
+
+[[requirements]]
+id = "release-evidence-review"
+description = "Independently inspect real simulation, browser and performance evidence, including fixture identity, actual settings, fidelity, truncation, failed rows and deliberately broken controls. Confirm all intended histories are merged, the Git tree is clean, and the pushed default branch matches the reviewed commit. No file-presence or model-score assertion substitutes for this review; this clause stays unverified by the static contract tool."
+required = true
+checks = []

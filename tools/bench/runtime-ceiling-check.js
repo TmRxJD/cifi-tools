@@ -25,8 +25,10 @@ const args = process.argv.slice(2);
 const opt = (n, d) => { const h = args.find((a) => a.startsWith(`--${n}=`)); return h ? h.slice(n.length + 3) : d; };
 const CEILING = Number(opt('ceiling', 300));
 const ONLY = opt('only', null);
+const OUT = opt('out', null);
 
 (async () => {
+  if (!Number.isFinite(CEILING) || CEILING <= 0) throw new Error('runtime ceiling must be a positive finite number');
   const known = H.loadKnownBuilds();
   const flat = Object.values(known).flat();
 
@@ -44,19 +46,36 @@ const ONLY = opt('only', null);
     const build = await H.parseBuildCode(fx.code, fx.hunter);
     const cfg = H.cfgForImport(fx.hunter, build, { budgetMode: 'spend' });
     const mode = fx.mode || 'loot';
-    const scorer = await H.makeScorer(cfg, mode,
+    const t0 = performance.now();
+    // Match the six-worker browser configuration measured on this host, including readiness.
+    // A serial scorer times a different execution path and cannot enforce the app's ceiling.
+    const pooled = await H.makePooledScorer(cfg, mode,
       (mode === 'boss' || mode === 'bossTimeless') && Number.isFinite(fx.bossStage)
-        ? { bossTarget: fx.bossStage } : undefined);
-
-    const t0 = Date.now();
-    const res = await H.Optimizer.optimize(cfg, {
-      mode, scorer, effort: H.Optimizer.DEFAULT_EFFORT,
-    });
-    const secs = (Date.now() - t0) / 1000;
+        ? { bossTarget: fx.bossStage } : undefined, 6);
+    let res, secs, cleanupSecs;
+    try {
+      if (pooled.workers !== 6) throw new Error('runtime ceiling: expected six ready scoring workers');
+      res = await H.Optimizer.optimize(cfg, {
+        mode, scorer: pooled.score, effort: H.Optimizer.DEFAULT_EFFORT,
+      });
+      secs = (performance.now() - t0) / 1000;
+      if (!res.best || res.diag?.profile?.settings?.effort !== H.Optimizer.DEFAULT_EFFORT) {
+        throw new Error('runtime ceiling: no build or wrong effort in result');
+      }
+    } finally {
+      // The app retains its ready pool after returning the result. Fixture teardown is
+      // mandatory but is not time the player waits for that result; report it separately.
+      const cleanupStarted = performance.now();
+      await pooled.destroy();
+      cleanupSecs = (performance.now() - cleanupStarted) / 1000;
+    }
+    if (OUT) require('node:fs').writeFileSync(OUT, JSON.stringify({fixture:fx.name,workers:pooled.workers,
+      seconds:secs,cleanupSeconds:cleanupSecs,ceiling:CEILING,evals:res.evals,best:res.best,ranked:res.ranked,diag:res.diag},null,2));
     const over = secs > CEILING;
     if (over) failures++;
     console.log(`${String(fx.name).padEnd(11)} lvl${String(fx.level).padEnd(3)} ${mode.padEnd(12)}`
-      + ` effort=${H.Optimizer.DEFAULT_EFFORT}  ${secs.toFixed(0)}s  ${res.evals} evals`
+      + ` effort=${H.Optimizer.DEFAULT_EFFORT} workers=${pooled.workers} ${secs.toFixed(0)}s  ${res.evals} evals`
+      + ` cleanup=${cleanupSecs.toFixed(2)}s`
       + `  ceiling ${CEILING}s`
       + (over ? `   *** OVER BY ${(secs - CEILING).toFixed(0)}s ***` : '   ok'));
   }
@@ -67,5 +86,5 @@ const ONLY = opt('only', null);
     console.log('      Do not raise the ceiling to make this pass -- it is the stated requirement.');
     process.exit(1);
   }
-  console.log(`PASS  the shipped default finishes the heaviest build inside ${CEILING}s`);
+  console.log(`PASS  the shipped default finishes the selected highest-level fixture inside ${CEILING}s`);
 })().catch((e) => { console.error('FAIL ' + ((e && e.stack) || e)); process.exit(1); });

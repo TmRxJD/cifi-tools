@@ -47,7 +47,7 @@ const bundle = bundleArg ? bundleArg.slice('--bundle='.length) : null;
 const LOCAL = [
   // The benches' own bench. Cheap (pure source inspection) and first, because every number the
   // rest of this suite prints is only as trustworthy as the bench that produced it.
-  'bench-integrity-check', 'suite-plan-check', 'search-report-check',
+  'bench-integrity-check', 'suite-plan-check', 'search-report-check', 'underspend-contract-check', 'runtime-ceiling-controls-check',
   // Every shipped effort level must return a build. `fast` used to THROW on ozzy@11.
   'effort-level-check',
   'asset-version-check',
@@ -80,7 +80,7 @@ const LOCAL = [
   // function" inside a click handler, after shipping. It also vendors copies of webapp/public files
   // that go stale the moment either side is edited. Both are checked here.
   'companion-deps-check', 'companion-route-lifecycle-check', 'companion-gem-store-check', 'override-costs-check', 'override-interaction-check', 'import-account-isolation-check', 'path-goal-check', 'optimizer-telemetry-check', 'incumbent-guard-check',
-  'optimizer-worker-liveness-check',
+  'optimizer-worker-liveness-check', 'final-normalization-check',
   // An unpacked extension does not refresh its content script until it is reloaded. Every change
   // that can ship into it must advance manifest.json so the loaded build is identifiable.
   'extension-version-check',
@@ -144,7 +144,7 @@ const LOCAL = [
   'reachability-audit',
   'runtime-ceiling-check',
   'attr-save-order-check', 'authored-value-check', 'mode-availability-check',
-  'scorer-scale-check', 'ultima-multiplier-check', 'eval-pool-check',
+  'scorer-scale-check', 'ultima-multiplier-check', 'eval-pool-check', 'eval-pool-lifecycle-check',
 ];
 
 // Gates that compare against the live cifi-tools bundle; they need --bundle=.
@@ -208,6 +208,7 @@ const TIMING_SENSITIVE = new Set([
 // otherwise --sims can advertise coverage while quietly omitting its hardest checks.
 function validateRegistry(local, reports, simulation) {
   const scheduled = [...local, ...reports];
+  if (!scheduled.length) throw new Error('suite registry is empty');
   if (new Set(scheduled).size !== scheduled.length) throw new Error('suite registry contains duplicate benches');
   for (const name of simulation) {
     if (!scheduled.includes(name)) throw new Error(`simulation bench is not scheduled: ${name}`);
@@ -319,6 +320,15 @@ async function main() {
 
 const reportNames = new Set(REPORTS);
 
+function summarizeResults(rows) {
+  return {
+    passed: rows.filter(r => !reportNames.has(r.name) && r.status === 'PASS').length,
+    failed: rows.filter(r => r.status === 'FAIL' || r.status === 'MISSING').length,
+    skipped: rows.filter(r => !reportNames.has(r.name) && r.status === 'SKIP').length,
+    reports: rows.filter(r => reportNames.has(r.name)).length,
+  };
+}
+
 function report() {
 
 const width = Math.max(...results.map((r) => r.name.length));
@@ -345,8 +355,9 @@ if (!bundle) {
   console.log('      node tools/bench/fetch-bundle.js');
   console.log('      node tools/bench/all.js --bundle=tools/bench/live-bundle.js');
 }
-console.log(`${gates.filter(r => r.status === 'PASS').length} passed, ${failed.length} failed, `
-  + `${skipped.length} skipped, ${REPORTS.length} report(s)`);
+const counts = summarizeResults(results);
+console.log(`${counts.passed} passed, ${counts.failed} failed, `
+  + `${counts.skipped} skipped, ${counts.reports} report(s)`);
 
 if (failed.length) {
   console.log('\nfailures:');
@@ -368,7 +379,7 @@ if (skipped.length) {
   process.exitCode = bad ? 1 : 0;
 }
 
-module.exports = { planSuite, validateRegistry };
+module.exports = { planSuite, validateRegistry, summarizeResults };
 if (require.main === module) main().catch((e) => {
   console.error('FAIL  the suite itself crashed: ' + ((e && e.stack) || e));
   process.exit(1);

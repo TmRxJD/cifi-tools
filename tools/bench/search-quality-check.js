@@ -14,7 +14,9 @@
 // when it is not, with the import fully inside the budget it was given. The gate scored that build
 // as a pass.
 //
-// So: the same fixtures, the same budgets, the incumbent REMOVED. The import becomes a target the
+// So: the same fixtures, the same budgets, the incumbent REMOVED and identical share codes
+// withheld from corpus donors. Other community donors remain part of the shipped search.
+// The import becomes a target the
 // search has to reach on its own. Budgets are the import's own spend (not the level-derived
 // budget) so the import is always exactly reachable and a shortfall can only be the search.
 //
@@ -29,6 +31,7 @@
 //   and the SEARCH varies ~7 percentage points across seeds -- one seed is ONE SAMPLE.
 // A single-seed difference narrower than ~7 points is not evidence about a mechanism.
 const H = require('./harness.js');
+const M = require('./measurement.js');
 
 const args = process.argv.slice(2);
 const opt = (name, dflt) => {
@@ -124,17 +127,42 @@ function stratify(fixtures, n, rand) {
     const bare = { ...cfg };
     delete bare.currentTalents;
     delete bare.currentAttrs;
-    const scorer = await H.makeScorer(bare, 'loot');
-    let res;
+    // Six workers match this host's browser runs. The count is read back after startup,
+    // and quality runs have no wall-clock stopping rule that could change the answer.
+    const pooled = await H.makePooledScorer(bare, 'loot', undefined, 6);
+    const corpus = global.OptimizerCorpus;
+    if (!corpus || typeof corpus.donorsFor !== 'function') {
+      await pooled.destroy();
+      throw new Error('search-quality: canonical corpus is unavailable');
+    }
+    const donorsFor = corpus.donorsFor;
+    let filterCalls = 0, withheld = 0;
+    corpus.donorsFor = (...args) => {
+      filterCalls++;
+      const donors = donorsFor(...args);
+      const heldOut = donors.filter(donor => donor.code !== p.fx.code);
+      withheld += donors.length - heldOut.length;
+      return heldOut;
+    };
+    let res, found;
     try {
-      res = await H.Optimizer.optimize(bare, { mode: 'loot', scorer });
+      if (pooled.workers !== 6) throw new Error('search-quality: expected six ready scoring workers');
+      console.log(`START ${p.fx.name} workers=${pooled.workers} effort=complete uncapped`);
+      res = await H.Optimizer.optimize(bare, { mode: 'loot', scorer: pooled.score, effort: 'complete', maxSeconds: 0 });
       if (res.diag?.incumbent?.protected !== false) throw new Error('search-quality: result did not confirm the incumbent was absent');
+      if (res.truncated !== false) throw new Error('search-quality: search was truncated or did not report truncation');
+      if (res.diag?.profile?.settings?.effort !== 'complete') throw new Error('search-quality: result did not confirm complete effort');
+      if (!filterCalls) throw new Error('search-quality: held-out donor filter was never used');
+      const legality = M.legalityOf(H, bare, res.best.talentAlloc, res.best.attrAlloc);
+      if (!legality.ok) throw new Error(`search-quality: illegal returned allocation: ${legality.problems.join('; ')}`);
+      found = (await H.evaluateAllocation(cfg, res.best.talentAlloc, res.best.attrAlloc)).loot;
+      if (!Number.isFinite(found) || res.best.score !== found) throw new Error('search-quality: nonfinite or stale returned score');
+      console.log(`HELD OUT ${p.fx.name}: ${filterCalls} donor queries, ${withheld} matching-code rows removed`);
     } catch (err) {
       console.log(`ERR  ${p.hunter}#${p.fx.index} lvl${p.level}: ${err.message}`);
       rows.push({ ...p, err: err.message });
       continue;
-    }
-    const found = (await H.evaluateAllocation(cfg, res.best.talentAlloc, res.best.attrAlloc)).loot;
+    } finally { corpus.donorsFor = donorsFor; await pooled.destroy(); }
     const delta = 100 * (found - importScore) / importScore;
     rows.push({ ...p, importScore, found, delta, evals: res.evals });
     const tag = delta >= -0.5 ? 'ok  ' : (delta >= -10 ? 'near' : 'MISS');

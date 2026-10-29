@@ -269,7 +269,7 @@ async function makePooledScorer(cfg, mode, ctxOverride, size) {
     out.boss = boss;
     return out;
   };
-  return { score, destroy: () => pool.destroy() };
+  return { score, workers: pool.workers.length, destroy: () => pool.destroy() };
 }
 
 /**

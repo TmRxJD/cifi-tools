@@ -37,42 +37,99 @@ class EvalPool {
     this._seq = 0;
     this._pending = new Map();
     this._cfg = cfg;
+    this._state = 'new';
+    this._error = null;
+    this._bootRejectors = new Set();
+    this._termination = null;
+    this._terminationErrors = [];
   }
 
-  async start() {
-    const file = path.join(__dirname, 'eval-pool-worker.js');
+  start() {
+    if (this._error) return Promise.reject(this._cleanupFailure() || this._error);
+    if (!this.ready) this.ready = this._start();
+    return this.ready;
+  }
+
+  // A fatal lifecycle event invalidates the pool, including batches assigned to other workers.
+  // Clear ownership before termination events arrive so expected exits cannot replace the cause.
+  _stop(error, state = 'failed') {
+    if (this._error) return;
+    this._error = error instanceof Error ? error : new Error(String(error));
+    this._state = state;
+    for (const reject of this._bootRejectors) reject(this._error);
+    this._bootRejectors.clear();
+    for (const pending of this._pending.values()) pending.reject(this._error);
+    this._pending.clear();
+    const owned = this.workers;
     this.workers = [];
+    this._termination = Promise.allSettled(owned.map(worker => Promise.resolve().then(() => worker.terminate())))
+      .then(results => { this._terminationErrors = results.filter(result => result.status === 'rejected').map(result => result.reason); });
+  }
+
+  _cleanupFailure() {
+    // Keep auto-cleanup observed without creating an unhandled background rejection. Startup
+    // and destroy await every termination attempt and surface both cleanup errors and its cause.
+    return this._terminationErrors.length
+      ? new AggregateError(this._terminationErrors, `eval-pool: worker cleanup failed after ${this._error.message}`, {cause: this._error})
+      : null;
+  }
+
+  async _start() {
+    const file = path.join(__dirname, 'eval-pool-worker.js');
     const boots = [];
-    for (let i = 0; i < this.size; i++) {
-      const w = new Worker(file, { workerData: { hunter: this.hunter, cfg: this._cfg } });
-      w.on('message', (msg) => {
-        if (msg.type === 'ready') { w.__ready(); return; }
-        const p = this._pending.get(msg.id);
-        if (!p) return;
-        this._pending.delete(msg.id);
-        if (msg.error) p.reject(new Error(msg.error));
-        else p.resolve(msg);
-      });
-      // A worker that dies mid-batch must REJECT the batch, not hang it. A silent hang here reads
-      // exactly like the throttled-browser failure this file exists to escape.
-      w.on('error', (e) => { for (const [, p] of this._pending) p.reject(e); this._pending.clear(); });
-      w.on('exit', (code) => {
-        if (code !== 0 && this._pending.size) {
-          const e = new Error(`eval-pool: worker exited with code ${code} mid-batch`);
-          for (const [, p] of this._pending) p.reject(e);
-          this._pending.clear();
-        }
-      });
-      boots.push(new Promise((res) => { w.__ready = res; }));
-      this.workers.push(w);
+    try {
+      if (this._error) throw this._error;
+      this._state = 'starting';
+      for (let i = 0; i < this.size; i++) {
+        let resolveBoot, rejectBoot;
+        boots.push(new Promise((resolve, reject) => { resolveBoot = resolve; rejectBoot = reject; }));
+        this._bootRejectors.add(rejectBoot);
+        const w = new Worker(file, { workerData: { hunter: this.hunter, cfg: this._cfg } });
+        this.workers.push(w);
+        let probing = false;
+        w.on('message', msg => {
+          if (this._error) return;
+          if (msg.type === 'ready' && !msg.error) {
+            if (probing) return;
+            probing = true;
+            // The existing worker's init catch sends ready THEN an out-of-band error. An empty
+            // evaluation acknowledges that its message handler really installed, without running
+            // WASM or touching RNG state. Ready alone cannot establish successful initialization.
+            const id = ++this._seq;
+            this._pending.set(id, {resolve: () => { this._bootRejectors.delete(rejectBoot); resolveBoot(); }, reject: rejectBoot});
+            try { w.postMessage({id, pairs: [], iterations: 1}); }
+            catch (error) { this._stop(error); }
+            return;
+          }
+          const pending = this._pending.get(msg.id);
+          if (!pending) {
+            if (msg.error) this._stop(new Error(msg.error));
+            return;
+          }
+          this._pending.delete(msg.id);
+          if (msg.error) pending.reject(new Error(msg.error));
+          else pending.resolve(msg);
+        });
+        w.on('error', error => this._stop(error));
+        w.on('exit', code => this._stop(new Error(`eval-pool: worker exited with code ${code} (${this._state})`)));
+      }
+      await Promise.all(boots);
+      if (this._error) throw this._error;
+      this._state = 'running';
+      return this;
+    } catch (error) {
+      this._stop(error);
+      // Constructor failure can occur before Promise.all attaches to earlier boot promises.
+      await Promise.allSettled(boots);
+      await this._termination;
+      throw this._cleanupFailure() || this._error;
     }
-    await Promise.all(boots);
-    return this;
   }
 
   /** Evaluate `pairs` at `iterations`, returning results in the CALLER's order. */
   async evaluate(pairs, iterations) {
-    if (!this.workers.length) throw new Error('eval-pool: evaluate() before start()');
+    if (this._error) throw this._error;
+    if (this._state !== 'running') throw new Error('eval-pool: evaluate() before start() completed');
     if (!pairs.length) return [];
     // Round-robin by index so every worker gets a contiguous share; the split cannot affect values.
     const n = this.workers.length;
@@ -83,9 +140,11 @@ class EvalPool {
     const out = new Array(pairs.length);
     await Promise.all(chunks.map((chunk, k) => {
       if (!chunk.length) return Promise.resolve();
+      if (this._error) return Promise.reject(this._error);
       const id = ++this._seq;
       const done = new Promise((resolve, reject) => this._pending.set(id, { resolve, reject }));
-      this.workers[k].postMessage({ id, pairs: chunk, iterations });
+      try { this.workers[k].postMessage({ id, pairs: chunk, iterations }); }
+      catch (error) { this._stop(error); }
       return done.then((msg) => {
         msg.results.forEach((r, j) => { out[origin[k][j]] = r; });
       });
@@ -94,8 +153,10 @@ class EvalPool {
   }
 
   async destroy() {
-    await Promise.all(this.workers.map((w) => w.terminate()));
-    this.workers = [];
+    this._stop(new Error('eval-pool: destroyed'), 'destroyed');
+    await this._termination;
+    const failure = this._cleanupFailure();
+    if (failure) throw failure;
   }
 }
 

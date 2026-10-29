@@ -477,6 +477,78 @@
     return current;
   }
 
+  // Independent finalists retain their own point-by-point choices. Only their score requests
+  // are combined: one canonical ctx.score call owns memoization and worker telemetry at a time.
+  async function normalizeFinalists(candidates, ctx, normalizeOne) {
+    const results = new Array(candidates.length);
+    const pending = new Set();
+    let queue = [], pump = null, next = 0, failure = null;
+    const fail = error => {
+      if (!failure) failure = error;
+      for (const request of pending) request.reject(failure);
+      pending.clear();
+      queue = [];
+    };
+    const check = () => {
+      if (failure) throw failure;
+      if (ctx.shouldCancel()) throw new Cancelled();
+    };
+    const flush = async () => {
+      try {
+        while (queue.length && !failure) {
+          check();
+          const iterations = queue[0].iterations;
+          const batch = queue.filter(request => request.iterations === iterations);
+          queue = queue.filter(request => request.iterations !== iterations);
+          const pairs = batch.flatMap(request => request.pairs);
+          const scores = await ctx.score(pairs, iterations);
+          check();
+          if (scores.length !== pairs.length || (scores.boss && scores.boss.length !== pairs.length)) {
+            throw new Error('Optimizer normalization score batch length mismatch');
+          }
+          let offset = 0;
+          for (const request of batch) {
+            const end = offset + request.pairs.length;
+            const part = /** @type {ScoreBatch} */ (scores.slice(offset, end));
+            if (scores.boss) part.boss = scores.boss.slice(offset, end);
+            pending.delete(request);
+            request.resolve(part);
+            offset = end;
+          }
+        }
+      } catch (error) { fail(error); }
+      finally { pump = null; }
+    };
+    const laneCtx = { ...ctx, score: (pairs, iterations) => {
+      try { check(); } catch (error) { fail(error); return Promise.reject(error); }
+      const promise = new Promise((resolve, reject) => {
+        const request = { pairs, iterations, resolve, reject };
+        pending.add(request);
+        queue.push(request);
+      });
+      // A microtask gathers requests from all ready lanes without timers or concurrent scorers.
+      if (!pump) pump = Promise.resolve().then(flush);
+      return promise;
+    } };
+    const lane = async () => {
+      try {
+        while (next < candidates.length) {
+          check();
+          const index = next++;
+          const result = await normalizeOne(candidates[index], laneCtx);
+          check();
+          results[index] = result;
+        }
+      } catch (error) { fail(error); }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, candidates.length) }, lane));
+    // A failed lane can reject peers while the scorer is still running. Drain that owned call
+    // before returning, so cancellation cannot leave background work or late candidate applies.
+    if (pump) await pump;
+    if (failure) throw failure;
+    return results;
+  }
+
   // A SECOND SCREENING SHAPE: PAY THE GATE, THEN BUY THE GATED NODE.
   //
   // canonicalFill spreads the budget evenly across a support's members. For a support whose value
@@ -2340,17 +2412,16 @@
       const normalized = [];
       const seenNormalized = new Set();
       let changedCount = 0;
-      for (const candidate of ranked) {
+      const repaired = await normalizeFinalists(ranked, ctx, async (candidate, normalizationCtx) => {
         let t = { ...candidate.talentAlloc }, a = { ...candidate.attrAlloc };
         // Enforcing a mode pin can refund points while repairing the budget. Fill AFTER
         // that repair; otherwise a fully-spent contender can become underspent here.
         a = applyPins(ATTRIBUTES, deps, minVal, attrBudget, a, pinnedAttrs);
-        t = await greedyTopUp(ctx, TALENTS, noDeps, noMin, talentBudget, t,
+        t = await greedyTopUp(normalizationCtx, TALENTS, noDeps, noMin, talentBudget, t,
           talentAlloc => ({ talentAlloc, attrAlloc: a }));
-        a = await greedyTopUp(ctx, ATTRIBUTES, deps, minVal, attrBudget, a,
+        a = await greedyTopUp(normalizationCtx, ATTRIBUTES, deps, minVal, attrBudget, a,
           attrAlloc => ({ talentAlloc: t, attrAlloc }));
         const pair = { talentAlloc: t, attrAlloc: a };
-        if (!Space.sameAlloc(TALENTS, t, candidate.talentAlloc) || !Space.sameAlloc(ATTRIBUTES, a, candidate.attrAlloc)) changedCount++;
         validatePair(pair, 'normalized contender');
         if (!pinsHeld(ATTRIBUTES, a, pinnedAttrs)) throw new Error('Optimizer cannot satisfy the mode attribute pins within this budget');
         for (const [label, defs, dependencies, thresholds, budget, alloc] of [
@@ -2360,7 +2431,13 @@
           const left = spendable(defs, dependencies, thresholds, budget, alloc);
           if (left) throw new Error(`Optimizer left ${left.idle} ${label} point(s) unspent while "${left.node}" could still take one: ${JSON.stringify(alloc)}`);
         }
-        const sig = `${Space.signature(TALENTS, t)}|${Space.signature(ATTRIBUTES, a)}`;
+        return pair;
+      });
+      for (let i = 0; i < repaired.length; i++) {
+        const pair = repaired[i], candidate = ranked[i];
+        if (!Space.sameAlloc(TALENTS, pair.talentAlloc, candidate.talentAlloc)
+          || !Space.sameAlloc(ATTRIBUTES, pair.attrAlloc, candidate.attrAlloc)) changedCount++;
+        const sig = `${Space.signature(TALENTS, pair.talentAlloc)}|${Space.signature(ATTRIBUTES, pair.attrAlloc)}`;
         if (!seenNormalized.has(sig)) { seenNormalized.add(sig); normalized.push(pair); }
       }
       if (!normalized.length) throw new Error('Optimizer produced no final contenders');

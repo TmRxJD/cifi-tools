@@ -1,153 +1,107 @@
 'use strict';
-// The test that WOULD have caught the reported bug, and that the 182-build gate could not.
-//
-// The gate builds every fixture with budget == the import's own spend, so its incumbent is
-// always fully spent and an under-spend can never arise (verified: 0 of 182 fixtures could
-// produce one). The real app takes its budget from the LEVEL, which routinely exceeds what a
-// saved build has spent -- a respec, a level-up not yet allocated, or simply a partial build.
-// That gap is where the failure lived.
-//
-// Here the incumbent is deliberately damaged -- points stripped out, exactly as a real
-// under-spent build looks -- and the optimizer must still:
-//   1. leave no spendable points on the table, and
-//   2. score at least as well as the untouched import it was derived from.
-//
-// (2) matters as much as (1): topping up to a full budget is worthless if the result is worse
-// than the build the user already had.
-//
-//   node tools/bench/underspend-test.js [hunter] [count]
-
+// Correctness under an emergency cap: protect the actual selected, underspent allocation.
+// Recovering an undisclosed full allocation belongs to uncapped search-quality reports.
+const assert = require('node:assert/strict');
 const H = require('./harness.js');
-
+const {assertCoverage, assertSelectedInput, assertUnderspendContract} = require('./underspend-contract.js');
 const Space = H.Space;
-const [hunterArg, countArg] = process.argv.slice(2);
-const COUNT = Number(countArg || 3);
-
-/** Remove `n` points from an allocation, largest nodes first, keeping it legal. */
-function strip(defs, deps, minVal, alloc, n) {
-  const out = { ...alloc };
+function strip(defs, deps, minVal, alloc, points) {
+  const out = {...alloc};
   let removed = 0;
-  let guard = 0;
-  while (removed < n && guard++ < 1000) {
-    let target = null;
-    for (const d of defs) {
-      if ((out[d.id] || 0) <= 0) continue;
-      if (!target || out[d.id] > out[target.id]) target = d;
-    }
+  while (removed < points) {
+    const target = defs.filter(node => (out[node.id] || 0) > 0)
+      .reduce((best,node) => !best || out[node.id] > out[best.id] ? node : best, null);
     if (!target) break;
-    out[target.id] -= 1;
+    out[target.id]--;
     removed += target.cost || 1;
   }
-  Space.clearInvalidDescendants(defs, deps, minVal, out);
+  Space.clearInvalidDescendants(defs,deps,minVal,out);
   return out;
 }
-
-let failures = 0;
-
-(async () => {
-  const known = H.loadKnownBuilds();
-  const hunters = hunterArg ? [hunterArg] : ['borge', 'ozzy', 'knox'];
-
-  for (const hunter of hunters) {
-    const all = known[hunter].filter((f) => f.mode === 'loot');
-    const step = Math.max(1, Math.floor(all.length / COUNT));
-    const picks = all.filter((_, i) => i % step === 0).slice(0, COUNT);
-
-    for (const fx of picks) {
-      const build = await H.parseBuildCode(fx.code);
-      if (!build) continue;
-
-      // 'level' budgets: what the app actually gives the optimizer.
-      const cfg = H.cfgForImport(hunter, build, { budgetMode: 'level' });
-      const importScore = (await H.evaluateAllocation(cfg, build.talents, build.attributes)).loot;
-
-      // Damage the incumbent the way a real under-spent build is damaged.
-      const damagedTalents = strip(cfg.TALENTS, {}, {}, build.talents, 12);
-      const damagedAttrs = strip(cfg.ATTRIBUTES, cfg.ATTRIBUTE_DEPENDENCIES, cfg.ATTRIBUTE_MIN_VALUE, build.attributes, 9);
-      const damaged = { ...cfg, currentTalents: damagedTalents, currentAttrs: damagedAttrs };
-
-      const tSpent = Space.costOf(cfg.TALENTS, damagedTalents);
-      const aSpent = Space.costOf(cfg.ATTRIBUTES, damagedAttrs);
-
-      const scorer = await H.makeScorer(damaged, 'loot');
-      let res;
-      try {
-        // CAPPED AT 30s, AND THE CAP MAKES THIS GATE STRICTER RATHER THAN WEAKER.
-        //
-        // This ran uncapped -- so at the 600s default -- for 9 builds, which made it one of the two
-        // gates that dominated the whole suite (567s+ against a 2,700s total, alongside
-        // effort-level-check's 910s). Everything else finishes in seconds.
-        //
-        // What this asserts is that the optimizer never returns an UNDER-SPENT build. A truncated
-        // run demonstrates that at least as well as a converged one: the spend assertion runs at
-        // Stage 3 regardless, and the cap is checked at stage boundaries precisely so a partial
-        // allocation is never returned. More to the point, a SHORTER run is MORE likely to leave a
-        // point unspent -- that is exactly how the original bug surfaced, on the cheap effort level
-        // and not the thorough one. So cutting the budget increases the chance of catching the
-        // thing this gate exists for.
-        //
-        // It would NOT be sound in a gate comparing SCORES, where truncation makes the number
-        // irreproducible. See effort-value-check, which disables the cap for that reason.
-        res = await H.Optimizer.optimize(damaged, { mode: 'loot', scorer, maxSeconds: 30 });
-      } catch (err) {
-        failures++;
-        console.log(`FAIL ${fx.uid} lvl${build.level}: optimize threw -- ${err.message}`);
-        continue;
-      }
-
-      const out = res.best;
-      const outScore = (await H.evaluateAllocation(cfg, out.talentAlloc, out.attrAlloc)).loot;
-
-      // 1. Nothing spendable left.
-      const leftover = (defs, deps, minVal, budget, alloc) => {
-        const idle = budget - Space.costOf(defs, alloc);
-        if (idle <= 0) return null;
-        const node = defs.find((d) => (d.cost || 1) <= idle && Space.isEligible(d, defs, deps, minVal, alloc));
-        return node ? `${idle} idle, "${node.id}" could take one` : null;
-      };
-      const tLeft = leftover(cfg.TALENTS, {}, {}, cfg.TALENT_BUDGET, out.talentAlloc);
-      const aLeft = leftover(cfg.ATTRIBUTES, cfg.ATTRIBUTE_DEPENDENCIES, cfg.ATTRIBUTE_MIN_VALUE, cfg.ATTRIBUTE_BUDGET, out.attrAlloc);
-
-      // 2. No worse than the untouched import.
-      const regressed = outScore < importScore;
-
-      const tag = `${fx.uid} lvl${build.level}`;
-      if (tLeft || aLeft || regressed) {
-        failures++;
-        console.log(`FAIL ${tag}`);
-        if (tLeft) console.log(`      talents: ${tLeft}`);
-        if (aLeft) console.log(`      attributes: ${aLeft}`);
-        if (regressed) {
-          // Say whether the target was even REACHABLE. The import is scored at its own full
-          // allocation, but the optimizer is given the LEVEL-derived budget -- and a share code
-          // does not encode level, it is inferred from spend. When the inference lands low, the
-          // import spends more than the optimizer is allowed to, and "beat the import" asks it to
-          // beat an allocation it is forbidden to make. Without this line the failure reads as a
-          // search defect, which is a different bug with a different fix.
-          const impT = Space.costOf(cfg.TALENTS, build.talents);
-          const impA = Space.costOf(cfg.ATTRIBUTES, build.attributes);
-          const overT = impT > cfg.TALENT_BUDGET;
-          const overA = impA > cfg.ATTRIBUTE_BUDGET;
-          if (overT || overA) {
-            console.log(`      NOT REACHABLE: the import spends ${impT}T/${impA}A but the level-`
-              + `derived budget is ${cfg.TALENT_BUDGET}T/${cfg.ATTRIBUTE_BUDGET}A -- the optimizer `
-              + 'cannot legally reproduce it, so this is an inferred-level problem, not a search one');
-          } else {
-            console.log(`      reachable: the import spends ${impT}T/${impA}A within a budget of `
-              + `${cfg.TALENT_BUDGET}T/${cfg.ATTRIBUTE_BUDGET}A, so this IS a search shortfall`);
-          }
-          console.log(`      scored ${outScore.toFixed(2)} vs the untouched import's ${importScore.toFixed(2)} `
-            + `(${(100 * (outScore - importScore) / importScore).toFixed(2)}%)`);
-        }
-      } else {
-        console.log(`pass ${tag}  incumbent damaged to ${tSpent}/${cfg.TALENT_BUDGET}T ${aSpent}/${cfg.ATTRIBUTE_BUDGET}A `
-          + `-> ${Space.costOf(cfg.TALENTS, out.talentAlloc)}/${cfg.TALENT_BUDGET}T `
-          + `${Space.costOf(cfg.ATTRIBUTES, out.attrAlloc)}/${cfg.ATTRIBUTE_BUDGET}A, `
-          + `${outScore.toFixed(2)} vs import ${importScore.toFixed(2)}`);
-      }
-    }
+function selectFixtures(known,args) {
+  const only = args.find(arg => arg.startsWith('--only='));
+  assert(args.every(arg => !arg.startsWith('--') || arg === only), 'unknown underspend-test option');
+  if (only) {
+    assert.equal(args.length,1,'--only cannot be combined with positional arguments');
+    const names = only.slice(7).split(',');
+    assert(names.every(name => name && name === name.trim()), '--only needs exact nonempty fixture names');
+    assert.equal(new Set(names).size,names.length,'--only contains duplicate fixtures');
+    return names.map(name => {
+      const matches = Object.values(known).flat().filter(fixture => fixture.name === name);
+      assert.equal(matches.length,1,`--only fixture must resolve exactly once: ${name}`);
+      assert.equal(matches[0].mode,'loot',`underspend-test requires a loot fixture: ${name}`);
+      return matches[0];
+    });
   }
-
-  console.log(`\n${failures ? `${failures} FAILED` : 'under-spent incumbents are always repaired and never regress'}`);
-  process.exit(failures ? 1 : 0);
-})().catch((e) => { console.error(e); process.exit(1); });
+  assert(args.length <= 2,'expected [hunter] [count] or --only=exactName,...');
+  const hunters = args[0] ? [args[0]] : ['borge','ozzy','knox'];
+  const count = args[1] === undefined ? 3 : Number(args[1]);
+  assert(Number.isInteger(count) && count > 0,'fixture count must be a positive integer');
+  return hunters.flatMap(hunter => {
+    assert(Array.isArray(known[hunter]),`unknown hunter ${hunter}`);
+    const all = known[hunter].filter(fixture => fixture.mode === 'loot');
+    assert(all.length >= count,`${hunter} has fewer than ${count} loot fixtures`);
+    const step = Math.max(1,Math.floor(all.length/count));
+    const picks = all.filter((_,index) => index % step === 0).slice(0,count);
+    assertCoverage(picks.length,count);
+    return picks;
+  });
+}
+async function main(args=process.argv.slice(2)) {
+  const picks = selectFixtures(H.loadKnownBuilds(),args);
+  assertCoverage(picks.length,picks.length);
+  const iterations = H.Optimizer.FINAL_ITERATIONS;
+  const effort = 'complete';
+  let checked = 0;
+  let failures = 0;
+  for (const fixture of picks) {
+    const started = performance.now();
+    console.log(`START ${fixture.name} effort=${effort} FINAL_ITERATIONS=${iterations} cap=30s`);
+    let pool;
+    try {
+      const build = await H.parseBuildCode(fixture.code,fixture.hunter);
+      assert(build,`${fixture.name}: build code did not decode`);
+      // Definitions originate in the VM sandbox. Compare host snapshots to host inputs while
+      // preserving Infinity; JSON cloning would silently change uncapped definitions to null.
+      const cfg = structuredClone(H.cfgForImport(fixture.hunter,build,{budgetMode:'level'}));
+      const untouchedReference = await H.scoreAllocation(cfg,fixture.mode,build.talents,build.attributes,iterations);
+      assert(Number.isFinite(untouchedReference), `${fixture.name}: untouched reference is nonfinite`);
+      cfg.currentTalents = strip(cfg.TALENTS,{}, {},build.talents,12);
+      cfg.currentAttrs = strip(cfg.ATTRIBUTES,cfg.ATTRIBUTE_DEPENDENCIES,cfg.ATTRIBUTE_MIN_VALUE,build.attributes,9);
+      assert(Space.costOf(cfg.TALENTS,cfg.currentTalents) < cfg.TALENT_BUDGET
+        || Space.costOf(cfg.ATTRIBUTES,cfg.currentAttrs) < cfg.ATTRIBUTE_BUDGET,`${fixture.name}: no underspend exercised`);
+      const snapshot = structuredClone(cfg);
+      assertSelectedInput(snapshot,Space);
+      const inputReadback = {iterations,score:await H.scoreAllocation(snapshot,fixture.mode,
+        snapshot.currentTalents,snapshot.currentAttrs,iterations)};
+      pool = await H.makePooledScorer(cfg,fixture.mode,undefined,6);
+      assert.equal(pool.workers,6,`${fixture.name}: expected six ready scoring workers`);
+      let lastPhase, lastProgress = 0;
+      const result = await H.Optimizer.optimize(cfg,{mode:fixture.mode,effort,scorer:pool.score,maxSeconds:30,
+        onProgress:progress => {
+          const now = performance.now();
+          if (progress.phase !== lastPhase || now-lastProgress > 15000) {
+            console.log(`progress ${fixture.name} ${progress.phase} ${progress.done}/${progress.total} evals=${progress.evals}`);
+            lastPhase=progress.phase; lastProgress=now;
+          }
+        }});
+      assert(result.best,`${fixture.name}: no returned build`);
+      const outputReadback = {iterations,score:await H.scoreAllocation(snapshot,fixture.mode,
+        result.best.talentAlloc,result.best.attrAlloc,iterations)};
+      const verified = assertUnderspendContract({cfg,snapshot,result,inputReadback,outputReadback,iterations,effort,space:Space});
+      checked++;
+      console.log(`PASS ${fixture.name} input=${inputReadback.score} output=${outputReadback.score}`
+        + ` kept=${verified.kept} truncated=${verified.truncated} contenders=${verified.contenders}`
+        + ` workers=${pool.workers} untouchedReference=${untouchedReference} (diagnostic, not supplied as a floor)`
+        + ` seconds=${((performance.now()-started)/1000).toFixed(2)}`);
+    } catch (error) {
+      failures++;
+      console.error(`FAIL ${fixture.name}: ${error.stack || error}`);
+    } finally { if (pool) await pool.destroy(); }
+  }
+  assertCoverage(checked+failures,picks.length);
+  assertCoverage(checked,picks.length);
+  console.log(`PASS underspend correctness: ${checked}/${picks.length} actual selected inputs protected; effort=${effort}, iterations=${iterations}`);
+}
+module.exports = {selectFixtures};
+if (require.main === module) main().catch(error => {console.error(`FAIL ${error.stack || error}`);process.exitCode=1;});
