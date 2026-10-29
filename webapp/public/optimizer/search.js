@@ -2342,11 +2342,13 @@
       let changedCount = 0;
       for (const candidate of ranked) {
         let t = { ...candidate.talentAlloc }, a = { ...candidate.attrAlloc };
+        // Enforcing a mode pin can refund points while repairing the budget. Fill AFTER
+        // that repair; otherwise a fully-spent contender can become underspent here.
+        a = applyPins(ATTRIBUTES, deps, minVal, attrBudget, a, pinnedAttrs);
         t = await greedyTopUp(ctx, TALENTS, noDeps, noMin, talentBudget, t,
           talentAlloc => ({ talentAlloc, attrAlloc: a }));
         a = await greedyTopUp(ctx, ATTRIBUTES, deps, minVal, attrBudget, a,
           attrAlloc => ({ talentAlloc: t, attrAlloc }));
-        a = applyPins(ATTRIBUTES, deps, minVal, attrBudget, a, pinnedAttrs);
         const pair = { talentAlloc: t, attrAlloc: a };
         if (!Space.sameAlloc(TALENTS, t, candidate.talentAlloc) || !Space.sameAlloc(ATTRIBUTES, a, candidate.attrAlloc)) changedCount++;
         validatePair(pair, 'normalized contender');

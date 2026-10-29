@@ -109,6 +109,18 @@ async function main() {
     assert.equal(result.best.attrAlloc.timeless,5);
     assert.deepEqual({talents:cfg.currentTalents,attrs:cfg.currentAttrs},before);
   });
+  await check('Knox bossTimeless spends points refunded by final mode pins', async () => {
+    const fixture = H.findFixture(known, 'knox@12');
+    const build = await H.parseBuildCode(fixture.code, fixture.hunter);
+    const cfg = H.cfgForImport(fixture.hunter, build, {budgetMode:'spend'});
+    const result = await run(cfg, 'fast', controlled(() => 1), 'bossTimeless');
+    assert(result.ranked.length > 0);
+    for (const candidate of result.ranked) {
+      assert.equal(candidate.attrAlloc.time, 5);
+      assert.equal(H.Space.costOf(cfg.ATTRIBUTES, candidate.attrAlloc), cfg.ATTRIBUTE_BUDGET);
+    }
+    assertRanked(result, () => 1);
+  });
   await check('a pin-compatible mode start survives a misleading local improvement', async () => {
     const cfg = {...base,currentAttrs:{...base.currentAttrs,timeless:0}};
     const isOriginalTalents = pair=>H.Space.sameAlloc(base.TALENTS,pair.talentAlloc,base.currentTalents);

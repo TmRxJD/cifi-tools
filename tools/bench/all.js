@@ -258,6 +258,7 @@ function finish(name, out, code, gateStart) {
   const t = Math.round((Date.now() - startedAt) / 1000);
   process.stdout.write(`  ${String(t).padStart(4)}s  ${status.padEnd(4)}  ${String(gateSecs).padStart(4)}s  ${name}
 `);
+  if (status === 'FAIL') process.stderr.write(`${name} output:\n${out}\n`);
 }
 
 /** Run `tasks` with at most `limit` in flight. */
