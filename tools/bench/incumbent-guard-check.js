@@ -150,7 +150,8 @@ async function main() {
       + base.ATTRIBUTES.reduce((s,d,i)=>s+(i+1)*17*(pair.attrAlloc[d.id]||0),0);
     const result = await run(empty,'fast',controlled((pair,it)=>it===1000?finalValue(pair):1));
     assertRanked(result,finalValue);
-    assert(result.diag.finalization.changedCount>0, 'fixture did not exercise normalization changes');
+    assert(result.diag.finalization.omittedIncomplete>0, 'fixture must exercise losing incomplete contenders');
+    assert.equal(result.diag.finalization.changedCount,0, 'a complete winner needs no extra repair search');
     if (result.diag.incumbent.kept) assert.equal(result.best.score,finalValue(result.best));
     const corrupt = clone(result); corrupt.ranked[0].score += 1;
     assert.throws(()=>assertRanked(corrupt,finalValue),/stale final score/,'known-bad score must be rejected');

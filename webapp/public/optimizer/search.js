@@ -2400,9 +2400,10 @@
 
     async function finish(ranked, stageChampions) {
       markStage('polish');
-      // Normalize every contender on a clone, then rank the actual allocations at one fidelity.
-      // Cleaning only ranked[0] left its old score attached to a different build and could hide
-      // a repaired rival. Unchanged candidates are exact memo hits, not new simulations.
+      // Final confirmation must not become another search over every losing archive elite.
+      // Repair the selected champion, retain complete contenders as fallbacks if repair hurts,
+      // and compare the ACTUAL returned allocations at full fidelity. Incomplete losers have
+      // already competed in Stage 3; greedily improving all of them added ~122s on Borge84.
       const spendable = (defs, dependencies, thresholds, budget, alloc) => {
         const idle = budget - Space.costOf(defs, alloc);
         if (idle <= 0) return null;
@@ -2412,7 +2413,14 @@
       const normalized = [];
       const seenNormalized = new Set();
       let changedCount = 0;
-      const repaired = await normalizeFinalists(ranked, ctx, async (candidate, normalizationCtx) => {
+      const inputContenders = ranked.length;
+      const selected = ranked.filter((candidate, index) => {
+        validatePair(candidate, 'final contender');
+        return index === 0 || (pinsHeld(ATTRIBUTES, candidate.attrAlloc, pinnedAttrs)
+          && !spendable(TALENTS, noDeps, noMin, talentBudget, candidate.talentAlloc)
+          && !spendable(ATTRIBUTES, deps, minVal, attrBudget, candidate.attrAlloc));
+      });
+      const repaired = await normalizeFinalists(selected, ctx, async (candidate, normalizationCtx) => {
         let t = { ...candidate.talentAlloc }, a = { ...candidate.attrAlloc };
         // Enforcing a mode pin can refund points while repairing the budget. Fill AFTER
         // that repair; otherwise a fully-spent contender can become underspent here.
@@ -2434,7 +2442,7 @@
         return pair;
       });
       for (let i = 0; i < repaired.length; i++) {
-        const pair = repaired[i], candidate = ranked[i];
+        const pair = repaired[i], candidate = selected[i];
         if (!Space.sameAlloc(TALENTS, pair.talentAlloc, candidate.talentAlloc)
           || !Space.sameAlloc(ATTRIBUTES, pair.attrAlloc, candidate.attrAlloc)) changedCount++;
         const sig = `${Space.signature(TALENTS, pair.talentAlloc)}|${Space.signature(ATTRIBUTES, pair.attrAlloc)}`;
@@ -2465,7 +2473,8 @@
         || Number(b === protectedCandidate) - Number(a === protectedCandidate));
       diag.incumbent.kept = protectedCandidate !== null && ranked[0] === protectedCandidate;
       if (diag.incumbent.kept) ctx.note('The original build met or beat every verified contender; keeping it unchanged.');
-      diag.finalization = { contenders: normalized.length, changedCount, finalIterations: FINAL_ITERATIONS,
+      diag.finalization = { contenders: normalized.length, inputContenders,
+        omittedIncomplete: inputContenders - selected.length, changedCount, finalIterations: FINAL_ITERATIONS,
         deadlineOverrunMs: Number.isFinite(deadlineAt) ? Math.max(0, Date.now() - deadlineAt) : 0 };
 
       report('done', 1, 1);

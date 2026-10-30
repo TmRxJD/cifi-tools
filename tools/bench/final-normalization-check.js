@@ -10,7 +10,7 @@ const H = require('./harness.js');
 const filename = path.resolve(__dirname, '../../webapp/public/optimizer/search.js');
 const source = fs.readFileSync(filename, 'utf8');
 const plain = value => structuredClone(value);
-function load(sequential = false) {
+function load(sequential = false, finishCandidates = null, exhaustiveCleanup = false) {
   const anchor = '  const Optimizer = {';
   assert.equal(source.split(anchor).length, 2, 'private instrumentation anchor must be unique');
   const injected = `${sequential ? 'normalizeFinalists = async (candidates, ctx, one) => { const out = []; for (const c of candidates) out.push(await one(c, ctx)); return out; };' : ''}
@@ -18,7 +18,17 @@ function load(sequential = false) {
   const sb = {module:{exports:{}},require:createRequire(filename),console,performance,setTimeout,clearTimeout,
     OptimizerCorpus:globalThis.OptimizerCorpus,OptimizerRefit:globalThis.OptimizerRefit,
     parseBuildCode:H.parseBuildCode};
-  vm.runInNewContext(source.replace(anchor,injected), sb, {filename});
+  let instrumented = source.replace(anchor,injected);
+  if (finishCandidates) {
+    sb.finishCandidates = finishCandidates;
+    instrumented = instrumented.replace('async function finish(ranked, stageChampions) {',
+      'async function finish(ranked, stageChampions) { ranked = globalThis.finishCandidates;');
+  }
+  if (exhaustiveCleanup) {
+    assert(instrumented.includes('return index === 0 || ('));
+    instrumented = instrumented.replace('return index === 0 || (', 'return true || (');
+  }
+  vm.runInNewContext(instrumented, sb, {filename});
   return {optimizer:sb.module.exports,...sb.internals};
 }
 const deferred = () => { let resolve; const promise = new Promise(r=>{resolve=r;}); return {promise,resolve}; };
@@ -116,6 +126,38 @@ async function main() {
       (c,ctx)=>ctx.score([c],100)),/batch length mismatch/);
   });
   const known=H.loadKnownBuilds();
+  await check('confirmation repairs only the champion and preserves a complete fallback when repair hurts',async()=>{
+    const build=await H.parseBuildCode(H.findFixture(known,'borge@12').code);
+    const cfg=H.cfgForImport('borge',build,{budgetMode:'level'});
+    const baseline=await batched.optimizer.optimize(cfg,{effort:'fast',mode:'loot',maxSeconds:0,
+      scorer:scorer(p=>pairValue(p))});
+    const complete=plain(baseline.best);
+    const signature=p=>JSON.stringify([p.talentAlloc,p.attrAlloc]);
+    const originalSignature=signature(complete);
+    const winner={talentAlloc:{},attrAlloc:{},score:100};
+    const loser={talentAlloc:{[cfg.TALENTS[1].id]:1},attrAlloc:{},score:1};
+    const candidates=[winner,{...complete,score:50},loser];
+    // Every fill from the empty champion ties at screening fidelity, taking declaration order.
+    // At final fidelity that repair loses to the previously complete contender.
+    const value=(p,it)=>it===1000 && signature(p)===originalSignature ? 50 : 1;
+    const options={effort:'fast',mode:'loot',maxSeconds:0,scorer:scorer(value)};
+    const config={...cfg,currentTalents:undefined,currentAttrs:undefined};
+    const result=await load(false,candidates).optimizer.optimize(config,options);
+    const assertBounded=r=>{
+      assert.equal(r.diag.finalization.inputContenders,3);
+      assert.equal(r.diag.finalization.omittedIncomplete,1,'losing incomplete build must not get another search');
+      assert.equal(r.diag.finalization.changedCount,1);
+      assert.equal(signature(plain(r.best)),originalSignature,'repair must not displace a better complete contender');
+      for(const p of r.ranked) assert.equal(p.score,value(plain(p),1000),'actual allocations need final scores');
+    };
+    assertBounded(result);
+    const old=await load(false,candidates,true).optimizer.optimize(config,options);
+    assert.throws(()=>assertBounded(old),assert.AssertionError,'known-slow exhaustive cleanup must fail this gate');
+    const after=result.diag.profile.stages.winner_cleanup.performed;
+    const before=old.diag.profile.stages.winner_cleanup.performed;
+    assert(after<before,'bounded cleanup must remove real scorer work');
+    console.log(`  controlled confirmation evaluations: ${before} -> ${after}`);
+  });
   for(const [name,mode,ties] of [['borge@12','loot',false],['knox@12','bossTimeless',true]]) {
     await check(`full fast search exact ranked/best equivalence ${name} ${mode}${ties?' ties':''}`,async()=>{
       const build=await H.parseBuildCode(H.findFixture(known,name).code);
@@ -135,6 +177,6 @@ async function main() {
       assert.deepEqual(plain(cfg),snapshot);
     });
   }
-  console.log(`${checks} normalization checks passed (including 2 known-bad equality controls).`);
+  console.log(`${checks} normalization checks passed (including 3 known-bad controls).`);
 }
 main().catch(error=>{console.error(error.stack);process.exitCode=1;});
